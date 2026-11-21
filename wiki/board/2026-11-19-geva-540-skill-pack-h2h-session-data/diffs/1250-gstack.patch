@@ -1,0 +1,247 @@
+diff --git a/httpserver/bulk_acl_test.go b/httpserver/bulk_acl_test.go
+new file mode 100644
+index 0000000..20314a4
+--- /dev/null
++++ b/httpserver/bulk_acl_test.go
+@@ -0,0 +1,94 @@
++package httpserver
++
++import (
++	"archive/zip"
++	"bytes"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"golang.org/x/crypto/bcrypt"
++)
++
++func setupBulkACL(t *testing.T) (*FileServer, string) {
++	t.Helper()
++	root := t.TempDir()
++	prot := filepath.Join(root, "protected")
++	require.NoError(t, os.MkdirAll(filepath.Join(prot, "sub"), 0755))
++	hash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.MinCost)
++	require.NoError(t, err)
++	acl := `{"auth":"admin:` + string(hash) + `","block":["blocked.txt"]}`
++	require.NoError(t, os.WriteFile(filepath.Join(prot, ".goshs"), []byte(acl), 0644))
++	require.NoError(t, os.WriteFile(filepath.Join(prot, "secret.txt"), []byte("secret"), 0644))
++	require.NoError(t, os.WriteFile(filepath.Join(prot, "blocked.txt"), []byte("blocked"), 0644))
++	require.NoError(t, os.WriteFile(filepath.Join(prot, "sub", "deep.txt"), []byte("deep"), 0644))
++	require.NoError(t, os.WriteFile(filepath.Join(root, "public.txt"), []byte("public"), 0644))
++	fs, _ := newTestFileServer(t, root)
++	return fs, root
++}
++
++func zipNames(t *testing.T, body []byte) map[string]string {
++	t.Helper()
++	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
++	require.NoError(t, err)
++	out := map[string]string{}
++	for _, f := range zr.File {
++		rc, err := f.Open()
++		require.NoError(t, err)
++		b, _ := io.ReadAll(rc)
++		rc.Close()
++		out[f.Name] = string(b)
++	}
++	return out
++}
++
++func TestBulkDownload_ACLUnauthenticated(t *testing.T) {
++	fs, _ := setupBulkACL(t)
++	for _, q := range []string{
++		"/?bulk&file=/protected/secret.txt",
++		"/?bulk&file=/protected/sub/deep.txt",
++		"/?bulk&file=/protected",
++		"/?bulk&file=/",
++		"/?bulk&file=/public.txt&file=/protected/secret.txt",
++	} {
++		w := httptest.NewRecorder()
++		fs.bulkDownload(w, httptest.NewRequest(http.MethodGet, q, nil))
++		require.Equal(t, http.StatusUnauthorized, w.Code, q)
++		require.NotContains(t, w.Body.String(), "secret", q)
++	}
++}
++
++func TestBulkDownload_ACLWrongPassword(t *testing.T) {
++	fs, _ := setupBulkACL(t)
++	r := httptest.NewRequest(http.MethodGet, "/?bulk&file=/protected/secret.txt", nil)
++	r.SetBasicAuth("admin", "wrong")
++	w := httptest.NewRecorder()
++	fs.bulkDownload(w, r)
++	require.Equal(t, http.StatusUnauthorized, w.Code)
++}
++
++func TestBulkDownload_ACLAuthorizedHonorsBlock(t *testing.T) {
++	fs, _ := setupBulkACL(t)
++	r := httptest.NewRequest(http.MethodGet, "/?bulk&file=/protected&file=/protected/blocked.txt", nil)
++	r.SetBasicAuth("admin", "admin")
++	w := httptest.NewRecorder()
++	fs.bulkDownload(w, r)
++	require.Equal(t, http.StatusOK, w.Code)
++	names := zipNames(t, w.Body.Bytes())
++	require.Equal(t, "secret", names["protected/secret.txt"])
++	require.Equal(t, "deep", names["protected/sub/deep.txt"])
++	require.NotContains(t, names, "protected/blocked.txt")
++	require.NotContains(t, names, "protected/.goshs")
++}
++
++func TestBulkDownload_PublicStillWorks(t *testing.T) {
++	fs, _ := setupBulkACL(t)
++	w := httptest.NewRecorder()
++	fs.bulkDownload(w, httptest.NewRequest(http.MethodGet, "/?bulk&file=/public.txt", nil))
++	require.Equal(t, http.StatusOK, w.Code)
++	require.Equal(t, "public", zipNames(t, w.Body.Bytes())["public.txt"])
++}
+diff --git a/httpserver/handler.go b/httpserver/handler.go
+index 2a022d7..0d08560 100644
+--- a/httpserver/handler.go
++++ b/httpserver/handler.go
+@@ -996,7 +996,8 @@ func (fs *FileServer) ShareHandler(w http.ResponseWriter, r *http.Request) {
+ 		q.Set("file", entry.FilePath)
+ 		q.Set("bulk", "true")
+ 		r.URL.RawQuery = q.Encode()
+-		fs.bulkDownload(w, r)
++		// Share links are already authorized by their token
++		fs.bulkDownloadInternal(w, r, false)
+ 	} else {
+ 		file, err := os.Open(filepath.Join(fs.Webroot, entry.FilePath))
+ 		if err != nil {
+diff --git a/httpserver/updown.go b/httpserver/updown.go
+index 59e4adb..535d3cc 100644
+--- a/httpserver/updown.go
++++ b/httpserver/updown.go
+@@ -8,12 +8,15 @@ import (
+ 	"net/http"
+ 	"os"
+ 	"path/filepath"
++	"slices"
+ 	"strings"
+ 	"time"
+ 
+ 	"goshs.de/goshs/v2/logger"
+ )
+ 
++var errBulkUnauthorized = errors.New("bulk download unauthorized")
++
+ // prepareWrite enforces the ACL for dir and applies the upload size limit.
+ // Returns false if the request has already been rejected.
+ func (fs *FileServer) prepareWrite(w http.ResponseWriter, req *http.Request, dir string) bool {
+@@ -213,8 +216,16 @@ func (fs *FileServer) upload(w http.ResponseWriter, req *http.Request) {
+ 	http.Redirect(w, req, upathDir, http.StatusSeeOther)
+ }
+ 
+-// bulkDownload will provide zip archived download bundle of multiple selected files
++// bulkDownload will provide zip archived download bundle of multiple selected files.
++// File based .goshs ACLs are enforced for every file included in the archive.
+ func (fs *FileServer) bulkDownload(w http.ResponseWriter, req *http.Request) {
++	fs.bulkDownloadInternal(w, req, true)
++}
++
++// bulkDownloadInternal builds the zip archive. When enforceACL is false (used
++// for already authorized share links) .goshs auth and block lists are not
++// applied, though .goshs files themselves are never included.
++func (fs *FileServer) bulkDownloadInternal(w http.ResponseWriter, req *http.Request, enforceACL bool) {
+ 	if fs.UploadOnly {
+ 		fs.handleError(w, req, fmt.Errorf("%s", "Bulk download not allowed due to 'upload only' option"), http.StatusForbidden)
+ 		return
+@@ -238,6 +249,75 @@ func (fs *FileServer) bulkDownload(w http.ResponseWriter, req *http.Request) {
+ 		filesCleaned = append(filesCleaned, absPath)
+ 	}
+ 
++	// Resolve the full list of files to include and enforce the effective
++	// .goshs ACL for each of them before anything is written to the client.
++	authorizedDirs := make(map[string]bool)
++	aclFor := func(dir string) configFile {
++		acl, err := fs.findEffectiveACL(dir)
++		if err != nil {
++			logger.Errorf("error reading file based access config: %+v", err)
++		}
++		return acl
++	}
++	authOK := true
++	var included []string
++	for _, root := range filesCleaned {
++		err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
++			if err != nil {
++				return err
++			}
++			name := info.Name()
++			if name == ".goshs" && !info.IsDir() {
++				return nil
++			}
++			if !enforceACL {
++				if !info.IsDir() {
++					included = append(included, p)
++				}
++				return nil
++			}
++			parent := filepath.Dir(p)
++			parentACL := aclFor(parent)
++			if info.IsDir() {
++				// Honor block entries for folders in the parent directory
++				if p != filepath.Clean(fs.Webroot) &&
++					(slices.Contains(parentACL.Block, name+"/") || slices.Contains(parentACL.Block, name)) {
++					return filepath.SkipDir
++				}
++				return nil
++			}
++			if slices.Contains(parentACL.Block, name) {
++				return nil
++			}
++			if parentACL.Auth != "" {
++				if ok, seen := authorizedDirs[parent]; seen {
++					if !ok {
++						return errBulkUnauthorized
++					}
++				} else {
++					if ok := fs.applyCustomAuth(w, req, parentACL); !ok {
++						authorizedDirs[parent] = false
++						return errBulkUnauthorized
++					}
++					authorizedDirs[parent] = true
++				}
++			}
++			included = append(included, p)
++			return nil
++		})
++		if errors.Is(err, errBulkUnauthorized) {
++			authOK = false
++			break
++		}
++		if err != nil {
++			logger.Errorf("creating zip file: %+v", err)
++		}
++	}
++	if !authOK {
++		// applyCustomAuth already wrote the error response
++		return
++	}
++
+ 	// Construct filename to download
+ 	filename := fmt.Sprintf("%d_goshs_download.zip", time.Now().Unix())
+ 
+@@ -294,11 +374,15 @@ func (fs *FileServer) bulkDownload(w http.ResponseWriter, req *http.Request) {
+ 		return nil
+ 	}
+ 
+-	// Loop over files and add to zip (filesCleaned contains validated absolute paths)
+-	for _, file := range filesCleaned {
+-		err := filepath.Walk(file, walker)
++	// Add the authorized files to the zip
++	for _, file := range included {
++		info, err := os.Lstat(file)
+ 		if err != nil {
+ 			logger.Errorf("creating zip file: %+v", err)
++			continue
++		}
++		if err := walker(file, info, nil); err != nil {
++			logger.Errorf("creating zip file: %+v", err)
+ 		}
+ 	}
+ 

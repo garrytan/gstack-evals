@@ -1,0 +1,167 @@
+diff --git a/api/src/main/java/io/grpc/EquivalentAddressGroup.java b/api/src/main/java/io/grpc/EquivalentAddressGroup.java
+index 18151e8..fc9c0fa 100644
+--- a/api/src/main/java/io/grpc/EquivalentAddressGroup.java
++++ b/api/src/main/java/io/grpc/EquivalentAddressGroup.java
+@@ -55,6 +55,13 @@ public final class EquivalentAddressGroup {
+    */
+   public static final Attributes.Key<String> ATTR_LOCALITY_NAME =
+       Attributes.Key.create("io.grpc.EquivalentAddressGroup.LOCALITY");
++  /**
++   * The name of the backend service (e.g., xDS cluster) that this EquivalentAddressGroup is in.
++   * Used for the {@code grpc.lb.backend_service} metric label.
++   */
++  @Attr
++  static final Attributes.Key<String> ATTR_BACKEND_SERVICE =
++      Attributes.Key.create("io.grpc.EquivalentAddressGroup.ATTR_BACKEND_SERVICE");
+   /**
+    * Endpoint weight for load balancing purposes. While the type is Long, it must be a valid uint32.
+    * Must not be zero. The weight is proportional to the other endpoints; if an endpoint's weight is
+diff --git a/api/src/main/java/io/grpc/InternalEquivalentAddressGroup.java b/api/src/main/java/io/grpc/InternalEquivalentAddressGroup.java
+index d4bed4d..a1f463c 100644
+--- a/api/src/main/java/io/grpc/InternalEquivalentAddressGroup.java
++++ b/api/src/main/java/io/grpc/InternalEquivalentAddressGroup.java
+@@ -26,4 +26,11 @@ public final class InternalEquivalentAddressGroup {
+    * twice that of another endpoint, it is intended to receive twice the load.
+    */
+   public static final Attributes.Key<Long> ATTR_WEIGHT = EquivalentAddressGroup.ATTR_WEIGHT;
++
++  /**
++   * The name of the backend service (e.g., xDS cluster) that this EquivalentAddressGroup is in.
++   * Used for the {@code grpc.lb.backend_service} metric label.
++   */
++  public static final Attributes.Key<String> ATTR_BACKEND_SERVICE =
++      EquivalentAddressGroup.ATTR_BACKEND_SERVICE;
+ }
+diff --git a/core/src/main/java/io/grpc/internal/InternalSubchannel.java b/core/src/main/java/io/grpc/internal/InternalSubchannel.java
+index 7a48bf6..337efdf 100644
+--- a/core/src/main/java/io/grpc/internal/InternalSubchannel.java
++++ b/core/src/main/java/io/grpc/internal/InternalSubchannel.java
+@@ -42,6 +42,7 @@ import io.grpc.EquivalentAddressGroup;
+ import io.grpc.HttpConnectProxiedSocketAddress;
+ import io.grpc.InternalChannelz;
+ import io.grpc.InternalChannelz.ChannelStats;
++import io.grpc.InternalEquivalentAddressGroup;
+ import io.grpc.InternalInstrumented;
+ import io.grpc.InternalLogId;
+ import io.grpc.InternalWithLogId;
+@@ -49,7 +50,6 @@ import io.grpc.LoadBalancer;
+ import io.grpc.Metadata;
+ import io.grpc.MethodDescriptor;
+ import io.grpc.MetricRecorder;
+-import io.grpc.NameResolver;
+ import io.grpc.SecurityLevel;
+ import io.grpc.Status;
+ import io.grpc.SynchronizationContext;
+@@ -604,7 +604,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
+             gotoNonErrorState(READY);
+             subchannelMetrics.recordConnectionAttemptSucceeded(/* target= */ target,
+                 /* backendService= */ getAttributeOrDefault(
+-                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
++                    addressIndex.getCurrentEagAttributes(), InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE),
+                 /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                     EquivalentAddressGroup.ATTR_LOCALITY_NAME),
+                 /* securityLevel= */ extractSecurityLevel(addressIndex.getCurrentEagAttributes()
+@@ -636,7 +636,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
+             gotoNonErrorState(IDLE);
+             subchannelMetrics.recordDisconnection(/* target= */ target,
+                 /* backendService= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+-                    NameResolver.ATTR_BACKEND_SERVICE),
++                    InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE),
+                 /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                     EquivalentAddressGroup.ATTR_LOCALITY_NAME),
+                 /* disconnectError= */ disconnectError.toErrorString(),
+@@ -645,7 +645,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
+           } else if (pendingTransport == transport) {
+             subchannelMetrics.recordConnectionAttemptFailed(/* target= */ target,
+                 /* backendService= */getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+-                    NameResolver.ATTR_BACKEND_SERVICE),
++                    InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE),
+                 /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                     EquivalentAddressGroup.ATTR_LOCALITY_NAME));
+             Preconditions.checkState(state.getState() == CONNECTING,
+diff --git a/core/src/test/java/io/grpc/internal/InternalSubchannelTest.java b/core/src/test/java/io/grpc/internal/InternalSubchannelTest.java
+index 811344d..635d5bd 100644
+--- a/core/src/test/java/io/grpc/internal/InternalSubchannelTest.java
++++ b/core/src/test/java/io/grpc/internal/InternalSubchannelTest.java
+@@ -48,12 +48,12 @@ import io.grpc.Attributes;
+ import io.grpc.ConnectivityStateInfo;
+ import io.grpc.EquivalentAddressGroup;
+ import io.grpc.InternalChannelz;
++import io.grpc.InternalEquivalentAddressGroup;
+ import io.grpc.InternalLogId;
+ import io.grpc.InternalWithLogId;
+ import io.grpc.LoadBalancer;
+ import io.grpc.MetricInstrument;
+ import io.grpc.MetricRecorder;
+-import io.grpc.NameResolver;
+ import io.grpc.SecurityLevel;
+ import io.grpc.Status;
+ import io.grpc.SynchronizationContext;
+@@ -1510,7 +1510,7 @@ public class InternalSubchannelTest {
+     when(mockBackoffPolicyProvider.get()).thenReturn(mockBackoffPolicy);
+     SocketAddress addr = mock(SocketAddress.class);
+     Attributes eagAttributes = Attributes.newBuilder()
+-        .set(NameResolver.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
++        .set(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
+         .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, LOCALITY)
+         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SECURITY_LEVEL)
+         .build();
+@@ -1564,7 +1564,7 @@ public class InternalSubchannelTest {
+     // 2. Setup Subchannel with attributes
+     SocketAddress addr = mock(SocketAddress.class);
+     Attributes eagAttributes = Attributes.newBuilder()
+-        .set(NameResolver.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
++        .set(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
+         .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, LOCALITY)
+         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SECURITY_LEVEL)
+         .build();
+diff --git a/xds/src/main/java/io/grpc/xds/CdsLoadBalancer2.java b/xds/src/main/java/io/grpc/xds/CdsLoadBalancer2.java
+index 5a59b47..148ab04 100644
+--- a/xds/src/main/java/io/grpc/xds/CdsLoadBalancer2.java
++++ b/xds/src/main/java/io/grpc/xds/CdsLoadBalancer2.java
+@@ -27,6 +27,7 @@ import com.google.errorprone.annotations.CheckReturnValue;
+ import io.grpc.Attributes;
+ import io.grpc.EquivalentAddressGroup;
+ import io.grpc.HttpConnectProxiedSocketAddress;
++import io.grpc.InternalEquivalentAddressGroup;
+ import io.grpc.InternalLogId;
+ import io.grpc.LoadBalancer;
+ import io.grpc.LoadBalancerProvider;
+@@ -371,6 +372,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
+                 endpoint.eag().getAttributes().toBuilder()
+                     .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY, locality)
+                     .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, localityName)
++                    .set(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE, clusterName)
+                     .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT,
+                         localityLbInfo.localityWeight())
+                     .set(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT, weight)
+diff --git a/xds/src/test/java/io/grpc/xds/ClusterResolverLoadBalancerTest.java b/xds/src/test/java/io/grpc/xds/ClusterResolverLoadBalancerTest.java
+index c6e5db0..9e1f24f 100644
+--- a/xds/src/test/java/io/grpc/xds/ClusterResolverLoadBalancerTest.java
++++ b/xds/src/test/java/io/grpc/xds/ClusterResolverLoadBalancerTest.java
+@@ -60,6 +60,7 @@ import io.grpc.ChannelLogger;
+ import io.grpc.ConnectivityState;
+ import io.grpc.EquivalentAddressGroup;
+ import io.grpc.HttpConnectProxiedSocketAddress;
++import io.grpc.InternalEquivalentAddressGroup;
+ import io.grpc.LoadBalancer;
+ import io.grpc.LoadBalancer.Helper;
+ import io.grpc.LoadBalancer.PickResult;
+@@ -829,6 +830,8 @@ public class ClusterResolverLoadBalancerTest {
+     for (EquivalentAddressGroup eag : childBalancer.addresses) {
+       assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY))
+           .isEqualTo(locality2);
++      assertThat(eag.getAttributes().get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE))
++          .isEqualTo(CLUSTER);
+     }
+   }
+ 
+@@ -922,6 +925,8 @@ public class ClusterResolverLoadBalancerTest {
+         childBalancer.addresses);
+     assertThat(childBalancer.addresses.get(0).getAttributes()
+         .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
++    assertThat(childBalancer.addresses.get(0).getAttributes()
++        .get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE)).isEqualTo(CLUSTER);
+   }
+ 
+   @Test

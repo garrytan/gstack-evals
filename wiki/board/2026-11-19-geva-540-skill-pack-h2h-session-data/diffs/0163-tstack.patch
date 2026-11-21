@@ -1,0 +1,191 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 11ccb2c..ce633d0 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -32,6 +32,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
+     non-MCP-first sentence.
+ 
+ ### Fixed
++- **`ctx_edit` auto-escalation no longer strips the lines you were editing.**
++  After an `old_string` miss on a file read in a compressed mode, files over 300
++  lines were re-shown as head+tail with the middle `[... N lines omitted ...]`,
++  yet the cache was marked fully delivered — so a follow-up `ctx_read(mode="full")`
++  returned an `[unchanged]` stub and the stripped lines were unreachable, making
++  every retry fail. The escalation now shows a verbatim window centred on the
++  closest match to `old_string` and leaves the cache undelivered, so a full or
++  `lines:N-M` re-read returns real content.
+ - **The Codex `lean-ctx -c` SessionStart hook is no longer a redundant nag (#625).**
+   Codex's `PreToolUse` hook already rewrites every rewritable Bash command to
+   `lean-ctx -c "<command>"` transparently (`permissionDecision: allow` +
+diff --git a/rust/src/tools/ctx_edit.rs b/rust/src/tools/ctx_edit.rs
+index 7aff71f..73960b5 100644
+--- a/rust/src/tools/ctx_edit.rs
++++ b/rust/src/tools/ctx_edit.rs
+@@ -304,7 +304,7 @@ pub fn run_io(params: &EditParams, last_mode: &str) -> (String, CacheEffect) {
+     let closest_hint = find_closest_line_hint(content, old_str);
+     let cross_file = crate::tools::edit_recovery::cross_file_hint(path, old_str);
+ 
+-    let (escalation, effect) = auto_escalate_reread(last_mode, file_path);
++    let (escalation, effect) = auto_escalate_reread(last_mode, file_path, old_str);
+ 
+     (
+         format!(
+@@ -319,37 +319,9 @@ pub fn run_io(params: &EditParams, last_mode: &str) -> (String, CacheEffect) {
+ /// Finds the closest matching line in the file content to help the agent
+ /// understand what went wrong. Returns a hint string or empty if no useful match.
+ fn find_closest_line_hint(content: &str, old_str: &str) -> String {
+-    let first_line = old_str.lines().next().unwrap_or("").trim();
+-    if first_line.len() < 4 {
+-        return String::new();
+-    }
+-
+-    let mut best_line: Option<(usize, &str)> = None;
+-
+-    for (i, line) in content.lines().enumerate() {
+-        if line.contains(first_line) {
+-            best_line = Some((i + 1, line));
+-            break;
+-        }
+-    }
+-
+-    // Try matching with significant identifiers from old_string's first line
+-    if best_line.is_none() {
+-        let keyword = first_line
+-            .split(|c: char| !c.is_alphanumeric() && c != '_')
+-            .find(|w| w.len() >= 4);
+-
+-        if let Some(keyword) = keyword {
+-            for (i, line) in content.lines().enumerate() {
+-                if line.contains(keyword) {
+-                    best_line = Some((i + 1, line));
+-                    break;
+-                }
+-            }
+-        }
+-    }
+-
+-    match best_line {
++    match closest_line_index(content, old_str)
++        .and_then(|i| content.lines().nth(i).map(|l| (i + 1, l)))
++    {
+         Some((line_num, line_content)) => {
+             let trimmed = line_content.trim();
+             let preview = if trimmed.len() > 100 {
+@@ -366,11 +338,30 @@ fn find_closest_line_hint(content: &str, old_str: &str) -> String {
+     }
+ }
+ 
++/// 0-based index of the file line that best matches the first line of
++/// `old_str`: an exact substring hit first, else the first line containing a
++/// significant identifier (len >= 4) from it. `None` when nothing useful matches.
++fn closest_line_index(content: &str, old_str: &str) -> Option<usize> {
++    let first_line = old_str.lines().next().unwrap_or("").trim();
++    if first_line.len() < 4 {
++        return None;
++    }
++    if let Some(i) = content.lines().position(|l| l.contains(first_line)) {
++        return Some(i);
++    }
++    let keyword = first_line
++        .split(|c: char| !c.is_alphanumeric() && c != '_')
++        .find(|w| w.len() >= 4)?;
++    content.lines().position(|l| l.contains(keyword))
++}
++
+ /// Auto-escalation: when old_string is not found and the file was previously read
+ /// in a compressed mode, re-read in full and return the content so the agent
+ /// can immediately retry with the correct old_string. Returns the text to append
+-/// plus the [`CacheEffect`] the caller should apply (store full content).
+-fn auto_escalate_reread(last_mode: &str, path: &str) -> (String, CacheEffect) {
++/// plus the [`CacheEffect`] the caller should apply (store full content). Files
++/// over the inline cap get a verbatim window around the closest match instead,
++/// with no cache effect (the full content was not delivered).
++fn auto_escalate_reread(last_mode: &str, path: &str, old_str: &str) -> (String, CacheEffect) {
+     if last_mode.is_empty() || last_mode == "full" {
+         return (String::new(), CacheEffect::None);
+     }
+@@ -382,26 +373,36 @@ fn auto_escalate_reread(last_mode: &str, path: &str) -> (String, CacheEffect) {
+     let line_count = fresh_content.lines().count();
+     const MAX_LINES: usize = 300;
+ 
+-    let content_preview = if line_count <= MAX_LINES {
+-        fresh_content.clone()
+-    } else {
+-        let lines: Vec<&str> = fresh_content.lines().collect();
+-        let head = &lines[..MAX_LINES / 2];
+-        let tail = &lines[line_count - MAX_LINES / 2..];
+-        let omitted = line_count - MAX_LINES;
+-        format!(
+-            "{}\n[... {omitted} lines omitted ...]\n{}",
+-            head.join("\n"),
+-            tail.join("\n")
+-        )
+-    };
++    if line_count <= MAX_LINES {
++        return (
++            format!(
++                "\n\n[auto-escalation] Last read used mode=\"{last_mode}\". \
++                 Full content ({line_count}L) below — retry edit with exact text from here:\n\n{fresh_content}"
++            ),
++            CacheEffect::StoreFull(fresh_content),
++        );
++    }
+ 
++    // Too large to inline in full: show a window centred on the region the
++    // agent was trying to edit (not a blind head+tail, which stripped exactly
++    // the lines the edit targeted). The cache is deliberately NOT marked as
++    // fully delivered, so a follow-up `ctx_read(mode="full")` returns the real
++    // content instead of an `[unchanged]` stub pointing at lines the agent
++    // never saw.
++    let lines: Vec<&str> = fresh_content.lines().collect();
++    let anchor = closest_line_index(&fresh_content, old_str).unwrap_or(0);
++    let start = anchor.saturating_sub(MAX_LINES / 2).min(line_count - MAX_LINES);
++    let end = start + MAX_LINES;
++    let window = lines[start..end].join("\n");
+     (
+         format!(
+             "\n\n[auto-escalation] Last read used mode=\"{last_mode}\". \
+-             Full content ({line_count}L) below — retry edit with exact text from here:\n\n{content_preview}"
++             Verbatim lines {}-{} of {line_count} below (closest to old_string) — retry edit with exact text from here. \
++             For other regions use ctx_read(\"{path}\", mode=\"lines:N-M\") or mode=\"full\":\n\n{window}",
++            start + 1,
++            end
+         ),
+-        CacheEffect::StoreFull(fresh_content),
++        CacheEffect::None,
+     )
+ }
+ 
+@@ -1226,6 +1227,32 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn escalation_on_large_file_shows_target_region_and_keeps_full_read_available() {
++        // A file larger than the inline cap must not have the edited region
++        // stripped from the escalation (old head+tail view dropped the middle),
++        // and must not be marked as fully delivered (else a follow-up full read
++        // returns an `[unchanged]` stub and the hidden lines are unreachable).
++        let body: String = (1..=1000).map(|i| format!("line {i}\n")).collect();
++        let f = make_temp(&body);
++        let mut cache = SessionCache::new();
++        let key = f.path().to_string_lossy().to_string();
++        cache.store(&key, &body);
++        cache.get_mut(&key).unwrap().last_mode = "aggressive".into();
++
++        let text = handle(
++            &mut cache,
++            &mk_params(f.path(), "line 500\nstripped\nline 501", "x", false, false),
++        );
++        assert!(text.contains("[auto-escalation]"), "{text}");
++        assert!(text.contains("\nline 500\n"), "target region shown: {text}");
++        assert!(text.contains("lines 350-649 of 1000"), "{text}");
++        assert!(
++            !cache.get(&key).is_some_and(|e| e.full_content_delivered),
++            "partial escalation must not mark the file as fully delivered"
++        );
++    }
++
+     #[test]
+     fn apply_cache_effect_invalidate_and_store() {
+         let f = make_temp("hello\n");

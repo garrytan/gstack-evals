@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Keyless comparison capture: Claude Code 2.1.314 (the trial image's pinned binary, docker/trial.Dockerfile) against a stub
+# Messages server, model openai/gpt-6.1-sol, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1, WebSearch, WebFetch and AskUserQuestion
+# denied. Arms: none (no skills) and current (gstack at fc5c285 installed with its own ./setup for Claude Code).
+set -uo pipefail
+M=~/.capy/work/ohr2/money; C=~/.capy/work/ohr2/codex; CC=$M/cc
+mkdir -p $CC && cd $CC
+if [ ! -x $CC/package/claude ]; then
+  curl -sSfL -o cc.tgz https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.314.tgz
+  echo "c6b690e52ba2d038c4c8d2566b2ec35acef4995c4321f7d57fa464a7088c2b78  cc.tgz" | sha256sum -c - || exit 3
+  tar -xzf cc.tgz package/claude
+fi
+X=$CC/package/claude; PORT=18581
+$X --version
+for arm in none current; do
+  H=$CC/home-$arm; W=$CC/work-$arm; rm -rf $H $W; mkdir -p $H/.claude $W; (cd $W && git init -q)
+  if [ $arm = current ]; then
+    mkdir -p $H/.claude/skills && cp -a $C/current $H/.claude/skills/gstack
+    (cd $H/.claude/skills/gstack && env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY HOME=$H timeout 300 ./setup --host claude > $CC/setup-$arm.log 2>&1; echo "setup exit $?")
+  fi
+  : > $CC/turns-$arm.request.jsonl
+  bun $M/stub-anthropic.ts $CC/turns-$arm.request.jsonl $PORT $M/replies.json > $CC/stub-$arm.log 2>&1 & S=$!; sleep 1.5
+  first=$M/msgs/first-none.txt; [ $arm = current ] && first=$CC/first-cc.txt
+  run() { (cd $W && env -u OPENAI_API_KEY -u OPENROUTER_API_KEY HOME=$H ANTHROPIC_BASE_URL=http://127.0.0.1:$PORT ANTHROPIC_API_KEY=stub-not-a-key CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 timeout 120 $X -p --output-format stream-json --verbose --model openai/gpt-6.1-sol --disallowedTools=WebSearch,WebFetch,AskUserQuestion "$@" < /dev/null); }
+  run "$(cat $first)" > $CC/turns-$arm.events.jsonl 2> $CC/turns-$arm.stderr; echo "$arm first exit $?"
+  SID=$(python3 -c "import json,sys; print(next(json.loads(l)['session_id'] for l in open(sys.argv[1]) if l.startswith('{') and json.loads(l).get('session_id')))" $CC/turns-$arm.events.jsonl)
+  for k in 1 2 3 4; do run --resume $SID "$(cat $M/msgs/turn$k.txt)" >> $CC/turns-$arm.events.jsonl 2>> $CC/turns-$arm.stderr; echo "$arm resume $k exit $?"; done
+  kill $S; wait $S 2>/dev/null
+done

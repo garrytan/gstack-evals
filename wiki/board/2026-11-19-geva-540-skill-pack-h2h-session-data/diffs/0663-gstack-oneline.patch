@@ -1,0 +1,75 @@
+diff --git a/pkg/machinery/scaffold.go b/pkg/machinery/scaffold.go
+index 018803b..365040c 100644
+--- a/pkg/machinery/scaffold.go
++++ b/pkg/machinery/scaffold.go
+@@ -25,8 +25,10 @@ import (
+ 	"os"
+ 	"path/filepath"
+ 	"slices"
++	"strconv"
+ 	"strings"
+ 	"text/template"
++	"time"
+ 
+ 	"github.com/spf13/afero"
+ 	"golang.org/x/tools/imports"
+@@ -108,10 +110,11 @@ func WithConfig(cfg config.Config) ScaffoldOption {
+ 	}
+ }
+ 
+-// WithBoilerplate provides the boilerplate to the Scaffold
++// WithBoilerplate provides the boilerplate to the Scaffold.
++// Any YEAR placeholder is replaced with the current year.
+ func WithBoilerplate(boilerplate string) ScaffoldOption {
+ 	return func(s *Scaffold) {
+-		s.injector.boilerplate = boilerplate
++		s.injector.boilerplate = strings.ReplaceAll(boilerplate, "YEAR", strconv.Itoa(time.Now().Year()))
+ 	}
+ }
+ 
+diff --git a/pkg/plugins/golang/v4/scaffolds/internal/templates/hack/boilerplate.go b/pkg/plugins/golang/v4/scaffolds/internal/templates/hack/boilerplate.go
+index b200fca..84bd8b9 100644
+--- a/pkg/plugins/golang/v4/scaffolds/internal/templates/hack/boilerplate.go
++++ b/pkg/plugins/golang/v4/scaffolds/internal/templates/hack/boilerplate.go
+@@ -19,7 +19,6 @@ package hack
+ import (
+ 	"fmt"
+ 	"path/filepath"
+-	"time"
+ 
+ 	"sigs.k8s.io/kubebuilder/v4/pkg/machinery"
+ )
+@@ -80,7 +79,9 @@ func (f *Boilerplate) SetTemplateDefaults() error {
+ 	}
+ 
+ 	if f.Year == "" {
+-		f.Year = fmt.Sprintf("%v", time.Now().Year())
++		// Use the YEAR placeholder, which is replaced with the current year
++		// when scaffolding files and by controller-gen when generating code.
++		f.Year = "YEAR"
+ 	}
+ 
+ 	// Boilerplate given
+diff --git a/pkg/plugins/golang/v4/scaffolds/internal/templates/makefile.go b/pkg/plugins/golang/v4/scaffolds/internal/templates/makefile.go
+index 49253d2..05bdd62 100644
+--- a/pkg/plugins/golang/v4/scaffolds/internal/templates/makefile.go
++++ b/pkg/plugins/golang/v4/scaffolds/internal/templates/makefile.go
+@@ -89,6 +89,9 @@ endif
+ # tools. (i.e. podman)
+ CONTAINER_TOOL ?= docker
+ 
++# YEAR is used to replace the YEAR placeholder in the boilerplate header file.
++YEAR ?= $(shell date +%Y)
++
+ # Setting SHELL to bash allows bash commands to be executed by recipes.
+ # Options are set to exit when a recipe line exits non-zero or a piped command fails.
+ SHELL = /usr/bin/env bash -o pipefail
+@@ -123,7 +126,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
+ .PHONY: generate
+ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+ 	{{ if .BoilerplatePath -}}
+-	"$(CONTROLLER_GEN)" object:headerFile={{printf "%q" .BoilerplatePath}} paths="./..."
++	"$(CONTROLLER_GEN)" object:headerFile={{printf "%q" .BoilerplatePath}},year=$(YEAR) paths="./..."
+ 	{{- else -}}
+ 	"$(CONTROLLER_GEN)" object paths="./..."
+ 	{{- end }}

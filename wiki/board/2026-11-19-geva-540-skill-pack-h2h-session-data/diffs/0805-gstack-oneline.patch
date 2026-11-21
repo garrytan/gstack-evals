@@ -1,0 +1,62 @@
+diff --git a/.changeset/quiet-inputs-update.md b/.changeset/quiet-inputs-update.md
+new file mode 100644
+index 0000000..ec31097
+--- /dev/null
++++ b/.changeset/quiet-inputs-update.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: update focused input bound with getter/setter when getter returns a stale value
+diff --git a/packages/svelte/src/internal/client/dom/elements/bindings/input.js b/packages/svelte/src/internal/client/dom/elements/bindings/input.js
+index 67e6ff1..3f29294 100644
+--- a/packages/svelte/src/internal/client/dom/elements/bindings/input.js
++++ b/packages/svelte/src/internal/client/dom/elements/bindings/input.js
+@@ -50,6 +50,13 @@ export function bind_value(input, get, set = get) {
+ 				input.selectionStart = start;
+ 				input.selectionEnd = Math.min(end, input.value.length);
+ 			}
++
++			// the input no longer reflects what the user typed (the getter may return a stale
++			// value, e.g. an each block item that has not yet been updated), so allow the
++			// render effect to update it once the batch is flushed
++			if (current_batch !== null) {
++				batches.delete(current_batch);
++			}
+ 		}
+ 	});
+ 
+diff --git a/packages/svelte/tests/runtime-runes/samples/bind-value-each-getter-setter/_config.js b/packages/svelte/tests/runtime-runes/samples/bind-value-each-getter-setter/_config.js
+new file mode 100644
+index 0000000..33313ac
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/bind-value-each-getter-setter/_config.js
+@@ -0,0 +1,13 @@
++import { flushSync } from 'svelte';
++import { test } from '../../test';
++export default test({
++	async test({ assert, target }) {
++		const input = target.querySelector('input');
++		input.focus();
++		input.value = 'value1';
++		input.dispatchEvent(new InputEvent('input', { bubbles: true }));
++		flushSync();
++		assert.htmlEqual(target.querySelector('div').innerHTML, 'value1');
++		assert.equal(input.value, 'value1');
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/bind-value-each-getter-setter/main.svelte b/packages/svelte/tests/runtime-runes/samples/bind-value-each-getter-setter/main.svelte
+new file mode 100644
+index 0000000..4511e0b
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/bind-value-each-getter-setter/main.svelte
+@@ -0,0 +1,8 @@
++<script>
++	class MyStore {
++		arr = $state([{ value: "value" }])
++		update = (x) => { this.arr = this.arr.map(_ => ({ value: x })) }
++	}
++	const s = new MyStore();
++</script>
++{#each s.arr as obj}<div>{obj.value}</div><input bind:value={() => obj.value, (x) => s.update(x)} />{/each}

@@ -1,0 +1,65 @@
+diff --git a/.changeset/keep-session-config-on-update.md b/.changeset/keep-session-config-on-update.md
+new file mode 100644
+index 0000000..43a5b73
+--- /dev/null
++++ b/.changeset/keep-session-config-on-update.md
+@@ -0,0 +1,5 @@
++---
++'@openai/agents-realtime': patch
++---
++
++fix: keep the session `config` (audio formats, turn detection, voice, etc.) when calling `updateAgent` or handing off
+diff --git a/packages/agents-realtime/src/realtimeSession.ts b/packages/agents-realtime/src/realtimeSession.ts
+index 3c4f22e..cd9a6d7 100644
+--- a/packages/agents-realtime/src/realtimeSession.ts
++++ b/packages/agents-realtime/src/realtimeSession.ts
+@@ -314,8 +314,9 @@ export class RealtimeSession<
+     }
+ 
+     return {
++      ...this.options.config,
+       instructions,
+-      voice: this.#currentAgent.voice,
++      voice: this.#currentAgent.voice ?? this.options.config?.voice,
+       model: this.options.model,
+       tools: this.#currentTools,
+       tracing: tracingConfig,
+diff --git a/packages/agents-realtime/test/realtimeSession.test.ts b/packages/agents-realtime/test/realtimeSession.test.ts
+index e39df37..0abcafb 100644
+--- a/packages/agents-realtime/test/realtimeSession.test.ts
++++ b/packages/agents-realtime/test/realtimeSession.test.ts
+@@ -230,6 +230,34 @@ describe('RealtimeSession', () => {
+     );
+   });
+ 
++  it('keeps the session config when updating the agent', async () => {
++    const t = new FakeTransport();
++    const agent = new RealtimeAgent({ name: 'A', handoffs: [] });
++    const s = new RealtimeSession(agent, {
++      transport: t,
++      config: {
++        inputAudioFormat: 'g711_ulaw',
++        outputAudioFormat: 'g711_ulaw',
++        voice: 'verse',
++        turnDetection: { type: 'semantic_vad' },
++      },
++    });
++    await s.connect({ apiKey: 'test' });
++
++    await s.updateAgent(
++      agent.clone({ name: 'Bob', instructions: 'You are Bob.' }),
++    );
++
++    expect(t.updateSessionConfigCalls).toHaveLength(1);
++    expect(t.updateSessionConfigCalls[0]).toMatchObject({
++      instructions: 'You are Bob.',
++      inputAudioFormat: 'g711_ulaw',
++      outputAudioFormat: 'g711_ulaw',
++      voice: 'verse',
++      turnDetection: { type: 'semantic_vad' },
++    });
++  });
++
+   it('approve and reject work with tool and error without', async () => {
+     const agent = new RealtimeAgent({
+       name: 'B',

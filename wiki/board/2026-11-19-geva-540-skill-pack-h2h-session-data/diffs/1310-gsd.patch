@@ -1,0 +1,100 @@
+diff --git a/internal/tools/http/http.go b/internal/tools/http/http.go
+index bb317b6..8b86ebc 100644
+--- a/internal/tools/http/http.go
++++ b/internal/tools/http/http.go
+@@ -160,6 +160,31 @@ func getRequestBody(bodyParams parameters.Parameters, requestBodyPayload string,
+ 	return requestBodyStr, nil
+ }
+ 
++// hasDotSegment reports whether the given path contains a "." or ".." segment,
++// including percent-encoded variants and backslash-separated segments.
++func hasDotSegment(p string) bool {
++	candidates := []string{p}
++	// Repeatedly decode to catch (multiply) percent-encoded dot segments.
++	cur := p
++	for i := 0; i < 3; i++ {
++		dec, err := url.PathUnescape(cur)
++		if err != nil || dec == cur {
++			break
++		}
++		candidates = append(candidates, dec)
++		cur = dec
++	}
++	for _, c := range candidates {
++		c = strings.ReplaceAll(c, "\\", "/")
++		for _, seg := range strings.Split(c, "/") {
++			if seg == "." || seg == ".." {
++				return true
++			}
++		}
++	}
++	return false
++}
++
+ // Helper function to generate the HTTP request URL upon Tool invocation.
+ func getURL(baseURL, path string, pathParams, queryParams parameters.Parameters, defaultQueryParams map[string]string, paramsMap map[string]any) (string, error) {
+ 	// use Go template to replace path params
+@@ -195,6 +220,12 @@ func getURL(baseURL, path string, pathParams, queryParams parameters.Parameters,
+ 	if relParsedURL.Scheme != "" || relParsedURL.Host != "" || relParsedURL.User != nil {
+ 		return "", fmt.Errorf("path must be relative and cannot override base host")
+ 	}
++	// Reject dot segments (e.g. "../") so that path parameters cannot escape
++	// the operator-configured path scope via path normalization in
++	// ResolveReference or on the downstream server.
++	if hasDotSegment(relParsedURL.EscapedPath()) || hasDotSegment(relParsedURL.Path) {
++		return "", fmt.Errorf("path must not contain '.' or '..' segments")
++	}
+ 
+ 	// Create URL based on BaseURL and Path
+ 	// Attach query parameters
+diff --git a/internal/tools/http/http_url_test.go b/internal/tools/http/http_url_test.go
+index c23e7fe..42085aa 100644
+--- a/internal/tools/http/http_url_test.go
++++ b/internal/tools/http/http_url_test.go
+@@ -76,3 +76,46 @@ func TestGetURLHostOverride(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestGetURLPathTraversal(t *testing.T) {
++	baseURL := "https://api.good.com"
++	path := "/api/v1/users/{{.id}}"
++	pathParams := parameters.Parameters{parameters.NewStringParameter("id", "user id")}
++
++	rejected := []string{
++		"../../../admin/secrets",
++		"..",
++		".",
++		"123/../../admin",
++		"%2e%2e/%2e%2e/admin",
++		"%2E%2E%2F%2E%2E%2Fadmin",
++		"%252e%252e/admin",
++		"..\\..\\admin",
++	}
++	for _, v := range rejected {
++		t.Run("reject "+v, func(t *testing.T) {
++			u, err := getURL(baseURL, path, pathParams, nil, nil, map[string]any{"id": v})
++			if err == nil {
++				t.Fatalf("expected error for %q, got URL %q", v, u)
++			}
++		})
++	}
++
++	allowed := map[string]string{
++		"123":     "https://api.good.com/api/v1/users/123",
++		"a.b":     "https://api.good.com/api/v1/users/a.b",
++		"...":     "https://api.good.com/api/v1/users/...",
++		"123/abc": "https://api.good.com/api/v1/users/123/abc",
++	}
++	for v, want := range allowed {
++		t.Run("allow "+v, func(t *testing.T) {
++			got, err := getURL(baseURL, path, pathParams, nil, nil, map[string]any{"id": v})
++			if err != nil {
++				t.Fatalf("unexpected error: %v", err)
++			}
++			if got != want {
++				t.Fatalf("got %q, want %q", got, want)
++			}
++		})
++	}
++}

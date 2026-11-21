@@ -1,0 +1,3 @@
+https://github.com/traefik/traefik at 005583eb12531b6301870affa2f2008c8ef9e34f
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE.md

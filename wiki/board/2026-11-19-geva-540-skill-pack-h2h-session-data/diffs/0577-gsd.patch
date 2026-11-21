@@ -1,0 +1,298 @@
+diff --git a/app/kuma-dp/pkg/dataplane/dnsproxy/component.go b/app/kuma-dp/pkg/dataplane/dnsproxy/component.go
+index 495769a..0da65bf 100644
+--- a/app/kuma-dp/pkg/dataplane/dnsproxy/component.go
++++ b/app/kuma-dp/pkg/dataplane/dnsproxy/component.go
+@@ -79,7 +79,7 @@ var _ component.GracefulComponent = &Server{}
+ func (s *Server) Handler(res dns.ResponseWriter, req *dns.Msg) {
+ 	start := time.Now()
+ 	defer func() {
+-		s.metrics.RequestDuration.Observe(time.Since(start).Seconds())
++		s.metrics.get().RequestDuration.Observe(time.Since(start).Seconds())
+ 		if err := recover(); err != nil {
+ 			log.Error(fmt.Errorf("handler panic %v", err), "panic in DNS handler")
+ 			response := new(dns.Msg)
+@@ -113,14 +113,14 @@ func (s *Server) Handler(res dns.ResponseWriter, req *dns.Msg) {
+ 		proxyStart := time.Now()
+ 		resp, err := s.upstreamClient(req)
+ 		if err != nil {
+-			s.metrics.UpstreamRequestFailureCount.Inc()
++			s.metrics.get().UpstreamRequestFailureCount.Inc()
+ 			log.Error(err, "failed to write message to upstream")
+ 			response = new(dns.Msg)
+ 			response.SetRcode(req, dns.RcodeServerFailure)
+ 		} else {
+ 			response = resp
+ 		}
+-		s.metrics.UpstreamRequestDuration.Observe(time.Since(proxyStart).Seconds())
++		s.metrics.get().UpstreamRequestDuration.Observe(time.Since(proxyStart).Seconds())
+ 	}
+ 	err := res.WriteMsg(response)
+ 	if err != nil {
+diff --git a/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go b/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
+index 56b17b5..79db363 100644
+--- a/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
++++ b/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
+@@ -1,39 +1,124 @@
+ package dnsproxy
+ 
+ import (
++	"maps"
++	"sync"
++	"sync/atomic"
++
+ 	"github.com/prometheus/client_golang/prometheus"
++	"github.com/prometheus/otlptranslator"
+ )
+ 
+-type metrics struct {
++const (
++	upstreamRequestDurationName     = "kuma_dp_dns_upstream_request_duration_seconds"
++	requestDurationName             = "kuma_dp_dns_request_duration_seconds"
++	upstreamRequestFailureCountName = "kuma_dp_dns_upstream_request_failure_count"
++)
++
++// metricSet holds DNS metrics created with a specific set of const labels.
++type metricSet struct {
++	labels                      prometheus.Labels
+ 	RequestDuration             prometheus.Histogram
+ 	UpstreamRequestDuration     prometheus.Histogram
+ 	UpstreamRequestFailureCount prometheus.Counter
+ }
+ 
+-var m *metrics
++func newMetricSet(labels prometheus.Labels) *metricSet {
++	return &metricSet{
++		labels: labels,
++		UpstreamRequestDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
++			Name:        upstreamRequestDurationName,
++			Help:        "The duration of the proxied requests.",
++			ConstLabels: labels,
++		}),
++		RequestDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
++			Name:        requestDurationName,
++			Help:        "The duration of the request (inclusive of request that use internal DNS map).",
++			ConstLabels: labels,
++		}),
++		UpstreamRequestFailureCount: prometheus.NewCounter(prometheus.CounterOpts{
++			Name:        upstreamRequestFailureCountName,
++			Help:        "The total number of failed upstream requests.",
++			ConstLabels: labels,
++		}),
++	}
++}
+ 
+-func newMetrics() *metrics {
+-	if m != nil {
+-		return m
++// metrics is a prometheus.Collector exposing DNS metrics. The labels attached
++// to the metrics (e.g. kuma_workload, mesh, k8s_kuma_io_namespace, kuma_io_zone)
++// are the same extra labels that are added to Envoy metrics, they are
++// delivered dynamically by the control plane (MeshMetric configuration).
++// Whenever the set of labels changes, a new set of metrics is created.
++type metrics struct {
++	current atomic.Pointer[metricSet]
++	mu      sync.Mutex // serializes label updates
++}
++
++var _ prometheus.Collector = &metrics{}
++
++func (m *metrics) get() *metricSet {
++	return m.current.Load()
++}
++
++// Describe intentionally sends no descriptors, which makes this an
++// "unchecked" collector. This is required because label set of the metrics
++// can change over time.
++func (m *metrics) Describe(chan<- *prometheus.Desc) {}
++
++func (m *metrics) Collect(ch chan<- prometheus.Metric) {
++	set := m.get()
++	set.RequestDuration.Collect(ch)
++	set.UpstreamRequestDuration.Collect(ch)
++	set.UpstreamRequestFailureCount.Collect(ch)
++}
++
++func (m *metrics) setLabels(extraLabels map[string]string) {
++	labels := toPrometheusLabels(extraLabels)
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	if maps.Equal(m.get().labels, labels) {
++		return
+ 	}
+-	upstreamRequestDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
+-		Name: "kuma_dp_dns_upstream_request_duration_seconds",
+-		Help: "The duration of the proxied requests.",
+-	})
+-	prometheus.MustRegister(upstreamRequestDuration)
+-	requestDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
+-		Name: "kuma_dp_dns_request_duration_seconds",
+-		Help: "The duration of the request (inclusive of request that use internal DNS map).",
+-	})
+-	prometheus.MustRegister(requestDuration)
+-	upstreamRequestFailureCount := prometheus.NewCounter(prometheus.CounterOpts{
+-		Name: "kuma_dp_dns_upstream_request_failure_count",
+-		Help: "The total number of failed upstream requests.",
+-	})
+-	m = &metrics{
+-		RequestDuration:             requestDuration,
+-		UpstreamRequestDuration:     upstreamRequestDuration,
+-		UpstreamRequestFailureCount: upstreamRequestFailureCount,
++	m.current.Store(newMetricSet(labels))
++}
++
++var labelNamer = otlptranslator.LabelNamer{UTF8Allowed: false}
++
++// toPrometheusLabels converts extra labels to Prometheus label names the same
++// way the OpenTelemetry Prometheus exporter does for Envoy metrics
++// (e.g. "kuma.workload" -> "kuma_workload", "k8s.kuma.io/namespace" -> "k8s_kuma_io_namespace").
++func toPrometheusLabels(extraLabels map[string]string) prometheus.Labels {
++	labels := prometheus.Labels{}
++	for k, v := range extraLabels {
++		if v == "" {
++			continue
++		}
++		name, err := labelNamer.Build(k)
++		if err != nil {
++			log.V(1).Info("skipping invalid metric label", "label", k, "err", err)
++			continue
++		}
++		labels[name] = v
+ 	}
++	return labels
++}
++
++var (
++	m        *metrics
++	initOnce sync.Once
++)
++
++func newMetrics() *metrics {
++	initOnce.Do(func() {
++		m = &metrics{}
++		m.current.Store(newMetricSet(prometheus.Labels{}))
++		prometheus.MustRegister(m)
++	})
+ 	return m
+ }
++
++// SetMetricsLabels sets extra labels (the same as the ones added to Envoy metrics)
++// on DNS proxy metrics.
++func SetMetricsLabels(extraLabels map[string]string) {
++	newMetrics().setLabels(extraLabels)
++}
+diff --git a/app/kuma-dp/pkg/dataplane/dnsproxy/metrics_test.go b/app/kuma-dp/pkg/dataplane/dnsproxy/metrics_test.go
+new file mode 100644
+index 0000000..19323f7
+--- /dev/null
++++ b/app/kuma-dp/pkg/dataplane/dnsproxy/metrics_test.go
+@@ -0,0 +1,87 @@
++package dnsproxy_test
++
++import (
++	"github.com/miekg/dns"
++	. "github.com/onsi/ginkgo/v2"
++	. "github.com/onsi/gomega"
++	"github.com/prometheus/client_golang/prometheus"
++	io_prometheus_client "github.com/prometheus/client_model/go"
++
++	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/dnsproxy"
++)
++
++type noopWriter struct{ dns.ResponseWriter }
++
++func (noopWriter) WriteMsg(*dns.Msg) error { return nil }
++
++func gatherDNSLabels() map[string]map[string]string {
++	families, err := prometheus.DefaultGatherer.Gather()
++	Expect(err).ToNot(HaveOccurred())
++	result := map[string]map[string]string{}
++	for _, family := range families {
++		switch family.GetName() {
++		case "kuma_dp_dns_request_duration_seconds",
++			"kuma_dp_dns_upstream_request_duration_seconds",
++			"kuma_dp_dns_upstream_request_failure_count":
++			Expect(family.GetMetric()).To(HaveLen(1))
++			result[family.GetName()] = labelsOf(family.GetMetric()[0])
++		}
++	}
++	return result
++}
++
++func labelsOf(metric *io_prometheus_client.Metric) map[string]string {
++	labels := map[string]string{}
++	for _, l := range metric.GetLabel() {
++		labels[l.GetName()] = l.GetValue()
++	}
++	return labels
++}
++
++var _ = Describe("metrics", func() {
++	AfterEach(func() {
++		dnsproxy.SetMetricsLabels(nil)
++	})
++
++	It("should add extra labels to DNS metrics", func() {
++		// given
++		server := dnsproxy.NewServerWithCustomClient("", func(msg *dns.Msg) (*dns.Msg, error) {
++			resp := new(dns.Msg)
++			resp.SetRcode(msg, dns.RcodeSuccess)
++			return resp, nil
++		})
++
++		// when
++		dnsproxy.SetMetricsLabels(map[string]string{
++			"kuma.workload":         "kri_wl_default_zone-1_kuma-demo_demo-app_",
++			"k8s.kuma.io/namespace": "kuma-demo",
++			"kuma.io/zone":          "zone-1",
++			"mesh":                  "default",
++			"empty":                 "",
++		})
++		msg := &dns.Msg{}
++		msg.SetQuestion("example.com.", dns.TypeA)
++		server.Handler(noopWriter{}, msg)
++
++		// then
++		expected := map[string]string{
++			"kuma_workload":         "kri_wl_default_zone-1_kuma-demo_demo-app_",
++			"k8s_kuma_io_namespace": "kuma-demo",
++			"kuma_io_zone":          "zone-1",
++			"mesh":                  "default",
++		}
++		labels := gatherDNSLabels()
++		Expect(labels).To(HaveKeyWithValue("kuma_dp_dns_request_duration_seconds", expected))
++		Expect(labels).To(HaveKeyWithValue("kuma_dp_dns_upstream_request_duration_seconds", expected))
++		Expect(labels).To(HaveKeyWithValue("kuma_dp_dns_upstream_request_failure_count", expected))
++	})
++
++	It("should replace labels when they change", func() {
++		dnsproxy.SetMetricsLabels(map[string]string{"kuma.workload": "a"})
++		dnsproxy.SetMetricsLabels(map[string]string{"kuma.workload": "b"})
++
++		Expect(gatherDNSLabels()).To(HaveKeyWithValue(
++			"kuma_dp_dns_request_duration_seconds", map[string]string{"kuma_workload": "b"},
++		))
++	})
++})
+diff --git a/app/kuma-dp/pkg/dataplane/meshmetrics/component.go b/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
+index e207929..1a8f805 100644
+--- a/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
++++ b/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
+@@ -12,6 +12,7 @@ import (
+ 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+ 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+ 
++	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/dnsproxy"
+ 	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/metrics"
+ 	"github.com/kumahq/kuma/v2/pkg/core"
+ 	"github.com/kumahq/kuma/v2/pkg/core/runtime/component"
+@@ -255,6 +256,10 @@ func (m *Manager) reconfigureBackend(ctx context.Context, backendName string, ba
+ }
+ 
+ func (m *Manager) Step(configuration dpapi.MeshMetricDpConfig) error {
++	// DNS metrics are produced by kuma-dp itself, so they don't go through the
++	// scraping pipeline that adds extra labels to Envoy metrics.
++	// Propagate the same labels to make DNS metrics correlate with a workload.
++	dnsproxy.SetMetricsLabels(configuration.Observability.Metrics.ExtraLabels)
+ 	newApplicationsToScrape := m.mapApplicationToApplicationToScrape(configuration.Observability.Metrics.Applications, configuration.Observability.Metrics.Sidecar, configuration.Observability.Metrics.ExtraLabels)
+ 	m.configurePrometheus(newApplicationsToScrape, getPrometheusBackends(configuration.Observability.Metrics.Backends))
+ 	return m.configureOpenTelemetryExporter(m.ctx, newApplicationsToScrape, getOpenTelemetryBackends(configuration.Observability.Metrics.Backends))

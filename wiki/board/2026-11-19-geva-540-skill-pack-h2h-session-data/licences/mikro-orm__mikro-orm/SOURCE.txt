@@ -1,0 +1,3 @@
+https://github.com/mikro-orm/mikro-orm at abe2499588e7de5470ac1fbdaebdc8538d4b4932
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

@@ -1,0 +1,147 @@
+diff --git a/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs b/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
+index c17514d..3c3e8f8 100644
+--- a/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
++++ b/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
+@@ -59,69 +59,59 @@ public static class FinbuckleServiceCollectionExtensions
+         return services.AddMultiTenant<TTenantInfo>(_ => { });
+     }
+ 
+-    // TODO: better document and extract
++    /// <summary>
++    /// Decorates every non-keyed registration of <typeparamref name="TService"/> with <typeparamref name="TImpl"/>.
++    /// Each registration is replaced in place, so registration order and lifetimes are preserved.
++    /// </summary>
++    /// <typeparam name="TService">The service type to decorate.</typeparam>
++    /// <typeparam name="TImpl">The decorator type. Its constructor receives the inner service first.</typeparam>
++    /// <param name="services">The <see cref="IServiceCollection"/> containing the registrations.</param>
++    /// <param name="parameters">Additional constructor arguments for the decorator.</param>
++    /// <returns><c>true</c> when at least one registration was decorated.</returns>
++    /// <exception cref="ArgumentException">No registration of <typeparamref name="TService"/> exists.</exception>
+     public static bool DecorateService<TService, TImpl>(this IServiceCollection services, params object[] parameters)
+     {
+-        var existingService = services.SingleOrDefault(s => s.ServiceType == typeof(TService));
+-        if (existingService is null)
+-            throw new ArgumentException($"No service of type {typeof(TService).Name} found.");
++        var decorated = false;
+ 
+-        ServiceDescriptor? newService;
+-
+-        if (existingService.ImplementationType is not null)
++        for (var i = 0; i < services.Count; i++)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
+-                sp =>
+-                {
+-                    TService inner =
+-                        (TService)ActivatorUtilities.CreateInstance(sp, existingService.ImplementationType);
+-
+-                    if (inner is null)
+-                        throw new Exception(
+-                            $"Unable to instantiate decorated type via implementation type {existingService.ImplementationType.Name}.");
++            var existingService = services[i];
++            if (existingService.ServiceType != typeof(TService) || existingService.IsKeyedService)
++                continue;
+ 
+-                    var parameters2 = new object[parameters.Length + 1];
+-                    Array.Copy(parameters, 0, parameters2, 1, parameters.Length);
+-                    parameters2[0] = inner;
+-
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, parameters2)!;
+-                },
+-                existingService.Lifetime);
+-        }
+-        else if (existingService.ImplementationInstance is not null)
+-        {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
+-                sp =>
+-                {
+-                    TService inner = (TService)existingService.ImplementationInstance;
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, inner, parameters)!;
+-                },
++            services[i] = new ServiceDescriptor(existingService.ServiceType,
++                sp => CreateDecorator(sp, CreateInner(sp, existingService)),
+                 existingService.Lifetime);
++            decorated = true;
+         }
+-        else if (existingService.ImplementationFactory is not null)
+-        {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
+-                sp =>
+-                {
+-                    TService inner = (TService)existingService.ImplementationFactory(sp);
+-                    if (inner is null)
+-                        throw new Exception(
+-                            "Unable to instantiate decorated type via implementation factory.");
+ 
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, inner, parameters)!;
+-                },
+-                existingService.Lifetime);
+-        }
+-        else
++        if (!decorated)
++            throw new ArgumentException($"No service of type {typeof(TService).Name} found.");
++
++        return true;
++
++        object CreateDecorator(IServiceProvider sp, object inner)
+         {
+-            throw new Exception(
+-                "Unable to instantiate decorated type.");
++            var arguments = new object[parameters.Length + 1];
++            arguments[0] = inner;
++            Array.Copy(parameters, 0, arguments, 1, parameters.Length);
++            return ActivatorUtilities.CreateInstance<TImpl>(sp, arguments)!;
+         }
++    }
++
++    private static object CreateInner(IServiceProvider sp, ServiceDescriptor descriptor)
++    {
++        if (descriptor.ImplementationInstance is not null)
++            return descriptor.ImplementationInstance;
+ 
+-        services.Remove(existingService);
+-        services.Add(newService);
++        if (descriptor.ImplementationFactory is not null)
++            return descriptor.ImplementationFactory(sp) ??
++                   throw new Exception("Unable to instantiate decorated type via implementation factory.");
+ 
+-        return true;
++        if (descriptor.ImplementationType is not null)
++            return ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType);
++
++        throw new Exception("Unable to instantiate decorated type.");
+     }
+ 
+     /// <summary>
+diff --git a/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs b/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
+index 78157f3..6d4a666 100644
+--- a/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
++++ b/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
+@@ -611,6 +611,27 @@ public class MultiTenantBuilderExtensionsShould
+             Assert.Equal(defaultValue, options.AccessDeniedPath);
+         }
+ 
++    private class AdditionalAuthenticationSchemeProvider(IOptions<AuthenticationOptions> options)
++        : AuthenticationSchemeProvider(options);
++
++    [Fact]
++    public void WithPerTenantAuthentication_DecorateEveryIAuthenticationSchemeProvider()
++    {
++        var services = new ServiceCollection();
++        services.AddAuthentication();
++        services.AddTransient<IAuthenticationSchemeProvider, AdditionalAuthenticationSchemeProvider>();
++        services.AddLogging();
++        services.AddMultiTenant<TenantInfo>().WithPerTenantAuthentication();
++        var sp = services.BuildServiceProvider();
++
++        var providers = sp.GetServices<IAuthenticationSchemeProvider>().ToList();
++
++        Assert.Equal(2, providers.Count);
++        Assert.All(providers, p => Assert.IsType<MultiTenantAuthenticationSchemeProvider>(p));
++        Assert.Equal(ServiceLifetime.Transient,
++            services.Last(s => s.ServiceType == typeof(IAuthenticationSchemeProvider)).Lifetime);
++    }
++
+     [Fact]
+     public void WithPerTenantAuthentication_ThrowIfCantDecorateIAuthenticationService()
+     {

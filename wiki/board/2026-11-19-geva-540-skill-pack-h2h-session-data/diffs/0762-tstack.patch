@@ -1,0 +1,73 @@
+diff --git a/.changeset/preserve-session-config.md b/.changeset/preserve-session-config.md
+new file mode 100644
+index 0000000..e84085d
+--- /dev/null
++++ b/.changeset/preserve-session-config.md
+@@ -0,0 +1,5 @@
++---
++'@openai/agents-realtime': patch
++---
++
++fix: preserve the session config (e.g. audio formats) when calling `updateAgent` or during handoffs
+diff --git a/packages/agents-realtime/src/realtimeSession.ts b/packages/agents-realtime/src/realtimeSession.ts
+index 3c4f22e..e91d9d8 100644
+--- a/packages/agents-realtime/src/realtimeSession.ts
++++ b/packages/agents-realtime/src/realtimeSession.ts
+@@ -313,10 +313,15 @@ export class RealtimeSession<
+       );
+     }
+ 
++    // Preserve the user-provided session config (e.g. audio formats, turn detection) so that
++    // subsequent session updates (agent updates, handoffs) do not reset them to defaults.
++    const baseConfig: Partial<RealtimeSessionConfig> = this.options.config ?? {};
++
+     return {
++      ...baseConfig,
+       instructions,
+-      voice: this.#currentAgent.voice,
+-      model: this.options.model,
++      voice: this.#currentAgent.voice ?? baseConfig.voice,
++      model: this.options.model ?? baseConfig.model,
+       tools: this.#currentTools,
+       tracing: tracingConfig,
+       ...additionalConfig,
+diff --git a/packages/agents-realtime/test/realtimeSession.test.ts b/packages/agents-realtime/test/realtimeSession.test.ts
+index e39df37..a8b5e36 100644
+--- a/packages/agents-realtime/test/realtimeSession.test.ts
++++ b/packages/agents-realtime/test/realtimeSession.test.ts
+@@ -75,6 +75,35 @@ describe('RealtimeSession', () => {
+     });
+   });
+ 
++  it('preserves session config when updating the agent', async () => {
++    const t = new FakeTransport();
++    const agent = new RealtimeAgent({ name: 'A', handoffs: [] });
++    const s = new RealtimeSession(agent, {
++      transport: t,
++      config: {
++        inputAudioFormat: 'g711_ulaw',
++        outputAudioFormat: 'g711_ulaw',
++        voice: 'ash',
++        instructions: 'session-level instructions',
++      },
++    });
++    await s.connect({ apiKey: 'test' });
++
++    const newAgent = new RealtimeAgent({
++      name: 'Bob',
++      instructions: 'You are Bob',
++      handoffs: [],
++    });
++    await s.updateAgent(newAgent);
++
++    const update = t.updateSessionConfigCalls.at(-1)!;
++    expect(update.inputAudioFormat).toBe('g711_ulaw');
++    expect(update.outputAudioFormat).toBe('g711_ulaw');
++    expect(update.voice).toBe('ash');
++    // agent-specific values still take precedence over the base config
++    expect(update.instructions).toBe('You are Bob');
++  });
++
+   it('updates history and emits history_updated', () => {
+     const historyEvents: RealtimeItem[][] = [];
+     session.on('history_updated', (h) => {

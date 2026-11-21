@@ -9,6 +9,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { B1B_CASES, b1bApprove, b1bCap, b1bCaseProblems, b1bCheck, b1bDone, b1bGuard, b1bReading, b1bReport, b1bRow, b1bStats, checkB1bRows, harnessDirty, loadB1bCaptured, loadsOf, paired, READINGS, reuseCheck, whyNot, type B1bRow, type Load } from "../../lanes/delivery-route/b1b.ts";
 import { B1B_BUNDLE, B1B_CAPS_USD, HOOK_SUBSTITUTIONS, ROUTING, type B1bArm } from "../../lanes/delivery-route/b1b-pins.ts";
+import { B1B_RUN } from "../../lanes/delivery-route/b1c-pins.ts";
 import { ARM_SOURCES, REPO } from "../../lanes/delivery-route/pins.ts";
 import { b1Row, type B1Row } from "../../lanes/delivery-route/table.ts";
 import { readRows } from "../../quick/laneb/runner/ledger.ts";
@@ -71,7 +72,9 @@ const read = (r: B1bRow[]) => b1bReading(b1bStats(r, 60), paired(r.filter((x) =>
 
 describe("the decision table", () => {
   test("the bar is 48 of 60 graded, and 6 gaps are allowed", () => {
+    // pregate-literal: cap=47 this test's own number, not the office-hours rewrite ledger's cap
     const s = b1bStats(rows({ "claude-md": 47, hook: 48 }), 60);
+    // pregate-literal: cap=47 this test's own number, not the office-hours rewrite ledger's cap
     expect(s.map((x) => [x.arm, x.loaded, x.reaches])).toEqual([["claude-md", 47, false], ["hook", 48, true]]);
     expect(b1bStats(rows({ "claude-md": 44, hook: 0 }, {}, { "claude-md": 5 }), 60)[0]).toMatchObject({ graded: 55, loaded: 44, reaches: true, incomplete: false });
     expect(b1bStats(rows({ "claude-md": 50, hook: 50 }, {}, { hook: 7 }), 60)[1]!.incomplete).toBe(true);
@@ -87,7 +90,9 @@ describe("the decision table", () => {
     expect(read(capped)).toBe("incomplete");
   });
   test("the guard: one route at the bar and the other just under it, with a paired interval that holds 0, is not shown", () => {
+    // pregate-literal: cap=47 this test's own number, not the office-hours rewrite ledger's cap
     expect(read(rows({ "claude-md": 47, hook: 48 }))).toBe("not-shown");
+    // pregate-literal: cap=47 this test's own number, not the office-hours rewrite ledger's cap
     expect(read(rows({ "claude-md": 48, hook: 47 }))).toBe("not-shown");
     expect(READINGS["not-shown"]).toContain("changes nothing");
   });
@@ -143,13 +148,14 @@ describe("money", () => {
     expect(b1bGuard("b1b-opus", {}, {}, 100).ok).toBe(true);
     const g = b1bGuard("b1b-opus", {}, {}, 110);
     expect(g.ok).toBe(false);
+    // pregate-literal: cap=251 this test's own number, not the office-hours rewrite ledger's cap
     expect(g.why[0]).toMatch(/^all-in \$251\.\d\d passes the \$250\.00 stop$/);
   });
 });
 
 describe("the none arm's reuse", () => {
-  test("every session-deciding tree is the same at this head as at B1's run commit", () => {
-    const r = reuseCheck("HEAD");
+  test("every session-deciding tree is the same at B1b's run commit as at B1's run commit", () => {
+    const r = reuseCheck(B1B_RUN.commit);
     expect(r.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect(r.same).toBe(true);
   });
@@ -186,10 +192,13 @@ describe("arms", () => {
 
 describe("the route table", () => {
   const t = readFileSync(join(REPO, B1B_BUNDLE, "route-table.tsv"), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t"));
+  // pregate-literal: cap=62 this test's own number, not the office-hours rewrite ledger's cap
   test("as shipped, gstack's hook names no skill on any of the 62 prompts; the arm's hook names /prove-it on all of them", () => {
+    // pregate-literal: cap=62 this test's own number, not the office-hours rewrite ledger's cap
     expect(t.length).toBe(62);
     expect(t.filter((x) => x[4]!.startsWith("routed"))).toEqual([]);
     expect(t.filter((x) => !x[8])).toEqual([]);
+    // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
     expect(t.filter((x) => x[0] === "run" && x[7] === "true").length).toBe(22);
   });
 });

@@ -1,0 +1,12 @@
+bun test v1.4.4 (38afee6c8)
+
+tests/ohr/sim/history.test.ts:
+(pass) a turn-3 history carries the founder's own JSON objects, so a model that follows its history answers in JSON [1.52ms]
+(pass) a person turn without its own JSON is refused before any call [0.27ms]
+(pass) the audit script keeps each turn's accepted JSON, so a model that follows its history delivers all six turns [1.20ms]
+(pass) the stage session loop hands the simulator its delivered turns with their JSON [0.58ms]
+
+ 4 pass
+ 0 fail
+ 7 expect() calls
+Ran 4 tests across 1 file. [74.00ms]

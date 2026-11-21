@@ -1,0 +1,171 @@
+{
+ "schema": "h2hx-codex-pins.v1",
+ "installed_on": "2026-11-21",
+ "hash_rule": {
+  "skip": [
+   ".codex/tmp/**",
+   ".codex/hooks.json.bak*",
+   "gstack/.git/objects/pack/**",
+   "gstack/bin/.gstack-cso-build.log"
+  ],
+  "json": [
+   {
+    "glob": ".codex/gsd-install-state.json",
+    "drop": [
+     "appliedAt"
+    ]
+   },
+   {
+    "glob": ".codex/gsd-file-manifest.json",
+    "drop": [
+     "timestamp",
+     "files"
+    ]
+   }
+  ],
+  "text": [
+   {
+    "globs": [
+     ".codex/**",
+     ".agents/**"
+    ],
+    "pattern": "(GSD_[A-Z_]*ARGS_END)_[0-9a-f]{32}",
+    "replace": "$1_NONCE"
+   }
+  ]
+ },
+ "arms": [
+  {
+   "arm": "s-none",
+   "home_tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "roots": [],
+   "sources": [],
+   "image_dockerfile_sha256": "7c5d730f0a5c8adc6a1a31aad5a8fae9c81fad16a0b4abd1992a7d4084c0ce84",
+   "codex_sha256": "880819aab735adcf16f36cd628940b9f1e652a36c01d10a5d32f83cc84902971",
+   "agents_md_sha256": null
+  },
+  {
+   "arm": "s-gstack",
+   "home_tree_sha256": "3c328bf2515f246813963ed709ff478179e089c7f33315a1e2c4e7f8fb6e3d26",
+   "roots": [
+    ".bun",
+    ".cache/ms-playwright",
+    ".claude/backups",
+    ".claude.json",
+    ".codex",
+    ".gstack",
+    "gstack"
+   ],
+   "sources": [
+    {
+     "name": "gstack",
+     "repo": "garrytan/gstack",
+     "sha": "29bff55dd8a14b32ff282d5a37097e3a53e3250a",
+     "kind": "clone",
+     "git_tree": "99ee94842aa7fa9384bad482231e47cfbe2ea020"
+    }
+   ],
+   "image_dockerfile_sha256": "7c5d730f0a5c8adc6a1a31aad5a8fae9c81fad16a0b4abd1992a7d4084c0ce84",
+   "codex_sha256": "880819aab735adcf16f36cd628940b9f1e652a36c01d10a5d32f83cc84902971",
+   "agents_md_sha256": null
+  },
+  {
+   "arm": "s-gstack-line",
+   "home_tree_sha256": "a5f8b96d9475da02c1caf09b901631ffa8c63dba005e3ce5fcdfc84f0a962c56",
+   "roots": [
+    ".bun",
+    ".cache/ms-playwright",
+    ".claude/backups",
+    ".claude.json",
+    ".codex",
+    ".gstack",
+    "gstack"
+   ],
+   "sources": [
+    {
+     "name": "gstack",
+     "repo": "garrytan/gstack",
+     "sha": "29bff55dd8a14b32ff282d5a37097e3a53e3250a",
+     "kind": "clone",
+     "git_tree": "99ee94842aa7fa9384bad482231e47cfbe2ea020"
+    }
+   ],
+   "image_dockerfile_sha256": "7c5d730f0a5c8adc6a1a31aad5a8fae9c81fad16a0b4abd1992a7d4084c0ce84",
+   "codex_sha256": "880819aab735adcf16f36cd628940b9f1e652a36c01d10a5d32f83cc84902971",
+   "agents_md_sha256": "f62ebe89fbdcc840a1da59b744bdccdffb6453f6622cda86d87f6b7dffbfcd3e"
+  },
+  {
+   "arm": "s-superpowers",
+   "home_tree_sha256": "43a9b1ea45b61fd53fa44c066dabad8d462cd6b9adc8b4343d6563f3bf6c99a7",
+   "roots": [
+    ".codex"
+   ],
+   "sources": [
+    {
+     "name": "superpowers",
+     "repo": "obra/superpowers",
+     "sha": "22f0b463e7a5e579904dd6211a520321035526f7",
+     "kind": "clone",
+     "git_tree": "8fddc972a73e9af7501442df0e638d8e29842b6b"
+    }
+   ],
+   "image_dockerfile_sha256": "7c5d730f0a5c8adc6a1a31aad5a8fae9c81fad16a0b4abd1992a7d4084c0ce84",
+   "codex_sha256": "880819aab735adcf16f36cd628940b9f1e652a36c01d10a5d32f83cc84902971",
+   "agents_md_sha256": null
+  },
+  {
+   "arm": "s-agent-skills",
+   "home_tree_sha256": "e113973593684ef4588db32617690ac4266ba98fb783bb72b299597d1ae130a5",
+   "roots": [
+    ".codex"
+   ],
+   "sources": [
+    {
+     "name": "agent-skills",
+     "repo": "addyosmani/agent-skills",
+     "sha": "39b723ceebf81474d0557c1fecd01eddab585563",
+     "kind": "tree",
+     "git_tree": "6e773dca46ab0fcc75e3771db1412cb0dd309a7f",
+     "tree_sha256": "6a4a5bf174062b0d03813c0d9e916de014fe311f7094342e284e6cabc3d1551e"
+    }
+   ],
+   "image_dockerfile_sha256": "7c5d730f0a5c8adc6a1a31aad5a8fae9c81fad16a0b4abd1992a7d4084c0ce84",
+   "codex_sha256": "880819aab735adcf16f36cd628940b9f1e652a36c01d10a5d32f83cc84902971",
+   "agents_md_sha256": null
+  },
+  {
+   "arm": "s-gsd",
+   "home_tree_sha256": "2b57ac8f07d42b8c9079c3bbdbd0d38ee943f4c0d25ea44d197a8bef93166c47",
+   "roots": [
+    ".agents",
+    ".codex",
+    ".gsd",
+    ".npm"
+   ],
+   "sources": [],
+   "image_dockerfile_sha256": "7c5d730f0a5c8adc6a1a31aad5a8fae9c81fad16a0b4abd1992a7d4084c0ce84",
+   "codex_sha256": "880819aab735adcf16f36cd628940b9f1e652a36c01d10a5d32f83cc84902971",
+   "agents_md_sha256": null
+  },
+  {
+   "arm": "s-tstack",
+   "home_tree_sha256": "f8478122f459b8e3abdee419ba88c8b62b621d24cfabc22f302896766abe9b43",
+   "roots": [
+    ".codex"
+   ],
+   "sources": [
+    {
+     "name": "tstack",
+     "repo": "t3dotgg/tstack",
+     "sha": "11e37a74d0a6868c121cd0910ab2b3bd9873b92a",
+     "kind": "tree",
+     "git_tree": "03e5a2855a128cdd44fbb27f5e0db1827f89b951",
+     "tree_sha256": "48695fdc9e009dfc45663cb6aae9aade1c0accda8346f54a14fa153995f2c8b0"
+    }
+   ],
+   "image_dockerfile_sha256": "7c5d730f0a5c8adc6a1a31aad5a8fae9c81fad16a0b4abd1992a7d4084c0ce84",
+   "codex_sha256": "880819aab735adcf16f36cd628940b9f1e652a36c01d10a5d32f83cc84902971",
+   "agents_md_sha256": null
+  }
+ ]
+}

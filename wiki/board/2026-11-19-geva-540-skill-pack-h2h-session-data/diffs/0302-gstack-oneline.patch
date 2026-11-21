@@ -1,0 +1,18 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java b/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
+index fcc4c74..0839f1d 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
++++ b/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
+@@ -152,7 +152,12 @@ public class CognitoJsonHandler {
+         List<UserPoolClient> clients = service.listUserPoolClients(request.path("UserPoolId").asText());
+         ObjectNode response = objectMapper.createObjectNode();
+         ArrayNode items = response.putArray("UserPoolClients");
+-        clients.forEach(c -> items.add(clientToNode(c)));
++        clients.forEach(c -> {
++            ObjectNode node = items.addObject();
++            node.put("ClientId", c.getClientId());
++            node.put("UserPoolId", c.getUserPoolId());
++            node.put("ClientName", c.getClientName());
++        });
+         return Response.ok(response).build();
+     }
+ 

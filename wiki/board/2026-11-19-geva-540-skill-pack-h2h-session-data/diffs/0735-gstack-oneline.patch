@@ -1,0 +1,22 @@
+diff --git a/src/linker-script.cc b/src/linker-script.cc
+index 51144b3..0f872ba 100644
+--- a/src/linker-script.cc
++++ b/src/linker-script.cc
+@@ -249,9 +249,14 @@ std::string_view Script<E>::get_script_output_type() {
+   }
+ 
+   if (tok.size() >= 3 && (tok[0] == "INPUT" || tok[0] == "GROUP") &&
+-      tok[1] == "(")
+-    if (MappedFile *mf = resolve_path(tok[2], false))
+-      return get_machine_type(ctx, rctx, mf);
++      tok[1] == "(") {
++    tok = tok.subspan(2);
++    while (tok.size() >= 2 && tok[0] == "AS_NEEDED" && tok[1] == "(")
++      tok = tok.subspan(2);
++    if (!tok.empty() && tok[0] != ")")
++      if (MappedFile *mf = resolve_path(tok[0], false))
++        return get_machine_type(ctx, rctx, mf);
++  }
+   return "";
+ }
+ 

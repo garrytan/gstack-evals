@@ -1,0 +1,26 @@
+diff --git a/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs b/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs
+index 3eba574..0ed109e 100644
+--- a/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs
++++ b/src/NAudio.Core/Wave/WaveStreams/BlockAlignReductionStream.cs
+@@ -126,16 +126,18 @@ public class BlockAlignReductionStream : WaveStream
+     /// </summary>
+     public override int Read(Span<byte> buffer)
+     {
+-        int count = buffer.Length;
++        // never request more than the circular buffer can hold, otherwise data read
++        // from the source would be silently discarded
++        int count = Math.Min(buffer.Length, circularBuffer.MaxLength - 2 * sourceStream.BlockAlign);
+         lock (lockObject)
+         {
+             // 1. attempt to fill the circular buffer with enough data to meet our request
+             while (BufferEndPosition < position + count)
+             {
+-                int sourceReadCount = count;
++                int sourceReadCount = (int)(position + count - BufferEndPosition);
+                 if (sourceReadCount % sourceStream.BlockAlign != 0)
+                 {
+-                    sourceReadCount = (count + sourceStream.BlockAlign) - (count % sourceStream.BlockAlign);
++                    sourceReadCount = (sourceReadCount + sourceStream.BlockAlign) - (sourceReadCount % sourceStream.BlockAlign);
+                 }
+ 
+                 byte[] sourceBuf = GetSourceBuffer(sourceReadCount);

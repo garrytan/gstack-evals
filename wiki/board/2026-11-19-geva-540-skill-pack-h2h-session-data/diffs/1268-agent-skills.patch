@@ -1,0 +1,66 @@
+diff --git a/xoraddr.go b/xoraddr.go
+index f6c125e..4247994 100644
+--- a/xoraddr.go
++++ b/xoraddr.go
+@@ -91,6 +91,9 @@ func (a *XORMappedAddress) GetFromAs(msg *Message, attr AttrType) error {
+ 	if err != nil {
+ 		return err
+ 	}
++	if len(value) <= 4 {
++		return io.ErrUnexpectedEOF
++	}
+ 	family := bin.Uint16(value[0:2])
+ 	if family != familyIPv6 && family != familyIPv4 {
+ 		return newDecodeErr("xor-mapped address", "family",
+@@ -111,9 +114,6 @@ func (a *XORMappedAddress) GetFromAs(msg *Message, attr AttrType) error {
+ 		}
+ 	}
+ 
+-	if len(value) <= 4 {
+-		return io.ErrUnexpectedEOF
+-	}
+ 	if err := CheckOverflow(attr, len(value[4:]), len(a.IP)); err != nil {
+ 		return err
+ 	}
+diff --git a/xoraddr_short_test.go b/xoraddr_short_test.go
+new file mode 100644
+index 0000000..4628d68
+--- /dev/null
++++ b/xoraddr_short_test.go
+@@ -0,0 +1,36 @@
++// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
++// SPDX-License-Identifier: MIT
++
++package stun
++
++import (
++	"errors"
++	"io"
++	"testing"
++)
++
++func TestXORMappedAddress_GetFrom_ShortValue(t *testing.T) {
++	for _, value := range [][]byte{{}, {0x00}, {0x00, 0x01}, {0x00, 0x01, 0x00}, {0x00, 0x01, 0x00, 0x00}} {
++		msg := New()
++		msg.Add(AttrXORMappedAddress, value)
++		msg.WriteHeader()
++		// Exact-capacity buffer so out-of-bounds slicing panics.
++		raw := make([]byte, len(msg.Raw))
++		copy(raw, msg.Raw)
++		decoded := &Message{Raw: raw[:len(raw):len(raw)]}
++		if err := decoded.Decode(); err != nil {
++			t.Fatal(err)
++		}
++		var addr XORMappedAddress
++		func() {
++			defer func() {
++				if r := recover(); r != nil {
++					t.Fatalf("panic on value %x: %v", value, r)
++				}
++			}()
++			if err := addr.GetFrom(decoded); !errors.Is(err, io.ErrUnexpectedEOF) {
++				t.Errorf("value %x: expected ErrUnexpectedEOF, got %v", value, err)
++			}
++		}()
++	}
++}

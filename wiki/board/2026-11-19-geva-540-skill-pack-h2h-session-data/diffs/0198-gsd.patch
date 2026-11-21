@@ -1,0 +1,302 @@
+diff --git a/docs/docs/configuration/reusing-mapping-configurations.mdx b/docs/docs/configuration/reusing-mapping-configurations.mdx
+index 3605e80..8a4584a 100644
+--- a/docs/docs/configuration/reusing-mapping-configurations.mdx
++++ b/docs/docs/configuration/reusing-mapping-configurations.mdx
+@@ -55,6 +55,29 @@ The following configurations will be included:
+ - `MapValue`
+ - `MapDerivedType`
+ 
++### Including multiple mapping configurations
++
++The `IncludeMappingConfigurationAttribute` can be applied multiple times to the same method
++to include the configurations of several mapping methods.
++This is useful if a type implements multiple interfaces and each interface has its own mapping configuration:
++
++```csharp
++[MapProperty(nameof(IAudit.CreatedBy), nameof(IAuditDto.Creator))]
++private partial void MapAudit(IAudit audit, IAuditDto dto);
++
++[MapProperty(nameof(IOwnable.Owner), nameof(IOwnableDto.OwnerName))]
++private partial void MapOwnable(IOwnable ownable, IOwnableDto dto);
++
++// highlight-start
++[IncludeMappingConfiguration(nameof(MapAudit))]
++[IncludeMappingConfiguration(nameof(MapOwnable))]
++// highlight-end
++public partial HouseDto ToDto(House house);
++```
++
++If multiple included configurations share the same base configuration (e.g. both include the same mapping method),
++the shared configuration is only applied once.
++
+ ### Including a mapping configuration from a base class
+ 
+ This attribute also supports including configurations from a base class. For example, suppose you want to map
+diff --git a/src/Riok.Mapperly.Abstractions/IncludeMappingConfigurationAttribute.cs b/src/Riok.Mapperly.Abstractions/IncludeMappingConfigurationAttribute.cs
+index 7456ba6..2d29aff 100644
+--- a/src/Riok.Mapperly.Abstractions/IncludeMappingConfigurationAttribute.cs
++++ b/src/Riok.Mapperly.Abstractions/IncludeMappingConfigurationAttribute.cs
+@@ -5,8 +5,9 @@ namespace Riok.Mapperly.Abstractions;
+ /// <summary>
+ /// An attribute used to include the mapping configuration of another mapping method in the attributed method.
+ /// Use the other mapping's method name to identify the configuration.
++/// The attribute can be applied multiple times to include the configurations of multiple mapping methods.
+ /// </summary>
+-[AttributeUsage(AttributeTargets.Method)]
++[AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
+ [Conditional("MAPPERLY_ABSTRACTIONS_SCOPE_RUNTIME")]
+ public sealed class IncludeMappingConfigurationAttribute : Attribute
+ {
+diff --git a/src/Riok.Mapperly/Configuration/EnumMappingConfiguration.cs b/src/Riok.Mapperly/Configuration/EnumMappingConfiguration.cs
+index 55525fe..6871c01 100644
+--- a/src/Riok.Mapperly/Configuration/EnumMappingConfiguration.cs
++++ b/src/Riok.Mapperly/Configuration/EnumMappingConfiguration.cs
+@@ -1,5 +1,6 @@
+ using Microsoft.CodeAnalysis;
+ using Riok.Mapperly.Abstractions;
++using Riok.Mapperly.Helpers;
+ 
+ namespace Riok.Mapperly.Configuration;
+ 
+@@ -21,9 +22,9 @@ public record EnumMappingConfiguration(
+         return this with
+         {
+             FallbackValue = FallbackValue ?? otherConfiguration?.FallbackValue,
+-            IgnoredSourceMembers = IgnoredSourceMembers.Concat(otherConfiguration?.IgnoredSourceMembers ?? []).ToList(),
+-            IgnoredTargetMembers = IgnoredTargetMembers.Concat(otherConfiguration?.IgnoredTargetMembers ?? []).ToList(),
+-            ExplicitMappings = ExplicitMappings.Concat(otherConfiguration?.ExplicitMappings ?? []).ToList(),
++            IgnoredSourceMembers = IgnoredSourceMembers.Concat(otherConfiguration?.IgnoredSourceMembers ?? []).DistinctByReference().ToList(),
++            IgnoredTargetMembers = IgnoredTargetMembers.Concat(otherConfiguration?.IgnoredTargetMembers ?? []).DistinctByReference().ToList(),
++            ExplicitMappings = ExplicitMappings.Concat(otherConfiguration?.ExplicitMappings ?? []).DistinctByReference().ToList(),
+         };
+     }
+ }
+diff --git a/src/Riok.Mapperly/Configuration/MapperConfigurationReader.cs b/src/Riok.Mapperly/Configuration/MapperConfigurationReader.cs
+index 3968e59..d81e156 100644
+--- a/src/Riok.Mapperly/Configuration/MapperConfigurationReader.cs
++++ b/src/Riok.Mapperly/Configuration/MapperConfigurationReader.cs
+@@ -150,6 +150,10 @@ public class MapperConfigurationReader
+             config = BuildWithIncludedMappings(visitedMethods, includedReference, supportsDeepCloning);
+         }
+ 
++        // visitedMethods tracks the current include path only,
++        // this allows multiple includes sharing the same base configuration (diamond)
++        // without reporting them as circular references.
++        visitedMethods.Remove(methodSymbol);
+         return config;
+     }
+ 
+diff --git a/src/Riok.Mapperly/Configuration/MappingConfiguration.cs b/src/Riok.Mapperly/Configuration/MappingConfiguration.cs
+index 0c9b06a..16a684a 100644
+--- a/src/Riok.Mapperly/Configuration/MappingConfiguration.cs
++++ b/src/Riok.Mapperly/Configuration/MappingConfiguration.cs
+@@ -1,5 +1,6 @@
+ using Riok.Mapperly.Abstractions;
+ using Riok.Mapperly.Descriptors;
++using Riok.Mapperly.Helpers;
+ 
+ namespace Riok.Mapperly.Configuration;
+ 
+@@ -19,7 +20,7 @@ public record MappingConfiguration(
+         {
+             Enum = Enum.Include(otherConfiguration?.Enum),
+             Members = Members.Include(otherConfiguration?.Members),
+-            DerivedTypes = DerivedTypes.Concat(otherConfiguration?.DerivedTypes ?? []).ToList(),
++            DerivedTypes = DerivedTypes.Concat(otherConfiguration?.DerivedTypes ?? []).DistinctByReference().ToList(),
+         };
+     }
+ 
+diff --git a/src/Riok.Mapperly/Configuration/MembersMappingConfiguration.cs b/src/Riok.Mapperly/Configuration/MembersMappingConfiguration.cs
+index 0185798..993e948 100644
+--- a/src/Riok.Mapperly/Configuration/MembersMappingConfiguration.cs
++++ b/src/Riok.Mapperly/Configuration/MembersMappingConfiguration.cs
+@@ -1,4 +1,5 @@
+ using Riok.Mapperly.Abstractions;
++using Riok.Mapperly.Helpers;
+ using Riok.Mapperly.Symbols;
+ 
+ namespace Riok.Mapperly.Configuration;
+@@ -26,14 +27,19 @@ public record MembersMappingConfiguration(
+         return members.Distinct();
+     }
+ 
++    /// <summary>
++    /// Merges the other configuration into this one.
++    /// Configurations reachable via multiple include paths (e.g. two included configurations sharing the same base configuration)
++    /// are the same instances and are therefore only included once.
++    /// </summary>
+     public MembersMappingConfiguration Include(MembersMappingConfiguration? otherConfiguration)
+     {
+         return new MembersMappingConfiguration(
+-            IgnoredSources.Concat(otherConfiguration?.IgnoredSources ?? []).ToList(),
+-            IgnoredTargets.Concat(otherConfiguration?.IgnoredTargets ?? []).ToList(),
+-            ValueMappings.Concat(otherConfiguration?.ValueMappings ?? []).ToList(),
+-            ExplicitMappings.Concat(otherConfiguration?.ExplicitMappings ?? []).ToList(),
+-            NestedMappings.Concat(otherConfiguration?.NestedMappings ?? []).ToList(),
++            IgnoredSources.Concat(otherConfiguration?.IgnoredSources ?? []).Distinct().ToList(),
++            IgnoredTargets.Concat(otherConfiguration?.IgnoredTargets ?? []).Distinct().ToList(),
++            ValueMappings.Concat(otherConfiguration?.ValueMappings ?? []).DistinctByReference().ToList(),
++            ExplicitMappings.Concat(otherConfiguration?.ExplicitMappings ?? []).DistinctByReference().ToList(),
++            NestedMappings.Concat(otherConfiguration?.NestedMappings ?? []).DistinctByReference().ToList(),
+             IgnoreObsoleteMembersStrategy ?? otherConfiguration?.IgnoreObsoleteMembersStrategy,
+             RequiredMappingStrategy ?? otherConfiguration?.RequiredMappingStrategy
+         );
+diff --git a/src/Riok.Mapperly/Helpers/EnumerableExtensions.cs b/src/Riok.Mapperly/Helpers/EnumerableExtensions.cs
+index 02dc21e..415980e 100644
+--- a/src/Riok.Mapperly/Helpers/EnumerableExtensions.cs
++++ b/src/Riok.Mapperly/Helpers/EnumerableExtensions.cs
+@@ -18,6 +18,12 @@ public static class EnumerableExtensions
+ #nullable restore
+     }
+ 
++    public static IEnumerable<T> DistinctByReference<T>(this IEnumerable<T> enumerable)
++        where T : class
++    {
++        return enumerable.Distinct<T>(ReferenceEqualityComparer.Instance);
++    }
++
+     public static IEnumerable<T> SkipLast<T>(this IEnumerable<T> enumerable)
+     {
+         using var enumerator = enumerable.GetEnumerator();
+diff --git a/test/Riok.Mapperly.Abstractions.Tests/_snapshots/PublicApiTest.PublicApiHasNotChanged.verified.cs b/test/Riok.Mapperly.Abstractions.Tests/_snapshots/PublicApiTest.PublicApiHasNotChanged.verified.cs
+index 3ad1c41..2491f7d 100644
+--- a/test/Riok.Mapperly.Abstractions.Tests/_snapshots/PublicApiTest.PublicApiHasNotChanged.verified.cs
++++ b/test/Riok.Mapperly.Abstractions.Tests/_snapshots/PublicApiTest.PublicApiHasNotChanged.verified.cs
+@@ -34,7 +34,7 @@ namespace Riok.Mapperly.Abstractions
+         Source = 1,
+         Target = 2,
+     }
+-    [System.AttributeUsage(System.AttributeTargets.Method)]
++    [System.AttributeUsage(System.AttributeTargets.Method, AllowMultiple=true)]
+     [System.Diagnostics.Conditional("MAPPERLY_ABSTRACTIONS_SCOPE_RUNTIME")]
+     public sealed class IncludeMappingConfigurationAttribute : System.Attribute
+     {
+diff --git a/test/Riok.Mapperly.Tests/Mapping/IncludeMappingConfigurationTest.cs b/test/Riok.Mapperly.Tests/Mapping/IncludeMappingConfigurationTest.cs
+index efce47f..a7761b6 100644
+--- a/test/Riok.Mapperly.Tests/Mapping/IncludeMappingConfigurationTest.cs
++++ b/test/Riok.Mapperly.Tests/Mapping/IncludeMappingConfigurationTest.cs
+@@ -42,6 +42,124 @@ public class IncludeMappingConfigurationTest
+         return TestHelper.VerifyGenerator(source);
+     }
+ 
++    [Fact]
++    public void IncludesMultipleConfigsFromInterfaceMappings()
++    {
++        var source = TestSourceBuilder.MapperWithBodyAndTypes(
++            """
++            [MapProperty(nameof(IAudit.CreatedBy), nameof(IAuditDto.Creator))]
++            partial void MapAudit(IAudit source, IAuditDto target);
++
++            [MapProperty(nameof(IOwnable.Owner), nameof(IOwnableDto.OwnerName))]
++            partial void MapOwnable(IOwnable source, IOwnableDto target);
++
++            [IncludeMappingConfiguration(nameof(MapAudit))]
++            [IncludeMappingConfiguration(nameof(MapOwnable))]
++            partial HouseDto Map(House source);
++            """,
++            "interface IAudit { string CreatedBy { get; } }",
++            "interface IOwnable { string Owner { get; } }",
++            "interface IAuditDto { string Creator { set; } }",
++            "interface IOwnableDto { string OwnerName { set; } }",
++            "class House : IAudit, IOwnable { public string CreatedBy { get; set; } public string Owner { get; set; } public string Address { get; set; } }",
++            "class HouseDto : IAuditDto, IOwnableDto { public string Creator { get; set; } public string OwnerName { get; set; } public string Address { get; set; } }"
++        );
++
++        TestHelper
++            .GenerateMapper(source)
++            .Should()
++            .HaveMethodBody(
++                "Map",
++                """
++                var target = new global::HouseDto();
++                target.Creator = source.CreatedBy;
++                target.OwnerName = source.Owner;
++                target.Address = source.Address;
++                return target;
++                """
++            );
++    }
++
++    [Fact]
++    public void IncludesMultipleExternalStaticConfigs()
++    {
++        var source = TestSourceBuilder.MapperWithBodyAndTypes(
++            """
++            [IncludeMappingConfiguration(nameof(@BaseMapper.MapAudit))]
++            [IncludeMappingConfiguration(nameof(@BaseMapper.MapOwnable))]
++            static partial HouseDto Map(House source);
++            """,
++            "interface IAudit { string CreatedBy { get; } }",
++            "interface IOwnable { string Owner { get; } }",
++            "interface IAuditDto { string Creator { set; } }",
++            "interface IOwnableDto { string OwnerName { set; } }",
++            "class House : IAudit, IOwnable { public string CreatedBy { get; set; } public string Owner { get; set; } }",
++            "class HouseDto : IAuditDto, IOwnableDto { public string Creator { get; set; } public string OwnerName { get; set; } }",
++            """
++            static class BaseMapper
++            {
++                [MapProperty(nameof(IAudit.CreatedBy), nameof(IAuditDto.Creator))]
++                public static partial void MapAudit(IAudit source, IAuditDto target);
++
++                [MapProperty(nameof(IOwnable.Owner), nameof(IOwnableDto.OwnerName))]
++                public static partial void MapOwnable(IOwnable source, IOwnableDto target);
++            }
++            """
++        );
++
++        TestHelper
++            .GenerateMapper(source, TestHelperOptions.AllowDiagnostics)
++            .Should()
++            .HaveMethodBody(
++                "Map",
++                """
++                var target = new global::HouseDto();
++                target.Creator = source.CreatedBy;
++                target.OwnerName = source.Owner;
++                return target;
++                """
++            );
++    }
++
++    [Fact]
++    public void IncludesMultipleConfigsSharingTheSameBaseConfig()
++    {
++        var source = TestSourceBuilder.MapperWithBodyAndTypes(
++            """
++            [MapProperty(nameof(A.Value), nameof(B.Value), StringFormat = "X")]
++            partial B MapBase(A a);
++
++            [IncludeMappingConfiguration(nameof(MapBase))]
++            [MapProperty(nameof(A.Value2), nameof(B.Value2), StringFormat = "D")]
++            partial B MapOther(A a);
++
++            [IncludeMappingConfiguration(nameof(MapBase))]
++            [MapProperty(nameof(A.Value3), nameof(B.Value3), StringFormat = "N")]
++            partial B MapOther2(A a);
++
++            [IncludeMappingConfiguration(nameof(MapOther))]
++            [IncludeMappingConfiguration(nameof(MapOther2))]
++            partial B Map(A a);
++            """,
++            "class A { public int Value { get; set; } public int Value2 { get; set; } public int Value3 { get; set; } }",
++            "class B { public string Value { get; set; } public string Value2 { get; set; } public string Value3 { get; set; } }"
++        );
++
++        TestHelper
++            .GenerateMapper(source)
++            .Should()
++            .HaveMethodBody(
++                "Map",
++                """
++                var target = new global::B();
++                target.Value = a.Value.ToString("X");
++                target.Value2 = a.Value2.ToString("D");
++                target.Value3 = a.Value3.ToString("N");
++                return target;
++                """
++            );
++    }
++
+     [Fact]
+     public Task UsesMapperIgnoreSourceFromTargetMapper()
+     {

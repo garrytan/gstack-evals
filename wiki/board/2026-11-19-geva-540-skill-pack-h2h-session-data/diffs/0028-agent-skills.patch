@@ -1,0 +1,83 @@
+diff --git a/src/framework/parsers/glb-parser.js b/src/framework/parsers/glb-parser.js
+index c957254..ff0666d 100644
+--- a/src/framework/parsers/glb-parser.js
++++ b/src/framework/parsers/glb-parser.js
+@@ -588,7 +588,12 @@ const createMaterial = (gltfMaterial, textures) => {
+         material.aoMapChannel = 'r';
+ 
+         extractTextureTransform(occlusionTexture, material, ['ao']);
+-        // TODO: support 'strength'
++
++        // glTF: occlusion = 1.0 + strength * (occlusionTexture - 1.0), which matches
++        // the shader's mix(1.0, ao, aoIntensity)
++        if (occlusionTexture.hasOwnProperty('strength')) {
++            material.aoIntensity = occlusionTexture.strength;
++        }
+     }
+ 
+     if (gltfMaterial.hasOwnProperty('emissiveFactor')) {
+diff --git a/test/framework/parsers/glb-parser.test.mjs b/test/framework/parsers/glb-parser.test.mjs
+new file mode 100644
+index 0000000..21c2921
+--- /dev/null
++++ b/test/framework/parsers/glb-parser.test.mjs
+@@ -0,0 +1,59 @@
++import { expect } from 'chai';
++
++import { GlbParser } from '../../../src/framework/parsers/glb-parser.js';
++import { createApp } from '../../app.mjs';
++import { jsdomSetup, jsdomTeardown } from '../../jsdom.mjs';
++
++const parseGltfJson = (app, gltf) => {
++    const data = new TextEncoder().encode(JSON.stringify(gltf)).buffer;
++    return new Promise((resolve, reject) => {
++        GlbParser.parse('test.gltf', '', data, app.graphicsDevice, app.assets, {}, (err, result) => {
++            if (err) {
++                reject(err);
++            } else {
++                resolve(result);
++            }
++        });
++    });
++};
++
++describe('GlbParser', function () {
++    let app;
++
++    beforeEach(function () {
++        jsdomSetup();
++        app = createApp();
++    });
++
++    afterEach(function () {
++        app?.destroy();
++        app = null;
++        jsdomTeardown();
++    });
++
++    describe('occlusionTexture', function () {
++
++        it('maps occlusion strength to aoIntensity', async function () {
++            const result = await parseGltfJson(app, {
++                asset: { version: '2.0' },
++                scenes: [{ nodes: [] }],
++                nodes: [],
++                materials: [{ occlusionTexture: { index: 0, strength: 0.5 } }]
++            });
++
++            expect(result.materials[0].aoIntensity).to.equal(0.5);
++        });
++
++        it('defaults aoIntensity to 1 when strength is absent', async function () {
++            const result = await parseGltfJson(app, {
++                asset: { version: '2.0' },
++                scenes: [{ nodes: [] }],
++                nodes: [],
++                materials: [{ occlusionTexture: { index: 0 } }]
++            });
++
++            expect(result.materials[0].aoIntensity).to.equal(1);
++        });
++
++    });
++});

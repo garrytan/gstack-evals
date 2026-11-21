@@ -1,0 +1,35 @@
+diff --git a/index.js b/index.js
+index 4d3e212..3ed9571 100644
+--- a/index.js
++++ b/index.js
+@@ -24,7 +24,7 @@ var UNSAFE_CHARS_REGEXP   = /[<>\/\u2028\u2029]/g;
+ // stops there without waiting for a closing `>`. A trailing backslash is not
+ // a delimiter here (that's a JS-level concern, not an HTML one), so this
+ // doesn't affect tagged template literals like `String.raw`.
+-var SCRIPT_CLOSE_REGEXP = /<\/script[^>]*>|<\/script(?=[\t\n\f\r \/>])/gi;
++var SCRIPT_CLOSE_REGEXP = /<\/script[^<>]*>|<\/script(?=[\t\n\f\r \/>])/gi;
+ 
+ var RESERVED_SYMBOLS = ['*', 'async'];
+ 
+diff --git a/test/unit/serialize.js b/test/unit/serialize.js
+index 978328f..9f7496f 100644
+--- a/test/unit/serialize.js
++++ b/test/unit/serialize.js
+@@ -726,6 +726,17 @@ describe('serialize( obj )', function () {
+             strictEqual(deserialized('/'), fn('/'));
+             strictEqual(deserialized('x'), fn('x'));
+         });
++
++        it('should not let a code-position `</script` swallow a later `</script>`', function () {
++            var src = "function f(x){ return x</script=+/ + '</script><img src=x onerror=alert(1)>' }";
++            var fn = new Function('return ' + src)();
++            var serialized = serialize({ h: fn });
++
++            strictEqual(/<\/script[\t\n\f\r \/>]/i.test(serialized), false);
++
++            var deserialized; eval('deserialized = ' + serialized);
++            strictEqual(deserialized.h('a'), fn('a'));
++        });
+     });
+ 
+     describe('options', function () {

@@ -1,0 +1,48 @@
+diff --git a/pkl-parser/src/main/java/org/pkl/parser/Lexer.java b/pkl-parser/src/main/java/org/pkl/parser/Lexer.java
+index 5b7ee93..988c4fc 100644
+--- a/pkl-parser/src/main/java/org/pkl/parser/Lexer.java
++++ b/pkl-parser/src/main/java/org/pkl/parser/Lexer.java
+@@ -489,11 +489,13 @@ public class Lexer {
+   }
+ 
+   private void lexQuotedIdentifier() {
+-    while (lookahead != '`' && lookahead != '\n' && lookahead != '\r') {
++    while (lookahead != '`' && lookahead != '\n' && lookahead != '\r' && lookahead != EOF) {
+       nextChar();
+     }
+     if (lookahead == '`') {
+       nextChar();
++    } else if (lookahead == EOF) {
++      throw unexpectedEndOfFile();
+     } else {
+       throw unexpectedChar(lookahead, "backquote");
+     }
+diff --git a/pkl-parser/src/test/kotlin/org/pkl/parser/LexerTest.kt b/pkl-parser/src/test/kotlin/org/pkl/parser/LexerTest.kt
+index 6cd9fbf..b1d1b7f 100644
+--- a/pkl-parser/src/test/kotlin/org/pkl/parser/LexerTest.kt
++++ b/pkl-parser/src/test/kotlin/org/pkl/parser/LexerTest.kt
+@@ -16,6 +16,7 @@
+ package org.pkl.parser
+ 
+ import org.assertj.core.api.Assertions.assertThat
++import org.assertj.core.api.Assertions.assertThatThrownBy
+ import org.junit.jupiter.api.Test
+ 
+ class LexerTest {
+@@ -46,4 +47,16 @@ class LexerTest {
+     assertThat(Lexer.maybeQuoteIdentifier("this")).isEqualTo("`this`")
+     assertThat(Lexer.maybeQuoteIdentifier("😀")).isEqualTo("`😀`")
+   }
++
++  @Test
++  fun `unterminated quoted identifier at end of input`() {
++    for (input in listOf("`", "`foo", "foo.`bar")) {
++      assertThatThrownBy {
++          val lexer = Lexer(input)
++          while (lexer.next() != Token.EOF) {}
++        }
++        .isInstanceOf(ParserError::class.java)
++        .hasMessageContaining("Unexpected end of file")
++    }
++  }
+ }

@@ -1,0 +1,125 @@
+diff --git a/slatedb/src/bytes_range.rs b/slatedb/src/bytes_range.rs
+index f05936b..02285c8 100644
+--- a/slatedb/src/bytes_range.rs
++++ b/slatedb/src/bytes_range.rs
+@@ -43,22 +43,26 @@ impl RangeBounds<Bytes> for BytesRange {
+     }
+ }
+ 
+-fn is_bound_non_empty(bound: &Bound<Bytes>) -> bool {
+-    match bound {
+-        Included(b) | Excluded(b) => !b.is_empty(),
+-        Unbounded => true,
+-    }
+-}
+-
+ impl BytesRange {
++    /// Creates a new range from the given bounds.
++    ///
++    /// Empty byte strings are accepted as bounds. Since the empty byte string is
++    /// the smallest possible key, an empty start bound (included or excluded) is
++    /// normalized to [`Unbounded`]. An empty end bound always yields an empty
++    /// range (no valid key sorts before the empty key), which is rejected just
++    /// like any other empty range.
++    ///
++    /// # Panics
++    ///
++    /// Panics if the resulting range is empty.
+     pub(crate) fn new(start_bound: Bound<Bytes>, end_bound: Bound<Bytes>) -> Self {
++        let start_bound = match start_bound {
++            Included(b) | Excluded(b) if b.is_empty() => Unbounded,
++            other => other,
++        };
+         assert!(
+-            is_bound_non_empty(&start_bound),
+-            "Start bound must be non-empty"
+-        );
+-        assert!(
+-            is_bound_non_empty(&end_bound),
+-            "End bound must be non-empty"
++            !matches!(&end_bound, Included(b) | Excluded(b) if b.is_empty()),
++            "Range must be non-empty"
+         );
+         let inner = ComparableRange::new(start_bound, end_bound);
+         assert!(inner.non_empty(), "Range must be non-empty");
+@@ -315,6 +319,34 @@ pub(crate) mod tests {
+         BytesRange::new(Unbounded, Unbounded);
+     }
+ 
++    #[test]
++    fn test_new_with_empty_start_bound_is_unbounded() {
++        let end = Bytes::from("z");
++        for start in [
++            Bound::Included(Bytes::new()),
++            Bound::Excluded(Bytes::new()),
++        ] {
++            let range = BytesRange::new(start, Bound::Excluded(end.clone()));
++            assert_eq!(range.start_bound(), Unbounded);
++            assert_eq!(range.end_bound(), Bound::Excluded(&end));
++            assert!(range.contains(&Bytes::from("a")));
++        }
++        let range = BytesRange::from(Bytes::new()..);
++        assert_eq!(range, BytesRange::new(Unbounded, Unbounded));
++    }
++
++    #[test]
++    #[should_panic(expected = "Range must be non-empty")]
++    fn test_new_with_empty_excluded_end_bound_panics() {
++        BytesRange::new(Unbounded, Bound::Excluded(Bytes::new()));
++    }
++
++    #[test]
++    #[should_panic(expected = "Range must be non-empty")]
++    fn test_new_with_empty_included_end_bound_panics() {
++        BytesRange::new(Unbounded, Bound::Included(Bytes::new()));
++    }
++
+     #[test]
+     #[should_panic(expected = "Range must be non-empty")]
+     fn test_new_with_start_larger_than_end_panics() {
+diff --git a/slatedb/src/db.rs b/slatedb/src/db.rs
+index 1bde64f..cfe1784 100644
+--- a/slatedb/src/db.rs
++++ b/slatedb/src/db.rs
+@@ -924,6 +924,13 @@ impl Db {
+     ///
+     /// returns a `DbIterator`
+     ///
++    /// An empty start bound (e.g. `b"".."z"`) is treated as unbounded, since the
++    /// empty key sorts before every valid key.
++    ///
++    /// ## Panics
++    /// - If the range is empty, e.g. its start is greater than its end, or its end
++    ///   bound is the empty key.
++    ///
+     /// ## Errors
+     /// - `Error`: if there was an error scanning the range of keys
+     ///
+@@ -4231,6 +4238,27 @@ mod tests {
+         assert_eq!(db_state.state.imm_memtable.len(), 1);
+     }
+ 
++    #[tokio::test]
++    async fn test_scan_with_empty_start_bound() {
++        let object_store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
++        let db = Db::open("/tmp/test_scan_empty_start", object_store)
++            .await
++            .unwrap();
++        db.put(b"a", b"1").await.unwrap();
++        db.put(b"b", b"2").await.unwrap();
++
++        let empty: &[u8] = b"";
++        let mut iter = db.scan(empty..).await.unwrap();
++        assert_eq!(iter.next().await.unwrap().unwrap().key.as_ref(), b"a");
++        assert_eq!(iter.next().await.unwrap().unwrap().key.as_ref(), b"b");
++        assert!(iter.next().await.unwrap().is_none());
++
++        let end: &[u8] = b"b";
++        let mut iter = db.scan(empty..end).await.unwrap();
++        assert_eq!(iter.next().await.unwrap().unwrap().key.as_ref(), b"a");
++        assert!(iter.next().await.unwrap().is_none());
++    }
++
+     #[tokio::test]
+     async fn test_put_empty_value() {
+         let object_store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());

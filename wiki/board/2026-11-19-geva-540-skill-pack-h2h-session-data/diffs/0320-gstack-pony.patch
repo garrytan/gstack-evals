@@ -1,0 +1,99 @@
+diff --git a/plugin/aa55udp.go b/plugin/aa55udp.go
+index fed3063..a56e452 100644
+--- a/plugin/aa55udp.go
++++ b/plugin/aa55udp.go
+@@ -6,6 +6,7 @@ import (
+ 	"encoding/hex"
+ 	"errors"
+ 	"fmt"
++	"math"
+ 	"net"
+ 	"strings"
+ 	"time"
+@@ -32,7 +33,7 @@ type AA55UDP struct {
+ 	log    *util.Logger
+ 	conn   *net.UDPConn
+ 	pdu    []byte // 6-byte PDU body, no CRC
+-	decode string // int32be | uint32be | int16be | uint16be
++	decode string // int32be | uint32be | int16be | uint16be | float32be
+ 	scale  float64
+ }
+ 
+@@ -46,7 +47,7 @@ func init() {
+ //	host:     192.168.1.26   # inverter IP; port 8899 is always used
+ //	register: 30127          # Modbus register address (0-based, uint16)
+ //	count:    2              # number of registers to read (1=U16, 2=S32/U32)
+-//	decode:   int32be        # int32be | uint32be | int16be | uint16be
++//	decode:   int32be        # int32be | uint32be | int16be | uint16be | float32be (alias float32)
+ //	scale:    1.0            # optional multiplier (default 1.0)
+ func NewAA55UDPFromConfig(_ context.Context, other map[string]interface{}) (Plugin, error) {
+ 	cc := struct {
+@@ -68,9 +69,9 @@ func NewAA55UDPFromConfig(_ context.Context, other map[string]interface{}) (Plug
+ 	}
+ 
+ 	switch cc.Decode {
+-	case "int32be", "uint32be", "int16be", "uint16be":
++	case "int32be", "uint32be", "int16be", "uint16be", "float32be", "float32":
+ 	default:
+-		return nil, fmt.Errorf("aa55udp: unsupported decode %q (want int32be|uint32be|int16be|uint16be)", cc.Decode)
++		return nil, fmt.Errorf("aa55udp: unsupported decode %q (want int32be|uint32be|int16be|uint16be|float32be)", cc.Decode)
+ 	}
+ 
+ 	pdu := buildPDU(cc.Register, cc.Count)
+@@ -179,7 +180,7 @@ func stripAA55Header(buf []byte) ([]byte, error) {
+ 	return buf[5 : 5+byteCount], nil
+ }
+ 
+-// decodeAt extracts an integer at the given byte offset of payload and
++// decodeAt extracts a number at the given byte offset of payload and
+ // interprets it according to decode.
+ func decodeAt(payload []byte, offset int, decode string) (float64, error) {
+ 	switch decode {
+@@ -203,6 +204,11 @@ func decodeAt(payload []byte, offset int, decode string) (float64, error) {
+ 			return 0, fmt.Errorf("payload too short for uint16be at offset %d (len=%d)", offset, len(payload))
+ 		}
+ 		return float64(binary.BigEndian.Uint16(payload[offset:])), nil
++	case "float32be", "float32":
++		if len(payload) < offset+4 {
++			return 0, fmt.Errorf("payload too short for float32be at offset %d (len=%d)", offset, len(payload))
++		}
++		return float64(math.Float32frombits(binary.BigEndian.Uint32(payload[offset:]))), nil
+ 	}
+ 	return 0, fmt.Errorf("unknown decode type: %s", decode)
+ }
+diff --git a/plugin/aa55udp_test.go b/plugin/aa55udp_test.go
+index a617a6f..38c9949 100644
+--- a/plugin/aa55udp_test.go
++++ b/plugin/aa55udp_test.go
+@@ -158,8 +158,17 @@ func TestDecodeAt_TooShort(t *testing.T) {
+ 	require.Error(t, err)
+ }
+ 
++func TestDecodeAt_Float32BE(t *testing.T) {
++	// 1234.5 as IEEE-754 big-endian
++	for _, d := range []string{"float32be", "float32"} {
++		v, err := decodeAt([]byte{0x44, 0x9A, 0x50, 0x00}, 0, d)
++		require.NoError(t, err)
++		assert.Equal(t, 1234.5, v)
++	}
++}
++
+ func TestDecodeAt_UnknownType(t *testing.T) {
+-	_, err := decodeAt(make([]byte, 4), 0, "float32")
++	_, err := decodeAt(make([]byte, 4), 0, "float64")
+ 	require.Error(t, err)
+ }
+ 
+diff --git a/templates/definition/meter/goodwe-wifi-et.yaml b/templates/definition/meter/goodwe-wifi-et.yaml
+index f1ffe24..46e8a5d 100644
+--- a/templates/definition/meter/goodwe-wifi-et.yaml
++++ b/templates/definition/meter/goodwe-wifi-et.yaml
+@@ -23,7 +23,7 @@ render: |
+     host: {{ .host }}
+     register: 36017
+     count: 2
+-    decode: float32
++    decode: float32be
+     scale: 0.001
+   {{- end }}
+   {{- if eq .usage "pv" }}

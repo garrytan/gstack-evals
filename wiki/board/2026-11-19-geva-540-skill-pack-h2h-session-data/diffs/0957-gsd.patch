@@ -1,0 +1,55 @@
+diff --git a/cell.go b/cell.go
+index 1cac3e4..e56a97e 100644
+--- a/cell.go
++++ b/cell.go
+@@ -1657,6 +1657,9 @@ func (ws *xlsxWorksheet) mergeCellsParser(cell string) (string, error) {
+ 				_ = sortCoordinates(rect)
+ 				ws.MergeCells.Cells[i].rect = rect
+ 			}
++			if len(ws.MergeCells.Cells[i].rect) == 0 {
++				continue
++			}
+ 			if cellInRange([]int{col, row}, ws.MergeCells.Cells[i].rect) {
+ 				cell = strings.Split(ws.MergeCells.Cells[i].Ref, ":")[0]
+ 				break
+@@ -1688,6 +1691,9 @@ func (f *File) checkCellInRangeRef(cell, rangeRef string) (bool, error) {
+ // cellInRange provides a function to determine if a given range is within a
+ // range.
+ func cellInRange(cell, ref []int) bool {
++	if len(cell) < 2 || len(ref) < 4 {
++		return false
++	}
+ 	return cell[0] >= ref[0] && cell[0] <= ref[2] && cell[1] >= ref[1] && cell[1] <= ref[3]
+ }
+ 
+diff --git a/merge_test.go b/merge_test.go
+index 3675cea..d6c797a 100644
+--- a/merge_test.go
++++ b/merge_test.go
+@@ -239,3 +239,26 @@ func TestMergeCellsParser(t *testing.T) {
+ 	_, err := ws.mergeCellsParser("A1")
+ 	assert.NoError(t, err)
+ }
++
++func TestMergeCellsParserEmptyRef(t *testing.T) {
++	f := NewFile()
++	assert.NoError(t, f.SetCellValue("Sheet1", "A1", "v"))
++	// Replace the worksheet XML with one containing an empty merge cell reference
++	f.Sheet.Delete("xl/worksheets/sheet1.xml")
++	f.Pkg.Store("xl/worksheets/sheet1.xml", []byte(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>v</t></is></c></row></sheetData><mergeCells count="1"><mergeCell ref=""></mergeCell></mergeCells></worksheet>`))
++	f.checked = sync.Map{}
++	for _, cell := range []string{"A1", "B1", "A2"} {
++		_, err := f.GetCellValue("Sheet1", cell)
++		assert.NoError(t, err)
++		_, err = f.GetCellType("Sheet1", cell)
++		assert.NoError(t, err)
++		_, err = f.GetCellFormula("Sheet1", cell)
++		assert.NoError(t, err)
++	}
++	val, err := f.GetCellValue("Sheet1", "A1")
++	assert.NoError(t, err)
++	assert.Equal(t, "v", val)
++	assert.NoError(t, f.SetCellValue("Sheet1", "B2", 1))
++	assert.False(t, cellInRange([]int{1, 1}, nil))
++	assert.NoError(t, f.Close())
++}

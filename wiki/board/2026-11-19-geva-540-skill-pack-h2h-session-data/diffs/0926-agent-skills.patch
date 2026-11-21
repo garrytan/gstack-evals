@@ -1,0 +1,81 @@
+diff --git a/lib/resolver-compat.js b/lib/resolver-compat.js
+index c00d1bf..641d3d4 100644
+--- a/lib/resolver-compat.js
++++ b/lib/resolver-compat.js
+@@ -109,7 +109,9 @@ class LegacyResolver extends CustomResolver {
+ 	constructor(fileSystem, globalPaths, builtinModules, rootPaths, pathContext, customResolver, hostRequire, compiler, strict, externals, allowTransitive) {
+ 		super(fileSystem, globalPaths, builtinModules, rootPaths, pathContext, customResolver, hostRequire, compiler, strict);
+ 		this.externals = externals.map(makeExternalMatcher);
+-		this.externalCache = externals.map(pattern => new RegExp(makeExternalMatcherRegex(pattern)));
++		// Anchored to the full package name (optionally followed by a subpath) so that
++		// e.g. 'left-pad' does not admit 'evil-left-pad' or 'left-pad-backdoor'.
++		this.externalCache = externals.map(pattern => new RegExp(`^${makeExternalMatcherRegex(pattern)}(?:[\\\\/].*)?$`));
+ 		this.currMod = undefined;
+ 		this.trustedMods = new WeakMap();
+ 		this.allowTransitive = allowTransitive;
+diff --git a/test/ghsa/GHSA-c48m-32m9-vx93/repro.js b/test/ghsa/GHSA-c48m-32m9-vx93/repro.js
+new file mode 100644
+index 0000000..afdeed2
+--- /dev/null
++++ b/test/ghsa/GHSA-c48m-32m9-vx93/repro.js
+@@ -0,0 +1,60 @@
++'use strict';
++
++/**
++ * GHSA-c48m-32m9-vx93 — External allowlist substring match with custom resolver
++ *
++ * The pre-check in `customResolve` tested the requested bare module name
++ * against an unanchored regex built from `require.external`, so
++ * `external: ['left-pad']` also admitted `evil-left-pad`, `left-pad-backdoor`,
++ * etc., which the custom resolver would then load in the host context.
++ */
++
++const assert = require('assert');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const { NodeVM } = require('../../../lib/main.js');
++
++describe('GHSA-c48m-32m9-vx93 (external allowlist must match full package name)', () => {
++	let root;
++
++	before(() => {
++		root = fs.mkdtempSync(path.join(os.tmpdir(), 'vm2-c48m-'));
++		const nm = path.join(root, 'node_modules');
++		for (const name of ['left-pad', 'evil-left-pad', 'left-pad-backdoor', '@scope/pkg', '@scope/pkg-evil']) {
++			const dir = path.join(nm, name);
++			fs.mkdirSync(dir, { recursive: true });
++			fs.writeFileSync(path.join(dir, 'index.js'), `module.exports = ${JSON.stringify(name)};`);
++			fs.writeFileSync(path.join(dir, 'sub.js'), `module.exports = ${JSON.stringify(name + '/sub')};`);
++		}
++	});
++
++	after(() => {
++		fs.rmSync(root, { recursive: true, force: true });
++	});
++
++	function makeVM(external) {
++		return new NodeVM({
++			require: {
++				external,
++				builtin: [],
++				context: 'host',
++				resolve: id => require.resolve(id, { paths: [root] })
++			}
++		});
++	}
++
++	it('allows the exact allowlisted package and its subpaths', () => {
++		const vm = makeVM(['left-pad', '@scope/pkg']);
++		assert.strictEqual(vm.run('module.exports = require("left-pad")', __filename), 'left-pad');
++		assert.strictEqual(vm.run('module.exports = require("left-pad/sub")', __filename), 'left-pad/sub');
++		assert.strictEqual(vm.run('module.exports = require("@scope/pkg")', __filename), '@scope/pkg');
++	});
++
++	for (const name of ['evil-left-pad', 'left-pad-backdoor', '@scope/pkg-evil']) {
++		it(`rejects colliding package ${name}`, () => {
++			const vm = makeVM(['left-pad', '@scope/pkg']);
++			assert.throws(() => vm.run(`module.exports = require(${JSON.stringify(name)})`, __filename), /Cannot find module/);
++		});
++	}
++});

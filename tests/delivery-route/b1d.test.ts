@@ -70,9 +70,12 @@ const mainRows = (k: number, gaps = 0) => RUN.map((t, i) => row(B1D_ARM, t, i < 
 const readIn = (rows: B1dRow[]) => inReading(b1dStats(rows, B1D_ARM, 60));
 
 describe("the decision", () => {
+  // pregate-literal: cap=38 this test's own number, not the office-hours rewrite ledger's cap
   test("Garry's bar is a point count: 39 of 60 clears, 38 is short, and too many gaps or a cap stop is INCOMPLETE", () => {
+    // pregate-literal: cap=38 this test's own number, not the office-hours rewrite ledger's cap
     expect([39, 40, 38, 0].map((k) => readIn(mainRows(k)).key)).toEqual(["clears", "clears", "short", "short"]);
     expect(readIn(mainRows(39)).text).toContain("the CLAUDE.md routing block is cut, unless the held-out readings below stop it");
+    // pregate-literal: cap=38 this test's own number, not the office-hours rewrite ledger's cap
     expect(readIn(mainRows(38)).text).toContain("the CLAUDE.md routing block stays and the result goes to Garry");
     expect(readIn(mainRows(45, 7)).key).toBe("incomplete");
     const capped = mainRows(45);
@@ -102,7 +105,9 @@ describe("the decision", () => {
   });
   test("the held-out report pairs each arm, splits by where the hook put prove-it, and prints the strata", () => {
     const tasks = Array.from({ length: 60 }, (_, i) => "t" + String(i).padStart(2, "0") + (i % 10 === 0 ? "_interface" : ""));
+    // pregate-literal: cap=47 this test's own number, not the office-hours rewrite ledger's cap
     const routes = new Map(tasks.map((t, i) => [t, { position: (i < 40 ? "only" : i < 47 ? "second of two" : "not named") as any, chars: 100 + i }]));
+    // pregate-literal: cap=47 this test's own number, not the office-hours rewrite ledger's cap
     const rows = tasks.flatMap((t, i) => [row(B1D_ARM, t, i < 40, i < 40 ? {} : { named: i < 47 ? ["verify", "prove-it"] : [], position: i < 47 ? "second of two" : "not named" }), row("project-md", t, i < 39), row(NOESCAPE.arm, t, i < 45), row("none", t, false)]);
     const rep = hoReport(rows, clears, routes, tasks);
     expect(rep.reading).toMatchObject({ incomplete: false, disagree: false, block: "matches", noescape: "matches", decision: "the CLAUDE.md routing block is cut (Garry's rule)" });
@@ -235,12 +240,24 @@ describe("money", () => {
       expect(b1dGuard("b1d-in", { "b1d-in": readRows(path) }, {}, 0).why).toContain("b1d-in is marked done; a done item never launches again");
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
-  test("the launch guard counts every item's projection and this lane's counter against the $340 stop", () => {
+  test("the launch guard counts every item's projection and this lane's counter against the $400 stop", () => {
     const g0 = b1dGuard("b1d-in", {}, {}, 0), all = Number(/all-in \$([\d.]+)/.exec(g0.lines[0]!)![1]);
     expect(b1dGuard("b1d-in", {}, {}, B1D.stopUsd - all).ok).toBe(true);
     const g = b1dGuard("b1d-in", {}, {}, B1D.stopUsd - all + 0.01);
     expect(g.ok).toBe(false);
-    expect(g.why[0]).toBe("all-in $340.01 passes the $340.00 stop");
+    expect(g.why[0]).toBe("all-in $400.01 passes the $400.00 stop");
+  });
+  test("a relaunch past the all-in stop runs anyway and prints the overshoot, and a fresh launch past the $400 stop still refuses", () => {
+    const M = (u: number) => Math.round(u * 1e6), ts = "2026-11-19T00:00:00Z", parts = b1dPlan("b1d-in", RUN, null).parts, lost = { "b1d-in": { parts, finished: [] } };
+    const ledger = [{ ts, item: "b1d-in", kind: "approval", id: "approval", usd_micros: M(90) }, { ts, item: "b1d-in", kind: "reserve", id: "b1d-in-1/s1", usd_micros: M(20) }, { ts, item: "b1d-in", kind: "settle", id: "b1d-in-1/s1", usd_micros: M(20) }, { ts, item: "b1d-in", kind: "reserve", id: "host-1", usd_micros: M(7.68) }, { ts, item: "b1d-in", kind: "reserve", id: "b1d-in-1/vm", usd_micros: M(2.4) }] as Row[];
+    const at = (crew: number) => b1dGuard("b1d-in", { "b1d-in": ledger }, lost, crew, "b1d-in-1"), all = Number(/all-in \$([\d.]+)/.exec(at(0).lines[0]!)![1]);
+    const over = at(B1D.stopUsd - all + 0.01);
+    expect([over.ok, over.why]).toEqual([true, []]);
+    expect(over.lines[0]).toMatch(/^B1D_LAUNCH OVERSHOOT b1d-in: all-in \$400\.01 of \$400\.00/);
+    expect(over.lines[1]).toBe("  relaunch of b1d-in-1 runs anyway, salvage first; report to the Captain at once: all-in $400.01 passes the $400.00 stop");
+    const g0 = b1dGuard("b1d-in", { "b1d-in": ledger }, { "b1d-in": { parts, finished: ["b1d-in-1"] } }, 0), fresh = Number(/all-in \$([\d.]+)/.exec(g0.lines[0]!)![1]);
+    const refused = b1dGuard("b1d-in", { "b1d-in": ledger }, { "b1d-in": { parts, finished: ["b1d-in-1"] } }, B1D.stopUsd - fresh + 0.01);
+    expect([refused.ok, refused.why]).toEqual([false, ["all-in $400.01 passes the $400.00 stop"]]);
   });
   test("a relaunch counts its item at its ledger spend, so a lost part's salvage runs, and a fresh launch past the cap still refuses", () => {
     const M = (u: number) => Math.round(u * 1e6), ts = "2026-11-19T00:00:00Z", parts = b1dPlan("b1d-in", RUN, null).parts;
@@ -251,12 +268,23 @@ describe("money", () => {
     const next = b1dGuard("b1d-in", { "b1d-in": ledger(60) }, { "b1d-in": { parts, finished: ["b1d-in-1"] } }, 0);
     expect([next.ok, next.why[0]]).toEqual([false, "b1d-in's projection $124.08 passes its cap $90.00"]);
   });
+  test("a relaunch past its item cap runs anyway and prints the cap overshoot", () => {
+    const M = (u: number) => Math.round(u * 1e6), ts = "2026-11-19T00:00:00Z", parts = b1dPlan("b1d-in", RUN, null).parts;
+    const ledger = [{ ts, item: "b1d-in", kind: "approval", id: "approval", usd_micros: M(90) }, { ts, item: "b1d-in", kind: "reserve", id: "b1d-in-1/s1", usd_micros: M(85) }, { ts, item: "b1d-in", kind: "settle", id: "b1d-in-1/s1", usd_micros: M(85) }, { ts, item: "b1d-in", kind: "reserve", id: "host-1", usd_micros: M(7.68) }, { ts, item: "b1d-in", kind: "reserve", id: "b1d-in-1/vm", usd_micros: M(2.4) }] as Row[];
+    const g = b1dGuard("b1d-in", { "b1d-in": ledger }, { "b1d-in": { parts, finished: [] } }, 0, "b1d-in-1");
+    expect([g.ok, g.why]).toEqual([true, []]);
+    expect(g.lines[0]).toMatch(/^B1D_LAUNCH OVERSHOOT b1d-in: .*; b1d-in \$95\.08 of cap \$90\.00/);
+    expect(g.lines[1]).toBe("  relaunch of b1d-in-1 runs anyway, salvage first; report to the Captain at once: b1d-in's projection $95.08 passes its cap $90.00");
+  });
 });
 
+// B1d's counted runs' commit, as its results post records it (wiki/board/2026-11-19-capy-b1d-hook-default-results).
+const B1D_RUN_COMMIT = "709dae5d50018c66cf3dba74ed19e0bc32295862";
+
 describe("the controls' reuse", () => {
-  test("B1c's rows are its published rows, 39 of 60 loaded, and the trees behind them and B1's none arm are the same at this head", () => {
+  test("B1c's rows are its published rows, 39 of 60 loaded, and the trees behind them and B1's none arm are the same at B1d's run commit", () => {
     expect(b1cRows().filter((r) => r.arm === "project-md" && r.outcome === "graded" && r.load?.loaded).length).toBe(39);
-    const a = reuseB1c("HEAD"), b = reuseCheck("HEAD");
+    const a = reuseB1c(B1D_RUN_COMMIT), b = reuseCheck(B1D_RUN_COMMIT);
     expect(a.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect([a.same, b.same]).toEqual([true, true]);
   });

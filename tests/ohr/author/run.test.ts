@@ -1,210 +1,346 @@
-// Value: protects=section 3's supply and pre-run change 1 item 4d's pilot as driven: the pilot's planted outcomes at both reads, a missing line, the cap, top-up twins, pairs placed whole, unmatched partners, 110 briefs placed, and pilot briefs placed only under unchanged inputs.
-import { describe, expect, test } from "bun:test";
-import { authorRun, checkAnswers, haltOf, inputsDigest, summaryOf, type AuthorRun } from "../../../lanes/office-hours-rewrite/author/run.ts";
-import { FIXTURE_SCREEN, fixtureParser, runCaller, wordLabeller } from "../../../lanes/office-hours-rewrite/author/fixtures.ts";
-import { buildScreen } from "../../../lanes/office-hours-rewrite/author/screens.ts";
-import { CAPS, QUOTA } from "../../../lanes/office-hours-rewrite/frozen.ts";
-import { line, pilotRead } from "../../../lanes/office-hours-rewrite/author/pilot.ts";
-import { MeterError } from "../../../lanes/product-value/meter.ts";
-import { authorToCustody } from "../../../lanes/office-hours-rewrite/author/custody.ts";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// Value: protects=the second attempt's authoring (its sections 4 and 5) as driven on a fake provider: each slot's fixed draw sequence, the top-up bound, the pilot, the projection read pinned to sizing.txt, recorded after every batch and never stopping a run on planted yields that go or hard ones, reserves last, the cap stop's two sides, the outcome log sealed draft by draft and batch by batch, a resume at another concurrency that requests no sealed draft again, and the reuse check on a planted bundle.
+import { afterAll, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { authorRun, checkAnswers, countsOf, haltOf, kindOf, metaOf, SLOT_DRAWS, summaryOf, type AuthorDeps, type AuthorRun, type Checkpoint, type Journal, type LogEntry, type Reuse } from "../../../lanes/office-hours-rewrite/author/run.ts";
+import { answersOf, fakeDecrypter, fakeMeter, fakeSealer, FIXTURE_SCREEN, fixtureParser, plantedFirstAttempt, runCaller, wordLabeller, writeFirstAttempt } from "../../../lanes/office-hours-rewrite/author/fixtures.ts";
+import { drawOf, familyOf, schedule } from "../../../lanes/office-hours-rewrite/author/draws.ts";
+import { ATTEMPT_1, projection, readProjection } from "../../../lanes/office-hours-rewrite/author/pilot.ts";
+import { readJournal, readReuse, sealedJournal } from "../../../lanes/office-hours-rewrite/author/custody.ts";
+import { BRIEF_ALLOWANCE, CAPS, PAIRED_TYPES, PILOT, REUSED_SLOTS, TOP_UP_BOUND } from "../../../lanes/office-hours-rewrite/frozen.ts";
+import { MeterError } from "../../../lanes/product-value/meter.ts";
+import type { Outcome } from "../../../lanes/office-hours-rewrite/author/brief.ts";
 
-const mdd = () => 0.13;
-function go(o: { secondFails?: (n: number) => boolean; usd?: number; cap?: number; screen?: typeof FIXTURE_SCREEN; pilotOnly?: boolean; pilot?: AuthorRun["pilot"] } = {}) {
-  const call = runCaller({ secondFails: o.secondFails });
-  const deps = { call, label: wordLabeller(), parse: fixtureParser, screen: o.screen ?? FIXTURE_SCREEN, spent: () => call.state.drafts * (o.usd ?? 1.04) };
-  return authorRun(deps, { cap: o.cap ?? CAPS.authoring, concurrency: 8, pilotOnly: o.pilotOnly, pilot: o.pilot });
+const SLOTS = schedule();
+const bySlot = new Map(SLOTS.map((s) => [s.slot, s]));
+const made: string[] = [];
+afterAll(() => made.forEach((d) => rmSync(d, { recursive: true, force: true })));
+const temp = (prefix: string) => (made.push(mkdtempSync(prefix)), made.at(-1)!);
+const mdd = () => 0.14;
+const PLACED = await plantedFirstAttempt();
+const REUSE: Reuse = { placed: PLACED, answers: answersOf(PLACED), failed: [] };
+/** The slot a draft reference belongs to: draw 1000 * (p + 1) + k. */
+const slotOfRef = (ref: string) => SLOTS.find((s) => s.p === Math.floor(Number(/^d(\d+)/.exec(ref)![1]) / 1000) - 1)!;
+const twinOf = (ref: string) => /^d\d+b/.test(ref);
+const firstOf = (ref: string) => /^d\d+a/.test(ref);
+const unpairedOf = (ref: string) => /^d\d+(\.\d+)?$/.test(ref);
+const hashed = (ref: string, below: number) => createHash("sha256").update(ref).digest()[0]! < below;
+/** Planted yields that a run fills on: about one draft in five fails, by its reference alone. */
+const SOME = (ref: string) => hashed(ref, 52);
+
+function depsOf(o: { fails?: (ref: string) => boolean; hang?: (label: string) => boolean; label?: AuthorDeps["label"]; usd?: number } = {}) {
+  const call = runCaller({ fails: o.fails, hang: o.hang });
+  const m = fakeMeter(call, o.usd ? (r) => ({ first: 0.887, second: 0.093, unpaired: 0.545 })[r] * o.usd! : undefined);
+  return { deps: { call: m.call, label: o.label ?? wordLabeller(), parse: fixtureParser, screen: FIXTURE_SCREEN, spent: m.spent, spentOn: m.spentOn } satisfies AuthorDeps, call };
 }
-const total = (r: AuthorRun) => r.sets.calibration.length + r.sets.comparison.length + r.sets.reserve.length;
-const L = line(1.04, 1)!;
+const go = (o: Parameters<typeof depsOf>[0] & { cap?: number; concurrency?: number; reuse?: Reuse; journal?: Journal; resume?: Checkpoint } = {}) =>
+  authorRun(depsOf(o).deps, { cap: o.cap ?? CAPS.authoring, concurrency: o.concurrency ?? 8, reuse: o.reuse ?? REUSE, journal: o.journal, resume: o.resume });
+const all = (r: AuthorRun) => [...r.sets.calibration, ...r.sets.comparison, ...r.sets.reserve];
+const placedSet = (r: AuthorRun) => all(r).map((m) => m.id + " " + m.digest).sort();
+const throwsOn = (match: (label: string) => boolean, err: () => Error) => {
+  const base = wordLabeller();
+  return Object.assign(async (req: Parameters<typeof base>[0]) => {
+    if (match(req.label)) throw err();
+    return base(req);
+  }, { calls: base.calls });
+};
 
-describe("the pilot gate, driven", () => {
-  test("16 of 16 second twins passing reads go at the first read, then all 110 briefs place", async () => {
-    const r = await go();
-    expect(r.pilot.verdict).toBe("go");
-    expect(r.pilot.reads.map((x) => [x.k, x.n])).toEqual([[16, 16]]);
-    expect(r.pilot.second_draws).toBe(16);
-    expect(r.pilot.line).toBeCloseTo(L, 10);
+describe("each slot's draws follow a fixed sequence (section 5.1)", () => {
+  test("the k-th first-twin or unpaired draft is draw 1000 * (p + 1) + k from the family p + k names, and a second twin takes its partner's draw and family", async () => {
+    const r = await go({ fails: SOME });
     expect(r.stopped).toBe("quotas");
-    expect(total(r)).toBe(110);
-    expect(haltOf(r, mdd)).toBeNull();
+    for (const s of SLOTS) {
+      const mine = r.outcomes.filter((x) => x.slot === s.slot);
+      mine.filter((x) => x.role !== "second").forEach((x, i) => expect([x.draw, x.author]).toEqual([drawOf(s.p, i + 1), familyOf(s.p, i + 1)]));
+      for (const x of mine.filter((y) => y.role === "second")) {
+        const partner = mine.find((y) => y.id === x.id.replace(/b$/, "a"))!;
+        expect([x.draw, x.author]).toEqual([partner.draw, partner.author]);
+      }
+    }
+    expect(r.outcomes.every((x) => x.draw > 1000)).toBe(true);
+    expect(new Set(all(r).map((m) => m.id)).size).toBe(96);
   });
-  test("0 of 16 reads stop and halts with E_OHR_PILOT_STOP and the numbers", async () => {
-    const r = await go({ secondFails: () => true });
-    expect([r.pilot.verdict, r.stopped]).toEqual(["stop", "pilot"]);
-    expect(pilotRead([{ k: 0, n: 16 }], L).verdict).toBe("stop");
-    const e = haltOf(r, mdd)!;
-    expect(e.code).toBe("E_OHR_PILOT_STOP");
-    expect(e.message).toContain("0/16");
-  });
-  test("1 of 16 is open, so it draws on to 32; 17 of 32 then reads go", async () => {
-    const r = await go({ secondFails: (n) => n <= 15 });
-    expect(r.pilot.reads.map((x) => [x.k, x.n, x.read])).toEqual([[1, 16, "open"], [17, 32, "go"]]);
-    expect(r.pilot.verdict).toBe("go");
-  });
-  test("4 of 16 then 8 of 32 stays open and halts with E_OHR_PILOT_OPEN", async () => {
-    const r = await go({ secondFails: (n) => n % 4 !== 0 });
-    expect(r.pilot.reads.map((x) => [x.k, x.n])).toEqual([[4, 16], [8, 32]]);
-    expect(r.pilot.verdict).toBe("open");
-    expect(haltOf(r, mdd)!.code).toBe("E_OHR_PILOT_OPEN");
-  });
-  test("a cost per draw that leaves no room for second twins has no line and halts", async () => {
-    const r = await go({ usd: 4 });
-    expect([r.pilot.verdict, r.pilot.line]).toEqual(["no-line", null]);
-    expect(haltOf(r, mdd)!.code).toBe("E_OHR_PILOT_STOP");
-    expect(haltOf(r, mdd)!.message).toContain("no line");
-  });
-  test("a top-up twin comes from the pair's family, and every second-twin draft counts", async () => {
-    const r = await go({ secondFails: (n) => n === 1 });
-    const seconds = r.pilot.outcomes.filter((x) => x.role === "second");
-    expect(seconds).toHaveLength(16);
-    const topUp = seconds.find((x) => x.attempt === 2)!;
-    const partner = r.pilot.outcomes.find((x) => x.id === topUp.id.replace(/b$/, "a"))!;
-    expect(topUp.author).toBe(partner.author);
-    expect(r.pilot.reads[0]).toMatchObject({ k: 15, n: 16 });
+  test("the same draws whatever the concurrency: 1, 3 and 8 place the same briefs", async () => {
+    const sets = await Promise.all([1, 3, 8].map(async (c) => placedSet(await go({ fails: SOME, concurrency: c }))));
+    expect(sets[0]).toHaveLength(96);
+    expect(sets[1]).toEqual(sets[0]!);
+    expect(sets[2]).toEqual(sets[0]!);
   });
 });
 
-describe("supply", () => {
-  test("a cap too small for one draft stops the pilot and reports a shortfall", async () => {
-    const r = await go({ cap: 3 });
-    expect(r.pilot.verdict).toBe("cap");
-    expect(haltOf(r, mdd)!.code).toBe("E_OHR_SUPPLY_SHORT");
+describe("the top-up bound (section 5.3)", () => {
+  const slot = SLOTS.find((s) => s.kind === "pair" && s.set === "comparison" && !REUSED_SLOTS.includes(s.slot))!;
+  test("a partner gets 30 second twins, as the Captain ruled on 2026-11-18; when all fail it drops, unplaced, and its slot draws its next first twin", async () => {
+    const first = "d" + drawOf(slot.p, 1);
+    const r = await go({ fails: (ref) => ref.startsWith(first + "b") });
+    const mine = r.outcomes.filter((x) => x.slot === slot.slot);
+    expect(mine.map((x) => x.role + ":" + x.draw + ":" + x.attempt + ":" + x.status)).toEqual([
+      "first:" + drawOf(slot.p, 1) + ":1:pass",
+      ...Array.from({ length: 30 }, (_, i) => "second:" + drawOf(slot.p, 1) + ":" + (i + 1) + ":drop"),
+      "first:" + drawOf(slot.p, 2) + ":1:pass",
+      "second:" + drawOf(slot.p, 2) + ":1:pass",
+    ]);
+    expect(TOP_UP_BOUND).toBe(30);
+    expect(all(r).some((m) => m.id === first + "a")).toBe(false);
+    expect(summaryOf(r).second_twins.dropped_at_bound).toBe(1);
+    expect(countsOf(r.outcomes).partners[slot.type]![1]).toBe(r.outcomes.filter((x) => x.role === "second" && bySlot.get(x.slot)!.type === slot.type && (x.status === "pass" || x.attempt === TOP_UP_BOUND)).length);
   });
-  test("when twins stop passing after the pilot, the cap stops authoring, partners left unmatched drop, and pairs stay whole", async () => {
-    const r = await go({ secondFails: (n) => n > 16 });
-    expect(r.stopped).toBe("cap");
-    expect(r.unmatched.length).toBeGreaterThan(0);
-    const ids = new Set([...r.sets.calibration, ...r.sets.comparison, ...r.sets.reserve].map((m) => m.id));
-    for (const id of r.unmatched) expect(ids.has(id)).toBe(false);
-    for (const m of [...r.sets.calibration, ...r.sets.comparison, ...r.sets.reserve]) if (m.twin) expect(ids.has(m.twin)).toBe(true);
+});
+
+describe("the pilot (section 5.4)", () => {
+  const main = SLOTS.filter((s) => s.set !== "reserve" && !REUSED_SLOTS.includes(s.slot));
+  const pilotPairs = PAIRED_TYPES.flatMap((t) => main.filter((s) => s.type === t).slice(0, PILOT.pair_slots).map((s) => s.slot));
+  const prefix = (r: AuthorRun) => r.outcomes.slice(0, r.outcomes.findIndex((x) => !x.pilot));
+  test("comes first, after the reused briefs: two open slots of each pair type, each settling one partner, and 8 drafts a kind or the kind's open slots", async () => {
+    const r = await go();
+    const p = prefix(r);
+    expect(r.outcomes.slice(p.length).every((x) => !x.pilot)).toBe(true);
+    expect([...new Set(p.filter((x) => x.role !== "unpaired").map((x) => x.slot))].sort()).toEqual([...pilotPairs].sort());
+    for (const slot of pilotPairs) expect(p.filter((x) => x.slot === slot).map((x) => x.role)).toEqual(["first", "second"]);
+    const kind = (u: string) => p.filter((x) => kindOf(bySlot.get(x.slot)!) === u);
+    expect([kind("T7").length, kind("T8").length, kind("builder").length]).toEqual([3, 5, 8]);
+    expect(kind("builder").map((x) => x.slot)).toEqual(main.filter((s) => s.kind === "builder").slice(0, 8).map((s) => s.slot));
+    expect(r.outcomes.some((x) => REUSED_SLOTS.includes(x.slot))).toBe(false);
+  });
+  test("a slot that fails stops at 3 first twins, and a kind with fewer open slots than 8 drafts takes its slots in turn", async () => {
+    const pairSlot = bySlot.get(pilotPairs[0]!)!;
+    const r = await go({ fails: (ref) => (firstOf(ref) && slotOfRef(ref).slot === pairSlot.slot) || (unpairedOf(ref) && slotOfRef(ref).type === "T7") });
+    const p = prefix(r);
+    expect(p.filter((x) => x.slot === pairSlot.slot).map((x) => x.role + ":" + x.status)).toEqual(["first:drop", "first:drop", "first:drop"]);
+    const t7 = main.filter((s) => s.type === "T7").map((s) => p.filter((x) => x.slot === s.slot).length);
+    expect(t7).toEqual([3, 3, 2]);
+    expect(r.outcomes.filter((x) => x.slot === pairSlot.slot && !x.pilot).length).toBeGreaterThan(0);
+  });
+});
+
+describe("the projection read (section 5.5, descriptive since the Captain's ruling of 2026-11-18)", () => {
+  /** Reads at the pilot's end and after every later batch: one per batch of at most 8 drafts, the last after the last draft. */
+  const readEveryBatch = (r: AuthorRun) => {
+    expect(r.reads[0]!.drafts).toBe(r.outcomes.filter((x) => x.pilot).length);
+    expect(r.reads.at(-1)!.drafts).toBe(r.outcomes.length);
+    for (let i = 1; i < r.reads.length; i++) expect(r.reads[i]!.drafts - r.reads[i - 1]!.drafts).toBeOneOf([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(summaryOf(r).projections.map((p) => [p.drafts, p.over])).toEqual(r.reads.map((p) => [p.drafts, p.over]));
+  };
+  test("at the first attempt's counts alone, T8 at T7's counts and scale 1, the first projection is sizing.txt's $127.52", () => {
+    const open = { pairs: { T1: 4, T2: 3, T3: 3, T4: 3, T5: 4, T6: 3 }, unpaired: { T7: 3, T8: 5, builder: 21 } };
+    expect(projection({ ...ATTEMPT_1, unpaired: { ...ATTEMPT_1.unpaired, T8: ATTEMPT_1.unpaired.T7 } }, open, 1).toFixed(2)).toBe("127.52");
+    const left = SLOTS.filter((s) => s.set !== "reserve" && !REUSED_SLOTS.includes(s.slot));
+    expect(Object.fromEntries(PAIRED_TYPES.map((t) => [t, left.filter((s) => s.kind === "pair" && s.type === t).length]))).toEqual(open.pairs);
+    expect(Object.fromEntries((["T7", "T8", "builder"] as const).map((u) => [u, left.filter((s) => kindOf(s) === u).length]))).toEqual(open.unpaired);
+  });
+  test("its room is the cap less the committed spend less 8 drafts at $3.50, and its costs scale by spend over what the first attempt's figures predict", () => {
+    const counts = { first: [0, 0], partners: {}, matched_draws: [0, 0], unpaired: { T7: [0, 0], T8: [0, 0], builder: [0, 0] } } as const;
+    const open = { pairs: { T1: 1 }, unpaired: { T7: 0, T8: 0, builder: 0 } };
+    const one = readProjection({ counts, open, spend: 2, predicted: 1, cap: 409, committed: 31, drafts: 4 });
+    expect(one.room).toBe(409 - 31 - 28);
+    expect(one.scale).toBe(2);
+    expect(one.projection).toBeCloseTo(2 * readProjection({ counts, open, spend: 1, predicted: 1, cap: 409, committed: 31, drafts: 4 }).projection, 10);
+  });
+  test("planted yields that go: every read fits, every read is recorded, and calibration, comparison and then reserves fill", async () => {
+    const r = await go({ fails: SOME });
+    expect(r.reads.length).toBeGreaterThan(1);
+    expect(r.reads.every((x) => !x.over)).toBe(true);
+    readEveryBatch(r);
+    expect([r.stopped, r.full, all(r).length, haltOf(r, mdd)]).toEqual(["quotas", true, 96, null]);
+  });
+  test("planted hard yields: T1 and T4 never match and unpaired briefs rarely pass, the projection passes its room, and authoring still goes on to its cap, a final cap stop before the 88 required briefs", async () => {
+    const { deps } = depsOf({ fails: (ref) => (twinOf(ref) && ["T1", "T4"].includes(slotOfRef(ref).type)) || (unpairedOf(ref) && hashed(ref, 200)) });
+    const r = await authorRun(deps, { cap: CAPS.authoring, concurrency: 8, reuse: REUSE });
+    const over = r.reads.findIndex((x) => x.over);
+    expect(over).toBeGreaterThanOrEqual(0);
+    expect(r.reads[over]!.projection).toBeGreaterThan(r.reads[over]!.room);
+    expect(r.reads.length - over).toBeGreaterThan(1);
+    readEveryBatch(r);
+    expect([r.stopped, r.full]).toEqual(["cap", false]);
+    expect(deps.spent()).toBeLessThanOrEqual(CAPS.authoring);
+    expect(CAPS.authoring - deps.spent()).toBeLessThan(BRIEF_ALLOWANCE);
     const e = haltOf(r, mdd)!;
     expect(e.code).toBe("E_OHR_SUPPLY_SHORT");
-    expect(e.message).toContain("of 110 briefs");
-    expect(summaryOf(r).placed).toBeLessThan(110);
+    expect(e.message).toContain("authoring stopped at cap with " + all(r).length + " of 96 briefs placed");
   });
 });
 
-describe("placement", () => {
-  test("the sets hold the frozen make-up, skins and clusters", async () => {
-    const r = await go();
-    expect(r.sets.calibration).toHaveLength(QUOTA.calibration);
-    expect(r.sets.reserve).toHaveLength(QUOTA.reserve);
-    expect(r.sets.comparison).toHaveLength(QUOTA.founder + QUOTA.builder);
-    for (let skin = 1; skin <= 5; skin++) {
-      const f = r.sets.comparison.filter((m) => m.skin === skin && m.kind !== "builder");
-      expect([f.length, new Set(f.map((m) => m.cluster)).size]).toEqual([14, 8]);
-    }
-    expect(r.sets.comparison.filter((m) => m.kind === "pair")).toHaveLength(60);
-    const s = summaryOf(r);
-    expect(s.sets.comparison.clusters).toBe(40 + 24);
-    expect(JSON.stringify(s)).not.toContain("bridal");
+describe("order and the end of authoring (section 5.6)", () => {
+  test("reserves draw only after calibration and comparison are full", async () => {
+    const r = await go({ fails: SOME });
+    const last = r.outcomes.map((x) => bySlot.get(x.slot)!.set !== "reserve").lastIndexOf(true);
+    const first = r.outcomes.findIndex((x) => bySlot.get(x.slot)!.set === "reserve");
+    expect(first).toBeGreaterThan(last);
+    expect(r.sets.reserve).toHaveLength(8);
   });
-  test("pilot briefs are placed through the same checks, bound to their digests", async () => {
-    const r = await go();
-    const pilots = [...r.sets.calibration, ...r.sets.comparison, ...r.sets.reserve].filter((m) => m.pilot);
-    expect(pilots.length).toBeGreaterThan(0);
-    for (const m of pilots) {
-      const o = r.outcomes.find((x) => x.id === m.id && x.status === "pass")!;
-      const steps = o.checks.filter((c) => c.ok && !c.void && c.digest === m.digest).map((c) => c.step);
-      expect(steps).toEqual(expect.arrayContaining(["vocabulary", "unanimous", "audit", "probe", "generic"]));
-      expect(m.kind).toBe("pair");
-    }
+  test("a slot that never passes stops before its 1,000th first twin, so its draw numbers never reach the next slot's, and authoring ends short", async () => {
+    const slot = SLOTS.find((s) => s.kind === "pair" && s.set === "comparison" && !REUSED_SLOTS.includes(s.slot))!;
+    const r = await go({ fails: (ref) => firstOf(ref) && slotOfRef(ref).slot === slot.slot, usd: 0.001 });
+    const mine = r.outcomes.filter((x) => x.slot === slot.slot);
+    expect([r.stopped, r.full, mine.length, mine.at(-1)!.draw, SLOT_DRAWS]).toEqual(["schedule", false, 999, drawOf(slot.p, 999), 999]);
+    expect(haltOf(r, mdd)!.code).toBe("E_OHR_SUPPLY_SHORT");
   });
-  test("a continuation from a pilot with the same inputs places its briefs; changed inputs place none of them", async () => {
-    const p = await go({ pilotOnly: true });
-    expect(p.stopped).toBe("pilot");
-    const same = await go({ pilot: p.pilot });
-    expect(same.pilot_placed).toBe(true);
-    expect(total(same)).toBe(110);
-    const changed = await go({ pilot: p.pilot, screen: buildScreen(["an entirely different source line for the screen"]) });
-    expect(changed.pilot_placed).toBe(false);
-    const placed = new Set([...changed.sets.calibration, ...changed.sets.comparison, ...changed.sets.reserve].map((m) => m.id));
-    for (const x of p.pilot.outcomes) expect(placed.has(x.id)).toBe(false);
-    expect(inputsDigest(FIXTURE_SCREEN)).toBe(p.pilot.digest);
+  const reserveDraft = (label: string) => /^d\d+/.test(label) && slotOfRef(label).set === "reserve";
+  test("a cap stop after calibration and comparison are full ends authoring without a halt, with the reserves it placed", async () => {
+    const r = await go({ label: throwsOn((l) => reserveDraft(l) && l.includes(":unanimous:"), () => new MeterError("CAP_STOP", "brief label: the ledger refused the call")) });
+    expect([r.stopped, r.full, r.halt?.code]).toEqual(["cap", true, "CAP_STOP"]);
+    expect(haltOf(r, mdd)).toBeNull();
+    expect(r.sets.reserve.length).toBeLessThan(8);
+    expect(r.sets.calibration.length + r.sets.comparison.length).toBe(88);
   });
-  test("a continuation refuses a pilot that did not read go", async () => {
-    const p = await go({ secondFails: () => true });
-    await expect(go({ pilot: p.pilot })).rejects.toThrow("read stop");
+  test("a cap stop before they are full halts as before, and so does a batch the cap cannot cover", async () => {
+    const r = await go({ label: throwsOn((l) => /^d\d+/.test(l) && slotOfRef(l).set === "comparison" && !r0.has(l.split(":")[0]!), () => new MeterError("CAP_STOP", "brief label: the ledger refused the call")) });
+    expect([r.stopped, r.full, haltOf(r, mdd)!.code]).toEqual(["cap", false, "CAP_STOP"]);
+    const small = await go({ cap: 3 });
+    expect([small.stopped, haltOf(small, mdd)!.code]).toEqual(["cap", "E_OHR_SUPPLY_SHORT"]);
+    expect(haltOf(small, mdd)!.message).toContain("of 96 briefs placed");
+  });
+  test("a stop that is not about money halts the run even after calibration and comparison are full", async () => {
+    const r = await go({ label: throwsOn((l) => reserveDraft(l) && l.includes(":unanimous:"), () => new MeterError("E_OHR_MODEL_DRIFT", "brief label: the reply names another model")) });
+    expect([r.stopped, r.full, haltOf(r, mdd)!.code]).toEqual(["halt", true, "E_OHR_MODEL_DRIFT"]);
+    await expect(go({ label: throwsOn((l) => reserveDraft(l), () => new TypeError("not a stop")) })).rejects.toThrow("not a stop");
+  });
+});
+const r0 = new Set<string>();
+
+describe("the outcome log and resume (section 5.2)", () => {
+  const journalTo = (dir: string, runId = "ohr-author-test", item = "ohr-author") => sealedJournal({ dir, work: join(temp("/dev/shm/ohr-journal-"), "w"), sealer: fakeSealer, runId, item });
+  test("every settled draft is sealed with its spend before the run counts it, and the log and placed briefs after every batch", async () => {
+    const dir = temp(join(tmpdir(), "ohr-ckpt-"));
+    const sealed: number[] = [];
+    const j = journalTo(dir);
+    const r = await go({ fails: SOME, journal: { record: (e) => (sealed.push(e.seq), j.record(e)), checkpoint: j.checkpoint } });
+    expect(sealed).toEqual(r.outcomes.map((x) => x.seq));
+    for (const x of r.outcomes) expect(x.spend).toBeCloseTo({ first: 0.887, second: 0.093, unpaired: 0.545 }[x.role], 9);
+    const names = readdirSync(dir);
+    expect(names.filter((n) => n.startsWith("draft-"))).toHaveLength(r.outcomes.length);
+    expect(names).toContain("checkpoint-000000.age");
+    expect(names).toContain("checkpoint-" + String(r.outcomes.length).padStart(6, "0") + ".age");
+    const back = readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"), "ohr-author");
+    expect(back.log.map((x) => x.id)).toEqual(r.outcomes.map((x) => x.id));
+    expect(back.run_id).toBe("ohr-author-test");
+    expect(back.item).toBe("ohr-author");
+    expect(JSON.parse(readFileSync(join(dir, "run.json"), "utf8"))).toEqual({ run_id: "ohr-author-test", item: "ohr-author", end: { stopped: r.stopped, codes: [] } });
+    expect(back.reuse.placed).toHaveLength(19);
+    expect(readdirSync("/dev/shm").some((n) => n.includes(".open-"))).toBe(false);
+  });
+  test("a run stopped between a draft's completion and its batch's seal, resumed at another concurrency, requests no sealed draft again and places what an uninterrupted run places", async () => {
+    const whole = await go({ fails: SOME, concurrency: 8 });
+    const dir = temp(join(tmpdir(), "ohr-ckpt-"));
+    const target = whole.outcomes[60]!;
+    const hungRef = target.id + (target.attempt > 1 ? "." + target.attempt : "");
+    let hung = false;
+    const first = depsOf({ fails: SOME, hang: (l) => l === hungRef + ":author:1" && (hung = true) });
+    void authorRun(first.deps, { cap: CAPS.authoring, concurrency: 8, reuse: REUSE, journal: journalTo(dir) });
+    while (!hung) await new Promise((r) => setTimeout(r, 1));
+    await new Promise((r) => setTimeout(r, 50));
+    const names = readdirSync(dir);
+    const records = names.filter((n) => n.startsWith("draft-")).length;
+    const checkpoints = names.filter((n) => n.startsWith("checkpoint-")).sort();
+    const newest = Number(/(\d{6})/.exec(checkpoints.at(-1)!)![1]);
+    expect(records).toBeGreaterThan(newest);
+    const resumed = readJournal(join(dir, checkpoints.at(-1)!), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"), "ohr-author");
+    expect(resumed.log).toHaveLength(records);
+    const sealedRefs = new Set(resumed.log.map((x) => x.id + (x.attempt > 1 ? "." + x.attempt : "")));
+    expect(sealedRefs.has(hungRef)).toBe(false);
+    const second = depsOf({ fails: SOME });
+    const r = await authorRun(second.deps, { cap: CAPS.authoring, concurrency: 3, resume: resumed, journal: journalTo(dir) });
+    const asked = second.call.calls.filter((c) => /:author:1$/.test(c.label)).map((c) => c.label.split(":")[0]!);
+    expect(asked.filter((ref) => sealedRefs.has(ref))).toEqual([]);
+    expect(asked).toContain(hungRef);
+    expect(r.stopped).toBe("quotas");
+    expect(placedSet(r)).toEqual(placedSet(whole));
+    expect(r.outcomes.slice(0, records).map((x) => x.id)).toEqual(resumed.log.map((x) => x.id));
+  });
+  test("a resume refuses a gap in the sealed draft records", async () => {
+    const dir = temp(join(tmpdir(), "ohr-ckpt-"));
+    await go({ fails: SOME, journal: journalTo(dir) });
+    unlinkSync(join(dir, "draft-000005.age"));
+    expect(() => readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"), "ohr-author")).toThrow("E_OHR_RESUME");
+  });
+  test("a checkpoints folder serves one run, and a resume refuses a draft record of another run", async () => {
+    const dir = temp(join(tmpdir(), "ohr-ckpt-"));
+    const r = await go({ fails: SOME, journal: journalTo(dir) });
+    expect(() => journalTo(dir, "ohr-author-other")).toThrow("E_OHR_RESUME");
+    unlinkSync(join(dir, "run.json"));
+    journalTo(dir, "ohr-author-other").record({ ...r.outcomes.at(-1)!, seq: r.outcomes.length + 1 });
+    unlinkSync(join(dir, "run.json"));
+    expect(() => readJournal(join(dir, "checkpoint-000000.age"), fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"), "ohr-author")).toThrow("belongs to run ohr-author-other");
+  });
+});
+
+describe("reuse (section 4)", () => {
+  const tampered = PLACED.find((x) => x.role === "unpaired" && bySlot.get(x.slot)!.kind === "builder")!;
+  const planted = () => {
+    const dir = join(temp(join(tmpdir(), "ohr-first-")), "plain");
+    const stray: Outcome = { ...PLACED.find((x) => x.role === "unpaired" && bySlot.get(x.slot)!.type === "T7")!, id: "d90", slot: "com1-T7" };
+    writeFirstAttempt(dir, [...PLACED, stray], (x) => metaOf(bySlot.get(x.slot) ?? SLOTS.find((s) => s.type === "T7")!, x), [{ ...PLACED[0]!, id: "d91a", status: "drop", step: "audit" }]);
+    writeFileSync(join(dir, "briefs", tampered.id, "opening.md"), tampered.files!.opening + "One more line.\n");
+    const sealed = join(dir, "..", "authoring.tar.age");
+    fakeSealer(dir, sealed);
+    return sealed;
+  };
+  test("places each brief whose files match its recorded digest in a reused slot, and lists the rest", () => {
+    const r = readReuse(planted(), fakeDecrypter, join(temp("/dev/shm/ohr-reuse-"), "w"));
+    expect(r.placed.map((x) => x.id).sort()).toEqual(PLACED.filter((x) => x.id !== tampered.id).map((x) => x.id).sort());
+    expect(r.failed.map((f) => f.id + " " + f.why).sort()).toEqual(["d90 its slot com1-T7 is not one of the reused slots", tampered.id + " its files do not match its recorded digest"].sort());
+    expect(new Set(r.answers.map((a) => a.brief))).toEqual(new Set(r.placed.map((x) => x.id)));
+    expect(readdirSync("/dev/shm").some((n) => n.includes(".open-reuse"))).toBe(false);
+  });
+  test("the 18 that pass are placed before the pilot, and the brief that failed is drafted again in its slot", async () => {
+    const reuse = readReuse(planted(), fakeDecrypter, join(temp("/dev/shm/ohr-reuse-"), "w"));
+    const r = await go({ reuse });
+    const kept = new Set(reuse.placed.map((x) => x.slot));
+    expect(r.outcomes.some((x) => kept.has(x.slot))).toBe(false);
+    const again = r.outcomes.filter((x) => x.slot === tampered.slot);
+    expect(again[0]!.draw).toBe(drawOf(bySlot.get(tampered.slot)!.p, 1));
+    expect(all(r).filter((m) => reuse.placed.some((x) => x.id === m.id))).toHaveLength(18);
+    expect([r.stopped, all(r).length, summaryOf(r).reused.placed]).toEqual(["quotas", 96, 18]);
+    expect(summaryOf(r).reused.failed.map((f) => f.id).sort()).toEqual(["d90", tampered.id].sort());
   });
 });
 
 describe("answers for the judge check", () => {
-  test("every placed brief hands over its three full-information blocks, and unpaired briefs their three opening-only blocks", async () => {
+  test("every placed brief hands over its three full-information blocks, and unpaired briefs their three opening-only blocks, reused briefs from their recorded answers", async () => {
     const r = await go();
     const a = checkAnswers(r);
-    const unpaired = [...r.sets.calibration, ...r.sets.comparison, ...r.sets.reserve].filter((m) => m.kind !== "pair").length;
-    expect(a.filter((x) => x.source === "full")).toHaveLength(110 * 3);
+    const unpaired = all(r).filter((m) => m.kind !== "pair").length;
+    expect(a.filter((x) => x.source === "full")).toHaveLength(96 * 3);
     expect(a.filter((x) => x.source === "opening")).toHaveLength(unpaired * 3);
+    expect(a.filter((x) => REUSE.placed.some((y) => y.id === x.brief))).toEqual(REUSE.answers);
     expect(new Set(a.map((x) => x.author))).toEqual(new Set(["opus", "sol", "astra"]));
-    expect(Object.keys(a[0]!.block).sort()).toEqual(["decision", "next_action", "why"]);
+  });
+  test("the summary holds counts and digests only", async () => {
+    const s = summaryOf(await go());
+    expect(s.placed).toBe(96);
+    expect(JSON.stringify(s)).not.toContain("bridal");
   });
 });
 
-describe("a stop thrown by a draft or label call", () => {
-  const throwsAt = (k: number, err: () => Error) => {
-    const base = wordLabeller();
+describe("a cap stop is final, and a run resumes only on its own ledger item (pre-run change 1)", () => {
+  const journalTo = (dir: string, runId = "ohr-author-test", item = "ohr-author") => sealedJournal({ dir, work: join(temp("/dev/shm/ohr-journal-"), "w"), sealer: fakeSealer, runId, item });
+  const open = (p: string, item = "ohr-author") => readJournal(p, fakeDecrypter, join(temp("/dev/shm/ohr-open-"), "w"), item);
+  const last = (dir: string) => join(dir, readdirSync(dir).filter((n) => n.startsWith("checkpoint-")).sort().at(-1)!);
+  const drift = () => throwsOn((l) => l.includes(":unanimous:"), () => new MeterError("E_OHR_MODEL_DRIFT", "brief label: the reply names another model"));
+  test("a batch with a cap stop and another stop ends on the cap stop, and the run records both codes", async () => {
     let n = 0;
-    return async (req: Parameters<typeof base>[0]) => {
-      if (++n === k) throw err();
-      return base(req);
-    };
-  };
-  const goWith = (label: ReturnType<typeof throwsAt>) => {
-    const call = runCaller({});
-    return authorRun({ call, label, parse: fixtureParser, screen: FIXTURE_SCREEN, spent: () => call.state.drafts * 1.04 }, { cap: CAPS.authoring, concurrency: 8 });
-  };
-  test("a ledger stop after the pilot ends authoring with every settled draft kept, so ohr author still seals the placed briefs", async () => {
-    const r = await goWith(throwsAt(400, () => new MeterError("CAP_STOP", "brief label: the ledger refused the call")));
-    expect([r.pilot.verdict, r.stopped]).toEqual(["go", "cap"]);
-    expect(r.halt!.code).toBe("CAP_STOP");
-    expect(total(r)).toBeGreaterThan(0);
-    expect(total(r)).toBeLessThan(110);
-    const e = haltOf(r, mdd)!;
-    expect(e.code).toBe("CAP_STOP");
-    expect(e.message).toContain("the ledger refused the call");
-    expect(e.message).toContain(total(r) + " briefs placed");
+    const r = await go({ label: throwsOn((l) => l.endsWith(":unanimous:opus:1") && ++n <= 2, () => (n === 1 ? new MeterError("E_OHR_MODEL_DRIFT", "brief label: the reply names another model") : new MeterError("CAP_STOP", "brief label: the ledger refused the call"))) });
+    expect([r.stopped, r.halt?.code, r.codes]).toEqual(["cap", "CAP_STOP", ["E_OHR_MODEL_DRIFT", "CAP_STOP"]]);
+    expect(summaryOf(r).codes).toEqual(["E_OHR_MODEL_DRIFT", "CAP_STOP"]);
   });
-  test("a model drift during the pilot ends the pilot on a cap read and halts with the drift", async () => {
-    const r = await goWith(throwsAt(50, () => new MeterError("E_OHR_MODEL_DRIFT", "brief label: the reply names another model")));
-    expect([r.pilot.verdict, r.stopped]).toEqual(["cap", "pilot"]);
-    expect(r.pilot.outcomes.length).toBeGreaterThan(0);
-    expect(haltOf(r, mdd)!.code).toBe("E_OHR_MODEL_DRIFT");
+  test("a run that ends on a cap stop records it, and --resume refuses its checkpoints", async () => {
+    const dir = temp(join(tmpdir(), "ohr-ckpt-"));
+    expect((await go({ cap: 3, journal: journalTo(dir) })).stopped).toBe("cap");
+    expect(JSON.parse(readFileSync(join(dir, "run.json"), "utf8")).end).toEqual({ stopped: "cap", codes: [] });
+    for (const p of [join(dir, "checkpoint-000000.age"), last(dir)]) expect(() => open(p)).toThrow("ended on a cap stop");
+    unlinkSync(join(dir, "run.json"));
+    expect(() => open(last(dir))).toThrow("ended on a cap stop");
+    const halted = temp(join(tmpdir(), "ohr-ckpt-"));
+    expect((await go({ label: drift(), journal: journalTo(halted) })).stopped).toBe("halt");
+    expect(open(last(halted)).end).toEqual({ stopped: "halt", codes: ["E_OHR_MODEL_DRIFT"] });
   });
-  test("an empty-replies stop and a closed lease halt the same way", async () => {
-    for (const code of ["E_PV_EMPTY_REPLIES", "E_LEASE_CLOSED"] as const) {
-      const r = await goWith(throwsAt(400, () => new MeterError(code, "brief label: stopped")));
-      expect([r.stopped, r.halt!.code]).toEqual(["cap", code]);
-    }
-  });
-  test("a provider drift on a draft call halts the run, and every placed brief is sealed", async () => {
-    const call = runCaller({});
-    let n = 0;
-    const drifting = (async (req: Parameters<typeof call>[0]) => {
-      if (++n === 2500) throw new MeterError("E_PV_PROVIDER_DRIFT", "brief draft: served by another provider than its pin");
-      return call(req);
-    }) as typeof call;
-    const r = await authorRun({ call: drifting, label: wordLabeller(), parse: fixtureParser, screen: FIXTURE_SCREEN, spent: () => call.state.drafts * 1.04 }, { cap: CAPS.authoring, concurrency: 8 });
-    expect([r.pilot.verdict, r.stopped, r.halt!.code]).toEqual(["go", "cap", "E_PV_PROVIDER_DRIFT"]);
-    expect(total(r)).toBeGreaterThan(0);
-    expect(haltOf(r, mdd)!.code).toBe("E_PV_PROVIDER_DRIFT");
-    const shm = mkdtempSync("/dev/shm/ohr-run-"), dir = mkdtempSync(join(tmpdir(), "ohr-out-")), out = join(dir, "briefs.tar.age");
-    try {
-      const summary = authorToCustody(r, { work: join(shm, "work"), out, sealer: (w, o) => writeFileSync(o, String(readdirSync(join(w, "briefs")).length)) });
-      expect(summary.placed).toBe(total(r));
-      expect(Number(readFileSync(out, "utf8"))).toBe(total(r));
-    } finally {
-      rmSync(shm, { recursive: true, force: true });
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-  test("any other error still rejects the run", async () => {
-    await expect(goWith(throwsAt(400, () => new TypeError("not a stop")))).rejects.toThrow("not a stop");
-  });
-  test("a run with no stop carries no halt", async () => {
-    expect((await go()).halt).toBeNull();
+  test("a checkpoint resumes only on the ledger item it records, and its folder takes no other item", async () => {
+    const dir = temp(join(tmpdir(), "ohr-ckpt-"));
+    await go({ label: drift(), journal: journalTo(dir) });
+    expect(open(last(dir)).item).toBe("ohr-author");
+    expect(() => open(last(dir), "ohr-author-2")).toThrow("belongs to ledger item ohr-author, not --item ohr-author-2");
+    expect(() => journalTo(dir, "ohr-author-test", "ohr-author-2")).toThrow("E_OHR_RESUME");
   });
 });
-

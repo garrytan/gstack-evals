@@ -1,0 +1,162 @@
+diff --git a/backend/local/local.go b/backend/local/local.go
+index 91ec9cd..48a44dc 100644
+--- a/backend/local/local.go
++++ b/backend/local/local.go
+@@ -112,6 +112,21 @@ setuid, setgid and sticky bits are not restored by default - see the
+ 				Default:  false,
+ 				Advanced: true,
+ 			},
++			{
++				Name: "links_allow_unsafe",
++				Help: `Allow --links to create symlinks pointing outside the destination.
++
++By default when writing a '` + fs.LinkSuffix + `' object with --links,
++rclone refuses to create a symlink whose target is absolute or
++escapes the destination root, and refuses to write any object
++through a symlinked directory inside the destination. This stops a
++malicious remote from writing files outside the destination.
++
++Only set this when the source is trusted, for example when restoring
++your own backup containing absolute symlinks.`,
++				Default:  false,
++				Advanced: true,
++			},
+ 			{
+ 				Name: "skip_links",
+ 				Help: `Don't warn about skipped symlinks.
+@@ -376,6 +391,7 @@ only useful for reading.
+ type Options struct {
+ 	FollowSymlinks         bool                 `config:"copy_links"`
+ 	TranslateSymlinks      bool                 `config:"links"`
++	LinksAllowUnsafe       bool                 `config:"links_allow_unsafe"`
+ 	SkipSymlinks           bool                 `config:"skip_links"`
+ 	SkipSpecials           bool                 `config:"skip_specials"`
+ 	UTFNorm                bool                 `config:"unicode_normalization"`
+@@ -1456,6 +1472,35 @@ func isDiskFullError(err error) bool {
+ 	return errors.Is(err, file.ErrDiskFull) || fserrors.IsErrNoSpace(err)
+ }
+ 
++// checkSymlinkTarget refuses a symlink target that is absolute or
++// would resolve outside f.root when placed at linkPath.
++func (f *Fs) checkSymlinkTarget(linkPath, target string) error {
++	if target == "" {
++		return errors.New("refusing to create symlink with empty target")
++	}
++	if filepath.IsAbs(target) || filepath.VolumeName(target) != "" || os.IsPathSeparator(target[0]) || target[0] == '/' {
++		return fmt.Errorf("refusing to create symlink with absolute target %q (use --local-links-allow-unsafe to override)", target)
++	}
++	resolved := filepath.Join(filepath.Dir(linkPath), target)
++	rel, err := filepath.Rel(f.root, resolved)
++	if err != nil || !filepath.IsLocal(rel) {
++		return fmt.Errorf("refusing to create symlink with target %q outside the destination (use --local-links-allow-unsafe to override)", target)
++	}
++	return nil
++}
++
++// checkNoSymlinkParents refuses a path whose directories below f.root
++// include a symlink, so writes can't be redirected outside f.root.
++func (f *Fs) checkNoSymlinkParents(path string) error {
++	for dir := filepath.Dir(path); len(dir) > len(f.root) && strings.HasPrefix(dir, f.root); dir = filepath.Dir(dir) {
++		fi, err := os.Lstat(dir)
++		if err == nil && fi.Mode()&os.ModeSymlink != 0 {
++			return fmt.Errorf("refusing to write through symlinked directory %q (use --local-links-allow-unsafe to override)", dir)
++		}
++	}
++	return nil
++}
++
+ // Update the object from in with modTime and size
+ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) (err error) {
+ 	defer func() {
+@@ -1478,6 +1523,13 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 		}
+ 	}
+ 
++	if o.fs.opt.TranslateSymlinks && !o.fs.opt.LinksAllowUnsafe {
++		err = o.fs.checkNoSymlinkParents(o.path)
++		if err != nil {
++			return fserrors.NoRetryError(err)
++		}
++	}
++
+ 	err = o.mkdirAll()
+ 	if err != nil {
+ 		return err
+@@ -1533,6 +1585,11 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 	}
+ 
+ 	if o.translatedLink {
++		if err == nil && !o.fs.opt.LinksAllowUnsafe {
++			if checkErr := o.fs.checkSymlinkTarget(o.path, symlinkData.String()); checkErr != nil {
++				return fserrors.NoRetryError(checkErr)
++			}
++		}
+ 		if err == nil {
+ 			// Remove any current symlink or file, if one exists
+ 			if _, err := os.Lstat(o.path); err == nil {
+diff --git a/backend/local/local_internal_test.go b/backend/local/local_internal_test.go
+index f36cc17..95f6603 100644
+--- a/backend/local/local_internal_test.go
++++ b/backend/local/local_internal_test.go
+@@ -10,6 +10,7 @@ import (
+ 	"path/filepath"
+ 	"runtime"
+ 	"sort"
++	"strings"
+ 	"testing"
+ 	"time"
+ 
+@@ -195,6 +196,53 @@ func TestSymlink(t *testing.T) {
+ 	require.NoError(t, in.Close())
+ }
+ 
++func TestSymlinkEscape(t *testing.T) {
++	ctx := context.Background()
++	r := fstest.NewRun(t)
++	f := r.Flocal.(*Fs)
++	f.opt.TranslateSymlinks = true
++	modTime := fstest.Time("2002-03-03T04:05:10.123123123Z")
++
++	outside := t.TempDir()
++	victim := filepath.Join(outside, "authorized_keys")
++
++	for _, target := range []string{outside, "../" + filepath.Base(f.root) + "x", "sub/../../x", "a/b/../../../x"} {
++		t.Run(target, func(t *testing.T) {
++			src := object.NewStaticObjectInfo("pwn"+fs.LinkSuffix, modTime, int64(len(target)), true, nil, nil)
++			_, err := r.Flocal.Put(ctx, strings.NewReader(target), src)
++			require.Error(t, err)
++			_, err = os.Lstat(filepath.Join(f.root, "pwn"))
++			assert.True(t, os.IsNotExist(err), "no symlink created")
++		})
++	}
++
++	for _, target := range []string{"file.txt", "sub/../file.txt", "dir/x", "."} {
++		t.Run(target, func(t *testing.T) {
++			src := object.NewStaticObjectInfo("ok"+fs.LinkSuffix, modTime, int64(len(target)), true, nil, nil)
++			_, err := r.Flocal.Put(ctx, strings.NewReader(target), src)
++			require.NoError(t, err)
++			linkText, err := os.Readlink(filepath.Join(f.root, "ok"))
++			require.NoError(t, err)
++			assert.Equal(t, target, linkText)
++		})
++	}
++
++	require.NoError(t, os.Symlink(outside, filepath.Join(f.root, "planted")))
++	src := object.NewStaticObjectInfo("planted/authorized_keys", modTime, 5, true, nil, nil)
++	_, err := r.Flocal.Put(ctx, strings.NewReader("pwned"), src)
++	require.Error(t, err)
++	_, err = os.Stat(victim)
++	assert.True(t, os.IsNotExist(err), "nothing written outside the destination")
++
++	f.opt.LinksAllowUnsafe = true
++	src = object.NewStaticObjectInfo("abs"+fs.LinkSuffix, modTime, int64(len(outside)), true, nil, nil)
++	_, err = r.Flocal.Put(ctx, strings.NewReader(outside), src)
++	require.NoError(t, err)
++	linkText, err := os.Readlink(filepath.Join(f.root, "abs"))
++	require.NoError(t, err)
++	assert.Equal(t, outside, linkText)
++}
++
+ func TestSymlinkError(t *testing.T) {
+ 	m := configmap.Simple{
+ 		"links":      "true",

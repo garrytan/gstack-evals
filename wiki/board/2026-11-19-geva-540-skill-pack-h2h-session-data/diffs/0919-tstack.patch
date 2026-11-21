@@ -1,0 +1,31 @@
+diff --git a/tests/PhoneNumber.test.ts b/tests/PhoneNumber.test.ts
+index e26c8e7..68d04b9 100644
+--- a/tests/PhoneNumber.test.ts
++++ b/tests/PhoneNumber.test.ts
+@@ -136,5 +136,26 @@ describe('PhoneNumber', () => {
+         }).not.toThrow();
+       });
+     });
++
++    // Regression test for GHSA-x8rm-f576-gq67: the regex must not backtrack
++    // exponentially on a long digit run followed by a failing character.
++    describe('ReDoS', () => {
++      const payload = '1'.repeat(40) + 'x';
++      const plusPayload = '+' + '1'.repeat(40) + 'x';
++
++      test.each([payload, plusPayload])('rejects %s quickly', value => {
++        const start = Date.now();
++        expect(() => GraphQLPhoneNumber.serialize(value)).toThrow(
++          /^Value is not a valid phone number/,
++        );
++        expect(() => GraphQLPhoneNumber.parseValue(value)).toThrow(
++          /^Value is not a valid phone number/,
++        );
++        expect(() => GraphQLPhoneNumber.parseLiteral({ value, kind: Kind.STRING }, {})).toThrow(
++          /^Value is not a valid phone number/,
++        );
++        expect(Date.now() - start).toBeLessThan(1000);
++      });
++    });
+   });
+ });

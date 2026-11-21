@@ -1,0 +1,247 @@
+diff --git a/config/security/securityConfig.go b/config/security/securityConfig.go
+index 3ecc67f..59bbdac 100644
+--- a/config/security/securityConfig.go
++++ b/config/security/securityConfig.go
+@@ -64,6 +64,10 @@ var DefaultConfig = Config{
+ 		),
+ 		Methods: MustNewWhitelist("(?i)GET|POST"),
+ 	},
++	// HTML content files (text/html) are emitted verbatim, so they're denied by default.
++	AllowContent: MustNewWhitelist(
++		`! ^text/html$`,
++	),
+ 	Node: Node{
+ 		Permissions: NodePermissions{
+ 			Disable:           false,
+@@ -92,6 +96,10 @@ type Config struct {
+ 	// Node holds Node.js security settings.
+ 	Node Node `json:"node"`
+ 
++	// AllowContent is a whitelist of content media types (e.g. text/html) allowed as page content.
++	// <docsmeta>{ "newIn": "0.162.0" }</docsmeta>
++	AllowContent Whitelist `json:"allowContent"`
++
+ 	// Allow inline shortcodes
+ 	EnableInlineShortcodes bool `json:"enableInlineShortcodes"`
+ }
+@@ -189,6 +197,18 @@ func (c Config) CheckAllowedHTTPURL(url string) error {
+ 	return nil
+ }
+ 
++// CheckAllowedContent checks if the given content media type (e.g. "text/html") is allowed.
++func (c Config) CheckAllowedContent(mediaType string) error {
++	if !c.AllowContent.Accept(mediaType) {
++		return &AccessDeniedError{
++			name:     mediaType,
++			path:     "security.allowContent",
++			policies: c.ToTOML(),
++		}
++	}
++	return nil
++}
++
+ func (c Config) CheckAllowedHTTPMethod(method string) error {
+ 	if !c.HTTP.Methods.Accept(method) {
+ 		return &AccessDeniedError{
+diff --git a/config/security/securityConfig_test.go b/config/security/securityConfig_test.go
+index da82b0c..cee5aca 100644
+--- a/config/security/securityConfig_test.go
++++ b/config/security/securityConfig_test.go
+@@ -135,7 +135,7 @@ func TestToTOML(t *testing.T) {
+ 	got := DefaultConfig.ToTOML()
+ 
+ 	c.Assert(got, qt.Equals,
+-		"[security]\n  enableInlineShortcodes = false\n\n  [security.exec]\n    allow = ['^(dart-)?sass(-embedded)?$', '^go$', '^git$', '^node$', '^postcss$', '^tailwindcss$']\n    osEnv = ['(?i)^((HTTPS?|NO)_PROXY|PATH(EXT)?|APPDATA|TE?MP|TERM|GO\\w+|(XDG_CONFIG_)?HOME|USERPROFILE|SSH_AUTH_SOCK|DISPLAY|LANG|SYSTEMDRIVE|PROGRAMDATA)$']\n\n  [security.funcs]\n    getenv = ['^HUGO_', '^CI$']\n\n  [security.http]\n    methods = ['(?i)GET|POST']\n    urls = ['(?i)^https?://[a-z0-9]', '! ^https?://\\d+\\.', '! (?i)localhost', '! (?i)^https?://[^/?#]*@']\n\n  [security.node]\n    [security.node.permissions]\n      allowAddons = ['tailwindcss']\n      allowChildProcess = ['tailwindcss']\n      allowRead = ['.']\n      allowWorker = ['tailwindcss']\n      allowWrite = []\n      disable = false",
++		"[security]\n  allowContent = ['! ^text/html$']\n  enableInlineShortcodes = false\n\n  [security.exec]\n    allow = ['^(dart-)?sass(-embedded)?$', '^go$', '^git$', '^node$', '^postcss$', '^tailwindcss$']\n    osEnv = ['(?i)^((HTTPS?|NO)_PROXY|PATH(EXT)?|APPDATA|TE?MP|TERM|GO\\w+|(XDG_CONFIG_)?HOME|USERPROFILE|SSH_AUTH_SOCK|DISPLAY|LANG|SYSTEMDRIVE|PROGRAMDATA)$']\n\n  [security.funcs]\n    getenv = ['^HUGO_', '^CI$']\n\n  [security.http]\n    methods = ['(?i)GET|POST']\n    urls = ['(?i)^https?://[a-z0-9]', '! ^https?://\\d+\\.', '! (?i)localhost', '! (?i)^https?://[^/?#]*@']\n\n  [security.node]\n    [security.node.permissions]\n      allowAddons = ['tailwindcss']\n      allowChildProcess = ['tailwindcss']\n      allowRead = ['.']\n      allowWorker = ['tailwindcss']\n      allowWrite = []\n      disable = false",
+ 	)
+ }
+ 
+diff --git a/hugolib/page__meta.go b/hugolib/page__meta.go
+index 8ca377b..de1ea73 100644
+--- a/hugolib/page__meta.go
++++ b/hugolib/page__meta.go
+@@ -41,7 +41,9 @@ import (
+ 	"github.com/gohugoio/hugo/common/loggers"
+ 	"github.com/gohugoio/hugo/common/paths"
+ 	"github.com/gohugoio/hugo/config"
++	"github.com/gohugoio/hugo/config/security"
+ 	"github.com/gohugoio/hugo/helpers"
++	"github.com/gohugoio/hugo/media"
+ 
+ 	"github.com/gohugoio/hugo/output"
+ 	"github.com/gohugoio/hugo/resources/kinds"
+@@ -204,6 +206,10 @@ func (m *pageMetaSource) doInitEarly(h *HugoSites, cascades *page.PageMatcherPar
+ 		return err
+ 	}
+ 
++	if err := checkAllowedContent(h.Conf.GetConfigSection("security").(security.Config), m.pageConfigSource.ContentMediaType); err != nil {
++		return err
++	}
++
+ 	if m.pageConfigSource.Frontmatter != nil {
+ 		if err := m.setCascadeFromMap(m.pageConfigSource.Frontmatter, m.pageConfigSource.SitesMatrix, h.Conf.ConfiguredDimensions(), h.Log); err != nil {
+ 			return err
+@@ -1062,3 +1068,12 @@ func getParam(m resource.ResourceParamsProvider, key string, stringToLower bool)
+ func getParamToLower(m resource.ResourceParamsProvider, key string) any {
+ 	return getParam(m, key, true)
+ }
++
++// checkAllowedContent checks the content media type against the security.allowContent policy.
++// Only HTML content is checked, as that is emitted verbatim.
++func checkAllowedContent(sec security.Config, mt media.Type) error {
++	if !mt.IsHTML() {
++		return nil
++	}
++	return sec.CheckAllowedContent(mt.Type)
++}
+diff --git a/hugolib/page_test.go b/hugolib/page_test.go
+index b634b76..245b40d 100644
+--- a/hugolib/page_test.go
++++ b/hugolib/page_test.go
+@@ -741,6 +741,7 @@ func TestSummaryManualSplitHTML(t *testing.T) {
+ 	t.Parallel()
+ 	Test(t, `
+ -- hugo.toml --
++security.allowContent = ['.*']
+ -- content/simple.html --
+ ---
+ title: Simple
+diff --git a/hugolib/pagebundler_test.go b/hugolib/pagebundler_test.go
+index 1020720..57b9b5b 100644
+--- a/hugolib/pagebundler_test.go
++++ b/hugolib/pagebundler_test.go
+@@ -22,6 +22,7 @@ import (
+ func TestPageBundlerBasic(t *testing.T) {
+ 	files := `
+ -- hugo.toml --
++security.allowContent = ['.*']
+ -- content/mybundle/index.md --
+ ---
+ title: "My Bundle"
+@@ -627,6 +628,7 @@ func TestHTMLFilesIsue11999(t *testing.T) {
+ 
+ 	files := `
+ -- hugo.toml --
++security.allowContent = ['.*']
+ disableKinds = ["taxonomy", "term", "rss", "sitemap", "robotsTXT", "404"]
+ [permalinks]
+ posts = "/myposts/:slugorcontentbasename"
+@@ -703,6 +705,7 @@ myposts/mybundle/index.html
+ func TestBundleDuplicatePagesAndResources(t *testing.T) {
+ 	files := `
+ -- hugo.toml --
++security.allowContent = ['.*']
+ baseURL = "https://example.com"
+ disableKinds = ["taxonomy", "term"]
+ -- content/mysection/mybundle/index.md --
+diff --git a/hugolib/pagesfromdata/pagesfromgotmpl_integration_test.go b/hugolib/pagesfromdata/pagesfromgotmpl_integration_test.go
+index 2b3aa6e..6de731c 100644
+--- a/hugolib/pagesfromdata/pagesfromgotmpl_integration_test.go
++++ b/hugolib/pagesfromdata/pagesfromgotmpl_integration_test.go
+@@ -28,6 +28,7 @@ import (
+ 
+ const filesPagesFromDataTempleBasic = `
+ -- hugo.toml --
++security.allowContent = ['.*']
+ disableKinds = ["taxonomy", "term", "rss", "sitemap"]
+ baseURL = "https://example.com"
+ disableLiveReload = true
+@@ -138,6 +139,7 @@ func TestPagesFromGoTmplAsciiDocAndSimilar(t *testing.T) {
+ disableKinds = ["taxonomy", "term", "rss", "sitemap"]
+ baseURL = "https://example.com"
+ [security]
++allowContent = ['.*']
+ [security.exec]
+ allow = ['asciidoctor', 'pandoc','rst2html', 'python']
+ -- layouts/single.html --
+@@ -588,6 +590,7 @@ func TestPagesFromGoTmplShortcodeNoPreceddingCharacterIssue12544(t *testing.T) {
+ 
+ 	files := `
+ -- hugo.toml --
++security.allowContent = ['.*']
+ disableKinds = ['home','rss','section','sitemap','taxonomy','term']
+ -- content/_content.gotmpl --
+ {{ $content := dict "mediaType" "text/html" "value" "x{{< sc >}}" }}
+diff --git a/hugolib/rendershortcodes_test.go b/hugolib/rendershortcodes_test.go
+index 8fa0c24..1bc9de7 100644
+--- a/hugolib/rendershortcodes_test.go
++++ b/hugolib/rendershortcodes_test.go
+@@ -246,6 +246,7 @@ func TestRenderShortcodesNestedPageContextIssue12356(t *testing.T) {
+ 
+ 	files := `
+ -- hugo.toml --
++security.allowContent = ['.*']
+ disableKinds = ["taxonomy", "term", "rss", "sitemap", "robotsTXT", "404"]
+ -- layouts/_markup/render-image.html --
+ {{- with .PageInner.Resources.Get .Destination -}}Image: {{ .RelPermalink }}|{{- end -}}
+diff --git a/hugolib/security_allowcontent_test.go b/hugolib/security_allowcontent_test.go
+new file mode 100644
+index 0000000..3104cdf
+--- /dev/null
++++ b/hugolib/security_allowcontent_test.go
+@@ -0,0 +1,65 @@
++package hugolib
++
++import (
++	"strings"
++	"testing"
++
++	qt "github.com/frankban/quicktest"
++)
++
++func TestSecurityAllowContentHTML(t *testing.T) {
++	t.Parallel()
++
++	files := `
++-- hugo.toml --
++disableKinds = ["taxonomy", "term", "rss", "sitemap"]
++-- content/p1.html --
++---
++title: p1
++---
++<script>alert(1)</script>
++-- layouts/all.html --
++{{ .Content }}
++`
++	b, err := TestE(t, files)
++	qt.Assert(t, err, qt.IsNotNil)
++	qt.Assert(t, err.Error(), qt.Contains, "security.allowContent")
++
++	b = Test(t, strings.Replace(files, "-- hugo.toml --\n", "-- hugo.toml --\n[security]\nallowContent = ['.*']\n", 1))
++	b.AssertFileContent("public/p1/index.html", "<script>alert(1)</script>")
++}
++
++func TestSecurityAllowContentHTMLContentAdapter(t *testing.T) {
++	t.Parallel()
++
++	files := `
++-- hugo.toml --
++disableKinds = ["taxonomy", "term", "rss", "sitemap"]
++-- content/_content.gotmpl --
++{{ $.AddPage (dict "path" "p1" "title" "p1" "content" (dict "mediaType" "text/html" "value" "<script>alert(1)</script>")) }}
++{{ $.AddPage (dict "path" "p2" "title" "p2" "content" (dict "mediaType" "text/markdown" "value" "**md**")) }}
++-- layouts/all.html --
++{{ .Content }}
++`
++	_, err := TestE(t, files)
++	qt.Assert(t, err, qt.IsNotNil)
++	qt.Assert(t, err.Error(), qt.Contains, "security.allowContent")
++}
++
++func TestSecurityAllowContentMarkdownUnaffected(t *testing.T) {
++	t.Parallel()
++
++	files := `
++-- hugo.toml --
++disableKinds = ["taxonomy", "term", "rss", "sitemap"]
++-- content/p1.md --
++---
++title: p1
++---
++**md**
++-- layouts/all.html --
++{{ .Content }}
++`
++	b := Test(t, files)
++	b.AssertFileContent("public/p1/index.html", "<strong>md</strong>")
++}

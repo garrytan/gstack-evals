@@ -1,0 +1,18 @@
+diff --git a/bindgen/codegen/mod.rs b/bindgen/codegen/mod.rs
+index 5ffe088..9c364d8 100644
+--- a/bindgen/codegen/mod.rs
++++ b/bindgen/codegen/mod.rs
+@@ -810,8 +810,12 @@ impl CodeGenerator for Var {
+             };
+ 
+             if let Some(mut val) = const_expr {
+-                let var_ty_item = ctx.resolve_item(var_ty);
++                let var_ty_item =
++                    var_ty.into_resolver().through_type_refs().resolve(ctx);
+                 if matches!(
++                    var_ty_item.kind().as_type().map(|ty| ty.kind()),
++                    Some(TypeKind::Alias(..))
++                ) && matches!(
+                     var_ty_item.alias_style(ctx),
+                     AliasVariation::NewType | AliasVariation::NewTypeDeref
+                 ) {

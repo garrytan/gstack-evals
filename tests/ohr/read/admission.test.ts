@@ -1,15 +1,17 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// Section 12 stage 4's admission conditions A1 to A7 for the office-hours rewrite eval, each on both sides.
+// Section 12 stage 4's admission conditions A1 to A7 for the office-hours rewrite eval, and the second attempt's A8
+// (its pre-run change 3), each on both sides.
 import { describe, expect, test } from "bun:test";
 import { admission, admissionState, type AdmissionInput } from "../../../lanes/office-hours-rewrite/read/admission.ts";
-import { stage1Input } from "../../../lanes/office-hours-rewrite/read/seams.ts";
+import { skillLoad } from "../../../lanes/office-hours-rewrite/read/load.ts";
+import { plantLoad, stage1Input } from "../../../lanes/office-hours-rewrite/read/seams.ts";
 
 const cond = (x: AdmissionInput, id: string) => admission(x).conditions.find((c) => c.id === id)!;
 
 describe("admission", () => {
   test("the planted stage 1 is admitted", () => {
     const a = admission(stage1Input({}));
-    expect(a.conditions.map((c) => [c.id, c.pass])).toEqual([["A1", true], ["A2", true], ["A3", true], ["A4", true], ["A5", true], ["A6", true], ["A7", true]]);
+    expect(a.conditions.map((c) => [c.id, c.pass])).toEqual([["A1", true], ["A2", true], ["A3", true], ["A4", true], ["A5", true], ["A6", true], ["A7", true], ["A8", true]]);
     expect(a.pass).toBe(true);
   });
   test("A1: 6 of 8 exposed holds, 5 fails; particle-1 is reported only", () => {
@@ -38,7 +40,7 @@ describe("admission", () => {
   test("A6: the projection at stage 1's measured cost fits item 5 and item 6, or not", () => {
     const fits = cond(stage1Input({}), "A6");
     expect(fits.pass).toBe(true);
-    expect(fits.values.item5).toEqual({ projection: 654.24, cap: 1620 });
+    expect(fits.values.item5).toEqual({ projection: 556.8, cap: 1406 });
     expect(cond(stage1Input({ usd: { arm: "new", model: "opus", value: 12 } }), "A6").pass).toBe(false);
     expect(cond(stage1Input({ usd: { arm: "new", model: "particle", value: 1.5 } }), "A6").pass).toBe(false);
   });
@@ -47,6 +49,39 @@ describe("admission", () => {
     expect(cond(stage1Input({ read: { brief: "k03", model: "opus" } }), "A7").pass).toBe(false);
     expect(cond(stage1Input({ kind: { brief: "k03", arm: "current", model: "sol", value: null, missing: true } }), "A7").pass).toBe(true);
     expect(cond(stage1Input({ kind: { brief: "k03", arm: "current", model: "sol", value: null } }), "A7").pass).toBe(false);
+  });
+  test("A8: a skill session on Opus or Sol whose body did not arrive whole fails", () => {
+    const held = cond(stage1Input({}), "A8");
+    expect([held.pass, held.values.read, held.values.full]).toEqual([true, 48, 48]);
+    expect(cond(stage1Input({ short: { brief: "k03", arm: "new", model: "opus" } }), "A8").pass).toBe(false);
+    expect(cond(stage1Input({ short: { brief: "k08", arm: "current", model: "sol" } }), "A8").pass).toBe(false);
+  });
+  test("A8: a skill session with no read fails, and a none-arm session needs none", () => {
+    const x = stage1Input({});
+    const drop = (arm: string) => ({ ...x, loads: x.loads.filter((l) => !(l.brief === "k01" && l.model === "opus" && l.arm === arm)) });
+    expect(cond(drop("current"), "A8").pass).toBe(false);
+    expect(cond(drop("none"), "A8").pass).toBe(true);
+  });
+  test("A8: a particle-1 failure leaves that arm out of particle-1's stage 2 and admits", () => {
+    const c = cond(stage1Input({ short: { brief: "k05", arm: "new", model: "particle" } }), "A8");
+    expect([c.pass, c.values.left_out, c.values.stage2_particle_arms]).toEqual([true, ["particle|new"], ["none", "current"]]);
+    expect(cond(stage1Input({}), "A8").values.stage2_particle_arms).toEqual(["none", "current", "new"]);
+  });
+  test("A8: a skill session that ended missing with no transcript never started and is listed, not read", () => {
+    const x = stage1Input({ kind: { brief: "k03", arm: "current", model: "sol", value: null, missing: true } });
+    const c = cond({ ...x, loads: x.loads.filter((l) => !(l.brief === "k03" && l.model === "sol" && l.arm === "current")) }, "A8");
+    expect([c.pass, c.values.never_started, c.values.read]).toEqual([true, ["k03|sol|current"], 47]);
+  });
+  test("A8 reads through the file reader: a planted Opus copy cut short fails, a whole one passes", () => {
+    for (const cut of [0, 1]) {
+      const p = plantLoad({ host: "claude", arm: "new", cut });
+      try {
+        const read = skillLoad({ ...p.row, brief: "k02" }, p.bodies);
+        expect(cond(stage1Input({ load: read }), "A8").pass).toBe(cut === 0);
+      } finally {
+        p.done();
+      }
+    }
   });
   test("one repair, then FIX-METHOD", () => {
     const ok = admission(stage1Input({})), bad = admission(stage1Input({ currentRight: 12 }));

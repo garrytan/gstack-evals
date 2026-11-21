@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { excludedBy, finishFrame, licenceVerdict, screenFrame, type LicenceRead, type RowText, type SecondRead } from "../../lanes/outcome-skills/h2h/ordinary/frame.ts";
-import { b1Positions, drawB, planFor, replaceDropped, seededOrder, walk, walkB1, type DrawUnit, type Drawn, type Gate } from "../../lanes/outcome-skills/h2h/ordinary/draw.ts";
+import { b1Futility, b1Positions, b2AloneStage1, cpUpper, drawB, planFor, replaceDropped, seededOrder, walk, walkB1, type DrawUnit, type Drawn, type Gate } from "../../lanes/outcome-skills/h2h/ordinary/draw.ts";
 import { classifyLicenceFiles, classifyLicenceText, compileTemplate, loadTemplates, normaliseLicence, readLicenceFilesGraphQl, type GraphQl, type Templates } from "../../lanes/outcome-skills/h2h/ordinary/licences.ts";
 import { readPrereg } from "../../lanes/outcome-skills/h2h/prereg.ts";
 import type { Candidate } from "../../lanes/outcome-skills/statemachines/source.ts";
@@ -241,6 +241,61 @@ describe("h2h draw", () => {
     expect(at(none.b2!.units, "stage2")).toHaveLength(60);
     const pending: Gate = { name: "label", check: (id) => (id === "a0005" ? { pending: true, why: "no label" } : { ok: true }) };
     expect(drawB(p, p.draw_seed, seededOrder(frame(40, { prefix: "a" }), p.draw_seed), b2, [pending], [pass])).toMatchObject({ b1_status: null, b2: null });
+  });
+
+  test("B1's futility stop uses the one-sided 95% Clopper-Pearson bound and, with no pass in a 1,822-row frame, fires at 156 answered rows", () => {
+    expect(cpUpper(0, 156, 0.95)).toBeCloseTo(1 - Math.pow(0.05, 1 / 156), 10);
+    const k = 50, u = 3, b = cpUpper(u, k, 0.95);
+    let cdf = 0;
+    for (let i = 0; i <= u; i++) {
+      let c = 0;
+      for (let j = 1; j <= i; j++) c += Math.log(k - i + j) - Math.log(j);
+      cdf += Math.exp(c + i * Math.log(b) + (k - i) * Math.log1p(-b));
+    }
+    expect(cdf).toBeCloseTo(0.05, 9);
+    expect(cpUpper(5, 5, 0.95)).toBe(1);
+    expect(() => cpUpper(6, 5, 0.95)).toThrow(/^E_H2H_DRAW_INPUT /);
+    const order = seededOrder(frame(1822, { prefix: "a", perRepo: 12 }), p.draw_seed);
+    const answered = (n: number): Gate => {
+      const done = new Set(order.slice(0, n).map((x) => x.id));
+      return { name: "build", check: (id) => (done.has(id) ? { ok: false, code: "E_H2H_B_NO_TESTS", reason: "no_fail_to_pass" } : { pending: true, why: "no build result" }) };
+    };
+    expect(b1Futility(p, order, [answered(155)])).toMatchObject({ k: 155, u: 0, left: 1667, multilang: 8, floor: 32, fired: false });
+    const f = b1Futility(p, order, [answered(156)]);
+    expect(f).toMatchObject({ k: 156, u: 0, left: 1666, multilang: 8, floor: 32, fired: true, usable_ids: [] });
+    expect(f.projected).toBeCloseTo(1674 * (1 - Math.pow(0.05, 1 / 156)), 9);
+    expect(b1Futility(p, order, [answered(0)])).toMatchObject({ k: 0, u95: 1, fired: false });
+    const many: Gate = { name: "build", check: () => ({ ok: true }) };
+    expect(b1Futility(p, order.slice(0, 40), [many])).toMatchObject({ u: 40, fired: false });
+  });
+
+  test("an infeasible B1 gives B2 all 12 B stage 1 slots at 6, 12, ..., 72; a feasible B1 or an unfired stop leaves the merged draw", () => {
+    expect(b2AloneStage1([6, 12, 18, 24, 30, 36], 12)).toEqual([6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]);
+    expect(() => b2AloneStage1([6, 12, 20], 12)).toThrow(/^E_H2H_PREREG /);
+    const b1 = seededOrder(frame(200, { prefix: "a" }), p.draw_seed);
+    const b2 = seededOrder(frame(300, { prefix: "b" }), p.draw_seed);
+    const pending: Gate = { name: "build", check: (id) => (id === b1[3]!.id ? { pending: true, why: "no build result" } : { ok: false, code: "E_H2H_B_NO_TESTS", reason: "no_fail_to_pass" }) };
+    const stop = b1Futility(p, b1, [{ name: "build", check: () => ({ ok: false, code: "E_H2H_B_NO_TESTS", reason: "no_fail_to_pass" }) }]);
+    expect(stop).toMatchObject({ k: 200, u: 0, left: 0, fired: true });
+    for (const d of [drawB(p, p.draw_seed, b1, b2, [pending], [pass], { futility: stop }), drawB(p, p.draw_seed, seededOrder(frame(31, { prefix: "a" }), p.draw_seed), b2, [pass], [pass], { fallbacksDone: true })]) {
+      expect(d).toMatchObject({ b1_status: "infeasible", b1_feasible: false, n_b1: 0, n_b2: 60 });
+      expect(d.b1.units).toEqual([]);
+      expect(d.b1.pending).toBeNull();
+      expect(at(d.b2!.units, "stage1").map((u) => u.position)).toEqual([6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]);
+      expect(at(d.b2!.units, "stage2")).toHaveLength(60);
+      expect(at(d.b2!.units, "reserve")).toHaveLength(5);
+      expect(at(d.b2!.units, "stage0")).toHaveLength(1);
+      expect(at(d.b2!.units, "stage0")[0]!.position).toBeGreaterThan(Math.max(...at(d.b2!.units, "reserve").map((u) => u.position)));
+      expect(d.b2!.short).toBeNull();
+      oneStageEach(d.b2!.units);
+    }
+    expect(drawB(p, p.draw_seed, b1, b2, [pending], [pass], { futility: { ...stop, fired: false } })).toMatchObject({ b1_status: null, b2: null, b1_futility: { fired: false } });
+    const usable = seededOrder(frame(80, { prefix: "a" }), p.draw_seed);
+    const merged = drawB(p, p.draw_seed, usable, b2, [pass], [pass]);
+    const withStop = drawB(p, p.draw_seed, usable, b2, [pass], [pass], { futility: b1Futility(p, usable, [pass]) });
+    expect(merged.b1_futility).toBeNull();
+    expect({ ...withStop, b1_futility: merged.b1_futility }).toEqual(merged);
+    expect(at(merged.b2!.units, "stage1").map((u) => u.position)).toEqual([6, 12, 18, 24, 30, 36]);
   });
 
   test("the repository cap counts B1's drawn units in B2", () => {

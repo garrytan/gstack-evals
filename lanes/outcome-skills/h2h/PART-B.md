@@ -3,7 +3,8 @@
 Notes for part B of the keyless build for the head-to-head preregistration
 (wiki/plans/2026-11-15-geva-538-skill-pack-h2h-prereg/README.md, section 6). The post is the source of truth. This file
 says what part B built, what ran for real, the readings it chose where the post leaves a detail open, and where it could
-not follow the post as written. Nothing here makes a paid model call or reads a model key.
+not follow the post as written. Nothing in this build made a paid model call or read a model key; label-send (below) is
+the one command that does when it runs.
 
 ## What is built
 
@@ -29,10 +30,11 @@ Everything lives in lanes/outcome-skills/h2h/breadth/.
   discovery, the runner choice and derived tests, the unit dir in sm-unit.v1 format, and the oracle (5 and 5 runs with
   the browser conditions for B1, 3 and 3 for B2).
 - label.ts: the B1 browser-only label packet, the answer reader, the both-yes rule and agreement with Cohen's kappa.
+- label-send.ts: the paid sender for the label under the h2h-labels ledger item (see Label sender below).
 - fallback.ts: section 6's B fallbacks: which rows enter each frame's order, and whether B1 is usable.
 - chromium-wrapper.sh: the launcher wrapper that adds --no-sandbox and --disable-dev-shm-usage.
-- commands.ts: `export const commands` with mine-b2, mine-b1, image-build, image-store, oracle-b, browser-check and
-  label-packet. The h2h command table maps its rows here; part B did not edit src/cli.ts.
+- commands.ts: `export const commands` with mine-b2, mine-b1, image-build, image-store, oracle-b, browser-check,
+  label-packet and label-send. The h2h command table maps its rows here; part B did not edit src/cli.ts.
 
 ## What ran for real
 
@@ -158,19 +160,57 @@ oracle's smoke step used the state machines runtime (Claude Code 2.1.312) and fo
 - Image builds are meant to run on a throwaway VM with no keys. buildImage takes a builder host (docker_host) for that,
   but this build ran no real repository's install scripts: the Docker tests serve small local repositories instead.
 
+## Label sender
+
+`gstack-evals h2h label-send --run <id> --units <file> --out <dir> [--record <dir>] [--ledger <file>] [--lift-halt <meter,...>]`
+sends the B1 label packets under the h2h-labels ledger item. It runs on the state machines sender
+(statemachines/send.ts), which now takes a SendSpec: the item's packets, each packet's reader, the output cap and the
+usage bound. sm-labels and sm-judges keep their own: their packet readers, the 1,500-token cap and the 20,000 and 1,500
+token bound. So the label send keeps that sender's rules:
+one lease, each call alone through the metering proxy with its byte worst case as its allowance, a cap stop that ends
+the item and is never retried, an allowance stop that halts until --lift-halt, an uncharged call resent once and then a
+gap, and a call once sent never sent again, lost ones included.
+
+Each unit gets two calls, GPT-6 Astra then Opus 5.5, on sm-labels' routes (judgeRequest, JUDGE_ROUTE, medium reasoning
+on OpenAI). The user message is labelPacket(dir).text unchanged. readAnswer reads each reply, so a first word that is
+neither yes nor no is unclear: a recorded answer that counts as not yes, never asked again. When a send ends, finished
+or stopped, every unit with both answers gets its LabelRow in unit.json (labels.browser_only). Agreement over those
+units is the command's stdout line and goes to <out>/agreement.json. The send summary goes to stderr.
+
+Readings this sender chose:
+
+- The prereg freezes no per-call token bound for labels (sections 6 and 14 and A2 give only the item's $40 central and
+  $54 cap). So the sender uses only the per-call worst-case allowance and the item cap, and no call halts on its usage.
+  A call lost in a stopped send is recorded lost and never resent, with no halt, because there is no bound to check.
+- Each request names the metering proxy's default output cap (DEFAULT_MAX_OUTPUT_TOKENS, 32,768), and its worst case is
+  priced at that cap. The state machines cap of 1,500 belongs to that prereg's bound, and with medium reasoning it could
+  cut an Astra answer to no text, which reads as unclear. The cost: an Astra call's worst case is about $1.64 plus its
+  input, so the cap stop comes while about that much of the cap is still unspent.
+- A reply with no text (a provider refusal, or an answer cut at the output cap) reads as unclear. Its raw file is empty,
+  so these replies can be counted apart.
+- h2h-labels must be recorded in a program with skill h2h, like every h2h item; the program's name is not checked.
+- --units lists unit dirs one per line. Blank lines are skipped, a relative path is read from the file's own dir, and
+  every dir must be a B1 unit (source h2h-b1) listed once. Calls go in file order.
+- Replies name each unit by its id. Each send line records the packet's sha256. A resumed send refuses a unit whose
+  packet changed since one of its calls was sent (E_H2H_LABEL_INPUT), and a LabelRow is written only when both answers
+  read the current packet.
+- A unit with a gap, an upstream failure or a lost call gets no label, so it stays out and is not counted in agreement.
+
 ## Hooks into sibling lanes
 
 Part B changed the state machines lane only through backward-compatible hooks. testrun.ts gained RunExtra (an optional
 /dev/shm size, read-only bind mounts and env) and extraArgs; runArgs and runTests take an optional extra. oracle.ts
 gained an optional extra on oneRun and oracleUnit. With no extra, the container arguments are unchanged
 (tests/outcome-skills/h2h-hooks.test.ts). A B unit's unit.json sets source to h2h-b1 or h2h-b2, outside SmUnit's union;
-no state machines code branches on those values outside its own convert command.
+no state machines code branches on those values outside its own convert command. send.ts gained sendItem and SendSpec
+for the label sender; sendPackets passes the state machines values, and sm-send.test.ts and sm-packets.test.ts pass
+unchanged.
 
 ## Tests
 
-- Keyless: h2h-parsers, h2h-miners, h2h-recipes, h2h-browser, h2h-label, h2h-fallback, h2h-gates (a good and a bad case
-  for every gate, the 5 and 5 keep rule through the state machines judge, and one unit through every gate) and
-  h2h-hooks.
+- Keyless: h2h-parsers, h2h-miners, h2h-recipes, h2h-browser, h2h-label, h2h-label-send, h2h-fallback, h2h-gates (a
+  good and a bad case for every gate, the 5 and 5 keep rule through the state machines judge, and one unit through
+  every gate) and h2h-hooks.
 - Docker (GSTACK_EVALS_DOCKER=1): h2h-breadth-docker (a local registry:2 store by digest, the browser conditions in a
   real container, and one Go candidate through build, store, discovery, derived tests and the unit dir) and
   h2h-oracle-docker (the Go and Playwright units through the oracle, above). The oracle test needs network for the npm,

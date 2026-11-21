@@ -1,0 +1,130 @@
+diff --git a/internal/chezmoi/format.go b/internal/chezmoi/format.go
+index 341ac66..2dd855a 100644
+--- a/internal/chezmoi/format.go
++++ b/internal/chezmoi/format.go
+@@ -7,11 +7,13 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"maps"
++	"reflect"
+ 	"slices"
+ 	"strings"
+ 
++	"github.com/BurntSushi/toml"
+ 	"github.com/goccy/go-yaml"
+-	"github.com/pelletier/go-toml/v2"
++	pelletiertoml "github.com/pelletier/go-toml/v2"
+ 	"github.com/tailscale/hujson"
+ )
+ 
+@@ -149,7 +151,7 @@ func (formatJSON) Unmarshal(data []byte, value any) error {
+ 
+ // Marshal implements Format.Marshal.
+ func (formatTOML) Marshal(value any) ([]byte, error) {
+-	return toml.Marshal(value)
++	return pelletiertoml.Marshal(value)
+ }
+ 
+ // Name implements Format.Name.
+@@ -159,9 +161,55 @@ func (formatTOML) Name() string {
+ 
+ // Unmarshal implements Format.Unmarshal.
+ func (formatTOML) Unmarshal(data []byte, value any) error {
+-	decoder := toml.NewDecoder(bytes.NewReader(data))
+-	decoder.DisallowUnknownFields()
+-	return decoder.Decode(value)
++	metaData, err := toml.NewDecoder(bytes.NewReader(data)).Decode(value)
++	if err != nil {
++		return err
++	}
++	targetType := reflect.TypeOf(value)
++	for _, key := range metaData.Undecoded() {
++		if !tomlKeyIsUnderInterface(targetType, key) {
++			return fmt.Errorf("toml: unknown field %q", key.String())
++		}
++	}
++	return nil
++}
++
++// tomlKeyIsUnderInterface returns whether key is stored inside an interface
++// value of t. BurntSushi/toml does not mark keys below interface values as
++// decoded, so these keys are not unknown fields.
++func tomlKeyIsUnderInterface(t reflect.Type, key toml.Key) bool {
++	for _, component := range key {
++		for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
++			t = t.Elem()
++		}
++		switch t.Kind() {
++		case reflect.Interface:
++			return true
++		case reflect.Map:
++			t = t.Elem()
++		case reflect.Struct:
++			field, ok := tomlStructField(t, component)
++			if !ok {
++				return false
++			}
++			t = field.Type
++		default:
++			return false
++		}
++	}
++	return t.Kind() == reflect.Interface
++}
++
++// tomlStructField returns the field of t that BurntSushi/toml decodes name
++// into.
++func tomlStructField(t reflect.Type, name string) (reflect.StructField, bool) {
++	return t.FieldByNameFunc(func(fieldName string) bool {
++		field, _ := t.FieldByName(fieldName)
++		if tag, _, _ := strings.Cut(field.Tag.Get("toml"), ","); tag != "" {
++			return tag == name
++		}
++		return strings.EqualFold(fieldName, name)
++	})
+ }
+ 
+ // Name implements Format.Name.
+diff --git a/internal/chezmoi/format_test.go b/internal/chezmoi/format_test.go
+index f212c26..c28fc51 100644
+--- a/internal/chezmoi/format_test.go
++++ b/internal/chezmoi/format_test.go
+@@ -158,17 +158,23 @@ func TestFormatEdgeCases(t *testing.T) {
+ 			data:     `key = "value"`,
+ 			expected: T{Key: "value"},
+ 		},
++		{
++			name:     "toml_1_1_hex_escape",
++			format:   FormatTOML,
++			data:     `key = "\x76alue"`,
++			expected: T{Key: "value"},
++		},
+ 		{
+ 			name:        "toml_unknown_field",
+ 			format:      FormatTOML,
+ 			data:        `unknown = "value"`,
+-			expectedErr: "strict mode: fields in the document are missing in the target struct",
++			expectedErr: `toml: unknown field "unknown"`,
+ 		},
+ 		{
+ 			name:        "toml_unexpected_eof",
+ 			format:      FormatTOML,
+ 			data:        `[`,
+-			expectedErr: "expected key but found none",
++			expectedErr: "unexpected end of table name",
+ 		},
+ 		{
+ 			name:   "toml_whitespace",
+diff --git a/internal/cmd/testdata/scripts/init.txtar b/internal/cmd/testdata/scripts/init.txtar
+index ebb0413..9e0c3e4 100644
+--- a/internal/cmd/testdata/scripts/init.txtar
++++ b/internal/cmd/testdata/scripts/init.txtar
+@@ -73,7 +73,7 @@ chhome home8/user
+ # test that chezmoi init fails if the generated config is not valid
+ mkgitconfig
+ ! exec chezmoi init
+-stderr 'toml: expected character ='
++stderr 'toml: line 2 \(last key "diff"\): expected'
+ ! exists .config/chezmoi
+ 
+ chhome home/user

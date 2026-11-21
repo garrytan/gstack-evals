@@ -1,0 +1,128 @@
+diff --git a/src/lib/ares_close_sockets.c b/src/lib/ares_close_sockets.c
+index 347f43e..08e58d2 100644
+--- a/src/lib/ares_close_sockets.c
++++ b/src/lib/ares_close_sockets.c
+@@ -112,11 +112,12 @@ void ares_check_cleanup_conns(const ares_channel_t *channel)
+         do_cleanup = ARES_TRUE;
+       }
+ 
+-      /* If the associated server has failures, close it out. Resetting the
+-       * connection (and specifically the source port number) can help resolve
+-       * situations where packets are being dropped.
++      /* If the associated server has had failures since this connection was
++       * opened, close it out. Resetting the connection (and specifically the
++       * source port number) can help resolve situations where packets are
++       * being dropped.
+        */
+-      if (conn->server->consec_failures > 0) {
++      if (conn->server->consec_failures > conn->consec_failures_at_open) {
+         do_cleanup = ARES_TRUE;
+       }
+ 
+diff --git a/src/lib/ares_conn.c b/src/lib/ares_conn.c
+index 6b315b0..1369d2d 100644
+--- a/src/lib/ares_conn.c
++++ b/src/lib/ares_conn.c
+@@ -360,6 +360,7 @@ ares_status_t ares_open_connection(ares_conn_t   **conn_out,
+   memset(conn, 0, sizeof(*conn));
+   conn->fd              = ARES_SOCKET_BAD;
+   conn->server          = server;
++  conn->consec_failures_at_open = server->consec_failures;
+   conn->queries_to_conn = ares_llist_create(NULL);
+   conn->flags           = is_tcp ? ARES_CONN_FLAG_TCP : ARES_CONN_FLAG_NONE;
+   conn->out_buf         = ares_buf_create();
+diff --git a/src/lib/ares_conn.h b/src/lib/ares_conn.h
+index 16ecefd..32896f4 100644
+--- a/src/lib/ares_conn.h
++++ b/src/lib/ares_conn.h
+@@ -76,6 +76,13 @@ struct ares_conn {
+   /* total number of queries run on this connection since it was established */
+   size_t                  total_queries;
+ 
++  /* Value of server->consec_failures at the time this connection was opened.
++   * If the server has accumulated additional failures since then, this
++   * connection should not be reused for new queries (a fresh connection, and
++   * thus source port, may help).  Connections opened after the failures
++   * occurred can still be reused. */
++  size_t                  consec_failures_at_open;
++
+   /* list of outstanding queries to this connection */
+   ares_llist_t           *queries_to_conn;
+ };
+diff --git a/src/lib/ares_process.c b/src/lib/ares_process.c
+index aebea1a..5d6b539 100644
+--- a/src/lib/ares_process.c
++++ b/src/lib/ares_process.c
+@@ -1236,9 +1236,11 @@ static ares_conn_t *ares_fetch_connection(const ares_channel_t *channel,
+     return NULL;
+   }
+ 
+-  /* If the associated server has failures, don't use it.  It should be cleaned
+-   * up later. */
+-  if (conn->server->consec_failures > 0) {
++  /* If the associated server has had failures since this connection was
++   * opened, don't use it.  It should be cleaned up later.  We must not reject
++   * connections opened after the failures occurred, otherwise every query
++   * would open a brand new socket while the server has any failures. */
++  if (conn->server->consec_failures > conn->consec_failures_at_open) {
+     return NULL;
+   }
+ 
+diff --git a/test/ares-test-mock.cc b/test/ares-test-mock.cc
+index 5b9c15e..62610d9 100644
+--- a/test/ares-test-mock.cc
++++ b/test/ares-test-mock.cc
+@@ -476,6 +476,53 @@ TEST_P(MockChannelTest, ReInit) {
+   EXPECT_EQ("{'www.google.com' aliases=[] addrs=[2.3.4.5]}", ss.str());
+ }
+ 
++// Regression test: when a server has consecutive failures, new UDP queries
++// must still be able to share a single (newly opened) connection rather than
++// opening a brand new socket for every query.
++#define FAILED_SERVER_PARALLEL_QUERIES 16
++TEST_P(MockChannelTest, ReuseConnAfterServerFailure) {
++  DNSPacket failrsp;
++  failrsp.set_response().set_aa()
++    .add_question(new DNSQuestion("fail.example.com", T_A));
++  failrsp.set_rcode(SERVFAIL);
++  ON_CALL(server_, OnRequest("fail.example.com", T_A))
++    .WillByDefault(SetReply(&server_, &failrsp));
++
++  DNSPacket rsp;
++  rsp.set_response().set_aa()
++    .add_question(new DNSQuestion("www.google.com", T_A))
++    .add_answer(new DNSARR("www.google.com", 100, {2, 3, 4, 5}));
++  ON_CALL(server_, OnRequest("www.google.com", T_A))
++    .WillByDefault(SetReply(&server_, &rsp));
++
++  int rc = ARES_SUCCESS;
++  ares_set_socket_callback(channel_, SocketConnectCallback, &rc);
++
++  // Put the server into a failed state.
++  HostResult failresult;
++  ares_gethostbyname(channel_, "fail.example.com.", AF_INET, HostCallback,
++                     &failresult);
++  Process();
++  EXPECT_TRUE(failresult.done_);
++  EXPECT_EQ(ARES_ESERVFAIL, failresult.status_);
++
++  // Now issue a burst of parallel queries while the server still has
++  // failures recorded.  They should share a single new UDP socket.
++  sock_cb_count = 0;
++  HostResult result[FAILED_SERVER_PARALLEL_QUERIES];
++  for (size_t i = 0; i < FAILED_SERVER_PARALLEL_QUERIES; i++) {
++    ares_gethostbyname(channel_, "www.google.com.", AF_INET, HostCallback,
++                       &result[i]);
++  }
++  Process();
++
++  EXPECT_EQ(1, sock_cb_count);
++  for (size_t i = 0; i < FAILED_SERVER_PARALLEL_QUERIES; i++) {
++    EXPECT_TRUE(result[i].done_);
++    EXPECT_EQ(ARES_SUCCESS, result[i].status_);
++  }
++}
++
+ #define MAXUDPQUERIES_TOTAL 32
+ #define MAXUDPQUERIES_LIMIT 8
+ 

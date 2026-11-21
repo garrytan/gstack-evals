@@ -1,0 +1,15 @@
+diff --git a/crates/obscura-cdp/src/domains/page.rs b/crates/obscura-cdp/src/domains/page.rs
+index dd84b5e..f21549f 100644
+--- a/crates/obscura-cdp/src/domains/page.rs
++++ b/crates/obscura-cdp/src/domains/page.rs
+@@ -84,6 +84,10 @@ pub fn emit_navigation_events(
+     } else {
+         ctx.isolated_worlds.clone()
+     };
++    // Contexts were cleared: only the re-emitted default context (2) and the
++    // freshly minted isolated worlds below remain valid.
++    ctx.valid_context_ids.clear();
++    ctx.valid_context_ids.insert(2);
+     // Issue #192: fresh, monotonically increasing executionContextId per re-create.
+     for world_name in &world_names {
+         let world_ctx_id = ctx.next_isolated_context();

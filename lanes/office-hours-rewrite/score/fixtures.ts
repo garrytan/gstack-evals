@@ -32,7 +32,7 @@ export const turn = (n: number, revealed: string[] = []): Turn => ({ turn: n, re
 
 export function row(o: Partial<SessionRow> & Pick<SessionRow, "brief">): SessionRow {
   const k = BRIEFS.get(o.brief)!.key;
-  return { stage: 1, model: "opus", arm: "none", end: "block", code: null, block: blockOf(k.call, k.actions[0]!), founder_turns: [turn(1, k.decisive), turn(2), turn(3)].map((t) => ({ ...t, delivered: true })), closings: 1, founder_done: true, replies: 5, session_kind: null, guard_failures: 0, gstack_reads: [], usd: 0, sim_usd: 0, attempts: 1, transcript: null, state_root: null, ...o };
+  return { stage: 1, model: "opus", arm: "none", end: "block", code: null, block: blockOf(k.call, k.actions[0]!), founder_turns: [turn(1, k.decisive), turn(2), turn(3)].map((t) => ({ ...t, delivered: true })), closings: 1, founder_done: true, replies: 5, session_kind: null, served_model: null, cli_version: null, guard_failures: 0, gstack_reads: [], usd: 0, sim_usd: 0, attempts: 1, transcript: null, state_root: null, ...o };
 }
 
 /** Every arm's block on every brief for one model, the key's call everywhere. */

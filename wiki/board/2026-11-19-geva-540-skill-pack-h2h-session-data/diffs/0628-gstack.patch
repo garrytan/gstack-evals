@@ -1,0 +1,78 @@
+diff --git a/Terminal.Gui/Views/Selectors/SelectorBase.cs b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+index f1f7ed1..e6b0f2e 100644
+--- a/Terminal.Gui/Views/Selectors/SelectorBase.cs
++++ b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+@@ -529,6 +529,22 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+                 SubViews.ElementAt (i).Width = Dim.Auto ();
+             }
+         }
++
++        if (Orientation == Orientation.Horizontal)
++        {
++            // DimAuto (used by this view's Width/Height) computes the size of Pos.Align groups from the
++            // SubViews' current Frames. Newly created SubViews have not been laid out yet, so their Frames
++            // are empty, which causes the auto-sized width to be too small (truncating labels) until a
++            // subsequent layout pass. Pre-compute the SubViews' Frames so the first layout is correct.
++            Size contentSize = App?.Screen.Size ?? new Size (2048, 2048);
++
++            foreach (View subView in SubViews)
++            {
++                subView.SetRelativeLayout (contentSize);
++            }
++        }
++
++        SetNeedsLayout ();
+     }
+ 
+     /// <summary>
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index f84b0da..da7f1ad 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -1069,4 +1069,46 @@ public class OptionSelectorTests
+     }
+ 
+     #endregion
++
++    // Regression: Dim.Auto width must account for all labels when Labels/Values are set after construction
++    // with Orientation.Horizontal.
++    [Theory]
++    [InlineData (false, false)]
++    [InlineData (true, false)]
++    [InlineData (false, true)]
++    [InlineData (true, true)]
++    public void Horizontal_LabelsSetAfterConstruction_Width_Fits_All_Labels (bool setValues, bool startHidden)
++    {
++        View superView = new () { Width = 80, Height = 10 };
++        OptionSelector selector = new () { Y = 2, Orientation = Orientation.Horizontal };
++
++        if (startHidden)
++        {
++            selector.Visible = false;
++        }
++
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++
++        if (setValues)
++        {
++            selector.Values = [0, 1];
++        }
++
++        superView.Add (selector);
++        superView.Layout ();
++
++        if (startHidden)
++        {
++            selector.Visible = true;
++            superView.Layout ();
++        }
++
++        CheckBox [] checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (2, checkBoxes.Length);
++
++        // "◉ IMDb (Recommended)" (20) + 2 (HorizontalSpace) + "◯ TMDb" (6)
++        Assert.Equal (28, selector.Frame.Width);
++        Assert.Equal (22, checkBoxes [1].Frame.X);
++        Assert.Equal (6, checkBoxes [1].Frame.Width);
++    }
+ }

@@ -3,6 +3,7 @@
 // command, read a file or open a skill: it can only answer from the prompt it is sent. The request leaves from the
 // judge's own container on the trial network, which holds no skill and no copy of the agent's work, through its own
 // proxy slot; the proxy writes the cell's output cap into it and meters it like any session.
+import { createHash } from "node:crypto";
 import type { Provider } from "../runner/pricing/prices.ts";
 import type { AgentDriver, AgentOutcome } from "../trial/trial.ts";
 import type { Termination } from "../types.ts";
@@ -18,11 +19,20 @@ export const JUDGE_ROUTE: Record<Provider, string> = { anthropic: "/v1/messages"
  */
 export const JUDGE_REASONING_EFFORT = "medium";
 
-/** The request body: the model and one user message, and no tools, tool choice or system prompt; with maxOutputTokens, the output cap a smaller request asks for; with effort, the reasoning effort an OpenAI request asks for. */
-export function judgeRequest(provider: Provider, model: string, prompt: string, maxOutputTokens?: number, effort?: string): Record<string, unknown> {
-  const messages = [{ role: "user", content: prompt }];
+/**
+ * The request body: the model and one user message, and no tools, tool choice or system prompt; with maxOutputTokens, the
+ * output cap a smaller request asks for; with effort, the reasoning effort an OpenAI request asks for. With cachePrefix,
+ * the start of a prompt that other requests share, the message is two text blocks that join to the same prompt: on
+ * Anthropic the first carries a 5-minute cache_control marker, and on OpenAI, which caches on its own, the request names
+ * the prefix's hash as its prompt_cache_key. OpenRouter's message stays one string.
+ */
+export function judgeRequest(provider: Provider, model: string, prompt: string, maxOutputTokens?: number, effort?: string, cachePrefix?: string): Record<string, unknown> {
+  const split = cachePrefix && provider !== "openrouter" && prompt.length > cachePrefix.length && prompt.startsWith(cachePrefix);
+  const blocks = (type: string) => [{ type, text: cachePrefix!, ...(provider === "anthropic" ? { cache_control: { type: "ephemeral" } } : {}) }, { type, text: prompt.slice(cachePrefix!.length) }];
+  const messages = [{ role: "user", content: split ? blocks(provider === "openai" ? "input_text" : "text") : prompt }];
   const cap = maxOutputTokens === undefined ? {} : { [provider === "openai" ? "max_output_tokens" : "max_tokens"]: maxOutputTokens };
-  return provider === "openai" ? { model, input: messages, store: false, ...cap, ...(effort === undefined ? {} : { reasoning: { effort } }) } : { model, messages, ...cap };
+  if (provider !== "openai") return { model, messages, ...cap };
+  return { model, input: messages, store: false, ...cap, ...(effort === undefined ? {} : { reasoning: { effort } }), ...(split ? { prompt_cache_key: createHash("sha256").update(cachePrefix!).digest("hex").slice(0, 32) } : {}) };
 }
 
 /** The text of the model's answer in the provider's response shape. */
@@ -36,7 +46,7 @@ export function judgeAnswer(provider: Provider, body: any): string {
 const send = (route: string): string =>
   "const r = await fetch((process.env.ANTHROPIC_BASE_URL ?? process.env.OPENAI_BASE_URL) + " + JSON.stringify(route) + ", { method: 'POST', headers: { 'content-type': 'application/json', 'anthropic-version': '2023-06-01', authorization: 'Bearer ' + (process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.OPENAI_API_KEY) }, body: await Bun.stdin.text() }); process.stdout.write(JSON.stringify({ status: r.status, body: await r.text() }));";
 
-export function judgeDriver(o: { provider: Provider; model: string; proxy: { baseUrl: string; slot: string; token: string }; maxOutputTokens?: number; effort?: string }): AgentDriver {
+export function judgeDriver(o: { provider: Provider; model: string; proxy: { baseUrl: string; slot: string; token: string }; maxOutputTokens?: number; effort?: string; cachePrefix?: string }): AgentDriver {
   const base = o.proxy.baseUrl.replace(/\/+$/, "") + "/" + o.proxy.slot + "/" + o.provider;
   return {
     env: o.provider === "anthropic" ? { ANTHROPIC_BASE_URL: base, ANTHROPIC_AUTH_TOKEN: o.proxy.token } : { OPENAI_BASE_URL: base, OPENAI_API_KEY: o.proxy.token },
@@ -50,7 +60,7 @@ export function judgeDriver(o: { provider: Provider; model: string; proxy: { bas
       });
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timedOut = new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(false), timeoutMs)));
-      child.stdin?.end(JSON.stringify(judgeRequest(o.provider, o.model, task.prompt, o.maxOutputTokens, o.effort)));
+      child.stdin?.end(JSON.stringify(judgeRequest(o.provider, o.model, task.prompt, o.maxOutputTokens, o.effort, o.cachePrefix)));
       const done = await Promise.race([closed, timedOut]);
       clearTimeout(timer);
       if (!done) child.kill("SIGKILL");

@@ -1,0 +1,59 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+index d9e438d..19b7b23 100644
+--- a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -1048,12 +1048,10 @@ ClassUtil.name(name), ((AnnotatedParameter) m).getIndex());
+         if (ClassUtil.isProxyType(type)) {
+             throw new IllegalArgumentException("Cannot deserialize Proxy class "+type.getName()+" as a Bean");
+         }
+-        // also: can't deserialize some local classes: static are ok; in-method not;
+-        // other non-static inner classes are ok
+-        typeStr = ClassUtil.isLocalType(type, true);
+-        if (typeStr != null) {
+-            throw new IllegalArgumentException("Cannot deserialize Class "+type.getName()+" (of type "+typeStr+") as a Bean");
+-        }
++        // 09-Dec-2020, tatu: [databind#2762]: Do NOT block local/anonymous classes
++        //   here: while they usually cannot be instantiated, they may well be
++        //   deserialized when updating an existing instance ("readerForUpdating()").
++        //   Failure to instantiate will be reported at the point of instantiation.
+         return true;
+     }
+ 
+diff --git a/src/test/java/tools/jackson/databind/convert/UpdateViaObjectReaderTest.java b/src/test/java/tools/jackson/databind/convert/UpdateViaObjectReaderTest.java
+index d9c942a..bb239f2 100644
+--- a/src/test/java/tools/jackson/databind/convert/UpdateViaObjectReaderTest.java
++++ b/src/test/java/tools/jackson/databind/convert/UpdateViaObjectReaderTest.java
+@@ -392,4 +392,33 @@ public class UpdateViaObjectReaderTest
+         assertNotSame(obj, newObj);
+         assertNull(newObj);
+     }
++
++    // [databind#2762]: should be able to update instance of local/anonymous class
++    @Test
++    public void testUpdatingLocalAndAnonymousClass() throws Exception
++    {
++        final ObjectMapper mapper = newJsonMapper();
++
++        class LocalBean {
++            public int value;
++        }
++        LocalBean local = new LocalBean();
++        LocalBean result = mapper.readerForUpdating(local).readValue(a2q("{'value':2}"));
++        assertSame(local, result);
++        assertEquals(2, local.value);
++
++        Object anon = new Object() {
++            public int value;
++
++            @Override
++            public String toString() { return String.valueOf(value); }
++        };
++        Object anonResult = mapper.readerForUpdating(anon).readValue(a2q("{'value':3}"));
++        assertSame(anon, anonResult);
++        assertEquals("3", anon.toString());
++
++        // but can not construct a new instance (requires outer instance)
++        assertThrows(DatabindException.class,
++                () -> mapper.readValue(a2q("{'value':2}"), LocalBean.class));
++    }
+ }

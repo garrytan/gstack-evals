@@ -21,7 +21,7 @@ import { DEFAULT_POLICY, loadPolicy } from "../../src/skill-eval/cli/policy.ts";
 import type { Meter as PvMeter } from "../product-value/meter.ts";
 import { decide, paired, read, source, type Interval, type ScoredBuild } from "./analysis.ts";
 import { appWrites, RAM_SIZE } from "./app.ts";
-import { armPlan, readExposure } from "./exposure.ts";
+import { armPlan, findRun, PLAN, readExposure, WORK } from "./exposure.ts";
 import { runRealFixtures } from "./fixtures.ts";
 import { armPrompt, COMMON_ASK, DAY_ONE_PASS, GATE_REPLY, MODELS, OWNER_CLOSING, OWNER_NOTICE, PREREG, PROBE_QUESTIONS, PROMPTS_SHA256, BUILD_PROMPT, CHECK_FOOTER, CHECK_HEADER, OWNER_HEAD, OWNER_RULES, PLATFORM, QUESTION_CHARS, REVIEW_ASK, AUTOPLAN_LINE } from "./frozen.ts";
 import { controls, goldAgreement, labelPacket, packets, parseLabels, stockPlan, type Label } from "./judge.ts";
@@ -99,6 +99,7 @@ function stubRig(closed: { n: number }): HostRig {
 const ownerMeter = (calls: string[]): PvMeter => ({
   leaseId: "owner",
   spent: () => 0,
+  unknown: () => 0,
   close: async () => ({ spent_micros: 0, unknown_micros: 0 }),
   call: async (req) => {
     calls.push(req.prompt);
@@ -197,7 +198,12 @@ export const CASES: Record<string, Case> = {
     const dq = await ownerLoop({ ask: async () => fail("the responder was called with the channel dropped"), dropped: true }).nextUser(["Which day do you bake?"]);
     must("reply" in dg && dg.reply === GATE_REPLY && dropped.state.turns[0]!.source === "recommended" && dropped.state.turns[0]!.gate, "a dropped channel did not answer the gate with the fixed reply, logged as recommended");
     must("end" in dq, "a dropped channel answered a question");
-    return "answer with its source cut, closing at the limit, gate question, no question ends, failed call stops, the whole asking reply up to " + QUESTION_CHARS + " characters; dropped: the gate gets \"" + GATE_REPLY + "\" as recommended and a question ends";
+    const undecided = { text: "I don't know, use your judgment.\nSOURCE: unknown" };
+    const gd = ownerLoop({ ask: async () => undecided, gatePending: () => true });
+    const gdr = await gd.nextUser(["Reply approve or build it. Which do you want?"]);
+    const nogate = await ownerLoop({ ask: async () => undecided }).nextUser(["Reply approve or build it. Which do you want?"]);
+    must("reply" in gdr && gdr.reply === GATE_REPLY && gd.state.turns[0]!.source === "gate-default" && "reply" in nogate && nogate.reply !== GATE_REPLY, "an undecided options ask at a waiting gate did not get the gate default, or one with no gate did");
+    return "answer with its source cut, closing at the limit, gate question, no question ends, failed call stops, the whole asking reply up to " + QUESTION_CHARS + " characters; an undecided options ask at a waiting gate gets \"" + GATE_REPLY + "\" as gate-default; dropped: the gate gets \"" + GATE_REPLY + "\" as recommended and a question ends";
   },
   "session outcomes": () => {
     const base: AttemptRead = { termination: { kind: "completed" }, web: 0, gstack_reads: [], contained: [], micros: 0, voice: null, out: "/x" };
@@ -565,12 +571,13 @@ export const CASES: Record<string, Case> = {
   },
   "exposure": () =>
     withTmp((dir) => {
-      const run = (outside: string) => {
-        const d = join(dir, outside);
+      const call = JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "gstack-autoplan next --out " + WORK + "/r --plan " + PLAN + " --full" } }] } }) + "\n";
+      const run = (outside: string, transcript = call) => {
+        const d = join(dir, outside + (transcript ? "" : "-planted"));
         mkdirSync(join(d, "r"), { recursive: true });
         const phase = { closed_at: "2026-11-17T00:00:00Z", native: { status: "completed" }, outside: { status: outside } };
-        writeFileSync(join(d, "r", "run.json"), JSON.stringify({ status: "complete", plan_input: "plan.md", updated_at: "2026-11-17T00:00:00Z", phases: { ceo: phase, design: { skipped: true }, eng: phase } }));
-        return readExposure(d, 3);
+        writeFileSync(join(d, "r", "run.json"), JSON.stringify({ status: "complete", plan_input: PLAN, updated_at: "2026-11-17T00:00:00Z", phases: { ceo: phase, design: { skipped: true }, eng: phase } }));
+        return readExposure(findRun([{ dir: d, seen: WORK }], transcript), 3);
       };
       const ok = run("completed");
       const disabled = run("disabled");
@@ -579,17 +586,37 @@ export const CASES: Record<string, Case> = {
       must(ok.exposed && ok.voice === "astra", "a complete run with both voices was not exposed on astra");
       must(!disabled.exposed && /disabled/.test(disabled.why) && !skipped.exposed && /skipped/.test(skipped.why), "a disabled or skipped outside voice read exposed");
       must(unavailable.exposed && unavailable.voice === "fallback", "an unavailable outside voice did not read exposed on the fallback");
+      const waiting = (status: string) => {
+        const d = join(dir, "gate-" + status);
+        mkdirSync(join(d, "r"), { recursive: true });
+        const phase = { closed_at: "2026-11-17T00:00:00Z", native: { status: "completed" }, outside: { status: "completed" } };
+        writeFileSync(join(d, "r", "run.json"), JSON.stringify({ status, plan_input: PLAN, updated_at: "2026-11-17T00:00:02Z", gate: { rev: 1, written_at: "2026-11-17T00:00:01Z" }, phase_order: ["ceo", "design", "eng"], phases: { ceo: phase, design: { skipped: "no UI scope" }, eng: phase } }));
+        return readExposure(findRun([{ dir: d, seen: WORK }], call), 3);
+      };
+      const final = waiting("gate_pending");
+      const amend = waiting("amend_pending");
+      must(final.exposed && final.final_gate && !final.exposed_frozen && ok.exposed_frozen && !amend.exposed && !amend.final_gate, "a run waiting at its final gate was not exposed, one waiting for an amendment was, or the frozen reading moved");
+      const planted = run("completed", "");
+      must(!planted.exposed && planted.run === null, "a run.json that no gstack-autoplan call wrote read exposed");
+      const dated = join(dir, "dated");
+      mkdirSync(join(dated, "r-1"), { recursive: true });
+      writeFileSync(join(dated, "r-1", "run.json"), JSON.stringify({ status: "gate_pending", run: "r-1-x", plan_input: PLAN, created_at: "2026-11-17T00:00:01.500Z", updated_at: "2026-11-17T00:00:02Z" }));
+      const start = (at: string) => JSON.stringify({ type: "assistant", timestamp: at, message: { content: [{ type: "tool_use", id: "b2", name: "Bash", input: { command: "R=r-$(date +%s); gstack-autoplan next --out " + WORK + '/"$R" --plan ' + PLAN + " > /dev/null" } }] } }) + "\n";
+      const done = JSON.stringify({ type: "user", timestamp: "2026-11-17T00:00:01.800Z", message: { content: [{ type: "tool_result", tool_use_id: "b2", content: "" }] } }) + "\n";
+      const made = findRun([{ dir: dated, seen: WORK }], start("2026-11-17T00:00:01.200Z") + done);
+      const before = findRun([{ dir: dated, seen: WORK }], start("2026-11-17T00:00:01.600Z") + done);
+      must(made.run !== null && made.unmatched === 0 && before.run === null && before.unmatched === 1, "a start was not tied to the run gstack created during its Bash call, or one that created no run was not counted");
       const state = join(dir, "state");
       mkdirSync(join(state, "r"), { recursive: true });
       mkdirSync(join(dir, "work"), { recursive: true });
       writeFileSync(join(dir, "outside.md"), "OUTSIDE plan");
       writeFileSync(join(state, "r", "inside.md"), "INSIDE plan");
       const plan = (active: string, runOut = "/") => {
-        writeFileSync(join(state, "r", "run.json"), JSON.stringify({ updated_at: "2026-11-17T00:00:00Z", active_plan: active, out: runOut }));
-        return armPlan(join(dir, "work"), "base", state).text;
+        writeFileSync(join(state, "r", "run.json"), JSON.stringify({ updated_at: "2026-11-17T00:00:00Z", plan_input: PLAN, active_plan: active, out: runOut }));
+        return armPlan(join(dir, "work"), "base", findRun([{ dir: state, seen: WORK }], call).run).text;
       };
       must(plan("r/inside.md") === "INSIDE plan" && !plan("../outside.md").includes("OUTSIDE") && !plan("/a/b/outside.md", "/a/b/c/d").includes("OUTSIDE"), "an autoplan plan outside the state root was read, or one inside it was not");
-      return "both voices: exposed, astra; a disabled or skipped outside voice: not exposed, with the reason; unavailable: exposed on the fallback";
+      return "both voices: exposed, astra; a run waiting at its final gate: exposed, not under the frozen reading; waiting for an amendment: not exposed; a disabled or skipped outside voice: not exposed, with the reason; unavailable: exposed on the fallback; a run.json no gstack-autoplan call wrote: not exposed; a --out from $(date) ties to the run created during the start's Bash call, and a start that created none counts as unmatched";
     }),
   "checker session setup": () =>
     withTmp(async (dir) => {

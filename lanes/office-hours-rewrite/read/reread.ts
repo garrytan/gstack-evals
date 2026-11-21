@@ -6,14 +6,15 @@
 // builder check's pass share when nothing changes at the observed kept-whole rate. power.py runs as committed and checked
 // against its front-matter sha256: the rerun executes its imports, assignments and functions, skips its printed grid,
 // then calls its mdd(), layout(), builder_pairs() and builder_interval(). The runner is injected, so tests spawn nothing.
+// The second attempt keeps section 9 and power.py's model unchanged, so power.py stays the first preregistration's.
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PREREG } from "../frozen.ts";
+import { PREREG_1 } from "../frozen.ts";
 import type { ObservedMdd } from "./report.ts";
 
-export const POWER_PY = join(import.meta.dir, "..", "..", "..", PREREG, "..", "power.py");
+export const POWER_PY = join(import.meta.dir, "..", "..", "..", PREREG_1, "..", "power.py");
 export const POWER_SHA256 = createHash("sha256").update(readFileSync(POWER_PY)).digest("hex");
 export const RHO = [0.5, 0.843] as const;
 
@@ -64,7 +65,7 @@ const clip = (p: number) => Math.min(0.99, Math.max(0.01, p));
 
 /** Section 9's rerun at stage 1's observed control rates: current's and none's right-call rates, and current's kept-whole rate. */
 export function reread(observed: { current: number; none: number; kept: number }, run: Python = python): Reread {
-  const frozen = readFileSync(join(import.meta.dir, "..", "..", "..", PREREG), "utf8").match(/^ {2}- ([0-9a-f]{64}) {2}power\.py$/m)?.[1];
+  const frozen = readFileSync(join(import.meta.dir, "..", "..", "..", PREREG_1), "utf8").match(/^ {2}- ([0-9a-f]{64}) {2}power\.py$/m)?.[1];
   if (frozen !== POWER_SHA256) throw new Error("E_OHR_READ_POWER power.py's sha256 " + POWER_SHA256 + " is not the preregistration's attachment " + frozen);
   const stdin = JSON.stringify({ founder: [{ control: "current", p0: clip(observed.current) }, { control: "none", p0: clip(observed.none) }], builder: [{ p0: clip(observed.kept) }], rho: RHO });
   const text = run(rereadProgram(POWER_PY), stdin);

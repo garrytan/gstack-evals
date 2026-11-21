@@ -1,0 +1,89 @@
+diff --git a/context.go b/context.go
+index ec7fdd9..a2deed1 100644
+--- a/context.go
++++ b/context.go
+@@ -166,16 +166,26 @@ func (c *Context) Scheme() string {
+ 		return "https"
+ 	}
+ 	if scheme := c.request.Header.Get(HeaderXForwardedProto); scheme != "" {
+-		return scheme
++		return sanitizeScheme(scheme)
+ 	}
+ 	if scheme := c.request.Header.Get(HeaderXForwardedProtocol); scheme != "" {
+-		return scheme
++		return sanitizeScheme(scheme)
+ 	}
+ 	if ssl := c.request.Header.Get(HeaderXForwardedSsl); ssl == "on" {
+ 		return "https"
+ 	}
+ 	if scheme := c.request.Header.Get(HeaderXUrlScheme); scheme != "" {
+-		return scheme
++		return sanitizeScheme(scheme)
++	}
++	return "http"
++}
++
++// sanitizeScheme limits client-supplied scheme headers to known web schemes so they cannot inject
++// arbitrary schemes (e.g. `javascript`) into URLs built from Context.Scheme.
++func sanitizeScheme(scheme string) string {
++	switch s := strings.ToLower(strings.TrimSpace(scheme)); s {
++	case "http", "https", "ws", "wss":
++		return s
+ 	}
+ 	return "http"
+ }
+diff --git a/context_test.go b/context_test.go
+index 9376f0f..8dd274e 100644
+--- a/context_test.go
++++ b/context_test.go
+@@ -1147,6 +1147,30 @@ func TestContext_Scheme(t *testing.T) {
+ 	}
+ }
+ 
++func TestContext_SchemeRejectsUnknownHeaderValues(t *testing.T) {
++	tests := []struct {
++		header string
++		value  string
++		expect string
++	}{
++		{HeaderXForwardedProto, "javascript", "http"},
++		{HeaderXForwardedProto, "data", "http"},
++		{HeaderXForwardedProto, "file", "http"},
++		{HeaderXForwardedProto, " HTTPS ", "https"},
++		{HeaderXForwardedProto, "wss", "wss"},
++		{HeaderXForwardedProto, "ws", "ws"},
++		{HeaderXForwardedProtocol, "vbscript", "http"},
++		{HeaderXUrlScheme, "gopher", "http"},
++		{HeaderXUrlScheme, "https://evil.com/", "http"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.header+"="+tt.value, func(t *testing.T) {
++			c := &Context{request: &http.Request{Header: http.Header{tt.header: []string{tt.value}}}}
++			assert.Equal(t, tt.expect, c.Scheme())
++		})
++	}
++}
++
+ func TestContext_IsWebSocket(t *testing.T) {
+ 	tests := []struct {
+ 		c  *Context
+diff --git a/middleware/redirect_test.go b/middleware/redirect_test.go
+index a127ca4..442a322 100644
+--- a/middleware/redirect_test.go
++++ b/middleware/redirect_test.go
+@@ -293,3 +293,15 @@ func redirectTest(fn middlewareGenerator, host string, header http.Header) *http
+ 
+ 	return res
+ }
++
++func TestRedirectWWWAndNonWWWIgnoreUnsafeForwardedScheme(t *testing.T) {
++	header := http.Header{echo.HeaderXForwardedProto: []string{"javascript"}}
++
++	res := redirectTest(WWWRedirect, "labstack.com", header)
++	assert.Equal(t, http.StatusMovedPermanently, res.Code)
++	assert.Equal(t, "http://www.labstack.com/", res.Header().Get(echo.HeaderLocation))
++
++	res = redirectTest(NonWWWRedirect, "www.labstack.com", header)
++	assert.Equal(t, http.StatusMovedPermanently, res.Code)
++	assert.Equal(t, "http://labstack.com/", res.Header().Get(echo.HeaderLocation))
++}

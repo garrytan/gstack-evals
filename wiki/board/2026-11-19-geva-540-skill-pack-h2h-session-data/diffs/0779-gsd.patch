@@ -1,0 +1,188 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index f725bf8..d54db1b 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -130,6 +130,9 @@
+ 
+ ### Bug fixes
+ 
++- Fixed a bug where inlining could generate invalid code when an inlined
++  parameter was used as an argument in a record update expression.
++
+ - Fixed a bug where `echo` could crash on JavaScript if the module contains
+   record variants with the same name as some built-in JavaScript objects.
+   ([Louis Pilfold](https://github.com/lpil))
+diff --git a/compiler-core/src/erlang/tests/inlining.rs b/compiler-core/src/erlang/tests/inlining.rs
+index df9ef86..eb91486 100644
+--- a/compiler-core/src/erlang/tests/inlining.rs
++++ b/compiler-core/src/erlang/tests/inlining.rs
+@@ -312,3 +312,23 @@ fn divide(a, b) {
+ "
+     );
+ }
++
++// Regression test: arguments of record updates must be traversed when inlining
++#[test]
++fn inlined_parameter_used_in_record_update() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub type Config {
++  Config(host: String, ssl: Bool)
++}
++
++pub fn main(config: Config) {
++  use ssl <- result.map(Ok(True))
++  Config(..config, ssl: ssl)
++}
++"
++    );
++}
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_parameter_used_in_record_update.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_parameter_used_in_record_update.snap
+new file mode 100644
+index 0000000..e30d65d
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_parameter_used_in_record_update.snap
+@@ -0,0 +1,38 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++expression: "\nimport gleam/result\n\npub type Config {\n  Config(host: String, ssl: Bool)\n}\n\npub fn main(config: Config) {\n  use ssl <- result.map(Ok(True))\n  Config(..config, ssl: ssl)\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub type Config {
++  Config(host: String, ssl: Bool)
++}
++
++pub fn main(config: Config) {
++  use ssl <- result.map(Ok(True))
++  Config(..config, ssl: ssl)
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/1]).
++-export_type([config/0]).
++
++-type config() :: {config, binary(), boolean()}.
++
++-file("project/test/my/mod.gleam", 8).
++-spec main(config()) -> {ok, config()} | {error, any()}.
++main(Config) ->
++    case {ok, true} of
++        {ok, Value} ->
++            {ok, {config, erlang:element(2, Config), Value}};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/inline.rs b/compiler-core/src/inline.rs
+index 81df9e9..969bbbd 100644
+--- a/compiler-core/src/inline.rs
++++ b/compiler-core/src/inline.rs
+@@ -479,7 +479,22 @@ impl Inliner<'_> {
+                 record_assignment: record_assignment
+                     .map(|assignment| Box::new(self.assignment(*assignment))),
+                 constructor: self.boxed_expression(constructor),
+-                arguments,
++                arguments: arguments
++                    .into_iter()
++                    .map(
++                        |TypedCallArg {
++                             label,
++                             location,
++                             value,
++                             implicit,
++                         }| TypedCallArg {
++                            label,
++                            location,
++                            value: self.expression(value),
++                            implicit,
++                        },
++                    )
++                    .collect(),
+             },
+         }
+     }
+diff --git a/compiler-core/src/javascript/tests/inlining.rs b/compiler-core/src/javascript/tests/inlining.rs
+index 3b691ce..e930dc4 100644
+--- a/compiler-core/src/javascript/tests/inlining.rs
++++ b/compiler-core/src/javascript/tests/inlining.rs
+@@ -312,3 +312,23 @@ fn divide(a, b) {
+ "
+     );
+ }
++
++// Regression test: arguments of record updates must be traversed when inlining
++#[test]
++fn inlined_parameter_used_in_record_update() {
++    assert_js!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub type Config {
++  Config(host: String, ssl: Bool)
++}
++
++pub fn main(config: Config) {
++  use ssl <- result.map(Ok(True))
++  Config(..config, ssl: ssl)
++}
++"
++    );
++}
+diff --git a/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__inlined_parameter_used_in_record_update.snap b/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__inlined_parameter_used_in_record_update.snap
+new file mode 100644
+index 0000000..14e9835
+--- /dev/null
++++ b/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__inlined_parameter_used_in_record_update.snap
+@@ -0,0 +1,40 @@
++---
++source: compiler-core/src/javascript/tests/inlining.rs
++expression: "\nimport gleam/result\n\npub type Config {\n  Config(host: String, ssl: Bool)\n}\n\npub fn main(config: Config) {\n  use ssl <- result.map(Ok(True))\n  Config(..config, ssl: ssl)\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub type Config {
++  Config(host: String, ssl: Bool)
++}
++
++pub fn main(config: Config) {
++  use ssl <- result.map(Ok(True))
++  Config(..config, ssl: ssl)
++}
++
++
++----- COMPILED JAVASCRIPT
++import * as $result from "../../gleam_stdlib/gleam/result.mjs";
++import { Ok, CustomType as $CustomType } from "../gleam.mjs";
++
++export class Config extends $CustomType {
++  constructor(host, ssl) {
++    super();
++    this.host = host;
++    this.ssl = ssl;
++  }
++}
++
++export function main(config) {
++  let $ = new Ok(true);
++  if ($ instanceof Ok) {
++    let value = $[0];
++    return new Ok(new Config(config.host, value));
++  } else {
++    return $;
++  }
++}

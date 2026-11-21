@@ -1,0 +1,104 @@
+diff --git a/SPEC-client-hub-id.md b/SPEC-client-hub-id.md
+new file mode 100644
+index 0000000..ee7cde6
+--- /dev/null
++++ b/SPEC-client-hub-id.md
+@@ -0,0 +1,23 @@
++# Spec Delta: IBrowserFingerService.GetClientHubIdAsync
++
++Status: implemented
++
++## Objective
++Expose the client hub id (the per-browser id that `ClientHub` / `hub.js` stores) through
++`IBrowserFingerService` so components and services can read it from C#.
++
++## Current Behavior
++`IBrowserFingerService` only provides `GetFingerCodeAsync`. `hub.js` keeps the client id in
++`localStorage['bb_hub_connection_id']`, but C# code has no way to read it.
++
++## New Behavior
++- `Task<string?> GetClientHubIdAsync(CancellationToken token = default)` on `IBrowserFingerService`.
++- `DefaultBrowserFingerService` calls the JS function `getClientHubId` in `modules/utility.js`.
++- `getClientHubId()` returns `localStorage.getItem('bb_hub_connection_id')`, or `null` if it is not set.
++
++## Success Criteria
++- `test/UnitTest/Services/BrowserFingerServiceTest.cs` `GetClientHubIdAsync_Ok` passes.
++- `GetFingerCodeAsync` behavior and its test are unchanged.
++
++## Boundaries
++- No new dependencies; reuse the existing `utility.js` module.
+diff --git a/src/BootstrapBlazor/Services/DefaultBrowserFingerService.cs b/src/BootstrapBlazor/Services/DefaultBrowserFingerService.cs
+index b99da81..3d58604 100644
+--- a/src/BootstrapBlazor/Services/DefaultBrowserFingerService.cs
++++ b/src/BootstrapBlazor/Services/DefaultBrowserFingerService.cs
+@@ -14,11 +14,20 @@ class DefaultBrowserFingerService(IJSRuntime jSRuntime) : IBrowserFingerService
+     private JSModule? _module = null;
+ 
+     /// <summary>
+-    /// 获取剪切板数据方法
++    /// <inheritdoc/>
+     /// </summary>
+     public async Task<string?> GetFingerCodeAsync(CancellationToken token = default)
+     {
+         _module ??= await jSRuntime.LoadUtility();
+         return await _module.InvokeAsync<string?>("getFingerCode", token);
+     }
++
++    /// <summary>
++    /// <inheritdoc/>
++    /// </summary>
++    public async Task<string?> GetClientHubIdAsync(CancellationToken token = default)
++    {
++        _module ??= await jSRuntime.LoadUtility();
++        return await _module.InvokeAsync<string?>("getClientHubId", token);
++    }
+ }
+diff --git a/src/BootstrapBlazor/Services/IBrowserFingerService.cs b/src/BootstrapBlazor/Services/IBrowserFingerService.cs
+index 6c46122..b2b0165 100644
+--- a/src/BootstrapBlazor/Services/IBrowserFingerService.cs
++++ b/src/BootstrapBlazor/Services/IBrowserFingerService.cs
+@@ -15,4 +15,11 @@ public interface IBrowserFingerService
+     /// </summary>
+     /// <returns></returns>
+     Task<string?> GetFingerCodeAsync(CancellationToken token = default);
++
++    /// <summary>
++    /// 获得当前客户端 Hub Id 方法
++    /// <para>Get the current client hub id</para>
++    /// </summary>
++    /// <returns></returns>
++    Task<string?> GetClientHubIdAsync(CancellationToken token = default);
+ }
+diff --git a/src/BootstrapBlazor/wwwroot/modules/utility.js b/src/BootstrapBlazor/wwwroot/modules/utility.js
+index 0d97300..8651779 100644
+--- a/src/BootstrapBlazor/wwwroot/modules/utility.js
++++ b/src/BootstrapBlazor/wwwroot/modules/utility.js
+@@ -701,6 +701,10 @@ export function getFingerCode() {
+     return hash.toString();
+ }
+ 
++export function getClientHubId() {
++    return localStorage.getItem('bb_hub_connection_id');
++}
++
+ export function getHtml(options) {
+     let html = '';
+     let el = null;
+diff --git a/test/UnitTest/Services/BrowserFingerServiceTest.cs b/test/UnitTest/Services/BrowserFingerServiceTest.cs
+index 7d28958..9b8c350 100644
+--- a/test/UnitTest/Services/BrowserFingerServiceTest.cs
++++ b/test/UnitTest/Services/BrowserFingerServiceTest.cs
+@@ -15,4 +15,13 @@ public class BrowserFingerServiceTest : BootstrapBlazorTestBase
+         var code = await service.GetFingerCodeAsync();
+         Assert.Equal("9527", code);
+     }
++
++    [Fact]
++    public async Task GetClientHubIdAsync_Ok()
++    {
++        Context.JSInterop.Setup<string?>("getClientHubId").SetResult("hub-9527");
++        var service = Context.Services.GetRequiredService<IBrowserFingerService>();
++        var id = await service.GetClientHubIdAsync();
++        Assert.Equal("hub-9527", id);
++    }
+ }

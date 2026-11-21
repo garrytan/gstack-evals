@@ -64,6 +64,11 @@ export const CHECK_HEADER =
 export const CHECK_FOOTER =
   'When you have tried every task, end your reply with one fenced block labelled verdicts that holds a JSON object {"tasks": [{"id": "t1", "done": true, "why": "at most 30 words on what you saw"}, ...]} with every task id exactly once. Only this block is scored.';
 export const VERDICT_FENCE = "verdicts";
+/** The checker repair (REPAIR_CHANGE, section 14): a paragraph between CHECK_HEADER and the tasks, added after the first checker validation failed. */
+export const CHECK_REPAIR =
+  "If a click or a save seems to do nothing, take a new snapshot, try again with the element's exact name, and reload the page before you decide a task is not done. " +
+  "If the app will not let you begin until you do something it asks for first, such as an import that a later task names, do that first and then carry on in order.";
+export const REPAIR_CHANGE = "wiki/plans/2026-11-17-geva-549-day-one-pin-change.md";
 
 /** The owner responder (H1): the profile, then these rules; usersim's persona prompt wraps the whole text per question. */
 export const OWNER_RULES =
@@ -131,11 +136,14 @@ export const MODELS = {
 /** Every session: the claude-code-preset system prompt and a 200,000-token window. */
 export const SYSTEM_PROMPT = "claude-code-preset" as const;
 
-/** The gstack arms' pins. s-full and s-dayone pin commits on the strengthened branch when it lands. */
+/** The dated plan change that sets the gstack arms' pins after the prereg merged: the second, on gstack's unattended second-review fix. */
+export const PIN_CHANGE = "wiki/plans/2026-11-17-geva-549-day-one-second-pin-change.md";
+
+/** The gstack arms' pins, set by PIN_CHANGE: a on gstack main, s-dayone and s-full on the strengthened branches. */
 export const GSTACK_PINS: Readonly<Record<"a" | "s-full" | "s-dayone", { repo: string; sha: string | null; version: string | null }>> = {
-  a: { repo: "garrytan/gstack", sha: "5b4fa9ea335e3ba743a36e3269da95980b77b32d", version: "1.99.5.0" },
-  "s-full": { repo: "garrytan/gstack", sha: null, version: null },
-  "s-dayone": { repo: "garrytan/gstack", sha: null, version: null },
+  a: { repo: "garrytan/gstack", sha: "e671a531f4ede3d63b3143c96903466c960aca58", version: "1.100.0.0" },
+  "s-full": { repo: "garrytan/gstack", sha: "798782aeea7548d979878b7b559f5fc47bea2400", version: "1.100.0.0" },
+  "s-dayone": { repo: "garrytan/gstack", sha: "a2a421ba6734a861fee93234aa9fb4373dc858d0", version: "1.100.0.0" },
 };
 
 /** The app and browser container: Playwright's MCP server image, pinned by digest, serving MCP over HTTP. */
@@ -156,6 +164,9 @@ export const UNIT_SETS = {
 } as const;
 export type UnitSet = keyof typeof UNIT_SETS;
 
+/** The checker's identity, which each check stage's manifest records: its own texts, its model and its limits. */
+export const checkerIdentity = (model: string, limits: { minutes: number; turns: number; usd: number }): string => sha256(JSON.stringify([CHECK_HEADER, CHECK_REPAIR, CHECK_FOOTER, model, limits]));
+export const CHECKER_SHA256 = checkerIdentity(MODELS.checker, LIMITS.check);
 export const PROMPTS_SHA256 = sha256(JSON.stringify([COMMON_ASK, REVIEW_ASK, DAY_ONE_PASS, AUTOPLAN_LINE, OWNER_NOTICE, PLATFORM, BUILD_PROMPT, CHECK_HEADER, CHECK_FOOTER, OWNER_HEAD, OWNER_RULES, OWNER_CLOSING, GATE_REPLY, ...PROBE_QUESTIONS]));
 
 /** Each planning arm's first message, its bytes and its sha256, as the prereg lists them. */

@@ -1,0 +1,206 @@
+diff --git a/RULES_DESCRIPTIONS.md b/RULES_DESCRIPTIONS.md
+index f73ee66..8e0d293 100644
+--- a/RULES_DESCRIPTIONS.md
++++ b/RULES_DESCRIPTIONS.md
+@@ -1754,6 +1754,7 @@ _Configuration_: N/A
+ _Description_: Since Go 1.25 the `sync` package proposes the [`WaitGroup.Go`](https://pkg.go.dev/sync#WaitGroup.Go) method.
+ This method is a shorter and safer replacement for the idiom `wg.Add ... go { ... wg.Done ... }`.
+ The rule proposes to replace these legacy idioms with calls to the new method.
++It also covers the variant where a single `wg.Add(n)` is followed by a `for`/`range` loop that starts the goroutines.
+ 
+ _Limitations_: The rule doesn't rely on type information but on variable names to identify waitgroups.
+ This means the rule search for `wg` (the defacto standard name for wait groups);
+diff --git a/rule/use_waitgroup_go.go b/rule/use_waitgroup_go.go
+index 6f04fd6..dd0522d 100644
+--- a/rule/use_waitgroup_go.go
++++ b/rule/use_waitgroup_go.go
+@@ -98,15 +98,9 @@ func (w *lintUseWaitGroupGo) analyzeBlock(b *ast.BlockStmt) {
+ 		// we will iterate from the (i+1)-th statement up to the last statement of block.List
+ 		for i++; i < len(stmts); i++ {
+ 			stmt := stmts[i]
+-			// looking for a go statement
+-			goStmt, ok := stmt.(*ast.GoStmt)
+-			if !ok {
+-				continue // not a go statement
+-			}
+-
+-			// here we found a the go statement
+-			// now let's check is the go statement is applied to a function literal that contains a wg.Done
+-			if !w.hasCallToWgDone(goStmt) {
++			// looking for a go statement, either directly in the block
++			// or at the top level of the body of a for/range loop
++			if !w.isGoWithWgDone(stmt) {
+ 				continue
+ 			}
+ 
+@@ -122,6 +116,44 @@ func (w *lintUseWaitGroupGo) analyzeBlock(b *ast.BlockStmt) {
+ 	}
+ }
+ 
++// isGoWithWgDone returns true if the given statement is a go statement running
++// a function literal that calls wg.Done, or if it is a for/range loop whose body
++// contains (at its top level) such a go statement. The latter covers code like:
++//
++//	wg.Add(n)
++//	for range n {
++//		go func() {
++//			defer wg.Done()
++//			...
++//		}()
++//	}
++func (w *lintUseWaitGroupGo) isGoWithWgDone(stmt ast.Stmt) bool {
++	var body *ast.BlockStmt
++	switch s := stmt.(type) {
++	case *ast.GoStmt:
++		return w.hasCallToWgDone(s)
++	case *ast.ForStmt:
++		body = s.Body
++	case *ast.RangeStmt:
++		body = s.Body
++	default:
++		return false
++	}
++
++	if body == nil {
++		return false
++	}
++
++	for _, bodyStmt := range body.List {
++		goStmt, ok := bodyStmt.(*ast.GoStmt)
++		if ok && w.hasCallToWgDone(goStmt) {
++			return true
++		}
++	}
++
++	return false
++}
++
+ // hasCallToWgDone returns true if the given go statement
+ // calls to a function literal containing a call to wg.Done, false otherwise.
+ func (*lintUseWaitGroupGo) hasCallToWgDone(goStmt *ast.GoStmt) bool {
+diff --git a/testdata/go1.25/use_waitgroup_go.go b/testdata/go1.25/use_waitgroup_go.go
+index a827a49..45080e6 100644
+--- a/testdata/go1.25/use_waitgroup_go.go
++++ b/testdata/go1.25/use_waitgroup_go.go
+@@ -50,4 +50,58 @@ func useWaitGroupGo() {
+ 		}
+ 	}()
+ 	wg.Wait()
++
++	// from https://github.com/kubernetes-sigs/kueue/pull/9892
++	wg.Add(int(jobs)) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++
++	for range int(jobs) {
++		go func() {
++			defer wg.Done()
++			doSomething()
++		}()
++	}
++
++	wg.Wait()
++
++	wg.Add(n) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++	for i := 0; i < n; i++ {
++		go func() {
++			doSomething()
++			wg.Done()
++		}()
++	}
++	wg.Wait()
++
++	wg.Add(len(items)) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++	for _, item := range items {
++		item := item
++		go func() {
++			defer wg.Done()
++			process(item)
++		}()
++	}
++	wg.Wait()
++
++	// no go statement in the loop body
++	wg.Add(n)
++	for range n {
++		doSomething()
++	}
++	wg.Wait()
++
++	// goroutine in the loop does not call wg.Done
++	wg.Add(n)
++	for range n {
++		go func() {
++			doSomething()
++		}()
++	}
++	wg.Wait()
++
++	// goroutine runs a function defined elsewhere
++	wg.Add(n)
++	for range n {
++		go worker(&wg)
++	}
++	wg.Wait()
+ }
+diff --git a/testdata/use_waitgroup_go.go b/testdata/use_waitgroup_go.go
+index 4270b43..d57c289 100644
+--- a/testdata/use_waitgroup_go.go
++++ b/testdata/use_waitgroup_go.go
+@@ -50,4 +50,58 @@ func useWaitGroupGo() {
+ 		}
+ 	}()
+ 	wg.Wait()
++
++	// from https://github.com/kubernetes-sigs/kueue/pull/9892
++	wg.Add(int(jobs))
++
++	for range int(jobs) {
++		go func() {
++			defer wg.Done()
++			doSomething()
++		}()
++	}
++
++	wg.Wait()
++
++	wg.Add(n)
++	for i := 0; i < n; i++ {
++		go func() {
++			doSomething()
++			wg.Done()
++		}()
++	}
++	wg.Wait()
++
++	wg.Add(len(items))
++	for _, item := range items {
++		item := item
++		go func() {
++			defer wg.Done()
++			process(item)
++		}()
++	}
++	wg.Wait()
++
++	// no go statement in the loop body
++	wg.Add(n)
++	for range n {
++		doSomething()
++	}
++	wg.Wait()
++
++	// goroutine in the loop does not call wg.Done
++	wg.Add(n)
++	for range n {
++		go func() {
++			doSomething()
++		}()
++	}
++	wg.Wait()
++
++	// goroutine runs a function defined elsewhere
++	wg.Add(n)
++	for range n {
++		go worker(&wg)
++	}
++	wg.Wait()
+ }

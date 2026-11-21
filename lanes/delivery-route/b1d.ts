@@ -25,7 +25,7 @@ import { build as b1Build, LAYOUT, TAR_ARGS, wrappers } from "./arms.ts";
 import { b1References, loadsOf, paired, reuseCheck, type Load } from "./b1b.ts";
 import { armInfo, b1cBuild, whyNot as blockWhyNot } from "./b1c.ts";
 import { PLACEMENT } from "./b1c-pins.ts";
-import { B1C_RUN, B1D, B1D_ARM, B1D_ARM_NAMES, B1D_ARMS, B1D_BUNDLE, B1D_CAPS_USD, B1D_ITEMS, B1D_SMOKE, B1D_SPEC, COPIED_MANIFESTS, GSTACK_ARM, HELDOUT, isB1dArm, isB1dItem, NOESCAPE, NOESCAPE_SPEC, PROVE_IT, type B1dArm, type B1dItem } from "./b1d-pins.ts";
+import { B1C_RUN, type GstackPin, B1D, B1D_ARM, B1D_ARM_NAMES, B1D_ARMS, B1D_BUNDLE, B1D_CAPS_USD, B1D_ITEMS, B1D_SMOKE, B1D_SPEC, COPIED_MANIFESTS, GSTACK_ARM, HELDOUT, isB1dArm, isB1dItem, NOESCAPE, NOESCAPE_SPEC, PROVE_IT, type B1dArm, type B1dItem } from "./b1d-pins.ts";
 import { blockUsd, infraRerun, needsRerun } from "./money.ts";
 import { AGENT_SKILLS, ARM_SOURCES, B1, CLOSING, drawnTasks, frontMatterDigests, loadBundle, MODELS, REPO, sha256, SKILL, TASK_SETUP, VM_HOURS_PER_SESSION } from "./pins.ts";
 import { b1Row, pulledInputs, type B1Row, type B1TableConfig } from "./table.ts";
@@ -52,16 +52,16 @@ export function settingsHooks(tree: string): [string, string | null, string, num
 }
 /** What the built tree must hold: B1's prove-it skill byte for byte, gstack's files at their pinned blobs, the checkout at the
  *  pin, the four hook registrations setup writes, and Lane B's seeded long-time user. */
-export function armProblems(tree: string): string[] {
+export function armProblems(tree: string, g: GstackPin = GSTACK_ARM): string[] {
   const p: string[] = [], skill = join(tree, PROVE_IT.path);
   if (!existsSync(skill) || !readFileSync(skill).equals(readFileSync(join(REPO, ARM_SOURCES, PROVE_IT.source))) || (statSync(skill).mode & 0o777) !== PROVE_IT.mode) p.push(PROVE_IT.path + " is not B1's " + PROVE_IT.source + " at mode 644");
-  for (const [f, blob] of Object.entries(GSTACK_ARM.blobs)) {
+  for (const [f, blob] of Object.entries(g.blobs)) {
     const got = existsSync(gstackFile(tree, f)) ? spawnSync("git", ["hash-object", gstackFile(tree, f)], { encoding: "utf8" }).stdout.trim() : "missing";
     if (got !== blob) p.push(".claude/skills/gstack/" + f + " is blob " + got + ", not " + blob);
   }
   const head = spawnSync("git", ["--git-dir", gstackFile(tree, ".git"), "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
-  if (head !== GSTACK_ARM.sha) p.push("the gstack checkout is at " + (head || "nothing") + ", not " + GSTACK_ARM.sha);
-  const want = [...GSTACK_ARM.hooks].map((h) => [...h]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  if (head !== g.sha) p.push("the gstack checkout is at " + (head || "nothing") + ", not " + g.sha);
+  const want = [...g.hooks].map((h) => [...h]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   if (!existsSync(join(tree, ".claude/settings.json"))) p.push("no .claude/settings.json");
   else if (JSON.stringify(settingsHooks(tree)) !== JSON.stringify(want)) p.push("settings.json registers " + JSON.stringify(settingsHooks(tree)) + ", not " + JSON.stringify(want));
   const cfg = existsSync(join(tree, ".gstack/config.yaml")) ? readFileSync(join(tree, ".gstack/config.yaml"), "utf8") : "";
@@ -70,16 +70,16 @@ export function armProblems(tree: string): string[] {
   for (const m of MARKERS) if (!existsSync(join(tree, ".gstack", m))) p.push("the seeded user's marker .gstack/" + m + " is missing");
   return p;
 }
-export function mainManifestOf(out: string) {
+export function mainManifestOf(out: string, g: GstackPin = GSTACK_ARM, spec: string = B1D_SPEC) {
   const tree = join(out, "trees", B1D_ARM), tar = join(out, B1D_ARM + ".tar"), gz = join(out, B1D_ARM + ".tar.gz"), w = wrappers();
   const fetch = JSON.parse(readFileSync(join(out, "fetch-pin.json"), "utf8"));
-  if (fetch.sha !== GSTACK_ARM.sha || fetch.head !== GSTACK_ARM.sha) pinErr("fetch-pin.json is not the pin " + GSTACK_ARM.sha);
+  if (fetch.sha !== g.sha || fetch.head !== g.sha) pinErr("fetch-pin.json is not the pin " + g.sha);
   const config = Object.fromEntries(readFileSync(join(out, B1D_ARM + ".gstack-config.tsv"), "utf8").trim().split("\n").map((l) => l.split("\t")));
-  if (JSON.stringify(config) !== JSON.stringify(GSTACK_ARM.config)) pinErr("gstack-config reads " + JSON.stringify(config) + " in the built arm, not " + JSON.stringify(GSTACK_ARM.config));
-  const files = Object.keys(GSTACK_ARM.blobs).map((f) => ({ path: ".claude/skills/gstack/" + f, sha256: sha256(readFileSync(gstackFile(tree, f))) }));
+  if (JSON.stringify(config) !== JSON.stringify(g.config)) pinErr("gstack-config reads " + JSON.stringify(config) + " in the built arm, not " + JSON.stringify(g.config));
+  const files = Object.keys(g.blobs).map((f) => ({ path: ".claude/skills/gstack/" + f, sha256: sha256(readFileSync(gstackFile(tree, f))) }));
   const meta = {
-    claude_code: "2.1.312", typed: false, spec: B1D_SPEC, tar_gz_sha256: sha256(readFileSync(gz)),
-    gstack: { repo: GSTACK_ARM.repo, sha: GSTACK_ARM.sha, version: GSTACK_ARM.version, setup: GSTACK_ARM.setup, git_archive_sha256: fetch.git_archive_sha256, fetch: fetch.method },
+    claude_code: "2.1.312", typed: false, spec, tar_gz_sha256: sha256(readFileSync(gz)),
+    gstack: { repo: g.repo, sha: g.sha, version: g.version, setup: g.setup, git_archive_sha256: fetch.git_archive_sha256, fetch: fetch.method },
     update_check: "false", routing_declined: "true", onboarding_markers: MARKERS.map((m) => ".gstack/" + m).join(" "), gstack_config: config, loadout_lock_sha256: sha256(readFileSync(join(out, B1D_ARM + ".loadout.lock.json"))),
     steps: { sha256: w.steps_sha256, bytes: w.steps_bytes, source: AGENT_SKILLS.repo + " " + AGENT_SKILLS.sha + " " + AGENT_SKILLS.steps.file + " lines " + AGENT_SKILLS.steps.from + "-" + AGENT_SKILLS.steps.to },
     carrier: { ...w.arms["gstack-shaped"]!, path: PROVE_IT.path }, route: { files },
@@ -317,7 +317,8 @@ export function b1dDone(path: string, name: B1dItem) {
  *  share, against its cap; and every item (a done item at its settled spend, any other at the larger of its spend and its
  *  projection) plus this lane's counter, against the all-in stop. A relaunch counts its item at its ledger spend alone: it
  *  launches only the lost part's unstarted cells, whose sessions the ledger's reserve stops at the cap, and each later part
- *  meets this guard at its own launch, so the salvage a relaunch starts with is never refused for the item's cap. */
+ *  meets this guard at its own launch. A relaunch is never refused on money: a cap or all-in overshoot prints OVERSHOOT and its
+ *  reasons for the Captain, and the relaunch salvages first. */
 export function b1dGuard(name: B1dItem, ledgers: Partial<Record<B1dItem, Row[]>>, plans: Partial<Record<B1dItem, { parts: PartPlan[]; finished: string[] }>>, crewUsd: number, relaunching?: string) {
   const why: string[] = [];
   const all = B1D_ITEMS.map((i) => {
@@ -330,10 +331,12 @@ export function b1dGuard(name: B1dItem, ledgers: Partial<Record<B1dItem, Row[]>>
   });
   const own = all.find((x) => x.item === name)!, usd = (m: number) => "$" + fromMicros(m).toFixed(2);
   if (own.done) why.push(name + " is marked done; a done item never launches again");
-  if (own.total > own.cap) why.push(name + "'s projection " + usd(own.total) + " passes its cap " + usd(own.cap));
-  const sum = all.reduce((x, i) => x + i.counted, 0) + toMicros(crewUsd), stop = toMicros(B1D.stopUsd);
-  if (sum > stop) why.push("all-in " + usd(sum) + " passes the " + usd(stop) + " stop");
-  const lines = ["B1D_LAUNCH " + (why.length ? "REFUSE" : "PASS") + " " + name + ": all-in " + usd(sum) + " of " + usd(stop) + "; " + name + " " + usd(own.total) + " of cap " + usd(own.cap) + " (" + own.left + " parts to run)", ...all.map((i) => "  " + i.item + (i.done ? " done" : "") + ": settled " + usd(i.settled) + ", open " + usd(i.open) + ", counted " + usd(i.counted)), "  crew " + usd(toMicros(crewUsd))];
+  const money: string[] = [], sum = all.reduce((x, i) => x + i.counted, 0) + toMicros(crewUsd), stop = toMicros(B1D.stopUsd);
+  if (own.total > own.cap) money.push(name + "'s projection " + usd(own.total) + " passes its cap " + usd(own.cap));
+  if (sum > stop) money.push("all-in " + usd(sum) + " passes the " + usd(stop) + " stop");
+  if (!relaunching) why.push(...money);
+  const over = !why.length && money.length ? ["  relaunch of " + relaunching + " runs anyway, salvage first; report to the Captain at once: " + money.join("; ")] : [];
+  const lines = ["B1D_LAUNCH " + (why.length ? "REFUSE" : over.length ? "OVERSHOOT" : "PASS") + " " + name + ": all-in " + usd(sum) + " of " + usd(stop) + "; " + name + " " + usd(own.total) + " of cap " + usd(own.cap) + " (" + own.left + " parts to run)", ...over, ...all.map((i) => "  " + i.item + (i.done ? " done" : "") + ": settled " + usd(i.settled) + ", open " + usd(i.open) + ", counted " + usd(i.counted)), "  crew " + usd(toMicros(crewUsd))];
   return { ok: !why.length, why, lines };
 }
 
@@ -356,8 +359,8 @@ export function reuseB1c(head: string, repo = REPO): { same: boolean; lines: str
 }
 export const B1D_FILES = ["lanes/delivery-route/arms/b1d", "lanes/delivery-route/b1d-pins.ts", "lanes/delivery-route/b1d.ts", "lanes/delivery-route/b1d-build.sh", "quick/laneb/arms/manifests/b1d", "quick/laneb/arms/Dockerfile"];
 /** The checkout's uncommitted changes to any path that decides a session: L1's host-up syncs the live quick/laneb folder. */
-export function harnessDirty(repo = REPO): string[] {
-  const r = git(repo, ["status", "--porcelain", "--", ...new Set([...B1C_RUN.harness, ...B1D_FILES])]);
+export function harnessDirty(repo = REPO, paths: string[] = [...B1C_RUN.harness, ...B1D_FILES]): string[] {
+  const r = git(repo, ["status", "--porcelain", "--", ...new Set(paths)]);
   if (r.status !== 0) pinErr("git status failed in " + repo + ": " + (r.stderr ?? "").trim());
   return r.stdout.split("\n").filter(Boolean);
 }
@@ -481,8 +484,8 @@ export function hoReading(inR: InReading, ho: { incomplete: boolean; mainVsBlock
 const pct = (x: number, n: number) => (n ? ((100 * x) / n).toFixed(1) + "%" : "n/a");
 const ci = (c: [number, number] | null) => (c ? " [" + (100 * c[0]).toFixed(1) + ", " + (100 * c[1]).toFixed(1) + "]" : "");
 const pts = (x: number) => (x >= 0 ? "+" : "") + (100 * x).toFixed(1);
-const pairLine = (name: string, x: ReturnType<typeof paired>) => "  " + name + ": " + pts(x.diff) + " points [" + pts(x.lo) + ", " + pts(x.hi) + "] on " + x.pairs + " paired tasks (" + x.a_only + " vs " + x.b_only + " discordant)";
-const statLine = (s: Stat) => "  " + s.arm + ": loaded " + s.loaded + "/" + s.graded + " " + pct(s.loaded, s.graded) + ci(s.ci) + (s.incomplete ? " INCOMPLETE" : "") + "; at the first call " + s.first_call + "; /verify loaded " + s.verify_loaded + "; followed " + s.followed + "/" + s.graded + ci(s.followed_ci) + "; gaps " + s.gaps + ", cap stops " + s.cap_stops + ", safety stops " + s.safety_stops + ", audit " + s.audit_sessions + ", passes " + s.passes + " (descriptive), cost $" + s.cost_usd.toFixed(2) + " ($" + (s.graded ? s.cost_usd / s.graded : 0).toFixed(3) + " a graded session)" + (Object.keys(s.why).length ? "; not loaded: " + Object.entries(s.why).map(([w, n]) => w + " " + n).join(", ") : "");
+export const pairLine = (name: string, x: ReturnType<typeof paired>) => "  " + name + ": " + pts(x.diff) + " points [" + pts(x.lo) + ", " + pts(x.hi) + "] on " + x.pairs + " paired tasks (" + x.a_only + " vs " + x.b_only + " discordant)";
+export const statLine = (s: Stat) => "  " + s.arm + ": loaded " + s.loaded + "/" + s.graded + " " + pct(s.loaded, s.graded) + ci(s.ci) + (s.incomplete ? " INCOMPLETE" : "") + "; at the first call " + s.first_call + "; /verify loaded " + s.verify_loaded + "; followed " + s.followed + "/" + s.graded + ci(s.followed_ci) + "; gaps " + s.gaps + ", cap stops " + s.cap_stops + ", safety stops " + s.safety_stops + ", audit " + s.audit_sessions + ", passes " + s.passes + " (descriptive), cost $" + s.cost_usd.toFixed(2) + " ($" + (s.graded ? s.cost_usd / s.graded : 0).toFixed(3) + " a graded session)" + (Object.keys(s.why).length ? "; not loaded: " + Object.entries(s.why).map(([w, n]) => w + " " + n).join(", ") : "");
 /** The tertile of each task's prompt length among the tasks given: ascending by length, ties by task id, 20 a tertile. */
 export function tertiles(routes: Map<string, TaskRoute>, tasks: string[]): Map<string, number> {
   const order = [...tasks].sort((a, b) => routes.get(a)!.chars - routes.get(b)!.chars || a.localeCompare(b)), size = Math.ceil(order.length / 3);
@@ -529,9 +532,9 @@ export function hoReport(rows: B1dRow[], inR: InReading, routes: Map<string, Tas
 /** The pilot on the smoke tasks, per arm: each task has one graded row (its task can be supplied) with no audit hit, the
  *  gstack-main hook named what the route table's hook_names gives for the task, and each project-file arm's block was placed.
  *  One PASS or FAIL line per arm, and the arms that failed. */
-export function pilotCheck(rows: B1dRow[], routeRows: string[][], tasks: string[] = [...B1D_SMOKE]): { lines: string[]; failed: B1dArm[] } {
+export function pilotCheck(rows: B1dRow[], routeRows: string[][], tasks: string[] = [...B1D_SMOKE], arms: readonly B1dArm[] = B1D_ARM_NAMES): { lines: string[]; failed: B1dArm[] } {
   const lines: string[] = [], failed: B1dArm[] = [];
-  for (const arm of B1D_ARM_NAMES) {
+  for (const arm of arms) {
     const why: string[] = [];
     for (const t of tasks) {
       const g = rows.filter((r) => r.arm === arm && r.task === t && r.outcome === "graded");

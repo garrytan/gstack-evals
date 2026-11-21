@@ -1,0 +1,116 @@
+diff --git a/src/Quartz.Tests.Unit/Core/JobFactoryAsyncLocalFlowTest.cs b/src/Quartz.Tests.Unit/Core/JobFactoryAsyncLocalFlowTest.cs
+new file mode 100644
+index 0000000..dcfeb1f
+--- /dev/null
++++ b/src/Quartz.Tests.Unit/Core/JobFactoryAsyncLocalFlowTest.cs
+@@ -0,0 +1,64 @@
++using System.Collections.Specialized;
++
++using Quartz.Impl;
++using Quartz.Simpl;
++using Quartz.Spi;
++
++namespace Quartz.Tests.Unit.Core;
++
++[TestFixture]
++[NonParallelizable]
++public class JobFactoryAsyncLocalFlowTest
++{
++    private static readonly AsyncLocal<string> ambientValue = new();
++    private static TaskCompletionSource<string> observed = new(TaskCreationOptions.RunContinuationsAsynchronously);
++
++    [Test]
++    public async Task AsyncLocalSetInJobFactoryShouldFlowToJobExecution()
++    {
++        observed = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
++
++        var properties = new NameValueCollection
++        {
++            ["quartz.serializer.type"] = TestConstants.DefaultSerializerType,
++            ["quartz.scheduler.instanceName"] = "AsyncLocalFlowTest_" + Guid.NewGuid()
++        };
++        IScheduler scheduler = await new StdSchedulerFactory(properties).GetScheduler();
++        scheduler.JobFactory = new AmbientSettingJobFactory();
++        try
++        {
++            await scheduler.Start();
++
++            var job = JobBuilder.Create<AmbientReadingJob>().WithIdentity("job").UsingJobData("tenant", "001").Build();
++            var trigger = TriggerBuilder.Create().StartNow().Build();
++            await scheduler.ScheduleJob(job, trigger);
++
++            var completed = await Task.WhenAny(observed.Task, Task.Delay(TimeSpan.FromSeconds(10)));
++            Assert.That(completed, Is.SameAs(observed.Task), "job did not run");
++            Assert.That(await observed.Task, Is.EqualTo("001"));
++            Assert.That(ambientValue.Value, Is.Null, "ambient value must not leak to caller");
++        }
++        finally
++        {
++            await scheduler.Shutdown(true);
++        }
++    }
++
++    private sealed class AmbientSettingJobFactory : SimpleJobFactory
++    {
++        public override IJob NewJob(TriggerFiredBundle bundle, IScheduler scheduler)
++        {
++            ambientValue.Value = bundle.JobDetail.JobDataMap.GetString("tenant");
++            return base.NewJob(bundle, scheduler);
++        }
++    }
++
++    private sealed class AmbientReadingJob : IJob
++    {
++        public ValueTask Execute(IJobExecutionContext context)
++        {
++            observed.TrySetResult(ambientValue.Value ?? "<null>");
++            return default;
++        }
++    }
++}
+diff --git a/src/Quartz/Core/JobRunShell.cs b/src/Quartz/Core/JobRunShell.cs
+index ac98412..be7347b 100644
+--- a/src/Quartz/Core/JobRunShell.cs
++++ b/src/Quartz/Core/JobRunShell.cs
+@@ -57,6 +57,7 @@ public class JobRunShell : SchedulerListenerSupport
+ 
+     private JobExecutionContextImpl? jec;
+     private QuartzScheduler? qs;
++    private ExecutionContext? jobExecutionContext;
+     private readonly IScheduler scheduler;
+     private readonly TriggerFiredBundle firedTriggerBundle;
+ 
+@@ -109,6 +110,10 @@ public class JobRunShell : SchedulerListenerSupport
+         }
+ 
+         jec = new JobExecutionContextImpl(scheduler, firedTriggerBundle, job);
++
++        // capture the execution context so that any AsyncLocal values set up by the job factory
++        // (for example tenant or other ambient context) flow to the actual job execution
++        jobExecutionContext = ExecutionContext.Capture();
+     }
+ 
+     /// <summary>
+@@ -123,7 +128,21 @@ public class JobRunShell : SchedulerListenerSupport
+     /// run method to be called in that separately executing thread.
+     /// </summary>
+     /// <param name="cancellationToken">The cancellation instruction.</param>
+-    public virtual async Task Run(CancellationToken cancellationToken = default)
++    public virtual Task Run(CancellationToken cancellationToken = default)
++    {
++        ExecutionContext? capturedContext = jobExecutionContext;
++        jobExecutionContext = null;
++        if (capturedContext is null)
++        {
++            return RunInternal(cancellationToken);
++        }
++
++        Task? task = null;
++        ExecutionContext.Run(capturedContext, _ => task = RunInternal(cancellationToken), null);
++        return task!;
++    }
++
++    private async Task RunInternal(CancellationToken cancellationToken)
+     {
+         Context.CallerId.Value = Guid.NewGuid();
+         qs!.AddInternalSchedulerListener(this);

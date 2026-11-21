@@ -1,0 +1,143 @@
+diff --git a/pkg/workflow/copilot_installer.go b/pkg/workflow/copilot_installer.go
+index 70ebb94..2ef2d61 100644
+--- a/pkg/workflow/copilot_installer.go
++++ b/pkg/workflow/copilot_installer.go
+@@ -24,10 +24,12 @@ func GenerateCopilotInstallerSteps(version, stepName string) []GitHubActionStep
+ 	// and does not use gh CLI, so GH_HOST does not affect the download. No step-level
+ 	// GH_HOST override is needed here; the correct host is already set in GITHUB_ENV
+ 	// by configure_gh_for_ghe.sh (or by the Derive GH_HOST step when DIFC proxy is active).
++	versionArg, versionEnv := shellSafeVersion(version)
+ 	stepLines := []string{
+ 		"      - name: " + stepName,
+-		"        run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh " + version,
++		"        run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh " + versionArg,
+ 	}
++	stepLines = append(stepLines, versionEnv...)
+ 
+ 	return []GitHubActionStep{GitHubActionStep(stepLines)}
+ }
+diff --git a/pkg/workflow/engine_version_expression_test.go b/pkg/workflow/engine_version_expression_test.go
+new file mode 100644
+index 0000000..504740e
+--- /dev/null
++++ b/pkg/workflow/engine_version_expression_test.go
+@@ -0,0 +1,84 @@
++//go:build !integration
++
++package workflow
++
++import (
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++
++	"github.com/github/gh-aw/pkg/stringutil"
++)
++
++func compileEngineVersionWorkflow(t *testing.T, engineID, version string) string {
++	t.Helper()
++	workflowFile := filepath.Join(t.TempDir(), "engine-version.md")
++	content := `---
++on:
++  workflow_call:
++    inputs:
++      engine-version:
++        type: string
++        default: latest
++engine:
++  id: ` + engineID + `
++  version: ` + version + `
++---
++
++Say hi.`
++	if err := os.WriteFile(workflowFile, []byte(content), 0644); err != nil {
++		t.Fatalf("write workflow: %v", err)
++	}
++	if err := NewCompiler().CompileWorkflow(workflowFile); err != nil {
++		t.Fatalf("compile workflow: %v", err)
++	}
++	lock, err := os.ReadFile(stringutil.MarkdownToLockFile(workflowFile))
++	if err != nil {
++		t.Fatalf("read lock file: %v", err)
++	}
++	return string(lock)
++}
++
++var engineInstallCommands = map[string]string{
++	"copilot": "run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh ",
++	"claude":  "run: npm install -g @anthropic-ai/claude-code@",
++	"codex":   "run: npm install -g @openai/codex@",
++	"gemini":  "run: npm install -g @google/gemini-cli@",
++}
++
++func TestEngineVersionExpressionIsPassedViaEnv(t *testing.T) {
++	const expr = "${{ inputs.engine-version }}"
++	for engineID, installCmd := range engineInstallCommands {
++		t.Run(engineID, func(t *testing.T) {
++			lock := compileEngineVersionWorkflow(t, engineID, expr)
++
++			for line := range strings.SplitSeq(lock, "\n") {
++				if strings.Contains(line, expr) && strings.Contains(line, "run:") {
++					t.Errorf("expression must not appear in a run script: %q", line)
++				}
++			}
++
++			want := installCmd + `"${ENGINE_VERSION}"
++        env:
++          ENGINE_VERSION: "` + expr + `"`
++			if !strings.Contains(lock, want) {
++				t.Errorf("install step should pass the version via env, want:\n%s", want)
++			}
++		})
++	}
++}
++
++func TestEngineVersionLiteralIsInlined(t *testing.T) {
++	for engineID, installCmd := range engineInstallCommands {
++		t.Run(engineID, func(t *testing.T) {
++			lock := compileEngineVersionWorkflow(t, engineID, `"1.2.3"`)
++			if !strings.Contains(lock, installCmd+"1.2.3\n") {
++				t.Errorf("install step should inline the literal version")
++			}
++			if strings.Contains(lock, "ENGINE_VERSION") {
++				t.Errorf("literal version should not use ENGINE_VERSION")
++			}
++		})
++	}
++}
+diff --git a/pkg/workflow/nodejs.go b/pkg/workflow/nodejs.go
+index 1dae06c..3f24abe 100644
+--- a/pkg/workflow/nodejs.go
++++ b/pkg/workflow/nodejs.go
+@@ -52,11 +52,26 @@ func GenerateNpmInstallStepsWithScope(packageName, version, stepName, cacheKeyPr
+ 	if isGlobal {
+ 		globalFlag = "-g "
+ 	}
+-	installCmd := fmt.Sprintf("npm install %s%s@%s", globalFlag, packageName, version)
+-	steps = append(steps, GitHubActionStep{
++	versionArg, versionEnv := shellSafeVersion(version)
++	installStep := GitHubActionStep{
+ 		"      - name: " + stepName,
+-		"        run: " + installCmd,
+-	})
++		fmt.Sprintf("        run: npm install %s%s@%s", globalFlag, packageName, versionArg),
++	}
++	steps = append(steps, append(installStep, versionEnv...))
+ 
+ 	return steps
+ }
++
++// shellSafeVersion returns the shell argument for a version and any step env lines it needs.
++// A literal version is inlined. A GitHub Actions expression is never placed in the run script:
++// Actions substitutes ${{ }} before the shell parses the script, so an inlined expression would
++// let its runtime value inject shell syntax. Routing it through an env var keeps it data.
++func shellSafeVersion(version string) (string, []string) {
++	if !isGitHubActionsExpression(version) {
++		return version, nil
++	}
++	return `"${ENGINE_VERSION}"`, []string{
++		"        env:",
++		fmt.Sprintf("          ENGINE_VERSION: %q", version),
++	}
++}

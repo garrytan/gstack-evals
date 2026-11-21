@@ -1,0 +1,119 @@
+diff --git a/Core/Relationships/RelationshipResolver.cs b/Core/Relationships/RelationshipResolver.cs
+index 0c1314a..20fbaa8 100644
+--- a/Core/Relationships/RelationshipResolver.cs
++++ b/Core/Relationships/RelationshipResolver.cs
+@@ -286,6 +286,25 @@ namespace CKAN
+                     log.DebugFormat("Got {0} candidates for {1}",
+                                     candidates.Count, descriptor);
+                 }
++                catch (DependenciesNotSatisfiedKraken)
++                when (soft_resolve && options.proceed_with_inconsistencies)
++                {
++                    // Optional relationship whose candidates all conflict with the changeset;
++                    // include them anyway so the conflicts can be reported to the user
++                    try
++                    {
++                        candidates = resolved.Candidates(descriptor, modlist.Values,
++                                                         registry, game, true);
++                        log.DebugFormat("Got {0} conflicting candidates for {1}",
++                                        candidates.Count, descriptor);
++                    }
++                    catch
++                    {
++                        log.InfoFormat("{0} is recommended/suggested but it is not listed in the index, or not available for your game version.",
++                                       descriptor);
++                        continue;
++                    }
++                }
+                 catch
+                 when (soft_resolve || options.proceed_with_inconsistencies)
+                 {
+diff --git a/Core/Relationships/ResolvedRelationshipsTree.cs b/Core/Relationships/ResolvedRelationshipsTree.cs
+index 4ced90d..7c109fa 100644
+--- a/Core/Relationships/ResolvedRelationshipsTree.cs
++++ b/Core/Relationships/ResolvedRelationshipsTree.cs
+@@ -61,7 +61,8 @@ namespace CKAN
+         public IReadOnlyList<CkanModule> Candidates(RelationshipDescriptor          rel,
+                                                     IReadOnlyCollection<CkanModule> installing,
+                                                     IRegistryQuerier                registry,
+-                                                    IGame                           game)
++                                                    IGame                           game,
++                                                    bool                            allowConflicts = false)
+         {
+             var candidates = new List<CkanModule>();
+             var unresolved = new List<ResolvedRelationship[]>();
+@@ -84,6 +85,11 @@ namespace CKAN
+                         {
+                             // Skip other versions of mods being installed
+                         }
++                        else if (allowConflicts)
++                        {
++                            // Caller will handle conflicts itself
++                            candidates.Add(module);
++                        }
+                         else if (module.BadRelationships(installing)
+                                   .Select(r => relationshipCache.GetValueOrDefault(r.Descriptor))
+                                   .OfType<ResolvedRelationship>()
+diff --git a/Tests/Core/IO/ModuleInstallerTests.cs b/Tests/Core/IO/ModuleInstallerTests.cs
+index d7e5e99..76ff5fd 100644
+--- a/Tests/Core/IO/ModuleInstallerTests.cs
++++ b/Tests/Core/IO/ModuleInstallerTests.cs
+@@ -837,6 +837,58 @@ namespace Tests.Core.IO
+             }
+         }
+ 
++        [Test]
++        public void FindRecommendations_WithConflictingRecommendations_AllRecommended()
++        {
++            // Arrange
++            var crit = new GameVersionCriteria(new GameVersion(1, 12, 5));
++            using (var repo     = new TemporaryRepository(
++                                      Relationships.RelationshipResolverTests.MergeWithDefaults(
++                                          @"{
++                                              ""identifier"": ""Modpack"",
++                                              ""kind"":       ""metapackage"",
++                                              ""recommends"": [
++                                                  { ""name"": ""Kcalbeloh"" },
++                                                  { ""name"": ""JNSQ""      },
++                                                  { ""name"": ""GPP""       },
++                                                  { ""name"": ""OPM""       }
++                                              ]
++                                          }",
++                                          @"{ ""identifier"": ""Kcalbeloh"" }",
++                                          @"{
++                                              ""identifier"": ""JNSQ"",
++                                              ""conflicts"":  [ { ""name"": ""GPP"" }, { ""name"": ""OPM"" } ]
++                                          }",
++                                          @"{ ""identifier"": ""GPP"" }",
++                                          @"{ ""identifier"": ""OPM"" }")
++                                          .ToArray()))
++            using (var repoData = new TemporaryRepositoryData(nullUser, repo.repo))
++            using (var inst     = new DisposableKSP())
++            {
++                var registry = new CKAN.Registry(repoData.Manager, repo.repo);
++                var modpack  = registry.LatestAvailable("Modpack", inst.KSP.StabilityToleranceConfig, crit)!;
++
++                // Act
++                var result = ModuleInstaller.FindRecommendations(inst.KSP,
++                                                                 new HashSet<CkanModule> { modpack },
++                                                                 new CkanModule[] { modpack },
++                                                                 Array.Empty<CkanModule>(),
++                                                                 Array.Empty<CkanModule>(),
++                                                                 registry,
++                                                                 out Dictionary<CkanModule, Tuple<bool, List<string>>> recommendations,
++                                                                 out Dictionary<CkanModule, List<string>> suggestions,
++                                                                 out Dictionary<CkanModule, HashSet<string>> supporters);
++
++                // Assert
++                Assert.IsTrue(result, "Should return something");
++                CollectionAssert.AreEquivalent(new string[] { "Kcalbeloh", "JNSQ", "GPP", "OPM" },
++                                               recommendations.Keys.Select(m => m.identifier),
++                                               "Conflicting recommendations should all be listed");
++                Assert.IsTrue(recommendations.Single(kvp => kvp.Key.identifier == "Kcalbeloh").Value.Item1,
++                              "Non-conflicting recommendation should be checked");
++            }
++        }
++
+         [Test]
+         public void FindRecommendations_WithSuggestionsAndSupporters_Found()
+         {

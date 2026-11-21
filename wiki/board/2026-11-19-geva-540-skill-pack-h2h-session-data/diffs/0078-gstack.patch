@@ -1,0 +1,104 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java b/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
+index 891cf2c..c68119f 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
++++ b/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
+@@ -276,6 +276,11 @@ public class S3Controller {
+         }
+     }
+ 
++    private static final String[] UNMODELED_DELETE_SUBRESOURCES = {
++            "analytics", "metrics", "inventory", "intelligent-tiering", "metadataTable",
++            "metadataConfiguration"
++    };
++
+     @DELETE
+     @Path("/{bucket}")
+     public Response deleteBucket(@PathParam("bucket") String bucket,
+@@ -314,6 +319,17 @@ public class S3Controller {
+                 s3Service.deleteBucketOwnershipControls(bucket);
+                 return Response.noContent().build();
+             }
++            if (hasQueryParam(uriInfo, "replication")) {
++                s3Service.deleteBucketReplication(bucket);
++                return Response.noContent().build();
++            }
++            // Sub-resource-qualified DELETEs must never fall through to DeleteBucket.
++            for (String sub : UNMODELED_DELETE_SUBRESOURCES) {
++                if (hasQueryParam(uriInfo, sub)) {
++                    s3Service.headBucket(bucket);
++                    return Response.noContent().build();
++                }
++            }
+             s3Service.deleteBucket(bucket);
+             return Response.noContent().build();
+         } catch (AwsException e) {
+diff --git a/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java b/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
+index c60cc0f..87e092f 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
++++ b/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
+@@ -1822,6 +1822,16 @@ public class S3Service implements Resettable {
+         bucketStore.put(bucketName, bucket);
+     }
+ 
++    /**
++     * Replication configuration is not modeled; DeleteBucketReplication only validates
++     * that the bucket exists and succeeds (S3 returns 204 even with no configuration).
++     */
++    public void deleteBucketReplication(String bucketName) {
++        bucketStore.get(bucketName)
++                .orElseThrow(() -> new AwsException("NoSuchBucket", "The specified bucket does not exist.", 404));
++        LOG.debugv("Deleted replication configuration from bucket: {0}", bucketName);
++    }
++
+     public void deleteBucketOwnershipControls(String bucketName) {
+         Bucket bucket = bucketStore.get(bucketName)
+                 .orElseThrow(() -> new AwsException("NoSuchBucket", "The specified bucket does not exist.", 404));
+diff --git a/src/test/java/io/github/hectorvent/floci/services/s3/S3DeleteBucketReplicationIntegrationTest.java b/src/test/java/io/github/hectorvent/floci/services/s3/S3DeleteBucketReplicationIntegrationTest.java
+new file mode 100644
+index 0000000..9e4c539
+--- /dev/null
++++ b/src/test/java/io/github/hectorvent/floci/services/s3/S3DeleteBucketReplicationIntegrationTest.java
+@@ -0,0 +1,43 @@
++package io.github.hectorvent.floci.services.s3;
++
++import io.quarkus.test.junit.QuarkusTest;
++import org.junit.jupiter.api.Test;
++
++import static io.restassured.RestAssured.given;
++import static org.hamcrest.Matchers.containsString;
++
++@QuarkusTest
++class S3DeleteBucketReplicationIntegrationTest {
++
++    @Test
++    void deleteBucketReplicationDoesNotDeleteBucket() {
++        String bucket = "delete-replication-int-test";
++        given().when().put("/" + bucket).then().statusCode(200);
++
++        given().when().delete("/" + bucket + "?replication").then().statusCode(204);
++
++        given().when().head("/" + bucket).then().statusCode(200);
++
++        given().when().delete("/" + bucket).then().statusCode(204);
++    }
++
++    @Test
++    void unmodeledSubresourceDeleteDoesNotDeleteBucket() {
++        String bucket = "delete-analytics-int-test";
++        given().when().put("/" + bucket).then().statusCode(200);
++
++        given().when().delete("/" + bucket + "?analytics&id=a1").then().statusCode(204);
++
++        given().when().head("/" + bucket).then().statusCode(200);
++    }
++
++    @Test
++    void deleteBucketReplicationOnMissingBucketReturns404() {
++        given()
++        .when()
++            .delete("/no-such-bucket-replication?replication")
++        .then()
++            .statusCode(404)
++            .body(containsString("NoSuchBucket"));
++    }
++}

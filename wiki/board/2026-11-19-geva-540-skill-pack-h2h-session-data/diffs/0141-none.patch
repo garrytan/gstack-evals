@@ -1,0 +1,64 @@
+diff --git a/bindgen-tests/tests/expectations/tests/default-alias-style-new-type-macro-const.rs b/bindgen-tests/tests/expectations/tests/default-alias-style-new-type-macro-const.rs
+new file mode 100644
+index 0000000..cba716f
+--- /dev/null
++++ b/bindgen-tests/tests/expectations/tests/default-alias-style-new-type-macro-const.rs
+@@ -0,0 +1,7 @@
++#![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals)]
++pub const FooBar: u32 = 0;
++pub const Negative: i32 = -1;
++#[repr(transparent)]
++#[derive(Debug, Default, Copy, Clone)]
++pub struct Foo(pub u32);
++pub const Foo_A: Foo = Foo(1);
+diff --git a/bindgen-tests/tests/headers/default-alias-style-new-type-macro-const.h b/bindgen-tests/tests/headers/default-alias-style-new-type-macro-const.h
+new file mode 100644
+index 0000000..2a95da0
+--- /dev/null
++++ b/bindgen-tests/tests/headers/default-alias-style-new-type-macro-const.h
+@@ -0,0 +1,9 @@
++// bindgen-flags: --default-alias-style new_type
++
++typedef __UINT32_TYPE__ uint32_t;
++
++#define FooBar 0x00000000
++#define Negative -1
++
++typedef uint32_t Foo;
++static const Foo Foo_A = 1;
+diff --git a/bindgen/codegen/mod.rs b/bindgen/codegen/mod.rs
+index 5ffe088..998e5be 100644
+--- a/bindgen/codegen/mod.rs
++++ b/bindgen/codegen/mod.rs
+@@ -810,11 +810,26 @@ impl CodeGenerator for Var {
+             };
+ 
+             if let Some(mut val) = const_expr {
+-                let var_ty_item = ctx.resolve_item(var_ty);
+-                if matches!(
+-                    var_ty_item.alias_style(ctx),
+-                    AliasVariation::NewType | AliasVariation::NewTypeDeref
+-                ) {
++                // Only wrap the value if the type of the variable is actually
++                // an alias that is emitted as a newtype. Builtin types (such
++                // as the `u32` of a `#define`d constant) are never newtypes.
++                let var_ty_item = var_ty
++                    .into_resolver()
++                    .through_type_refs()
++                    .resolve(ctx);
++                let is_newtype_alias = var_ty_item
++                    .as_type()
++                    .is_some_and(|t| match *t.kind() {
++                        TypeKind::Alias(..) => t.name().map_or(true, |n| {
++                            utils::type_from_named(ctx, n).is_none()
++                        }),
++                        _ => false,
++                    }) &&
++                    matches!(
++                        var_ty_item.alias_style(ctx),
++                        AliasVariation::NewType | AliasVariation::NewTypeDeref
++                    );
++                if is_newtype_alias {
+                     val = quote! { #ty(#val) };
+                 }
+                 result.push(quote! {

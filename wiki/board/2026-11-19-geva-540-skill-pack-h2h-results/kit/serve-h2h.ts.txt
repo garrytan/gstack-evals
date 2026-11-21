@@ -1,0 +1,75 @@
+// serve-h2h.ts (GEVA-540 kit, not committed): gstack-evals outcome serve for one head-to-head item, on runner R.
+// At b54f6f4e, outcome serve (lanes/outcome-skills/cli.ts) reads --stage <item>=<arm> as one arm for any stage that is not
+// pf: or <model>@, so "--stage h2h-smoke=h2h:none,h2h:gstack,..." is refused (E_USAGE "serves h2h:none, ..., not
+// h2h:none,h2h:gstack"), and two --stage flags on one item are refused ("each stage needs its own line item"). The h2h
+// stages are served only through serveStages with an arms list, as e2e.ts, dryrun.ts and tests/outcome-skills/
+// h2h-driver.test.ts do. This file is outcome serve's main with that one change: --item <item> takes the place of --stage
+// and the stage is { item, arm: H2H_STAGES[item][0], arms: H2H_STAGES[item] }. Every other flag, default and output line
+// is outcome serve's: real fetch, the default admission check (rigAdmission), keys from this process's environment.
+// Stage 2: --item h2h-opus,h2h-pony serves both stage 2 items in one run, one stage (lease and proxy) per item.
+// Usage: bun serve-h2h.ts --run <id> --envelope-host <machine id> --item <h2h-smoke|h2h-pilot|h2h-opus,h2h-pony> --host <ip> --dir <run dir>
+//   [--planned 24] [--reruns 2] [--control-port <n>] [--ttl-hours 72] [--ledger <path>] [--ledger-record <dir>]
+//   [--lift-halt <session id>[,<session id>]]
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
+const REPO = resolve(process.env.H2H_REPO ?? join(homedir(), "h2h/repo"));
+const { CODES, docAnchor } = await import(REPO + "/src/errors/codes.ts");
+const { openLocalLedger } = await import(REPO + "/src/runner/ledger/local.ts");
+const { ledgerPath, recordPath } = await import(REPO + "/src/runner/ledger/paths.ts");
+const { LedgerError } = await import(REPO + "/src/runner/ledger/record.ts");
+const { serveStages } = await import(REPO + "/lanes/outcome-skills/driver/stage.ts");
+const { H2H_STAGES } = await import(REPO + "/lanes/outcome-skills/h2h/sessions/driver.ts");
+
+const lines = (code: string, message: string) => [...message.split("\n"), "fix: " + CODES[code].fix, "docs: " + docAnchor(code)].map((l) => code + " " + l).join("\n");
+const usage = (m: string) => (console.error(lines("E_USAGE", m)), 2);
+
+async function main(rest: string[]): Promise<number> {
+  const allowed = new Set(["--run", "--envelope-host", "--item", "--host", "--dir", "--planned", "--reruns", "--control-port", "--ttl-hours", "--ledger", "--ledger-record", "--lift-halt"]);
+  const flags = new Map<string, string>();
+  for (let i = 0; i < rest.length; i += 2) {
+    const [k, v] = [rest[i]!, rest[i + 1]];
+    if (!allowed.has(k) || v === undefined) return usage((allowed.has(k) ? k + " needs a value" : "unknown flag " + k) + "; serve-h2h takes outcome serve's flags with --item in place of --stage");
+    flags.set(k, v);
+  }
+  const missing = ["--run", "--envelope-host", "--item", "--host", "--dir"].filter((k) => !flags.has(k));
+  if (missing.length) return usage("serve-h2h needs " + missing.join(", "));
+  const item = flags.get("--item")!;
+  if (item !== "h2h-smoke" && item !== "h2h-resmoke" && item !== "h2h-pilot" && item !== "h2h-opus,h2h-pony") return usage("--item is h2h-smoke, h2h-resmoke, h2h-pilot or h2h-opus,h2h-pony, the items stage 0, its rerun, stage 1 and stage 2 pay from, not " + item);
+  const items = item.split(",");
+  const bad = ["--planned", "--reruns", "--control-port", "--ttl-hours"].find((k) => flags.has(k) && !/^\d+(\.\d+)?$/.test(flags.get(k)!));
+  if (bad) return usage(bad + " takes a number, not " + flags.get(bad));
+  const num = (k: string) => (flags.has(k) ? Number(flags.get(k)) : undefined);
+  const ttlHours = num("--ttl-hours");
+  let local: any = null;
+  try {
+    local = openLocalLedger(ledgerPath(flags.get("--ledger")));
+    const served = await serveStages({
+      record: recordPath(flags.get("--ledger-record")).path, local, run_id: flags.get("--run")!, envelope_host: flags.get("--envelope-host")!,
+      stages: items.map((it) => ({ item: it, arm: (H2H_STAGES[it] as string[])[0]!, arms: H2H_STAGES[it] as string[] })), host: flags.get("--host")!, dir: flags.get("--dir")!, planned: num("--planned"), reruns: num("--reruns"),
+      control_port: num("--control-port"), ttl_ms: ttlHours === undefined ? undefined : Math.round(ttlHours * 3_600_000),
+      ...(flags.has("--lift-halt") ? { lift_halts: flags.get("--lift-halt")!.split(",") } : {}),
+    });
+    console.log("control=" + served.control);
+    for (const s of served.stages) console.log("stage=" + s.item + " arm=" + s.arm + " arms=" + (H2H_STAGES[s.item] as string[]).length + " lease=" + s.lease_id + " reserved=" + s.reserved_micros + " proxy=" + s.proxy);
+    const onSignal = () => void served.stop();
+    process.on("SIGTERM", onSignal);
+    process.on("SIGINT", onSignal);
+    const onFault = (e: unknown) => {
+      console.error("E_INTERNAL outcome driver: " + (e instanceof Error ? e.message : String(e)) + "; stopping every stage");
+      void served.stop("failed");
+    };
+    process.on("uncaughtException", onFault);
+    process.on("unhandledRejection", onFault);
+    return await served.done;
+  } catch (e) {
+    if (e instanceof LedgerError) return (console.error(lines((e as any).code, (e as Error).message)), 2);
+    const m = /^(E_[A-Z_]+):? (.*)$/s.exec((e as Error).message);
+    if (m && m[1]! in CODES) return (console.error(lines(m[1]!, m[2]!)), 2);
+    throw e;
+  } finally {
+    local?.close();
+  }
+}
+
+process.exit(await main(process.argv.slice(2)));

@@ -1,0 +1,171 @@
+diff --git a/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs b/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs
+index 80a18b5..bb922d7 100644
+--- a/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs
++++ b/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs
+@@ -17,6 +17,77 @@ public sealed class TextPromptTests
+         result.ShouldBe("Hello World");
+     }
+ 
++    [Theory]
++    [InlineData("yes", "Yes")]
++    [InlineData("PARTIALLY", "Partially")]
++    [InlineData("No", "No")]
++    public void Should_Match_Choices_Case_Insensitively_When_Configured(string input, string expected)
++    {
++        // Given
++        var console = new TestConsole();
++        console.Input.PushTextWithEnter(input);
++
++        // When
++        var result = console.Prompt(
++            new TextPrompt<string>("Helpful?")
++                .AddChoices(["Yes", "Partially", "No"])
++                .CaseInsensitive());
++
++        // Then
++        result.ShouldBe(expected);
++    }
++
++    [Fact]
++    public void Should_Match_Choices_Using_Comparer_From_Constructor()
++    {
++        // Given
++        var console = new TestConsole();
++        console.Input.PushTextWithEnter("banana");
++
++        // When
++        var result = console.Prompt(
++            new TextPrompt<string>("Fruit?", StringComparer.OrdinalIgnoreCase)
++                .AddChoices(["Apple", "Banana"]));
++
++        // Then
++        result.ShouldBe("Banana");
++    }
++
++    [Fact]
++    public void Should_Match_Choices_Case_Sensitively_By_Default()
++    {
++        // Given
++        var console = new TestConsole();
++        console.Input.PushTextWithEnter("yes");
++        console.Input.PushTextWithEnter("Yes");
++
++        // When
++        var result = console.Prompt(
++            new TextPrompt<string>("Helpful?")
++                .AddChoices(["Yes", "No"]));
++
++        // Then
++        result.ShouldBe("Yes");
++        console.Output.ShouldContain("Please select one of the available options");
++    }
++
++    [Fact]
++    public void Should_Not_Throw_On_Choices_Differing_Only_By_Case_When_Case_Insensitive()
++    {
++        // Given
++        var console = new TestConsole();
++        console.Input.PushTextWithEnter("yes");
++
++        // When
++        var result = console.Prompt(
++            new TextPrompt<string>("Helpful?")
++                .AddChoices(["Yes", "YES"])
++                .CaseInsensitive());
++
++        // Then
++        result.ShouldBe("Yes");
++    }
++
+     [Fact]
+     [Expectation("ConversionError")]
+     public Task Should_Return_Validation_Error_If_Value_Cannot_Be_Converted()
+diff --git a/src/Spectre.Console/Prompts/TextPrompt.cs b/src/Spectre.Console/Prompts/TextPrompt.cs
+index 5418ef8..4f8b917 100644
+--- a/src/Spectre.Console/Prompts/TextPrompt.cs
++++ b/src/Spectre.Console/Prompts/TextPrompt.cs
+@@ -7,7 +7,6 @@ namespace Spectre.Console;
+ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+ {
+     private readonly string _prompt;
+-    private readonly StringComparer? _comparer;
+ 
+     /// <summary>
+     /// Gets or sets the prompt style.
+@@ -19,6 +18,13 @@ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+     /// </summary>
+     public List<T> Choices { get; } = [];
+ 
++    /// <summary>
++    /// Gets or sets the comparer used when matching user input against the choices.
++    /// Use e.g. <see cref="StringComparer.OrdinalIgnoreCase"/> to make choice matching case-insensitive.
++    /// Defaults to ordinal (case-sensitive) comparison when <see langword="null"/>.
++    /// </summary>
++    public StringComparer? Comparer { get; set; }
++
+     /// <summary>
+     /// Gets or sets the culture to use when converting input to object.
+     /// </summary>
+@@ -109,7 +115,7 @@ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+     public TextPrompt(string prompt, StringComparer? comparer = null)
+     {
+         _prompt = prompt ?? throw new System.ArgumentNullException(nameof(prompt));
+-        _comparer = comparer;
++        Comparer = comparer;
+     }
+ 
+     /// <summary>
+@@ -133,7 +139,15 @@ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+             var promptStyle = PromptStyle ?? Style.Plain;
+             var converter = Converter ?? TypeConverterHelper.ConvertToString;
+             var choices = Choices.Select(choice => converter(choice)).ToList();
+-            var choiceMap = Choices.ToDictionary(choice => converter(choice), choice => choice, _comparer);
++            var choiceMap = new Dictionary<string, T>(Comparer ?? StringComparer.Ordinal);
++            foreach (var choice in Choices)
++            {
++                var key = converter(choice);
++                if (!choiceMap.ContainsKey(key))
++                {
++                    choiceMap[key] = choice;
++                }
++            }
+ 
+             WritePrompt(console);
+ 
+diff --git a/src/Spectre.Console/Prompts/TextPromptExtensions.cs b/src/Spectre.Console/Prompts/TextPromptExtensions.cs
+index e0e9c46..06a765e 100644
+--- a/src/Spectre.Console/Prompts/TextPromptExtensions.cs
++++ b/src/Spectre.Console/Prompts/TextPromptExtensions.cs
+@@ -333,4 +333,30 @@ public static class TextPromptExtensions
+         obj.ClearOnFinish = clear;
+         return obj;
+     }
+-}
+\ No newline at end of file
++
++    /// <summary>
++    /// Sets the comparer used when matching user input against the choices.
++    /// </summary>
++    /// <typeparam name="T">The prompt result type.</typeparam>
++    /// <param name="obj">The prompt.</param>
++    /// <param name="comparer">The comparer to use, or <see langword="null"/> for the default (case-sensitive) comparison.</param>
++    /// <returns>The same instance so that multiple calls can be chained.</returns>
++    public static TextPrompt<T> WithComparer<T>(this TextPrompt<T> obj, StringComparer? comparer)
++    {
++        ArgumentNullException.ThrowIfNull(obj);
++
++        obj.Comparer = comparer;
++        return obj;
++    }
++
++    /// <summary>
++    /// Makes matching user input against the choices case-insensitive.
++    /// </summary>
++    /// <typeparam name="T">The prompt result type.</typeparam>
++    /// <param name="obj">The prompt.</param>
++    /// <returns>The same instance so that multiple calls can be chained.</returns>
++    public static TextPrompt<T> CaseInsensitive<T>(this TextPrompt<T> obj)
++    {
++        return WithComparer(obj, StringComparer.OrdinalIgnoreCase);
++    }
++}

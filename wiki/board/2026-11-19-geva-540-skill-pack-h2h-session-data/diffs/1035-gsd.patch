@@ -1,0 +1,83 @@
+diff --git a/pkg/server/server.go b/pkg/server/server.go
+index 86f17e8..2acb67e 100644
+--- a/pkg/server/server.go
++++ b/pkg/server/server.go
+@@ -861,12 +861,25 @@ func newMetricsMiddleware(reg prometheus.Registerer) func(http.Handler) http.Han
+ 			rec := statusCodeRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+ 			handler.ServeHTTP(&rec, r)
+ 			path := normalizedPath(r)
+-			requests.WithLabelValues(r.Method, path, strconv.Itoa(rec.statusCode)).Inc()
+-			duration.WithLabelValues(r.Method, path).Observe(time.Since(start).Seconds())
++			method := normalizedMethod(r.Method)
++			requests.WithLabelValues(method, path, strconv.Itoa(rec.statusCode)).Inc()
++			duration.WithLabelValues(method, path).Observe(time.Since(start).Seconds())
+ 		})
+ 	}
+ }
+ 
++// normalizedMethod clamps the HTTP method to a fixed allowlist so that
++// client-controlled method strings cannot create unbounded metric series.
++func normalizedMethod(method string) string {
++	switch method {
++	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete,
++		http.MethodOptions, http.MethodHead, http.MethodConnect, http.MethodTrace:
++		return method
++	default:
++		return "other"
++	}
++}
++
+ // normalizedPath returns a normalized mux path template representation
+ func normalizedPath(r *http.Request) string {
+ 	if route := mux.CurrentRoute(r); route != nil {
+diff --git a/pkg/server/server_test.go b/pkg/server/server_test.go
+index d4c9952..36ea1f5 100644
+--- a/pkg/server/server_test.go
++++ b/pkg/server/server_test.go
+@@ -2380,3 +2380,46 @@ func TestConfigHandler_ForceExpiration(t *testing.T) {
+ 		}
+ 	})
+ }
++
++func TestMetricsMiddlewareClampsMethodLabel(t *testing.T) {
++	reg := prometheus.NewRegistry()
++	mw := newMetricsMiddleware(reg)
++	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
++
++	for i := 0; i < 50; i++ {
++		req := httptest.NewRequest(fmt.Sprintf("M%d", i), "/", nil)
++		h.ServeHTTP(httptest.NewRecorder(), req)
++	}
++	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
++
++	families, err := reg.Gather()
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, mf := range families {
++		methods := map[string]bool{}
++		for _, m := range mf.GetMetric() {
++			for _, l := range m.GetLabel() {
++				if l.GetName() == "method" {
++					methods[l.GetValue()] = true
++				}
++			}
++		}
++		if len(methods) != 2 || !methods["other"] || !methods[http.MethodGet] {
++			t.Errorf("%s: unexpected method labels %v", mf.GetName(), methods)
++		}
++	}
++}
++
++func TestNormalizedMethod(t *testing.T) {
++	for _, m := range []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "CONNECT", "TRACE"} {
++		if got := normalizedMethod(m); got != m {
++			t.Errorf("normalizedMethod(%q) = %q", m, got)
++		}
++	}
++	for _, m := range []string{"M1", "get", "PATCH", "PROPFIND", ""} {
++		if got := normalizedMethod(m); got != "other" {
++			t.Errorf("normalizedMethod(%q) = %q, want other", m, got)
++		}
++	}
++}

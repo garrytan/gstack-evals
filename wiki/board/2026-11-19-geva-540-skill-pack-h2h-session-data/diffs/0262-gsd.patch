@@ -1,0 +1,241 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 34e6c10..4ad4875 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -12,6 +12,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
+ 
+ - Add `ByteSlice` and `ByteSliceValue` functions for new `BYTESLICE` attribute type in `go.opentelemetry.io/otel/attribute`. (#7948)
+ 
++### Changed
++
++- `ErrorType` in `go.opentelemetry.io/otel/semconv/v1.40.0` now unwraps generic standard library wrapping errors (those created by `fmt.Errorf` with the `%w` verb or by `errors.Join`) and reports the type of the outermost non-wrapping error instead of `*fmt.wrapError`, `*fmt.wrapErrors`, or `*errors.joinError`. (#6904)
++
+ <!-- Released section -->
+ <!-- Don't change this section unless doing release -->
+ 
+diff --git a/internal/tools/semconvkit/templates/error_type.go.tmpl b/internal/tools/semconvkit/templates/error_type.go.tmpl
+index 193c43a..b1708e8 100644
+--- a/internal/tools/semconvkit/templates/error_type.go.tmpl
++++ b/internal/tools/semconvkit/templates/error_type.go.tmpl
+@@ -24,6 +24,12 @@ import (
+ // [errors.As] is used. Otherwise, the returned attribute has a value derived
+ // from the concrete type of err.
+ //
++// Generic wrapping errors from the standard library, such as those returned
++// by [fmt.Errorf] with the %w verb or by [errors.Join], do not have
++// informative types. These errors are unwrapped and the type of the outermost
++// error that is not such a generic wrapper is used instead. When multiple
++// errors are wrapped, the first non-nil one is used.
++//
+ // The key of the returned attribute is [ErrorTypeKey].
+ func ErrorType(err error) attribute.KeyValue {
+ 	if err == nil {
+@@ -50,6 +56,11 @@ func errorType(err error) string {
+ 		// Fallback to reflection if the ErrorType method is not supported or
+ 		// returns an empty value.
+ 
++		// Errors that only wrap other errors (e.g. those created by
++		// fmt.Errorf with the %w verb or by errors.Join) have uninformative
++		// types. Report the type of the outermost non-wrapping error instead.
++		err = unwrapGeneric(err)
++
+ 		t := reflect.TypeOf(err)
+ 		pkg, name := t.PkgPath(), t.Name()
+ 		if pkg != "" && name != "" {
+@@ -64,3 +75,47 @@ func errorType(err error) string {
+ 	}
+ 	return s
+ }
++
++// unwrapGeneric unwraps err while it is a generic wrapping error from the
++// standard library (created by fmt.Errorf with the %w verb or by errors.Join).
++// It returns the outermost error that is not such a wrapper. If a wrapper does
++// not wrap any non-nil error, the wrapper itself is returned.
++func unwrapGeneric(err error) error {
++	for err != nil && isGenericWrapper(err) {
++		var next error
++		switch u := err.(type) {
++		case interface{ Unwrap() error }:
++			next = u.Unwrap()
++		case interface{ Unwrap() []error }:
++			for _, e := range u.Unwrap() {
++				if e != nil {
++					next = e
++					break
++				}
++			}
++		}
++		if next == nil {
++			break
++		}
++		err = next
++	}
++	return err
++}
++
++// isGenericWrapper reports whether err is one of the standard library error
++// types whose only purpose is to wrap other errors: *fmt.wrapError,
++// *fmt.wrapErrors, or *errors.joinError.
++func isGenericWrapper(err error) bool {
++	t := reflect.TypeOf(err)
++	if t.Kind() != reflect.Pointer {
++		return false
++	}
++	t = t.Elem()
++	switch t.PkgPath() {
++	case "fmt":
++		return t.Name() == "wrapError" || t.Name() == "wrapErrors"
++	case "errors":
++		return t.Name() == "joinError"
++	}
++	return false
++}
+diff --git a/internal/tools/semconvkit/templates/error_type_test.go.tmpl b/internal/tools/semconvkit/templates/error_type_test.go.tmpl
+index 1d8a82f..33f2dc2 100644
+--- a/internal/tools/semconvkit/templates/error_type_test.go.tmpl
++++ b/internal/tools/semconvkit/templates/error_type_test.go.tmpl
+@@ -5,6 +5,7 @@ package semconv // import "go.opentelemetry.io/otel/semconv/{{.TagVer}}"
+ 
+ import (
+ 	"errors"
++	"fmt"
+ 	"testing"
+ )
+ 
+@@ -18,6 +19,15 @@ func TestErrorType(t *testing.T) {
+ 	check(t, custom(""), pkg+".ErrCustomType")                     // empty ErrorType, use concrete type.
+ 	check(t, wrapped(custom("wrapped-aborted")), "wrapped-aborted")
+ 	check(t, wrapped(custom("")), pkg+".wrappedErr") // empty ErrorType in chain, use concrete top-level type.
++
++	// Generic standard library wrappers are unwrapped.
++	check(t, fmt.Errorf("ctx: %w", errors.New("msg")), "*errors.errorString")
++	check(t, fmt.Errorf("a: %w", fmt.Errorf("b: %w", plain{})), pkg+".plain")
++	check(t, fmt.Errorf("ctx: %w", wrapped(plain{})), pkg+".wrappedErr") // non-generic wrapper is kept.
++	check(t, fmt.Errorf("ctx: %w", custom("")), pkg+".ErrCustomType")
++	check(t, fmt.Errorf("%w and %w", plain{}, errors.New("msg")), pkg+".plain")
++	check(t, errors.Join(nil, plain{}, errors.New("msg")), pkg+".plain")
++	check(t, fmt.Errorf("ctx: %w", nil), "*fmt.wrapError") // nothing to unwrap.
+ }
+ 
+ func check(t *testing.T, err error, want string) {
+@@ -62,3 +72,7 @@ func (e wrappedErr) Error() string {
+ func (e wrappedErr) Unwrap() error {
+ 	return e.err
+ }
++
++type plain struct{}
++
++func (plain) Error() string { return "plain" }
+diff --git a/semconv/v1.40.0/error_type.go b/semconv/v1.40.0/error_type.go
+index 6d26e52..91fdce8 100644
+--- a/semconv/v1.40.0/error_type.go
++++ b/semconv/v1.40.0/error_type.go
+@@ -24,6 +24,12 @@ import (
+ // [errors.As] is used. Otherwise, the returned attribute has a value derived
+ // from the concrete type of err.
+ //
++// Generic wrapping errors from the standard library, such as those returned
++// by [fmt.Errorf] with the %w verb or by [errors.Join], do not have
++// informative types. These errors are unwrapped and the type of the outermost
++// error that is not such a generic wrapper is used instead. When multiple
++// errors are wrapped, the first non-nil one is used.
++//
+ // The key of the returned attribute is [ErrorTypeKey].
+ func ErrorType(err error) attribute.KeyValue {
+ 	if err == nil {
+@@ -50,6 +56,11 @@ func errorType(err error) string {
+ 		// Fallback to reflection if the ErrorType method is not supported or
+ 		// returns an empty value.
+ 
++		// Errors that only wrap other errors (e.g. those created by
++		// fmt.Errorf with the %w verb or by errors.Join) have uninformative
++		// types. Report the type of the outermost non-wrapping error instead.
++		err = unwrapGeneric(err)
++
+ 		t := reflect.TypeOf(err)
+ 		pkg, name := t.PkgPath(), t.Name()
+ 		if pkg != "" && name != "" {
+@@ -64,3 +75,47 @@ func errorType(err error) string {
+ 	}
+ 	return s
+ }
++
++// unwrapGeneric unwraps err while it is a generic wrapping error from the
++// standard library (created by fmt.Errorf with the %w verb or by errors.Join).
++// It returns the outermost error that is not such a wrapper. If a wrapper does
++// not wrap any non-nil error, the wrapper itself is returned.
++func unwrapGeneric(err error) error {
++	for err != nil && isGenericWrapper(err) {
++		var next error
++		switch u := err.(type) {
++		case interface{ Unwrap() error }:
++			next = u.Unwrap()
++		case interface{ Unwrap() []error }:
++			for _, e := range u.Unwrap() {
++				if e != nil {
++					next = e
++					break
++				}
++			}
++		}
++		if next == nil {
++			break
++		}
++		err = next
++	}
++	return err
++}
++
++// isGenericWrapper reports whether err is one of the standard library error
++// types whose only purpose is to wrap other errors: *fmt.wrapError,
++// *fmt.wrapErrors, or *errors.joinError.
++func isGenericWrapper(err error) bool {
++	t := reflect.TypeOf(err)
++	if t.Kind() != reflect.Pointer {
++		return false
++	}
++	t = t.Elem()
++	switch t.PkgPath() {
++	case "fmt":
++		return t.Name() == "wrapError" || t.Name() == "wrapErrors"
++	case "errors":
++		return t.Name() == "joinError"
++	}
++	return false
++}
+diff --git a/semconv/v1.40.0/error_type_test.go b/semconv/v1.40.0/error_type_test.go
+index b01ea79..966c7b7 100644
+--- a/semconv/v1.40.0/error_type_test.go
++++ b/semconv/v1.40.0/error_type_test.go
+@@ -5,6 +5,7 @@ package semconv // import "go.opentelemetry.io/otel/semconv/v1.40.0"
+ 
+ import (
+ 	"errors"
++	"fmt"
+ 	"testing"
+ )
+ 
+@@ -18,6 +19,15 @@ func TestErrorType(t *testing.T) {
+ 	check(t, custom(""), pkg+".ErrCustomType")                     // empty ErrorType, use concrete type.
+ 	check(t, wrapped(custom("wrapped-aborted")), "wrapped-aborted")
+ 	check(t, wrapped(custom("")), pkg+".wrappedErr") // empty ErrorType in chain, use concrete top-level type.
++
++	// Generic standard library wrappers are unwrapped.
++	check(t, fmt.Errorf("ctx: %w", errors.New("msg")), "*errors.errorString")
++	check(t, fmt.Errorf("a: %w", fmt.Errorf("b: %w", plain{})), pkg+".plain")
++	check(t, fmt.Errorf("ctx: %w", wrapped(plain{})), pkg+".wrappedErr") // non-generic wrapper is kept.
++	check(t, fmt.Errorf("ctx: %w", custom("")), pkg+".ErrCustomType")
++	check(t, fmt.Errorf("%w and %w", plain{}, errors.New("msg")), pkg+".plain")
++	check(t, errors.Join(nil, plain{}, errors.New("msg")), pkg+".plain")
++	check(t, fmt.Errorf("ctx: %w", nil), "*fmt.wrapError") // nothing to unwrap.
+ }
+ 
+ func check(t *testing.T, err error, want string) {
+@@ -62,3 +72,7 @@ func (e wrappedErr) Error() string {
+ func (e wrappedErr) Unwrap() error {
+ 	return e.err
+ }
++
++type plain struct{}
++
++func (plain) Error() string { return "plain" }

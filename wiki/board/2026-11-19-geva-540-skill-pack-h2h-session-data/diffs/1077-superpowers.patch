@@ -1,0 +1,190 @@
+diff --git a/pkg/server/server_entrypoint_tcp_http3.go b/pkg/server/server_entrypoint_tcp_http3.go
+index b971d97..7723840 100644
+--- a/pkg/server/server_entrypoint_tcp_http3.go
++++ b/pkg/server/server_entrypoint_tcp_http3.go
+@@ -8,6 +8,7 @@ import (
+ 	"net"
+ 	"net/http"
+ 	"sync"
++	"time"
+ 
+ 	"github.com/quic-go/quic-go"
+ 	"github.com/quic-go/quic-go/http3"
+@@ -48,11 +49,19 @@ func newHTTP3Server(ctx context.Context, configuration *static.EntryPoint, https
+ 		},
+ 	}
+ 
++	var readTimeout, writeTimeout, idleTimeout time.Duration
++	if configuration.Transport != nil && configuration.Transport.RespondingTimeouts != nil {
++		readTimeout = time.Duration(configuration.Transport.RespondingTimeouts.ReadTimeout)
++		writeTimeout = time.Duration(configuration.Transport.RespondingTimeouts.WriteTimeout)
++		idleTimeout = time.Duration(configuration.Transport.RespondingTimeouts.IdleTimeout)
++	}
++
+ 	h3.Server = &http3.Server{
+-		Addr:      configuration.GetAddress(),
+-		Port:      configuration.HTTP3.AdvertisedPort,
+-		Handler:   httpsServer.Server.(*http.Server).Handler,
+-		TLSConfig: &tls.Config{GetConfigForClient: h3.getTLSConfigForClient},
++		Addr:        configuration.GetAddress(),
++		Port:        configuration.HTTP3.AdvertisedPort,
++		Handler:     newHTTP3TimeoutHandler(httpsServer.Server.(*http.Server).Handler, readTimeout, writeTimeout),
++		IdleTimeout: idleTimeout,
++		TLSConfig:   &tls.Config{GetConfigForClient: h3.getTLSConfigForClient},
+ 		QUICConfig: &quic.Config{
+ 			Allow0RTT: false,
+ 		},
+@@ -79,6 +88,47 @@ func newHTTP3Server(ctx context.Context, configuration *static.EntryPoint, https
+ 	return h3, nil
+ }
+ 
++// streamDeadliner is implemented by the quic-go HTTP/3 response writer,
++// which allows setting deadlines on the underlying QUIC request stream.
++type streamDeadliner interface {
++	SetReadDeadline(time.Time) error
++	SetWriteDeadline(time.Time) error
++}
++
++// newHTTP3TimeoutHandler enforces the responding timeouts on HTTP/3 requests.
++// Contrary to HTTP/1.1 and HTTP/2, where these timeouts are applied as deadlines on the TCP connection,
++// HTTP/3 requests are carried by QUIC streams, so the deadlines have to be applied on each request stream.
++func newHTTP3TimeoutHandler(next http.Handler, readTimeout, writeTimeout time.Duration) http.Handler {
++	if readTimeout <= 0 && writeTimeout <= 0 {
++		return next
++	}
++
++	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
++		start := time.Now()
++
++		deadliner, ok := rw.(streamDeadliner)
++		if !ok {
++			log.WithoutContext().Debugf("Unable to set HTTP/3 stream deadlines: unsupported response writer %T", rw)
++			next.ServeHTTP(rw, req)
++			return
++		}
++
++		if readTimeout > 0 {
++			if err := deadliner.SetReadDeadline(start.Add(readTimeout)); err != nil {
++				log.WithoutContext().Debugf("Unable to set HTTP/3 stream read deadline: %v", err)
++			}
++		}
++
++		if writeTimeout > 0 {
++			if err := deadliner.SetWriteDeadline(start.Add(writeTimeout)); err != nil {
++				log.WithoutContext().Debugf("Unable to set HTTP/3 stream write deadline: %v", err)
++			}
++		}
++
++		next.ServeHTTP(rw, req)
++	})
++}
++
+ func (e *http3server) Start() error {
+ 	return e.Serve(e.http3conn)
+ }
+diff --git a/pkg/server/server_entrypoint_tcp_http3_test.go b/pkg/server/server_entrypoint_tcp_http3_test.go
+index 9adc1d4..38c3242 100644
+--- a/pkg/server/server_entrypoint_tcp_http3_test.go
++++ b/pkg/server/server_entrypoint_tcp_http3_test.go
+@@ -4,13 +4,16 @@ import (
+ 	"bufio"
+ 	"crypto/tls"
+ 	"crypto/x509"
++	"io"
+ 	"net/http"
+ 	"testing"
+ 	"time"
+ 
+ 	"github.com/quic-go/quic-go"
++	"github.com/quic-go/quic-go/http3"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
++	ptypes "github.com/traefik/paerser/types"
+ 	"github.com/traefik/traefik/v2/pkg/config/static"
+ 	tcprouter "github.com/traefik/traefik/v2/pkg/server/router/tcp"
+ 	traefiktls "github.com/traefik/traefik/v2/pkg/tls"
+@@ -242,3 +245,84 @@ func (c *clientSessionCache) Put(sessionKey string, cs *tls.ClientSessionState)
+ 	c.cache.Put(sessionKey, cs)
+ 	c.puts <- sessionKey
+ }
++
++func TestHTTP3ReadTimeout(t *testing.T) {
++	certContent, err := localhostCert.Read()
++	require.NoError(t, err)
++
++	keyContent, err := localhostKey.Read()
++	require.NoError(t, err)
++
++	tlsCert, err := tls.X509KeyPair(certContent, keyContent)
++	require.NoError(t, err)
++
++	epConfig := &static.EntryPointsTransport{}
++	epConfig.SetDefaults()
++	epConfig.RespondingTimeouts.ReadTimeout = ptypes.Duration(500 * time.Millisecond)
++
++	entryPoint, err := NewTCPEntryPoint(t.Context(), &static.EntryPoint{
++		Address:          "127.0.0.1:8091",
++		Transport:        epConfig,
++		ForwardedHeaders: &static.ForwardedHeaders{},
++		HTTP2:            &static.HTTP2Config{},
++		HTTP3:            &static.HTTP3Config{},
++	}, nil)
++	require.NoError(t, err)
++
++	router, err := tcprouter.NewRouter()
++	require.NoError(t, err)
++
++	router.AddHTTPTLSConfig("*", &tls.Config{
++		Certificates: []tls.Certificate{tlsCert},
++	}, traefiktls.DefaultTLSConfigName)
++
++	readErr := make(chan error, 1)
++	router.SetHTTPSHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
++		_, err := io.Copy(io.Discard, req.Body)
++		readErr <- err
++		rw.WriteHeader(http.StatusOK)
++	}), nil)
++
++	ctx := t.Context()
++	go entryPoint.Start(ctx)
++	entryPoint.SwitchRouter(router)
++
++	// We are racing with the http3Server readiness happening in the goroutine starting the entrypoint.
++	time.Sleep(time.Second)
++
++	certPool := x509.NewCertPool()
++	certPool.AppendCertsFromPEM(certContent)
++
++	transport := &http3.Transport{
++		TLSClientConfig: &tls.Config{RootCAs: certPool, ServerName: "127.0.0.1"},
++	}
++
++	// The body is never completed: the client holds the stream open.
++	bodyReader, bodyWriter := io.Pipe()
++	t.Cleanup(func() {
++		_ = bodyWriter.Close()
++		_ = transport.Close()
++		entryPoint.Shutdown(ctx)
++	})
++
++	go func() {
++		_, _ = bodyWriter.Write([]byte("x"))
++	}()
++
++	req, err := http.NewRequest(http.MethodPost, "https://127.0.0.1:8091/", bodyReader)
++	require.NoError(t, err)
++
++	go func() {
++		resp, err := transport.RoundTrip(req)
++		if err == nil {
++			_ = resp.Body.Close()
++		}
++	}()
++
++	select {
++	case err := <-readErr:
++		require.Error(t, err)
++	case <-time.After(5 * time.Second):
++		t.Fatal("HTTP/3 request body read was not interrupted by readTimeout")
++	}
++}

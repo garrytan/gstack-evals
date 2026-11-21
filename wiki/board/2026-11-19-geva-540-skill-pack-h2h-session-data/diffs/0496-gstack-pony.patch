@@ -1,0 +1,69 @@
+diff --git a/slatedb/src/bytes_range.rs b/slatedb/src/bytes_range.rs
+index f05936b..56ffca0 100644
+--- a/slatedb/src/bytes_range.rs
++++ b/slatedb/src/bytes_range.rs
+@@ -43,23 +43,18 @@ impl RangeBounds<Bytes> for BytesRange {
+     }
+ }
+ 
+-fn is_bound_non_empty(bound: &Bound<Bytes>) -> bool {
+-    match bound {
+-        Included(b) | Excluded(b) => !b.is_empty(),
+-        Unbounded => true,
+-    }
+-}
+-
+ impl BytesRange {
++    /// Creates a new range. Empty (`[]`) bounds are accepted. Since keys are never
++    /// empty, an empty start bound (included or excluded) is equivalent to
++    /// [`Unbounded`] and is normalized to it. An empty end bound is kept as-is
++    /// and simply matches no keys.
++    ///
++    /// Panics if the range is empty (start greater than end).
+     pub(crate) fn new(start_bound: Bound<Bytes>, end_bound: Bound<Bytes>) -> Self {
+-        assert!(
+-            is_bound_non_empty(&start_bound),
+-            "Start bound must be non-empty"
+-        );
+-        assert!(
+-            is_bound_non_empty(&end_bound),
+-            "End bound must be non-empty"
+-        );
++        let start_bound = match start_bound {
++            Included(b) | Excluded(b) if b.is_empty() => Unbounded,
++            b => b,
++        };
+         let inner = ComparableRange::new(start_bound, end_bound);
+         assert!(inner.non_empty(), "Range must be non-empty");
+         Self { inner }
+@@ -181,7 +176,7 @@ pub(crate) mod tests {
+     use bytes::Bytes;
+     use proptest::{prop_assert, proptest};
+     use std::ops::Bound;
+-    use std::ops::Bound::Unbounded;
++    use std::ops::Bound::{Excluded, Included, Unbounded};
+     use std::ops::RangeBounds;
+ 
+     #[test]
+@@ -322,4 +317,21 @@ pub(crate) mod tests {
+         let end = Bound::Included(Bytes::from("a"));
+         BytesRange::new(start, end);
+     }
++
++    #[test]
++    fn test_new_accepts_empty_bounds() {
++        let empty = Bytes::new();
++        let key = Bytes::from("a");
++
++        let range = BytesRange::new(Included(empty.clone()), Unbounded);
++        assert_eq!(range, BytesRange::new(Unbounded, Unbounded));
++        let range = BytesRange::new(Excluded(empty.clone()), Excluded(key.clone()));
++        assert_eq!(range, BytesRange::new(Unbounded, Excluded(key.clone())));
++        assert!(range.contains(&Bytes::from_static(&[0])));
++
++        let range = BytesRange::new(Included(empty.clone()), Excluded(empty.clone()));
++        assert!(!range.contains(&key));
++        let range = BytesRange::new(Unbounded, Included(empty));
++        assert!(!range.contains(&key));
++    }
+ }

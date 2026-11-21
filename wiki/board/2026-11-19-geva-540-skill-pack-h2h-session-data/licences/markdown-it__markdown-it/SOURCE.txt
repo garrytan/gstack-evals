@@ -1,0 +1,3 @@
+https://github.com/markdown-it/markdown-it at c627c4c633e98a342c91689e12b9201dcdea91ba
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

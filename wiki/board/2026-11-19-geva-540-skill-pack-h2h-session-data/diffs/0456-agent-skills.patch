@@ -1,0 +1,351 @@
+diff --git a/internal/storage/embeddeddolt/schema.go b/internal/storage/embeddeddolt/schema.go
+index 1e86ec8..2c60d00 100644
+--- a/internal/storage/embeddeddolt/schema.go
++++ b/internal/storage/embeddeddolt/schema.go
+@@ -8,6 +8,7 @@ import (
+ 	"embed"
+ 	"fmt"
+ 	"io/fs"
++	"regexp"
+ 	"sort"
+ 	"strconv"
+ 	"strings"
+@@ -169,3 +170,84 @@ func backfillMigrations(ctx context.Context, tx *sql.Tx) (int, error) {
+ 	}
+ 	return n, nil
+ }
++
++// ignoredTables lists the dolt_ignore'd tables (matching the 'wisps' and
++// 'wisp_%' patterns). Because they are ignored, they never enter Dolt history
++// and exist only in a working set: a fresh clone, a new branch, or a working
++// set reset will not contain them even though schema_migrations says the
++// migrations that created them were applied.
++var ignoredTables = []string{"wisps", "wisp_labels", "wisp_dependencies", "wisp_events", "wisp_comments"}
++
++// ignoredTableStmtRe extracts the target table of a migration statement that
++// creates or alters an ignored table (CREATE TABLE, ALTER TABLE, CREATE INDEX ... ON).
++var ignoredTableStmtRe = regexp.MustCompile(`(?is)^\s*(?:CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?|ALTER\s+TABLE\s+|CREATE\s+(?:UNIQUE\s+)?INDEX\s+\S+\s+ON\s+)` + "`?" + `(wisps|wisp_\w+)` + "`?" + `\b`)
++
++// ensureIgnoredTables recreates any missing dolt_ignore'd tables in the current
++// working set by replaying, in version order, every already-applied embedded
++// migration statement that targets a missing ignored table. Tables that
++// already exist are left untouched, so this is idempotent. This is the
++// embedded-mode counterpart of the server-mode createIgnoredTables.
++func ensureIgnoredTables(ctx context.Context, tx *sql.Tx) error {
++	missing := map[string]bool{}
++	for _, tbl := range ignoredTables {
++		var n int
++		if err := tx.QueryRowContext(ctx,
++			"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",
++			tbl).Scan(&n); err != nil {
++			return fmt.Errorf("checking for table %s: %w", tbl, err)
++		}
++		if n == 0 {
++			missing[tbl] = true
++		}
++	}
++	if len(missing) == 0 {
++		return nil
++	}
++
++	var current int
++	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&current); err != nil {
++		return fmt.Errorf("reading current migration version: %w", err)
++	}
++
++	entries, err := fs.ReadDir(upMigrations, "schema")
++	if err != nil {
++		return fmt.Errorf("reading embedded migrations: %w", err)
++	}
++	type migrationFile struct {
++		version int
++		name    string
++	}
++	var files []migrationFile
++	for _, e := range entries {
++		if e.IsDir() || !strings.HasSuffix(e.Name(), ".up.sql") {
++			continue
++		}
++		v, err := parseVersion(e.Name())
++		if err != nil {
++			return fmt.Errorf("parsing migration filename %q: %w", e.Name(), err)
++		}
++		if v <= current {
++			files = append(files, migrationFile{version: v, name: e.Name()})
++		}
++	}
++	sort.Slice(files, func(i, j int) bool { return files[i].version < files[j].version })
++
++	for _, mf := range files {
++		data, err := upMigrations.ReadFile("schema/" + mf.name)
++		if err != nil {
++			return fmt.Errorf("reading migration %s: %w", mf.name, err)
++		}
++		// Migration files contain only DDL without embedded semicolons,
++		// so splitting on ';' yields individual statements.
++		for _, stmt := range strings.Split(string(data), ";") {
++			m := ignoredTableStmtRe.FindStringSubmatch(stmt)
++			if m == nil || !missing[strings.ToLower(m[1])] {
++				continue
++			}
++			if _, err := tx.ExecContext(ctx, stmt); err != nil {
++				return fmt.Errorf("recreating ignored table %s (migration %s): %w", m[1], mf.name, err)
++			}
++		}
++	}
++	return nil
++}
+diff --git a/internal/storage/embeddeddolt/store.go b/internal/storage/embeddeddolt/store.go
+index d9f0dcc..7a149ec 100644
+--- a/internal/storage/embeddeddolt/store.go
++++ b/internal/storage/embeddeddolt/store.go
+@@ -237,6 +237,11 @@ func (s *EmbeddedDoltStore) initSchema(ctx context.Context) error {
+ 		if err != nil {
+ 			return err
+ 		}
++		// dolt_ignore'd wisp tables live only in the working set, so they can
++		// be missing even when all migrations are recorded as applied.
++		if err := ensureIgnoredTables(ctx, tx); err != nil {
++			return err
++		}
+ 		if applied > 0 {
+ 			if _, err := tx.ExecContext(ctx, "CALL DOLT_ADD('-A')"); err != nil {
+ 				return fmt.Errorf("dolt add after migrations: %w", err)
+diff --git a/internal/storage/embeddeddolt/wisp_tables_test.go b/internal/storage/embeddeddolt/wisp_tables_test.go
+new file mode 100644
+index 0000000..bde46d2
+--- /dev/null
++++ b/internal/storage/embeddeddolt/wisp_tables_test.go
+@@ -0,0 +1,132 @@
++//go:build cgo
++
++package embeddeddolt_test
++
++import (
++	"path/filepath"
++	"testing"
++
++	"github.com/steveyegge/beads/internal/storage/embeddeddolt"
++	"github.com/steveyegge/beads/internal/types"
++)
++
++var wispTables = []string{"wisps", "wisp_labels", "wisp_dependencies", "wisp_events", "wisp_comments"}
++
++// dropWispTables simulates a working set without the dolt_ignore'd wisp tables
++// (e.g. a fresh clone, a new branch, or a database created before the tables
++// were tracked by migrations). Ignored tables never reach Dolt history, so
++// they must be recreated on open.
++func dropWispTables(t *testing.T, te *testEnv) {
++	t.Helper()
++	for _, tbl := range wispTables {
++		te.exec(t, t.Context(), "DROP TABLE IF EXISTS `"+tbl+"`")
++	}
++}
++
++func createTwoTasks(t *testing.T, te *testEnv, prefix string) {
++	t.Helper()
++	ctx := t.Context()
++	for _, id := range []string{prefix + "-a", prefix + "-b"} {
++		iss := &types.Issue{ID: id, Title: id, Status: types.StatusOpen, Priority: 2, IssueType: types.TypeTask}
++		if err := te.store.CreateIssue(ctx, iss, "tester"); err != nil {
++			t.Fatalf("CreateIssue %s: %v", id, err)
++		}
++	}
++}
++
++// TestReopenRecreatesMissingWispTables: opening an embedded store must
++// recreate dolt_ignore'd wisp tables that are missing from the working set.
++func TestReopenRecreatesMissingWispTables(t *testing.T) {
++	skipUnlessEmbeddedDolt(t)
++	ctx := t.Context()
++
++	beadsDir := filepath.Join(t.TempDir(), ".beads")
++	store, err := embeddeddolt.New(ctx, beadsDir, "rw", "main")
++	if err != nil {
++		t.Fatalf("New: %v", err)
++	}
++	if err := store.SetConfig(ctx, "issue_prefix", "rw"); err != nil {
++		t.Fatalf("SetConfig: %v", err)
++	}
++	if err := store.Commit(ctx, "init"); err != nil {
++		t.Fatalf("Commit: %v", err)
++	}
++	te := &testEnv{store: store, dataDir: filepath.Join(beadsDir, "embeddeddolt"), database: "rw"}
++	createTwoTasks(t, te, "rw")
++	store.Close()
++
++	dropWispTables(t, te)
++
++	store, err = embeddeddolt.New(ctx, beadsDir, "rw", "main")
++	if err != nil {
++		t.Fatalf("New (reopen): %v", err)
++	}
++	t.Cleanup(func() { store.Close() })
++	te.store = store
++
++	for _, tbl := range wispTables {
++		var n int
++		te.queryScalar(t, ctx,
++			"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",
++			[]any{tbl}, &n)
++		if n != 1 {
++			t.Errorf("table %s not recreated on open", tbl)
++		}
++	}
++
++	// The recreated wisps table must carry later-migration columns.
++	var n int
++	te.queryScalar(t, ctx,
++		"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'wisps' AND column_name = 'no_history'",
++		nil, &n)
++	if n != 1 {
++		t.Errorf("recreated wisps table missing no_history column")
++	}
++	te.queryScalar(t, ctx,
++		"SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'wisp_dependencies' AND index_name = 'idx_wisp_dep_type'",
++		nil, &n)
++	if n == 0 {
++		t.Errorf("recreated wisp_dependencies table missing idx_wisp_dep_type index")
++	}
++
++	dep := &types.Dependency{IssueID: "rw-b", DependsOnID: "rw-a", Type: types.DepBlocks}
++	if err := store.AddDependency(ctx, dep, "tester"); err != nil {
++		t.Fatalf("AddDependency after reopen: %v", err)
++	}
++	if err := store.DeleteIssue(ctx, "rw-a"); err != nil {
++		t.Fatalf("DeleteIssue after reopen: %v", err)
++	}
++}
++
++// TestDependencyOpsToleratesMissingWispDependencies: dependency queries must
++// not fail hard when wisp_dependencies is missing (mirrors blocked.go).
++func TestDependencyOpsToleratesMissingWispDependencies(t *testing.T) {
++	skipUnlessEmbeddedDolt(t)
++	te := newTestEnv(t, "mw")
++	ctx := t.Context()
++	createTwoTasks(t, te, "mw")
++
++	// Drop while the store stays open, so no re-init happens.
++	te.exec(t, ctx, "DROP TABLE IF EXISTS wisp_dependencies")
++
++	dep := &types.Dependency{IssueID: "mw-b", DependsOnID: "mw-a", Type: types.DepBlocks}
++	if err := te.store.AddDependency(ctx, dep, "tester"); err != nil {
++		t.Fatalf("AddDependency: %v", err)
++	}
++	deps, err := te.store.GetDependencies(ctx, "mw-b")
++	if err != nil {
++		t.Fatalf("GetDependencies: %v", err)
++	}
++	if len(deps) != 1 || deps[0].ID != "mw-a" {
++		t.Errorf("GetDependencies = %v, want [mw-a]", deps)
++	}
++	if _, err := te.store.GetDependents(ctx, "mw-a"); err != nil {
++		t.Fatalf("GetDependents: %v", err)
++	}
++	if _, err := te.store.GetDependenciesWithMetadata(ctx, "mw-b"); err != nil {
++		t.Fatalf("GetDependenciesWithMetadata: %v", err)
++	}
++	if _, err := te.store.GetDependentsWithMetadata(ctx, "mw-a"); err != nil {
++		t.Fatalf("GetDependentsWithMetadata: %v", err)
++	}
++}
+diff --git a/internal/storage/issueops/batching.go b/internal/storage/issueops/batching.go
+index f2f6923..226e69d 100644
+--- a/internal/storage/issueops/batching.go
++++ b/internal/storage/issueops/batching.go
+@@ -1,6 +1,10 @@
+ package issueops
+ 
+-import "strings"
++import (
++	"context"
++	"database/sql"
++	"strings"
++)
+ 
+ // queryBatchSize limits the number of IDs in a single IN (...) clause.
+ // Large IN clauses cause Dolt query-planner spikes and MySQL packet-size
+@@ -18,3 +22,14 @@ func isTableNotExistError(err error) bool {
+ 	return strings.Contains(s, "doesn't exist") || strings.Contains(s, "does not exist") ||
+ 		strings.Contains(s, "error 1146")
+ }
++
++// tableExistsInTx reports whether a table exists in the current database.
++func tableExistsInTx(ctx context.Context, tx *sql.Tx, table string) (bool, error) {
++	var n int
++	if err := tx.QueryRowContext(ctx,
++		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",
++		table).Scan(&n); err != nil {
++		return false, err
++	}
++	return n > 0, nil
++}
+diff --git a/internal/storage/issueops/dependencies.go b/internal/storage/issueops/dependencies.go
+index 084316d..0d8b934 100644
+--- a/internal/storage/issueops/dependencies.go
++++ b/internal/storage/issueops/dependencies.go
+@@ -122,11 +122,24 @@ func AddDependencyInTx(ctx context.Context, tx *sql.Tx, dep *types.Dependency, a
+ 	// Cycle detection for blocking deps via recursive CTE.
+ 	if dep.Type == types.DepBlocks || dep.Type == types.DepConditionalBlocks {
+ 		// Build UNION ALL across all dep tables for the CTE.
++		// Skip dep tables that don't exist (e.g. dolt_ignore'd wisp_dependencies
++		// absent from the working set), matching ComputeBlockedIDsInTx.
+ 		var unions []string
+ 		for _, t := range depTables {
++			exists, err := tableExistsInTx(ctx, tx, t)
++			if err != nil {
++				return fmt.Errorf("failed to check for dependency cycle: %w", err)
++			}
++			if !exists {
++				continue
++			}
+ 			//nolint:gosec // G201: depTables are caller-controlled constants
+ 			unions = append(unions, fmt.Sprintf("SELECT issue_id, depends_on_id FROM %s WHERE type IN ('blocks', 'conditional-blocks')", t))
+ 		}
++		if len(unions) == 0 {
++			// No dependency tables exist yet, so no cycle is possible.
++			unions = append(unions, "SELECT NULL AS issue_id, NULL AS depends_on_id FROM DUAL WHERE FALSE")
++		}
+ 		unionQuery := strings.Join(unions, " UNION ALL ")
+ 
+ 		var reachable int
+@@ -310,6 +323,9 @@ func GetDependenciesWithMetadataInTx(ctx context.Context, tx *sql.Tx, issueID st
+ 		rows, err := tx.QueryContext(ctx, fmt.Sprintf(
+ 			`SELECT depends_on_id, type FROM %s WHERE issue_id = ?`, depTable), issueID)
+ 		if err != nil {
++			if isTableNotExistError(err) {
++				continue
++			}
+ 			return nil, fmt.Errorf("get dependencies from %s: %w", depTable, err)
+ 		}
+ 		for rows.Next() {
+@@ -373,6 +389,9 @@ func GetDependentsWithMetadataInTx(ctx context.Context, tx *sql.Tx, issueID stri
+ 		rows, err := tx.QueryContext(ctx, fmt.Sprintf(
+ 			`SELECT issue_id, type FROM %s WHERE depends_on_id = ?`, depTable), issueID)
+ 		if err != nil {
++			if isTableNotExistError(err) {
++				continue
++			}
+ 			return nil, fmt.Errorf("get dependents from %s: %w", depTable, err)
+ 		}
+ 		for rows.Next() {
+@@ -431,6 +450,9 @@ func GetDependenciesInTx(ctx context.Context, tx *sql.Tx, issueID string) ([]*ty
+ 		rows, err := tx.QueryContext(ctx, fmt.Sprintf(
+ 			`SELECT depends_on_id FROM %s WHERE issue_id = ?`, depTable), issueID)
+ 		if err != nil {
++			if isTableNotExistError(err) {
++				continue
++			}
+ 			return nil, fmt.Errorf("get dependencies from %s: %w", depTable, err)
+ 		}
+ 		for rows.Next() {
+@@ -464,6 +486,9 @@ func GetDependentsInTx(ctx context.Context, tx *sql.Tx, issueID string) ([]*type
+ 		rows, err := tx.QueryContext(ctx, fmt.Sprintf(
+ 			`SELECT issue_id FROM %s WHERE depends_on_id = ?`, depTable), issueID)
+ 		if err != nil {
++			if isTableNotExistError(err) {
++				continue
++			}
+ 			return nil, fmt.Errorf("get dependents from %s: %w", depTable, err)
+ 		}
+ 		for rows.Next() {

@@ -102,8 +102,13 @@ export interface MeterOptions {
   /** Holds the reply cache; it carries model output, so it sits on tmpfs for sealed work. */
   cacheDir: string;
   maxOutputTokens: number;
-  /** The most the lease reserves, in micros; without it the lease reserves what the item's cap has left. */
-  amountMicros?: number;
+  /** The most the lease reserves, in micros, or a function that gives it, called after this run's stale lease is settled; without it the lease reserves what the item's cap has left. */
+  amountMicros?: number | (() => number);
+  /**
+   * Reserve amountMicros less what the item has already committed, read after this run's stale lease settles, so a
+   * relaunch of the one run an item serves reserves only what that run has left of amountMicros.
+   */
+  lessCommitted?: boolean;
   record?: string;
   ledger?: string;
   env?: Record<string, string | undefined>;
@@ -124,7 +129,10 @@ export interface Meter {
   call(req: CallRequest): Promise<CallResult>;
   /** Settled spend on this lease so far, in micros, from the local ledger. */
   spent(): number;
-  close(): Promise<{ spent_micros: number; unknown_micros: number }>;
+  /** Calls on this lease whose outcome is unknown, held at their reservation, in micros, from the local ledger. */
+  unknown(): number;
+  /** Settles the lease; a cap stop's scope goes into the close, so the item admits no later lease. */
+  close(capStop?: string): Promise<{ spent_micros: number; unknown_micros: number }>;
 }
 
 /** Leases the item for the run (settling this run's own stale lease first), starts the proxy and returns the client. */
@@ -146,7 +154,9 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
     }
     const open = readItem(record, o.item).open;
     if (open && open.run_id === o.runId && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
-    leaseId = openLease(record, local, { item: o.item, run_id: o.runId, amount_micros: o.amountMicros, warn, requireAdmission: rigAdmission({ proof: "direct" }) }).lease_id;
+    const asked = typeof o.amountMicros === "function" ? o.amountMicros() : o.amountMicros;
+    const amount = asked !== undefined && o.lessCommitted ? Math.max(0, asked - readItem(record, o.item).committed_micros) : asked;
+    leaseId = openLease(record, local, { item: o.item, run_id: o.runId, amount_micros: amount, warn, requireAdmission: rigAdmission({ proof: "direct" }) }).lease_id;
     proxy = new MeteringProxy({ ledger: local, leaseId, host: "127.0.0.1", managementSocket: join(tmpdir(), "pv-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: o.maxOutputTokens });
     proxy.start();
   } catch (e) {
@@ -172,6 +182,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
   return {
     leaseId,
     spent: () => [...local.meters(leaseId).values()].reduce((a, m) => a + m.spent_micros, 0),
+    unknown: () => [...local.meters(leaseId).values()].reduce((a, m) => a + m.unknown_micros, 0),
     async call(req) {
       if (closed) throw new MeterError("E_USAGE", "the meter is closed");
       const m = MODELS[req.model];
@@ -193,7 +204,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
         done();
       }
     },
-    async close() {
+    async close(capStop) {
       if (closed) throw new MeterError("E_USAGE", "the meter is already closed");
       closed = true;
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -202,7 +213,7 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       p.stop();
       try {
         await reconcileJournal(journal, local);
-        const c = settleLease(record, local, leaseId, warn);
+        const c = settleLease(record, local, leaseId, warn, capStop);
         return { spent_micros: c.spent_micros, unknown_micros: c.unknown_micros };
       } finally {
         local.close();

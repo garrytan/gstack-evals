@@ -54,11 +54,23 @@ function betaFraction(a: number, b: number, x: number): number {
 }
 
 /** I_x(a, b), the regularized incomplete beta. */
-function incompleteBeta(x: number, a: number, b: number): number {
+export function incompleteBeta(x: number, a: number, b: number): number {
   if (x <= 0) return 0;
   if (x >= 1) return 1;
   const front = Math.exp(lnGamma(a + b) - lnGamma(a) - lnGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
   return x < (a + 1) / (a + b + 2) ? (front * betaFraction(a, b, x)) / a : 1 - (front * betaFraction(b, a, 1 - x)) / b;
+}
+
+/** The beta distribution's quantile: bisection on incompleteBeta to double precision. */
+export function betaQuantile(p: number, a: number, b: number): number {
+  if (!(p > 0 && p < 1) || !(a > 0) || !(b > 0)) throw new Error("E_OHR_READ_INPUT the beta quantile needs 0 < p < 1 and a, b > 0, got p " + p + ", a " + a + " and b " + b);
+  let lo = 0, hi = 1;
+  for (let k = 0; k < 200 && hi - lo > 1e-15; k++) {
+    const mid = (lo + hi) / 2;
+    if (incompleteBeta(mid, a, b) < p) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
 }
 
 /** Student t's distribution function with df degrees of freedom. */

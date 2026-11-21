@@ -21,10 +21,21 @@ export const SESSION_HOME = "/root";
 const TODO_TOOLS = new Set(["TodoWrite", "TaskCreate"]);
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const READ_TOOLS = new Set(["Read", "Grep", "Glob", "NotebookRead", "LS"]);
-/** A test file by its path, in every language the units carry. */
-export const TEST_PATH = /(^|\/)(tests?|__tests__|specs?|testing|e2e)\/|[._-](test|spec|tests)\.[A-Za-z0-9]+$|_test\.go$|(^|\/)test_[^/]*\.[A-Za-z0-9]+$|Tests?\.(java|kt|cs|scala)$|(^|\/)src\/test\//;
-/** A Bash result that shows a failing test run. */
-const FAILING = /\b(FAIL|FAILED|failing|failures?|AssertionError|panicked|assertion failed)\b|Exit code [1-9]/;
+/** A test file by its path, in every language the units carry. A spec or specs folder is no test by itself, because a
+ *  Python package can be named spec (hdmf's src/hdmf/spec/); a spec-named file (x_spec.rb, x.spec.ts) still is. */
+export const TEST_PATH = /(^|\/)(tests?|__tests__|testing|e2e)\/|[._-](test|spec|tests)\.[A-Za-z0-9]+$|_test\.go$|(^|\/)test_[^/]*\.[A-Za-z0-9]+$|Tests?\.(java|kt|cs|scala)$|(^|\/)src\/test\//;
+/** A Bash result that shows a failing test run, or a compiler's error count (a test the code under test rejects). */
+const FAILING = /\b(FAIL|FAILED|failing|failures?|AssertionError|panicked|assertion failed)\b|Exit code [1-9]|\b[1-9]\d* errors? (and \d+ warnings? )?generated\b/;
+/** A shell word, quoted or bare. */
+const ARG = String.raw`("[^"]+"|'[^']+'|[^\s;&|<>()"']+)`;
+/** A shell write's target: a redirect (2>&1 and other descriptor redirects are not) or tee's file. */
+const TARGET = new RegExp(String.raw`(?:(?<![<>&\d])>>?|\btee\s+(?:-a\s+)?)\s*` + ARG, "g");
+/** An in-place edit or an inline script that opens a file to write: the command writes every test file it names. */
+const EDITS = /\b(?:sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i|\bopen\([^)]*,\s*['"][wa+]|\.write_text\(|\bwriteFileSync\(/;
+/** Output captures, which a test path never names. */
+const CAPTURE = /\.(log|out|txt)$/i;
+/** Claude Code's notice for a Bash run in the background: its id and the file its output goes to. */
+const BACKGROUND = /background (?:with ID: |\(ID: )([\w-]+)[\s\S]*?Output is being written to: (\S+?)\.?(?:\s|$)/;
 
 const str = (c: unknown): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (typeof b?.text === "string" ? b.text : typeof b === "string" ? b : JSON.stringify(b))).join("\n") : c == null ? "" : JSON.stringify(c));
 
@@ -116,6 +127,34 @@ function loadedMarkers(pm: PackMarkers, r: Read, session: string | null): string
 }
 
 const bashUses = (r: Read) => r.uses.filter((u) => u.name === "Bash" && typeof u.input?.command === "string");
+/** The test files Bash commands write by the shell's own forms, each relative path read from the cd commands before it
+ *  in the same command. */
+function bashTestWrites(r: Read): Array<{ at: number; path: string }> {
+  const out: Array<{ at: number; path: string }> = [];
+  for (const b of bashUses(r)) {
+    const c = b.input!.command as string;
+    const cds = [...c.matchAll(new RegExp(String.raw`\bcd\s+` + ARG, "g"))];
+    const unq = (s: string) => s.replace(/^["']|["']$/g, "");
+    const resolve = (i: number, p: string) => cds.filter((m) => m.index! < i).map((m) => unq(m[1]!)).concat(unq(p)).reduce((dir, x) => (/^[/~]/.test(x) || !dir ? x : dir.replace(/\/+$/, "") + "/" + x), "");
+    const named = [...c.matchAll(TARGET)].map((m) => resolve(m.index!, m[1]!));
+    if (EDITS.test(c)) named.push(...[...c.matchAll(/[^\s'"`=(),;&|<>{}[\]]+\.[A-Za-z0-9]+(?![\w.])/g)].map((m) => resolve(m.index!, m[0])));
+    const path = named.find((p) => TEST_PATH.test(p) && !CAPTURE.test(p));
+    if (path) out.push({ at: b.at, path });
+  }
+  return out;
+}
+/** Each Bash run's result where the session saw it: a run sent to the background is seen where its output is read (a
+ *  Read of its output file, TaskOutput or BashOutput naming its id, or its task notification), never at its launch. */
+function bashRuns(r: Read): Array<{ at: number; ok: boolean; result: string }> {
+  return bashUses(r).flatMap((b) => {
+    const bg = BACKGROUND.exec(b.result);
+    if (!bg) return [{ at: b.at, ok: b.ok, result: b.result }];
+    const [, id, file] = bg;
+    const reads = r.uses.filter((u) => u.at > b.at && ((u.name === "Read" && u.input?.file_path === file) || ((u.name === "TaskOutput" || u.name === "BashOutput") && Object.values(u.input ?? {}).includes(id)))).map((u) => ({ at: u.at, ok: true, result: u.result }));
+    const notes = r.evs.filter((e) => e.at > b.at && e.kind === "context" && e.text.includes("<task-notification>") && e.text.includes(id!)).map((e) => ({ at: e.at, ok: true, result: e.text }));
+    return [...reads, ...notes];
+  });
+}
 const writes = (r: Read) => r.uses.filter((u) => WRITE_TOOLS.has(u.name!) && typeof (u.input?.file_path ?? u.input?.notebook_path) === "string").map((u) => ({ at: u.at, path: String(u.input!.file_path ?? u.input!.notebook_path), ok: u.ok }));
 /** Every todo list a session opened: each TodoWrite call's items, and its TaskCreate subjects in order. */
 function todoLists(r: Read): Array<{ at: number; items: string[] }> {
@@ -124,6 +163,9 @@ function todoLists(r: Read): Array<{ at: number; items: string[] }> {
   if (tasks.length) lists.push({ at: tasks[0]!.at, items: tasks.map((u) => String(u.input!.subject)) });
   return lists;
 }
+
+/** GSD's quick and debug planning dirs from markers.json, each ending in a slash; a path holding one is a planning file. */
+export const planningDirs = (m: Markers = readMarkers()): string[] => [m.packs.gsd!.strings.quick_dir!, m.packs.gsd!.strings.debug_dir!.replace(/\/?$/, "/")];
 
 /** Each arm's procedure markers (section 8). entry is the session's entry. */
 function procedureMarkers(arm: H2hArm, entry: Entry, m: Markers, r: Read, files: string[]): string[] {
@@ -150,16 +192,16 @@ function procedureMarkers(arm: H2hArm, entry: Entry, m: Markers, r: Read, files:
       const plan = w.find((x) => /(^|\/)tasks\/plan\.md$/.test(x.path));
       return spec && plan ? ["spec:" + spec.path, "plan:" + plan.path] : [];
     }
-    const test = w.find((x) => TEST_PATH.test(x.path));
+    const test = [...w.filter((x) => TEST_PATH.test(x.path)), ...bashTestWrites(r)].sort((a, b) => a.at - b.at)[0];
     const source = w.find((x) => !TEST_PATH.test(x.path) && !/\.(md|txt|json|ya?ml|toml|lock)$/i.test(x.path));
     if (!test || !source || test.at > source.at) return [];
-    const failed = bashUses(r).find((b) => b.at > test.at && b.at < source.at && (b.result !== "" && (!b.ok || FAILING.test(b.result))));
+    const failed = bashRuns(r).find((b) => b.at >= test.at && b.at < source.at && (b.result !== "" && (!b.ok || FAILING.test(b.result))));
     return failed ? ["test-first:" + test.path, "failing-run"] : [];
   }
   if (arm === "gsd") {
     const g = pk.gsd!.strings;
     const tool = bashUses(r).some((b) => b.input!.command.includes(g.run!) || b.input!.command.includes(g.tools!));
-    const dirs = [g.quick_dir!, g.debug_dir!.replace(/\/?$/, "/")];
+    const dirs = planningDirs(m);
     const wrote = [...writes(r).map((x) => x.path), ...files, ...bashUses(r).filter((b) => /(>|\bmkdir\b|\btee\b|\bcp\b|\bmv\b|\btouch\b)/.test(b.input!.command)).map((b) => b.input!.command)].find((p) => dirs.some((d) => p.includes(d)));
     return tool && wrote ? ["gsd-tools", "planning:" + wrote.slice(0, 120)] : [];
   }

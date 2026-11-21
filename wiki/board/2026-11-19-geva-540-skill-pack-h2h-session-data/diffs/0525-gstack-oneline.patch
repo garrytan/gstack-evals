@@ -1,0 +1,42 @@
+diff --git a/pkg/cli/copilot_agent_logs.go b/pkg/cli/copilot_agent_logs.go
+index 0bd39af..f31be76 100644
+--- a/pkg/cli/copilot_agent_logs.go
++++ b/pkg/cli/copilot_agent_logs.go
+@@ -11,10 +11,12 @@ var (
+ 	agentTurnPattern     = regexp.MustCompile(`(?i)task.*iteration|agent.*turn|step.*\d+`)
+ 	agentToolCallPattern = regexp.MustCompile(`(?i)tool.*call|executing.*tool|calling.*(\w+)`)
+ 	toolNamePatterns     = []*regexp.Regexp{
+-		regexp.MustCompile(`(?i)tool[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)calling[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)executing[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)using[:\s]+tool[:\s]+([a-zA-Z0-9_-]+)`),
++		// Require an explicit "<keyword>:" delimiter so natural-language prose
++		// (e.g. "the agent calls a tool to ...") is not mistaken for a tool call.
++		regexp.MustCompile(`(?i)\btool\s+call:\s*([a-zA-Z0-9_-]+)`),
++		regexp.MustCompile(`(?i)\btool:\s*([a-zA-Z0-9_-]+)`),
++		regexp.MustCompile(`(?i)\bcalling:\s*([a-zA-Z0-9_-]+)`),
++		regexp.MustCompile(`(?i)\bexecuting:\s*([a-zA-Z0-9_-]+)`),
+ 	}
+ )
+ 
+diff --git a/pkg/cli/copilot_agent_test.go b/pkg/cli/copilot_agent_test.go
+index 2829182..1dd1638 100644
+--- a/pkg/cli/copilot_agent_test.go
++++ b/pkg/cli/copilot_agent_test.go
+@@ -226,6 +226,16 @@ func TestExtractToolName(t *testing.T) {
+ 			line:     "Using tool: read_operation",
+ 			expected: "read_operation",
+ 		},
++		{
++			name:     "extracts from 'tool call:' pattern",
++			line:     "Tool call: github_search",
++			expected: "github_search",
++		},
++		{
++			name:     "ignores natural language prose",
++			line:     "The agent calls a tool to launch the server since executing the command for tool calls is needed",
++			expected: "",
++		},
+ 		{
+ 			name:     "returns empty for no match",
+ 			line:     "Just a regular log line",

@@ -1,0 +1,141 @@
+diff --git a/internal/plugins/ai/codex/codex.go b/internal/plugins/ai/codex/codex.go
+index b1b531f..215c502 100644
+--- a/internal/plugins/ai/codex/codex.go
++++ b/internal/plugins/ai/codex/codex.go
+@@ -227,12 +227,15 @@ func (c *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, o
+ 	var (
+ 		builder       strings.Builder
+ 		completedResp *responses.Response
++		outputItems   []responses.ResponseOutputItemUnion
+ 	)
+ 	for stream.Next() {
+ 		event := stream.Current()
+ 		switch event.Type {
+ 		case string(constant.ResponseOutputTextDelta("").Default()):
+ 			builder.WriteString(event.AsResponseOutputTextDelta().Delta)
++		case string(constant.ResponseOutputItemDone("").Default()):
++			outputItems = append(outputItems, event.AsResponseOutputItemDone().Item)
+ 		case "response.completed":
+ 			resp := event.AsResponseCompleted().Response
+ 			completedResp = &resp
+@@ -242,8 +245,20 @@ func (c *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, o
+ 	if err := c.mapRequestError(stream.Err()); err != nil {
+ 		return "", err
+ 	}
++
++	// The Codex backend (with store=false) may send a response.completed event
++	// whose output array is empty; the actual content is only delivered via
++	// output_item.done and output_text.delta events. Reconstruct from those.
++	if completedResp == nil && len(outputItems) > 0 {
++		completedResp = &responses.Response{}
++	}
+ 	if completedResp != nil {
+-		return c.ExtractText(completedResp), nil
++		if len(completedResp.Output) == 0 {
++			completedResp.Output = outputItems
++		}
++		if text := c.ExtractText(completedResp); text != "" {
++			return text, nil
++		}
+ 	}
+ 
+ 	return builder.String(), nil
+diff --git a/internal/plugins/ai/codex/codex_test.go b/internal/plugins/ai/codex/codex_test.go
+index 5989956..b1587e7 100644
+--- a/internal/plugins/ai/codex/codex_test.go
++++ b/internal/plugins/ai/codex/codex_test.go
+@@ -569,3 +569,94 @@ func marshalJSON(t *testing.T, value any) string {
+ 	}
+ 	return string(encoded)
+ }
++
++func TestSendFallsBackToDeltasWhenCompletedOutputIsEmpty(t *testing.T) {
++	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		if r.URL.Path != "/responses" {
++			http.NotFound(w, r)
++			return
++		}
++		w.Header().Set("Content-Type", "text/event-stream")
++		flusher, ok := w.(http.Flusher)
++		if !ok {
++			t.Fatalf("response writer does not implement http.Flusher")
++		}
++		fmt.Fprintf(w, "data: %s\n\n", marshalJSON(t, map[string]any{
++			"type":  string(constant.ResponseOutputTextDelta("").Default()),
++			"delta": "hello",
++		}))
++		fmt.Fprintf(w, "data: %s\n\n", marshalJSON(t, map[string]any{
++			"type":  string(constant.ResponseOutputTextDelta("").Default()),
++			"delta": " world",
++		}))
++		// Codex backend (store=false) sends a completed event with empty output.
++		fmt.Fprintf(w, "data: %s\n\n", marshalJSON(t, map[string]any{
++			"type":     "response.completed",
++			"response": map[string]any{"output": []any{}},
++		}))
++		flusher.Flush()
++		fmt.Fprint(w, "data: [DONE]\n\n")
++	}))
++	defer apiServer.Close()
++
++	client := newConfiguredTestClient(t, apiServer.URL, "acct_empty", testJWT("acct_empty", time.Now().Add(time.Hour)))
++
++	message, err := client.Send(context.Background(), []*chat.ChatCompletionMessage{
++		{Role: chat.ChatMessageRoleUser, Content: "Hello"},
++	}, &domain.ChatOptions{Model: "gpt-5.4"})
++	if err != nil {
++		t.Fatalf("Send() error = %v", err)
++	}
++	if message != "hello world" {
++		t.Fatalf("Send() = %q, want %q", message, "hello world")
++	}
++}
++
++func TestSendUsesOutputItemsWhenCompletedOutputIsEmpty(t *testing.T) {
++	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		if r.URL.Path != "/responses" {
++			http.NotFound(w, r)
++			return
++		}
++		w.Header().Set("Content-Type", "text/event-stream")
++		flusher, ok := w.(http.Flusher)
++		if !ok {
++			t.Fatalf("response writer does not implement http.Flusher")
++		}
++		fmt.Fprintf(w, "data: %s\n\n", marshalJSON(t, map[string]any{
++			"type":         "response.output_item.done",
++			"output_index": 0,
++			"item": map[string]any{
++				"type": "message",
++				"content": []any{
++					map[string]any{
++						"type": "output_text",
++						"text": "hello from item",
++						"annotations": []any{
++							map[string]any{"type": "url_citation", "title": "Example", "url": "https://example.com"},
++						},
++					},
++				},
++			},
++		}))
++		fmt.Fprintf(w, "data: %s\n\n", marshalJSON(t, map[string]any{
++			"type":     "response.completed",
++			"response": map[string]any{"output": []any{}},
++		}))
++		flusher.Flush()
++		fmt.Fprint(w, "data: [DONE]\n\n")
++	}))
++	defer apiServer.Close()
++
++	client := newConfiguredTestClient(t, apiServer.URL, "acct_items", testJWT("acct_items", time.Now().Add(time.Hour)))
++
++	message, err := client.Send(context.Background(), []*chat.ChatCompletionMessage{
++		{Role: chat.ChatMessageRoleUser, Content: "Hello"},
++	}, &domain.ChatOptions{Model: "gpt-5.4"})
++	if err != nil {
++		t.Fatalf("Send() error = %v", err)
++	}
++	if !strings.Contains(message, "hello from item") || !strings.Contains(message, "[Example](https://example.com)") {
++		t.Fatalf("Send() = %q, want item text with sources", message)
++	}
++}

@@ -1,0 +1,137 @@
+diff --git a/aws/resources/backup_vault.go b/aws/resources/backup_vault.go
+index 02410ec..dd1ca8e 100644
+--- a/aws/resources/backup_vault.go
++++ b/aws/resources/backup_vault.go
+@@ -18,6 +18,7 @@ type BackupVaultAPI interface {
+ 	DeleteRecoveryPoint(ctx context.Context, params *backup.DeleteRecoveryPointInput, optFns ...func(*backup.Options)) (*backup.DeleteRecoveryPointOutput, error)
+ 	ListBackupVaults(ctx context.Context, params *backup.ListBackupVaultsInput, optFns ...func(*backup.Options)) (*backup.ListBackupVaultsOutput, error)
+ 	ListRecoveryPointsByBackupVault(ctx context.Context, params *backup.ListRecoveryPointsByBackupVaultInput, optFns ...func(*backup.Options)) (*backup.ListRecoveryPointsByBackupVaultOutput, error)
++	ListTags(ctx context.Context, params *backup.ListTagsInput, optFns ...func(*backup.Options)) (*backup.ListTagsOutput, error)
+ }
+ 
+ // NewBackupVault creates a new BackupVault resource using the generic resource pattern.
+@@ -48,9 +49,17 @@ func listBackupVaults(ctx context.Context, client BackupVaultAPI, scope resource
+ 		}
+ 
+ 		for _, backupVault := range page.BackupVaultList {
++			tags, err := getBackupVaultTags(ctx, client, backupVault.BackupVaultArn)
++			if err != nil {
++				logging.Debugf("Error getting tags for backup vault %s: %s", aws.ToString(backupVault.BackupVaultName), err)
++				// Continue without tags rather than failing entirely
++				tags = nil
++			}
++
+ 			if cfg.ShouldInclude(config.ResourceValue{
+ 				Name: backupVault.BackupVaultName,
+ 				Time: backupVault.CreationDate,
++				Tags: tags,
+ 			}) {
+ 				names = append(names, backupVault.BackupVaultName)
+ 			}
+@@ -60,6 +69,28 @@ func listBackupVaults(ctx context.Context, client BackupVaultAPI, scope resource
+ 	return names, nil
+ }
+ 
++// getBackupVaultTags retrieves all tags for a backup vault.
++func getBackupVaultTags(ctx context.Context, client BackupVaultAPI, vaultArn *string) (map[string]string, error) {
++	if vaultArn == nil {
++		return nil, nil
++	}
++
++	tags := make(map[string]string)
++	paginator := backup.NewListTagsPaginator(client, &backup.ListTagsInput{
++		ResourceArn: vaultArn,
++	})
++	for paginator.HasMorePages() {
++		page, err := paginator.NextPage(ctx)
++		if err != nil {
++			return nil, err
++		}
++		for k, v := range page.Tags {
++			tags[k] = v
++		}
++	}
++	return tags, nil
++}
++
+ // nukeRecoveryPoints deletes all recovery points in a backup vault.
+ func nukeRecoveryPoints(ctx context.Context, client BackupVaultAPI, name *string) error {
+ 	vaultName := aws.ToString(name)
+diff --git a/aws/resources/backup_vault_test.go b/aws/resources/backup_vault_test.go
+index 0d59726..a10b5e5 100644
+--- a/aws/resources/backup_vault_test.go
++++ b/aws/resources/backup_vault_test.go
+@@ -24,6 +24,13 @@ type mockBackupVaultClient struct {
+ 	ListRecoveryPointsPages  []backup.ListRecoveryPointsByBackupVaultOutput
+ 	listRecoveryPointsIndex  int
+ 	DeleteRecoveryPointCount atomic.Int32
++
++	// ListTags support, keyed by vault ARN
++	Tags map[string]map[string]string
++}
++
++func (m *mockBackupVaultClient) ListTags(ctx context.Context, params *backup.ListTagsInput, optFns ...func(*backup.Options)) (*backup.ListTagsOutput, error) {
++	return &backup.ListTagsOutput{Tags: m.Tags[aws.ToString(params.ResourceArn)]}, nil
+ }
+ 
+ func (m *mockBackupVaultClient) DeleteBackupVault(ctx context.Context, params *backup.DeleteBackupVaultInput, optFns ...func(*backup.Options)) (*backup.DeleteBackupVaultOutput, error) {
+@@ -84,19 +91,44 @@ func TestListBackupVaults(t *testing.T) {
+ 				}},
+ 			expected: []string{},
+ 		},
++		"tagExclusionFilter": {
++			configObj: config.ResourceType{
++				ExcludeRule: config.FilterRule{
++					Tags: map[string]config.Expression{
++						"env": {RE: *regexp.MustCompile("prod")},
++					},
++				}},
++			expected: []string{testName1},
++		},
++		"tagInclusionFilter": {
++			configObj: config.ResourceType{
++				IncludeRule: config.FilterRule{
++					Tags: map[string]config.Expression{
++						"env": {RE: *regexp.MustCompile("dev")},
++					},
++				}},
++			expected: []string{testName1},
++		},
+ 	}
+ 
++	arn1 := "arn:aws:backup:us-east-1:123456789012:backup-vault:" + testName1
++	arn2 := "arn:aws:backup:us-east-1:123456789012:backup-vault:" + testName2
++
+ 	for name, tc := range tests {
+ 		t.Run(name, func(t *testing.T) {
+ 			mock := &mockBackupVaultClient{
+ 				ListBackupVaultsPages: []backup.ListBackupVaultsOutput{
+ 					{
+ 						BackupVaultList: []types.BackupVaultListMember{
+-							{BackupVaultName: aws.String(testName1), CreationDate: aws.Time(now)},
+-							{BackupVaultName: aws.String(testName2), CreationDate: aws.Time(now.Add(1))},
++							{BackupVaultName: aws.String(testName1), BackupVaultArn: aws.String(arn1), CreationDate: aws.Time(now)},
++							{BackupVaultName: aws.String(testName2), BackupVaultArn: aws.String(arn2), CreationDate: aws.Time(now.Add(1))},
+ 						},
+ 					},
+ 				},
++				Tags: map[string]map[string]string{
++					arn1: {"env": "dev"},
++					arn2: {"env": "prod"},
++				},
+ 			}
+ 
+ 			names, err := listBackupVaults(context.Background(), mock, resource.Scope{}, tc.configObj)
+diff --git a/docs/supported-resources.md b/docs/supported-resources.md
+index 6b0cd5e..4c9a4ec 100644
+--- a/docs/supported-resources.md
++++ b/docs/supported-resources.md
+@@ -151,7 +151,7 @@ This table shows which filtering features are supported for each resource type i
+ | api-gateway-v2 | APIGatewayV2 | ✓ | ✓ | ✓ | ✓ |
+ | app-runner-service | AppRunnerService | ✓ | ✓ | | ✓ |
+ | asg | AutoScalingGroup | ✓ | ✓ | ✓ | ✓ |
+-| backup-vault | BackupVault | ✓ | ✓ | | ✓ |
++| backup-vault | BackupVault | ✓ | ✓ | ✓ | ✓ |
+ | cloudformation-stack | CloudFormationStack | ✓ | ✓ | ✓ | ✓ |
+ | cloudfront-distribution | CloudFrontDistribution | ✓ | | | ✓ |
+ | cloudmap-namespace | CloudMapNamespace | ✓ | ✓ | ✓ | ✓ |

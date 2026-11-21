@@ -1,0 +1,72 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+index d9e438d..07aff14 100644
+--- a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -1048,12 +1048,8 @@ ClassUtil.name(name), ((AnnotatedParameter) m).getIndex());
+         if (ClassUtil.isProxyType(type)) {
+             throw new IllegalArgumentException("Cannot deserialize Proxy class "+type.getName()+" as a Bean");
+         }
+-        // also: can't deserialize some local classes: static are ok; in-method not;
+-        // other non-static inner classes are ok
+-        typeStr = ClassUtil.isLocalType(type, true);
+-        if (typeStr != null) {
+-            throw new IllegalArgumentException("Cannot deserialize Class "+type.getName()+" (of type "+typeStr+") as a Bean");
+-        }
++        // Local/anonymous classes are allowed: they cannot be instantiated, but
++        // existing instances may still be updated (readerForUpdating)
+         return true;
+     }
+ 
+diff --git a/src/test/java/tools/jackson/databind/deser/merge/UpdateValueTest.java b/src/test/java/tools/jackson/databind/deser/merge/UpdateValueTest.java
+index 79b0a2f..e52f441 100644
+--- a/src/test/java/tools/jackson/databind/deser/merge/UpdateValueTest.java
++++ b/src/test/java/tools/jackson/databind/deser/merge/UpdateValueTest.java
+@@ -9,6 +9,8 @@ import tools.jackson.databind.*;
+ 
+ import static org.junit.jupiter.api.Assertions.assertEquals;
+ import static org.junit.jupiter.api.Assertions.assertNotNull;
++import static org.junit.jupiter.api.Assertions.assertSame;
++import static org.junit.jupiter.api.Assertions.assertThrows;
+ 
+ import static tools.jackson.databind.testutil.DatabindTestUtil.a2q;
+ import static tools.jackson.databind.testutil.DatabindTestUtil.newJsonMapper;
+@@ -67,4 +69,39 @@ public class UpdateValueTest
+         Bean result = r.readValue(a2q("{'a':'x'}"));
+         assertNotNull(result);
+     }
++
++    static class ValueHolder {
++        public int value;
++    }
++
++    @Test
++    public void testUpdatingLocalClassInstance() throws Exception
++    {
++        class Local {
++            public int value;
++        }
++        Local local = new Local();
++        Local result = MAPPER.readerForUpdating(local).readValue(a2q("{'value':2}"));
++        assertSame(local, result);
++        assertEquals(2, local.value);
++    }
++
++    @Test
++    public void testUpdatingAnonymousClassInstance() throws Exception
++    {
++        ValueHolder anon = new ValueHolder() { };
++        ValueHolder result = MAPPER.readerForUpdating(anon).readValue(a2q("{'value':3}"));
++        assertSame(anon, result);
++        assertEquals(3, anon.value);
++    }
++
++    @Test
++    public void testConstructingLocalClassStillFails() throws Exception
++    {
++        class Local {
++            public int value;
++        }
++        assertThrows(DatabindException.class,
++                () -> MAPPER.readValue(a2q("{'value':2}"), Local.class));
++    }
+ }

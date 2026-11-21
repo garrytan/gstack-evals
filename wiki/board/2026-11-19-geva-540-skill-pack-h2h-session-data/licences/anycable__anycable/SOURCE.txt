@@ -1,0 +1,3 @@
+https://github.com/anycable/anycable at 53dff5a3faec247ea3c27b16889c022a5ba74ecb
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: MIT-LICENSE

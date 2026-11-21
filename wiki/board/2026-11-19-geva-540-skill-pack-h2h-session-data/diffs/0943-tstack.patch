@@ -1,0 +1,188 @@
+diff --git a/openapi3filter/issue_array_items_nil_test.go b/openapi3filter/issue_array_items_nil_test.go
+new file mode 100644
+index 0000000..ded5adf
+--- /dev/null
++++ b/openapi3filter/issue_array_items_nil_test.go
+@@ -0,0 +1,101 @@
++package openapi3filter_test
++
++import (
++	"bytes"
++	"io"
++	"mime/multipart"
++	"net/http"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++
++	"github.com/getkin/kin-openapi/openapi3"
++	"github.com/getkin/kin-openapi/openapi3filter"
++	"github.com/getkin/kin-openapi/routers/gorillamux"
++)
++
++func TestArrayWithoutItemsDoesNotPanic(t *testing.T) {
++	bodySpec := func(ct string) string {
++		return `
++openapi: 3.1.0
++info: {title: t, version: 1.0.0}
++paths:
++  /f:
++    post:
++      requestBody:
++        required: true
++        content:
++          ` + ct + `:
++            schema:
++              type: object
++              properties:
++                tags: {type: array}
++      responses:
++        '200': {description: ok}
++`
++	}
++	const headerSpec = `
++openapi: 3.1.0
++info: {title: t, version: 1.0.0}
++paths:
++  /f:
++    get:
++      responses:
++        '200':
++          description: ok
++          headers:
++            X-Tags:
++              schema: {type: array}
++`
++	var mpBody bytes.Buffer
++	mw := multipart.NewWriter(&mpBody)
++	require.NoError(t, mw.WriteField("tags", "a"))
++	require.NoError(t, mw.Close())
++
++	tests := []struct {
++		name, spec, method, ct string
++		body                   io.Reader
++		response               bool
++	}{
++		{"urlencoded", bodySpec("application/x-www-form-urlencoded"), http.MethodPost, "application/x-www-form-urlencoded", strings.NewReader("tags=a"), false},
++		{"multipart", bodySpec("multipart/form-data"), http.MethodPost, mw.FormDataContentType(), &mpBody, false},
++		{"response header", headerSpec, http.MethodGet, "", nil, true},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			loader := openapi3.NewLoader()
++			doc, err := loader.LoadFromData([]byte(tt.spec))
++			require.NoError(t, err)
++			require.NoError(t, doc.Validate(loader.Context))
++			router, err := gorillamux.NewRouter(doc)
++			require.NoError(t, err)
++
++			req, err := http.NewRequest(tt.method, "/f", tt.body)
++			require.NoError(t, err)
++			if tt.ct != "" {
++				req.Header.Set("Content-Type", tt.ct)
++			}
++			route, pathParams, err := router.FindRoute(req)
++			require.NoError(t, err)
++			reqInput := &openapi3filter.RequestValidationInput{
++				Request: req, PathParams: pathParams, Route: route,
++				Options: &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc},
++			}
++
++			require.NotPanics(t, func() {
++				if tt.response {
++					err = openapi3filter.ValidateResponse(loader.Context, &openapi3filter.ResponseValidationInput{
++						RequestValidationInput: reqInput,
++						Status:                 http.StatusOK,
++						Header:                 http.Header{"X-Tags": []string{"a,b"}},
++						Body:                   io.NopCloser(strings.NewReader("")),
++					})
++				} else {
++					err = openapi3filter.ValidateRequest(loader.Context, reqInput)
++				}
++			})
++			require.ErrorContains(t, err, "array items schema is required")
++		})
++	}
++}
+diff --git a/openapi3filter/req_resp_decoder.go b/openapi3filter/req_resp_decoder.go
+index 9841747..1c74afa 100644
+--- a/openapi3filter/req_resp_decoder.go
++++ b/openapi3filter/req_resp_decoder.go
+@@ -559,8 +559,12 @@ func (d *urlValuesDecoder) DecodeArray(param string, sm *openapi3.SerializationM
+ func (d *urlValuesDecoder) parseArray(raw []string, schemaRef *openapi3.SchemaRef) ([]any, error) {
+ 	var value []any
+ 
++	items, err := arrayItemsSchema(schemaRef)
++	if err != nil {
++		return nil, err
++	}
+ 	for i, v := range raw {
+-		item, err := d.parseValue(v, schemaRef.Value.Items)
++		item, err := d.parseValue(v, items)
+ 		if err != nil {
+ 			if v, ok := err.(*ParseError); ok {
+ 				return nil, &ParseError{path: []any{i}, Cause: v}
+@@ -993,6 +997,9 @@ func buildResObj(params map[string]any, parentKeys []string, key string, schema
+ 
+ 	switch {
+ 	case schema.Value.Type.Is("array"):
++		if _, err := arrayItemsSchema(schema); err != nil {
++			return nil, err
++		}
+ 		paramArr, ok := deepGet(params, mapKeys...)
+ 		if !ok {
+ 			return nil, nil
+@@ -1124,9 +1131,13 @@ func pathFromKeys(kk []string) []any {
+ // Every item is parsed as a primitive value.
+ // The function returns an error when an error happened while parse array's items.
+ func parseArray(raw []string, schemaRef *openapi3.SchemaRef) ([]any, error) {
++	items, err := arrayItemsSchema(schemaRef)
++	if err != nil {
++		return nil, err
++	}
+ 	var value []any
+ 	for i, v := range raw {
+-		item, err := parsePrimitive(v, schemaRef.Value.Items)
++		item, err := parsePrimitive(v, items)
+ 		if err != nil {
+ 			if v, ok := err.(*ParseError); ok {
+ 				return nil, &ParseError{path: []any{i}, Cause: v}
+@@ -1144,6 +1155,16 @@ func parseArray(raw []string, schemaRef *openapi3.SchemaRef) ([]any, error) {
+ 	return value, nil
+ }
+ 
++// arrayItemsSchema returns the items schema of an array schema.
++// OpenAPI 3.1 allows array schemas without items, which cannot be decoded
++// from raw strings, so an error is returned instead of dereferencing nil.
++func arrayItemsSchema(schemaRef *openapi3.SchemaRef) (*openapi3.SchemaRef, error) {
++	if schemaRef == nil || schemaRef.Value == nil || schemaRef.Value.Items == nil || schemaRef.Value.Items.Value == nil {
++		return nil, errors.New("array items schema is required for decoding")
++	}
++	return schemaRef.Value.Items, nil
++}
++
+ // parsePrimitive returns a value that is created by parsing a source string to a primitive type
+ // that is specified by a schema. The function returns nil when the source string is empty and the type is not "string".
+ // The function panics when a schema has a non-primitive type.
+@@ -1418,6 +1439,9 @@ func UrlencodedBodyDecoder(body io.Reader, header http.Header, schema *openapi3.
+ 		case propType.Is("object"):
+ 			return nil, fmt.Errorf("unsupported schema of request body's property %q", propName)
+ 		case propType.Is("array"):
++			if propSchema.Value.Items == nil || propSchema.Value.Items.Value == nil {
++				return nil, fmt.Errorf("unsupported schema of request body's property %q: array items schema is required", propName)
++			}
+ 			items := propSchema.Value.Items.Value
+ 			if !(items.Type.Is("string") || items.Type.Is("integer") || items.Type.Is("number") || items.Type.Is("boolean")) {
+ 				return nil, fmt.Errorf("unsupported schema of request body's property %q", propName)
+@@ -1561,7 +1585,9 @@ func MultipartBodyDecoder(body io.Reader, header http.Header, schema *openapi3.S
+ 				}
+ 			}
+ 			if valueSchema.Value.Type.Is("array") {
+-				valueSchema = valueSchema.Value.Items
++				if valueSchema, err = arrayItemsSchema(valueSchema); err != nil {
++					return nil, &ParseError{path: []any{name}, Kind: KindOther, Cause: err}
++				}
+ 			}
+ 		}
+ 

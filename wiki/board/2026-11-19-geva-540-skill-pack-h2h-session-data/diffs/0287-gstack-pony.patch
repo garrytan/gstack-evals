@@ -1,0 +1,107 @@
+diff --git a/packages/core/src/utils/EntityComparator.ts b/packages/core/src/utils/EntityComparator.ts
+index 7b81203..9754a3c 100644
+--- a/packages/core/src/utils/EntityComparator.ts
++++ b/packages/core/src/utils/EntityComparator.ts
+@@ -634,21 +634,26 @@ export class EntityComparator {
+     if (object) {
+       ret += `${padding}if (${nullCond}) ret${dataKey} = null;\n`;
+     } else {
+-      ret += `${padding}if (${nullCond}) {\n`;
+-      ret +=
++      // nested inline embeddables have no column of their own, so null out their leaf columns instead
++      const nullChildren = (parent: EntityProperty<T>): string[] =>
+         meta.props
+           .filter(
+             p =>
+-              p.embedded?.[0] === prop.name &&
++              p.embedded?.[0] === parent.name &&
+               // object for JSON embeddable
+               (p.object || p.persist !== false),
+           )
+-          .map(childProp => {
++          .flatMap(childProp => {
++            if (childProp.kind === ReferenceKind.EMBEDDED && !childProp.object && !meta.embeddable) {
++              return nullChildren(childProp);
++            }
++
+             const childDataKey =
+               meta.embeddable || prop.object ? dataKey + this.wrap(childProp.embedded![1]) : this.wrap(childProp.name);
+-            return `${padding}  ret${childDataKey} = null;`;
+-          })
+-          .join('\n') + `\n`;
++            return [`${padding}  ret${childDataKey} = null;`];
++          });
++      ret += `${padding}if (${nullCond}) {\n`;
++      ret += nullChildren(prop).join('\n') + `\n`;
+       ret += `${padding}}\n`;
+     }
+ 
+diff --git a/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap b/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap
+index 6001207..63b03c7 100644
+--- a/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap
++++ b/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap
+@@ -602,7 +602,8 @@ exports[`polymorphic embeddables in sqlite > diffing 2`] = `
+     ret.pet_type = null;
+     ret.pet_name = null;
+     ret.pet_canMeow = null;
+-    ret.pet_food = null;
++    ret.pet_food_cats = null;
++    ret.pet_food_mice = null;
+   }
+   if (entity.pet != null) {
+     if (typeof entity.pet.canBark !== 'undefined') ret.pet_canBark = clone(entity.pet.canBark);
+diff --git a/tests/issues/GHnested-embeddable-null.test.ts b/tests/issues/GHnested-embeddable-null.test.ts
+new file mode 100644
+index 0000000..e460f0b
+--- /dev/null
++++ b/tests/issues/GHnested-embeddable-null.test.ts
+@@ -0,0 +1,49 @@
++import { MikroORM } from '@mikro-orm/sqlite';
++import { Embeddable, Embedded, Entity, PrimaryKey, Property, ReflectMetadataProvider } from '@mikro-orm/decorators/legacy';
++
++@Embeddable()
++class Geo {
++  @Property({ nullable: true })
++  lat?: number;
++}
++
++@Embeddable()
++class Address {
++  @Property({ nullable: true })
++  city?: string;
++
++  @Embedded(() => Geo, { nullable: true })
++  geo?: Geo | null;
++}
++
++@Entity()
++class User {
++  @PrimaryKey()
++  id!: number;
++
++  @Embedded(() => Address, { nullable: true })
++  address?: Address | null;
++}
++
++let orm: MikroORM;
++
++beforeAll(async () => {
++  orm = await MikroORM.init({ entities: [User], dbName: ':memory:', metadataProvider: ReflectMetadataProvider });
++  await orm.schema.create();
++});
++
++afterAll(() => orm.close(true));
++
++test('nested inline embeddable with null parent', async () => {
++  const u = orm.em.create(User, { address: null });
++  await orm.em.flush();
++  u.address = { city: 'x', geo: { lat: 1 } } as Address;
++  await orm.em.flush();
++  u.address = null;
++  await orm.em.flush();
++  const row = await orm.em.getConnection().execute('select * from user');
++  expect(row[0]).toMatchObject({ address_city: null, address_geo_lat: null });
++  orm.em.clear();
++  const u2 = await orm.em.findOneOrFail(User, u.id);
++  expect(u2.address).toBeNull();
++});

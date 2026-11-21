@@ -1,0 +1,3 @@
+https://github.com/github/gh-aw at eeace1605d4c9422bb5ebd7951e95ef97eeb7e80
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

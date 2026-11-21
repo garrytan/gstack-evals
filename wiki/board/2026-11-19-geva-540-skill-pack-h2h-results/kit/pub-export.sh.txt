@@ -1,0 +1,10 @@
+set -uo pipefail
+export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
+R=~/h2h/run/geva540-s2-7700a8f
+cd ~/h2h/repo && test "$(git rev-parse HEAD)" = "$(git rev-parse 7700a8ff)" && git diff --quiet && echo "repo 7700a8ff clean" || { echo "repo not clean at 7700a8ff"; exit 3; }
+rm -rf $R/pub && mkdir -p $R/pub/log
+for i in $(seq 0 15); do bun --no-env-file ~/kit/rs/pub-export.ts $i/16 > $R/pub/log/$i.out 2> $R/pub/log/$i.err & done
+wait
+fails=$(grep -L "done" $R/pub/log/*.out | wc -l)
+bun --no-env-file ~/kit/rs/pub-export.ts assemble > $R/pub/log/assemble.out 2>&1
+echo "EXIT shards_without_done=$fails assemble=$?" > $R/pub/log/EXIT

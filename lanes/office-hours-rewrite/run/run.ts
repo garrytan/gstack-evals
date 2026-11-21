@@ -24,8 +24,11 @@
 //   60 agent turns a reply, a 200,000-token window, cap stops, AskUserQuestion denied beside WebSearch and WebFetch, no
 //   GSTACK_SESSION_KIND, and the closing loop as nextUser. Skill arms get a fresh state root, copied out after; none
 //   gets none, and its tool calls are audited for gstack reads.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, posix } from "node:path";
+// - A Sol session runs in Codex CLI instead (HOSTS; pre-run change 2): solLaunch is dockerLaunch on the arm's Codex
+//   image with the Sol driver (run/codex.ts), its model calls through the lane's model tap (run/tap.ts) to the same
+//   proxy slot. run/codex.ts says what differs from the Claude Code arms.
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, posix } from "node:path";
 import { claudeCodeDriver, claudeCodeEnv, type ClaudeProvider, type NextUser } from "../../../src/adapters/claude-code/driver.ts";
 import type { ReasonCode } from "../../../src/errors/codes.ts";
 import { armNamespaces, slotModels, type HostRig } from "../../../src/skill-eval/cli/run-host.ts";
@@ -42,16 +45,21 @@ import { SYSTEM_PROMPT } from "../../office-hours-founder/frozen.ts";
 import { pinnedCall, type SimOutcome } from "../sim/founder.ts";
 import { pool, type Meter } from "../../product-value/meter.ts";
 import { pvOutcome } from "../../product-value/parse.ts";
-import { AGENT_TURNS_PER_REPLY, ALLOWANCE, MODEL_KEYS, SESSION_MINUTES, SIM_ALLOWANCE, type Pin } from "../frozen.ts";
-import type { ArmId, BlockParser, BriefKind, BriefMeta, ManifestEntry, ModelId, PriorSession } from "../types.ts";
+import { AGENT_TURNS_PER_REPLY, ALLOWANCE, CODEX, HOSTS, MODEL_KEYS, SESSION_MINUTES, SIM_ALLOWANCE, type Pin } from "../frozen.ts";
+import { BEARER_ENV, codexPinCommand, codexPinProblems, codexReads, codexTreeProblems, gapProblems, solDriver } from "./codex.ts";
+import type { RolloutGuard } from "./home-watch.ts";
+import { tapModels, tapOffPin, type OhrRig } from "./codex-rig.ts";
+import type { ArmId, BlockParser, BriefKind, BriefMeta, ManifestEntry, ModelId, PriorSession, SkillArm } from "../types.ts";
 import { capProblem, entryId, freezeManifest, loadBriefs, makeManifest, type LaunchName } from "./manifest.ts";
+import type { ManifestLook } from "./half.ts";
 import { armEnvProblems, containerPinCommand, containerPinProblems, containerRoot, isSkillArm, nullPinProblem, pinProblems, type Pins } from "./pins.ts";
 import { readRows, sessionRow, type RowLine } from "./rows.ts";
 import { priorProblem, seedPrior } from "./seed.ts";
-import { offPin } from "../pinned.ts";
+import { assistantModels, cliVersion, offPin, servedModel } from "../pinned.ts";
 import { attemptOutcome, closingLoop, firstMessage, safetyStop, sessionKindOf, settle, type AttemptRead, type Line, type Outcome } from "./session.ts";
 import type { PersonSheet, SimCall } from "../../../src/persona-sim/sim.ts";
 import { loadPerson } from "../sim/founder.ts";
+import { CLAUDE_SESSION, startOutput } from "../read/load.ts";
 
 export { copyReceipts, receiptsAfter };
 
@@ -126,6 +134,8 @@ export interface RunInput {
   entries?: readonly ManifestEntry[];
   /** The local ledger the arm item's leases sit on, where a crashed attempt's spend is read back; null reads none. */
   ledger?: string | null;
+  /** Stage 2's part (pre-run change 3): the half, or the second part after the interim read. */
+  look?: ManifestLook;
 }
 
 export type SimTurnFn = (o: { kind: BriefKind; sheet: PersonSheet; transcript: Line[]; call: SimCall }) => Promise<SimOutcome>;
@@ -163,8 +173,11 @@ export function priorOf(dir: string, meta: BriefMeta): PriorSession | null {
   return JSON.parse(readFileSync(path, "utf8")) as PriorSession;
 }
 
-/** The sandbox with each agent container probed once, just before it stops: the founder lane's probe, the arm env names and, on a skill arm, its pin check. */
-export function ohrProbed(sandbox: Sandbox, o: { docker: string; home: string; pin: Pin | null; root: string | null; onProbe: (p: { contained: string[] | null; pin: string[] | null }) => void }): Sandbox {
+/** The container step that prints Claude Code's own session files under HOME, where the /office-hours expansion A8 reads is kept (the SDK stream never carries it). */
+export const claudeSessionCommand = (home: string): string => "cat " + JSON.stringify(home) + "/.claude/projects/*/*.jsonl";
+
+/** The sandbox with each agent container probed once, just before it stops: the founder lane's probe, the arm env names and, on a skill arm, its pin check. bearer names the one key-shaped variable that carries the slot's session bearer (Sol's OPENAI_API_KEY). session, on a Claude Code container, is the host path its session files are copied to for A8; a failed read writes nothing, so A8 finds no copy. */
+export function ohrProbed(sandbox: Sandbox, o: { docker: string; home: string; pin: Pin | null; root: string | null; check?: { command: string; problems: (printed: string) => string[] }; bearer?: string; session?: string; onProbe: (p: { contained: string[] | null; pin: string[] | null }) => void }): Sandbox {
   return {
     ...sandbox,
     agent(task, opts) {
@@ -175,11 +188,17 @@ export function ohrProbed(sandbox: Sandbox, o: { docker: string; home: string; p
         stop() {
           if (!done) {
             done = true;
-            const p = probe(session, o.docker, [sandbox.workPath(opts.work, task, opts.root), o.home]);
+            const found = probe(session, o.docker, [sandbox.workPath(opts.work, task, opts.root), o.home]);
+            const p = found && o.bearer ? { ...found, keys: found.keys.filter((k) => k !== o.bearer) } : found;
             const names = session.exec("awk 'BEGIN { for (k in ENVIRON) print k }'", 30_000);
             const env = names.exitCode === 0 ? armEnvProblems(names.stdout.split("\n").map((s) => s.trim()).filter(Boolean)) : null;
-            const pinned = o.pin && o.root ? session.exec(containerPinCommand(o.root, o.pin), 60_000) : null;
-            o.onProbe({ contained: p && env ? [...departures(p), ...env.map((e) => "arm env: " + e)] : null, pin: !o.pin ? [] : pinned && pinned.exitCode === 0 ? containerPinProblems(pinned.stdout, o.pin) : null });
+            const pinned = o.check ? session.exec(o.check.command, 60_000) : o.pin && o.root ? session.exec(containerPinCommand(o.root, o.pin), 60_000) : null;
+            o.onProbe({ contained: p && env ? [...departures(p), ...env.map((e) => "arm env: " + e)] : null, pin: o.check ? (pinned && pinned.exitCode === 0 ? o.check.problems(pinned.stdout) : null) : !o.pin ? [] : pinned && pinned.exitCode === 0 ? containerPinProblems(pinned.stdout, o.pin) : null });
+            const kept = o.session ? session.exec(claudeSessionCommand(o.home), 60_000) : null;
+            if (o.session && kept?.exitCode === 0 && kept.stdout) {
+              mkdirSync(dirname(o.session), { recursive: true });
+              writeFileSync(o.session, kept.stdout);
+            }
           }
           session.stop();
         },
@@ -188,11 +207,67 @@ export function ohrProbed(sandbox: Sandbox, o: { docker: string; home: string; p
   };
 }
 
-/** One attempt on the Docker rig. */
+/**
+ * One Sol attempt (pre-run change 2): as dockerLaunch, on the arm's Codex image with the Sol driver (run/codex.ts), its
+ * calls through the model tap to the same proxy, lease and ledger items. The container's end check is the Codex binary
+ * and, on a skill arm, the rendered skill (codexPinCommand); the HOME check before the first exec joins the containment
+ * findings; the none arm's read audit adds codexReads over every rollout; and the off-pin models come from the tap.
+ */
+export const solLaunch: Launch = async (o) => {
+  const model = CODEX.model;
+  const codex = (o.rig as OhrRig).codex;
+  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], served_model: null, cli_version: null, micros: 0, rollout_flags: [], non_default_turns: [], rollout_unreadable: false };
+  if (!codex) return { ...none, termination: { kind: "infra", incident: "the rig has no Codex installs for a Sol session" } };
+  let binding: Awaited<ReturnType<HostRig["bind"]>>;
+  try {
+    binding = await o.rig.bind({ cell: { run_id: o.runId, arm: o.entry.arm, task: entryId(o.entry), model, trial: 1, attempt: o.attempt }, models: slotModels(o.policy, model, null), allowance_micros: o.allowanceMicros });
+  } catch (e) {
+    return { ...none, termination: { kind: "infra", incident: "the proxy refused the slot: " + (e as Error).message } };
+  }
+  writeFileSync(join(o.dir, "meter.json"), JSON.stringify({ meter_id: binding.meter_id, lease_id: o.rig.recovery?.lease_id ?? null, journal: o.rig.recovery?.journal ?? null }) + "\n");
+  const skillArm = isSkillArm(o.entry.arm);
+  const arm = skillArm ? (o.entry.arm as "current" | "new") : null;
+  const base = codex.sandbox(o.entry.arm);
+  const home = base.homePath(o.dir);
+  let found: { contained: string[] | null; pin: string[] | null } = { contained: null, pin: null };
+  let homeFound: string[] | null = null;
+  let guard: RolloutGuard | null = null;
+  const sandbox = ohrProbed(base, { docker: o.docker, home, pin: null, root: null, check: { command: codexPinCommand(home, arm), problems: (s) => codexPinProblems(s, arm) }, bearer: BEARER_ENV, onProbe: (p) => (found = p) });
+  const agent = solDriver({ proxy: { baseUrl: codex.baseUrl, slot: binding.slot, token: binding.token }, home, skillArm, out: join(o.dir, "host"), nextUser: o.nextUser, onHome: (p) => (homeFound = p), onGuard: (g) => (guard = g) });
+  const envProblems = armEnvProblems(agent.env);
+  mkdirSync(join(o.dir, "tasks"), { recursive: true });
+  let termination: Termination;
+  try {
+    const repo = workRepo(join(o.dir, "repo"));
+    if (skillArm && o.prior) seedPrior(repo, o.entry.arm as "current" | "new", o.prior, o.day);
+    const trial = await runTrial({ cell: { model, arm: o.entry.arm, round: 1, trial: 1 }, task: { id: TASK, prompt: o.prompt }, tasksDir: join(o.dir, "tasks"), sandbox, agent, dir: o.dir, timeoutS: SESSION_MINUTES * 60, network: o.rig.network, seed: repo, ...(skillArm ? { copyDir: { from: STATE_ROOT_DIR, to: join(o.dir, "host", "gstack-state") } } : { stateRoot: false as const }) });
+    termination = trial.record.termination;
+  } catch (e) {
+    termination = { kind: "infra", incident: "the trial failed: " + (e as Error).message };
+  }
+  const meter = await o.rig.finalize(binding.meter_id);
+  const path = join(o.dir, "host", "transcript.ndjson");
+  const transcript = existsSync(path) ? readFileSync(path, "utf8") : "";
+  const rolloutDir = join(o.dir, "host", "rollouts");
+  const rollouts = existsSync(rolloutDir) ? readdirSync(rolloutDir).map((f) => readFileSync(join(rolloutDir, f), "utf8")) : [];
+  const read = pvOutcome(termination, transcript).outcome;
+  const contained = found.contained === null || homeFound === null ? null : [...found.contained, ...(homeFound as string[]), ...envProblems.map((e) => "agent env: " + e)];
+  return { termination, gstack_reads: skillArm ? [] : [...gstackReads(transcript), ...codexReads(rollouts)], contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: tapOffPin(codex.tapLog, binding.slot, model), served_model: servedModel(tapModels(codex.tapLog, binding.slot)), cli_version: cliVersion(transcript), micros: meter.micros, ...guardRead(guard, o.dir) };
+};
+
+/** F1 and G1 on a Sol attempt (pre-run change 5); with no report from the driver, a copied rollout is a flag, since nothing watched it. */
+const guardRead = (g: RolloutGuard | null, dir: string): Pick<AttemptRead, "rollout_flags" | "non_default_turns" | "rollout_unreadable"> =>
+  g ? { rollout_flags: g.flags, non_default_turns: g.non_default_turns, rollout_unreadable: g.rollout_unreadable } : { rollout_flags: existsSync(join(dir, "host", "rollout.jsonl")) ? ["a rollout with no report from the watch"] : [], non_default_turns: [], rollout_unreadable: false };
+
+/** The start step's output in Claude Code's session file, or null when the file is missing or holds no whole head and tail around one. */
+const loadedStart = (file: string, arm: SkillArm): string | null => (existsSync(file) ? startOutput(readFileSync(file, "utf8"), arm) : null);
+
+/** One attempt on the Docker rig; a Sol session runs on Codex (solLaunch). */
 export const dockerLaunch: Launch = async (o) => {
+  if (HOSTS[o.entry.model] === "codex") return solLaunch(o);
   const model = MODEL_KEYS[o.entry.model];
   const provider = providerOf(o.policy, model) as ClaudeProvider;
-  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: 0 };
+  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], served_model: null, cli_version: null, micros: 0 };
   let binding: Awaited<ReturnType<HostRig["bind"]>>;
   try {
     binding = await o.rig.bind({ cell: { run_id: o.runId, arm: o.entry.arm, task: entryId(o.entry), model, trial: 1, attempt: o.attempt }, models: slotModels(o.policy, model, null), allowance_micros: o.allowanceMicros });
@@ -205,7 +280,7 @@ export const dockerLaunch: Launch = async (o) => {
   const home = base.homePath(o.dir);
   const install = o.rig.arms[o.entry.arm]!;
   let found: { contained: string[] | null; pin: string[] | null } = { contained: null, pin: null };
-  const sandbox = ohrProbed(base, { docker: o.docker, home, pin: skillArm ? o.pin : null, root: skillArm && install.gstack ? containerRoot(home, install.gstack) : null, onProbe: (p) => (found = p) });
+  const sandbox = ohrProbed(base, { docker: o.docker, home, pin: skillArm ? o.pin : null, root: skillArm && install.gstack ? containerRoot(home, install.gstack) : null, session: join(o.dir, "host", CLAUDE_SESSION), onProbe: (p) => (found = p) });
   const skill = skillArm && install.skill ? { name: "office-hours", roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
   const proxy = { baseUrl: o.rig.baseUrl, slot: binding.slot, token: binding.token };
   const envProblems = armEnvProblems(claudeCodeEnv({ model, provider, proxy, disable1mContext: true }));
@@ -225,7 +300,7 @@ export const dockerLaunch: Launch = async (o) => {
   const transcript = existsSync(path) ? readFileSync(path, "utf8") : "";
   const read = pvOutcome(termination, transcript).outcome;
   const contained = found.contained === null ? null : [...found.contained, ...envProblems.map((e) => "agent env: " + e)];
-  return { termination, gstack_reads: skillArm ? [] : gstackReads(transcript), contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: offPin(transcript, model), micros: meter.micros };
+  return { termination, gstack_reads: skillArm ? [] : gstackReads(transcript), contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript, skillArm ? loadedStart(join(o.dir, "host", CLAUDE_SESSION), o.entry.arm as SkillArm) : null), off_pin: offPin(transcript, model), served_model: servedModel(assistantModels(transcript)), cli_version: cliVersion(transcript), micros: meter.micros };
 };
 
 /** An attempt a crash left with a marker and no row: an unknown harness failure at the settled and unknown spend its ledger meter holds, recorded in reconcile.json. */
@@ -246,10 +321,18 @@ function reconcile(dir: string, parse: BlockParser, ledger: string | null): Atte
   const lines = existsSync(transcript) ? readFileSync(transcript, "utf8").split("\n").filter(Boolean).length : 0;
   writeFileSync(join(dir, "reconcile.json"), JSON.stringify({ meter, ledger_micros: spent, session_log_lines: lines, reconciled_at: new Date().toISOString() }, null, 2) + "\n");
   const loop = closingLoop({ parse, founder: async () => ({ kind: "call-failed", reason: "provider", detail: "", rejected: [], requests: [] }) }).state;
-  return { termination: { kind: "infra", incident: "an unknown outcome, reconciled" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], micros: spent ?? 0, sim_micros: 0 };
+  return { termination: { kind: "infra", incident: "an unknown outcome, reconciled" }, loop, gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], served_model: null, cli_version: null, micros: spent ?? 0, sim_micros: 0 };
 }
 
 const hostTree = (rig: HostRig, arm: ArmId, pin: Pin): string[] => pinProblems(gstackDir(rig.arms[arm] ?? { gstack: null }), pin);
+/** A Codex install's tree laid out from HOME: its layer with no destination. */
+const codexHome = (rig: HostRig, arm: ArmId): string | null => (rig as OhrRig).codex?.arms[arm]?.layers?.find((l) => !l.dest)?.src ?? null;
+/** The Sol arms' install checks at rig open: each skill arm's render, and the current-to-new gap when both run. */
+export function codexTrees(rig: HostRig, arms: readonly ArmId[]): string[] {
+  const skill = arms.filter(isSkillArm);
+  const p = skill.flatMap((a) => codexTreeProblems(codexHome(rig, a), a).map((x) => a + " on Codex: " + x));
+  return skill.includes("current") && skill.includes("new") ? [...p, ...gapProblems(codexHome(rig, "current") ?? "", codexHome(rig, "new") ?? "")] : p;
+}
 
 /** Runs one launch: checks, freezes its manifest, opens the rig, then runs round by round until the schedule ends or a stop. */
 export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> {
@@ -269,7 +352,7 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
   const ran = new Set([...done.values()].filter((l) => l.row.stage === 2).map((l) => l.row.brief));
   let manifest;
   try {
-    manifest = makeManifest({ launch: o.launch, briefsDir: o.briefsDir, models: o.models, arms: o.arms, pins: o.pins, buildCommit: o.buildCommit, dropped: o.dropped, ran, ...(o.entries ? { entries: o.entries } : {}) });
+    manifest = makeManifest({ launch: o.launch, briefsDir: o.briefsDir, models: o.models, arms: o.arms, pins: o.pins, buildCommit: o.buildCommit, dropped: o.dropped, ran, ...(o.entries ? { entries: o.entries } : {}), ...(o.look ? { look: o.look } : {}) });
   } catch (e) {
     const m = (e as Error).message;
     throw new Error(/^E_[A-Z_]+ /.test(m) ? m : "E_OHR_MANIFEST " + m);
@@ -298,7 +381,8 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
     held.sim += sign * simMicros(o.allowances);
   };
   try {
-    const trees = manifest.arms.filter(isSkillArm).flatMap((a) => (deps.treeProblems ?? hostTree)(rig, a, o.pins[a]!).map((p) => a + ": " + p));
+    const onHost = (host: "claude" | "codex") => [...new Set(manifest.entries.filter((e) => HOSTS[e.model] === host).map((e) => e.arm))];
+    const trees = [...onHost("claude").filter(isSkillArm).flatMap((a) => (deps.treeProblems ?? hostTree)(rig, a, o.pins[a]!).map((p) => a + ": " + p)), ...(onHost("codex").length && !deps.treeProblems ? codexTrees(rig, onHost("codex")) : [])];
     if (trees.length) throw new Error("E_OHR_PIN_MISMATCH the installed gstack trees are not the pins: " + trees.join("; "));
     const session = async (e: ManifestEntry): Promise<void> => {
       const id = entryId(e);
@@ -306,7 +390,7 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
       const b = meta.get(e.brief)!;
       const dir = join(o.briefsDir, e.brief);
       const sheet = loadPerson(dir, b.kind);
-      const prompt = firstMessage(e.arm, readFileSync(join(dir, "opening.md"), "utf8"));
+      const prompt = firstMessage(e.arm, readFileSync(join(dir, "opening.md"), "utf8"), e.model);
       const attempts: AttemptRead[] = [];
       const records: RowLine["attempts"] = [];
       let end: Outcome | null = null;

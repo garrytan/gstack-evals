@@ -20,6 +20,9 @@
 // ledger lacks one of the run's leases, unless the owner reconciled that lease and the replies file holds its lease
 // line, which a send writes when it opens a lease. A call such a lease sent and never answered has no usage any ledger
 // shows, so it halts the item as usage unknown, naming the lease's proxy journal and the export the reconcile cites.
+// sendItem is the same send for any item a SendSpec describes: its packets, each packet's reader, its output cap and its
+// usage bound. The head-to-head's B1 labels (h2h/breadth/label-send.ts) use it with no bound, so nothing there halts on
+// usage; their halts are allowance stops alone.
 import { createHash, randomBytes } from "node:crypto";
 import { Database } from "bun:sqlite";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeFileSync, writeSync } from "node:fs";
@@ -54,11 +57,10 @@ const KINDS: Record<string, { packet: string; keys: string[] }> = {
   "sm-judges": { packet: "sm-judge-packet.v1", keys: ["sm-judge-key.v1", "sm-r78-key.v1"] },
 };
 
-export interface SendOptions {
+export interface ItemSendOptions {
   item: string;
   /** The run the item's leases name. An item admits one run, so a resumed send names the same run. */
   run_id: string;
-  packets: string;
   /** Holds replies.jsonl, raw/<reader>/<packet>.txt and each lease's proxy journal; never inside packets. */
   out: string;
   record?: string;
@@ -72,6 +74,10 @@ export interface SendOptions {
   log?: (line: string) => void;
 }
 
+export interface SendOptions extends ItemSendOptions {
+  packets: string;
+}
+
 export interface SendResult {
   item: string;
   run_id: string;
@@ -83,9 +89,39 @@ export interface SendResult {
   replies: string;
 }
 
-interface Job {
+export interface Job {
   packet: string;
   reader: Reader;
+}
+
+/** One packet a send pays for: the prompt sent as the call's one user message, its sha256 when the packet's id is not its
+ *  digest (a resumed send is refused once the packet differs from the one a call was sent), and the reader that turns the
+ *  answer's text into an answer or a malformed reply. */
+export interface SendPacket {
+  prompt: string;
+  sha256?: string;
+  read: (answer: string) => { ok: true; answer: unknown } | { ok: false; code: ReasonCode; why: string };
+}
+
+/** What differs between the items this sender pays for. */
+export interface SendSpec {
+  /** The command named in warnings. */
+  command: string;
+  /** The program and skills the approvals record must hold for the item; a null program takes any program but none. */
+  program: string | null;
+  skills: string[];
+  /** Where program and skills come from, named in the refusal. */
+  source: string;
+  /** Each request's output cap: sent in the body, enforced by the proxy and priced in the call's worst case. */
+  output_tokens: number;
+  /** The prereg's per-call usage bound, or null when it freezes none, so no call halts on its usage. */
+  bound: { input_tokens: number; output_tokens: number } | null;
+  /** The code that refuses a packet changed since one of its calls was sent. */
+  packet_code: ReasonCode;
+  /** Reads and checks every packet and the call order. It runs while the send holds the item, before anything is opened. */
+  load: () => { packets: Map<string, SendPacket>; order: Job[] };
+  /** Runs once the send ends, finished or stopped, while it still holds the item, with the replies file's path. */
+  after?: (replies: string) => void | Promise<void>;
 }
 
 const ledger = <T>(f: () => T): T => {
@@ -150,7 +186,8 @@ function loadPackets(item: string, dir: string) {
     return [...q, ...sorted.filter((id) => !q.includes(id) && readers.get(id)!.has(r))].map((packet): Job => ({ packet, reader: r }));
   });
   const order = Array.from({ length: Math.max(0, ...lists.map((l) => l.length)) }, (_, i) => lists.flatMap((l) => (l[i] ? [l[i]!] : []))).flat();
-  return { packets, order };
+  const read = (packet: LabelPacket | JudgePacket) => (answer: string) => (packet.schema === "sm-judge-packet.v1" ? readJudgeAnswer(answer, packet) : readLabelAnswer(answer));
+  return { packets: new Map([...packets].map(([id, { packet, prompt }]): [string, SendPacket] => [id, { prompt, read: read(packet) }])), order };
 }
 
 /**
@@ -173,25 +210,44 @@ function holdItemLock(record: string, item: string): Database {
 /** Sends every packet's calls that the out dir has not recorded, on one lease of the item, and settles the lease. */
 export async function sendPackets(o: SendOptions): Promise<SendResult> {
   if (!ITEMS[o.item] || !KINDS[o.item]) smFail("E_USAGE", "sm packets send pays from sm-labels or sm-judges, not " + JSON.stringify(o.item));
+  const def = ITEMS[o.item]!;
+  const load = () => {
+    const packetsDir = resolve(o.packets), out = resolve(o.out);
+    if (out === packetsDir || out.startsWith(packetsDir + sep)) smFail("E_USAGE", "--out " + out + " is inside --packets " + packetsDir + "; write the replies beside the packets, never among them");
+    return loadPackets(o.item, packetsDir);
+  };
+  return sendItem({ command: "sm packets send", program: def.program, skills: def.skills, source: "items.ts", output_tokens: R78_PRICE_BOUND.output_tokens, bound: R78_PRICE_BOUND, packet_code: "E_SM_PACKET", load }, o);
+}
+
+/** Sends every call of spec's packets that the out dir has not recorded, on one lease of the item, and settles the lease. */
+export async function sendItem(spec: SendSpec, o: ItemSendOptions): Promise<SendResult> {
   const record = recordPath(o.record, o.env ?? process.env).path;
   if (!existsSync(record)) smFail("E_LEDGER_MISSING", "no approval record is at " + record + "; nothing was opened");
   const lock = holdItemLock(realpathSync(record), o.item);
+  let ended = false;
   try {
-    return await sendHeld(o, record);
+    const result = await sendHeld(spec, o, record);
+    ended = true;
+    return result;
   } finally {
-    lock.close();
+    try {
+      await spec.after?.(join(resolve(o.out), "replies.jsonl"));
+    } catch (e) {
+      if (ended) throw e;
+      (o.log ?? ((line: string) => console.error(line)))("E_INTERNAL " + spec.command + ": after the send stopped: " + (e as Error).message);
+    } finally {
+      lock.close();
+    }
   }
 }
 
-async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
-  const def = ITEMS[o.item]!;
+async function sendHeld(spec: SendSpec, o: ItemSendOptions, record: string): Promise<SendResult> {
   if (!o.run_id) smFail("E_USAGE", "a send names its run with --run");
-  const packetsDir = resolve(o.packets), out = resolve(o.out);
-  if (out === packetsDir || out.startsWith(packetsDir + sep)) smFail("E_USAGE", "--out " + out + " is inside --packets " + packetsDir + "; write the replies beside the packets, never among them");
-  const { packets, order } = loadPackets(o.item, packetsDir);
+  const out = resolve(o.out);
+  const { packets, order } = spec.load();
   const env = o.env ?? process.env;
   const log = o.log ?? ((line: string) => console.error(line));
-  const warn = (code: ReasonCode, message: string) => log(code + " sm packets send: " + message);
+  const warn = (code: ReasonCode, message: string) => log(code + " " + spec.command + ": " + message);
 
   mkdirSync(out, { recursive: true });
   const repliesFile = join(out, "replies.jsonl");
@@ -220,7 +276,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     counts[r.outcome]++;
     write({ event: "reply", packet: job.packet, reader: job.reader, model: LABELLERS[job.reader], outcome: r.outcome, code: r.code ?? null, ...(r.first_code ? { first_code: r.first_code } : {}), why: r.why ?? null, answer: r.answer ?? null, raw: r.raw ?? null, micros: r.micros ?? null, meter_id: r.meter_id ?? null });
   };
-  const prior: Array<{ at?: string; event?: string; item?: string; run_id?: string; packet: string; reader: Reader; meter_id?: string; lease_id?: string; outcome?: Outcome; code?: ReasonCode; why?: string }> = [];
+  const prior: Array<{ at?: string; event?: string; item?: string; run_id?: string; packet: string; reader: Reader; meter_id?: string; lease_id?: string; outcome?: Outcome; code?: ReasonCode; why?: string; packet_sha256?: string }> = [];
   const rows = existsSync(repliesFile) ? readFileSync(repliesFile, "utf8").split("\n") : [];
   if (rows.at(-1) === "") rows.pop();
   for (const [i, row] of rows.entries()) {
@@ -238,6 +294,8 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
   }
   const other = prior.find((l) => l.item !== o.item || l.run_id !== o.run_id);
   if (other) smFail("E_USAGE", repliesFile + " holds replies of " + other.item + " for run " + other.run_id + ", not " + o.item + " for run " + o.run_id + "; give each send its own --out");
+  const changed = prior.find((l) => l.event === "send" && l.packet_sha256 && packets.get(l.packet)?.sha256 && packets.get(l.packet)!.sha256 !== l.packet_sha256);
+  if (changed) smFail(spec.packet_code, "packet " + changed.packet + " is now sha256 " + packets.get(changed.packet)!.sha256 + ", but its " + changed.reader + " call (meter " + changed.meter_id + ") was sent sha256 " + changed.packet_sha256 + "; both readers answer one packet, so restore what it was built from or leave it out; nothing was opened");
   const k = (j: { packet: string; reader: string }) => j.packet + " " + j.reader;
   const done = new Set(prior.filter((l) => l.event === "reply" && l.outcome !== "cap_stop" && l.outcome !== "uncharged").map(k));
   const uncharged = new Map<string, (typeof prior)[number]>();
@@ -264,7 +322,8 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
   let lease: { lease_id: string; reserved_micros: number };
   try {
     const state = ledger(() => readItem(record, o.item));
-    if (state.cap_micros !== null && (state.program !== def!.program || state.skills.join() !== def!.skills.join())) smFail("E_USAGE", "line item " + o.item + " is recorded in program " + (state.program ?? "none") + " for " + (state.skills.join(", ") || "no skill") + ", not " + def!.program + " for " + def!.skills.join(", ") + " (items.ts); nothing was opened");
+    const program = spec.program === null ? state.program !== null : state.program === spec.program;
+    if (state.cap_micros !== null && (!program || state.skills.join() !== spec.skills.join())) smFail("E_USAGE", "line item " + o.item + " is recorded in program " + (state.program ?? "none") + " for " + (state.skills.join(", ") || "no skill") + ", not " + (spec.program ?? "a program") + " for " + spec.skills.join(", ") + " (" + spec.source + "); nothing was opened");
     const cannotLease = capStopRefusal(state) !== null || (state.cap_micros !== null && state.committed_micros >= state.cap_micros);
     const leased = new Set(prior.flatMap((l) => (l.event === "lease" && l.lease_id ? [l.lease_id] : [])));
     const unheld = state.leases.filter(({ lease, close }) => lease.run_id === o.run_id && !local.getLease(lease.lease_id) && !(close?.how === "reconciled" && leased.has(lease.lease_id))).map(({ lease }) => lease.lease_id);
@@ -289,6 +348,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
       if (l.event === "send" && l.meter_id && current) leaseOf.set(l.meter_id, current);
     }
     const newHalts: Array<{ meter_id: string; why: string }> = [];
+    const bound = spec.bound;
     for (const l of lost.values()) {
       const metered = runLeases.flatMap((id) => {
         const m = local.meters(id).get(l.meter_id!);
@@ -296,16 +356,16 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
       })[0];
       const u = metered?.meter.usage;
       const usage = u ? { input: u.input + u.cache_read + u.cache_write, output: u.output + u.reasoning } : null;
-      const gone = state.leases.find(({ lease, close }) => lease.lease_id === leaseOf.get(l.meter_id!) && close?.how === "reconciled" && !local.getLease(lease.lease_id));
-      const past = usage !== null && (usage.input > R78_PRICE_BOUND.input_tokens || usage.output > R78_PRICE_BOUND.output_tokens);
-      const unknown = !gone && !past && metered && metered.meter.unknown_calls > 0 ? metered.lease_id : null;
+      const gone = bound && state.leases.find(({ lease, close }) => lease.lease_id === leaseOf.get(l.meter_id!) && close?.how === "reconciled" && !local.getLease(lease.lease_id));
+      const past = bound !== null && usage !== null && (usage.input > bound.input_tokens || usage.output > bound.output_tokens);
+      const unknown = bound && !gone && !past && metered && metered.meter.unknown_calls > 0 ? metered.lease_id : null;
       if ((gone || past || unknown) && !halted.has(l.meter_id!)) {
         const journal = gone ? join(out, gone.lease.lease_id + ".journal.ndjson") : unknown ? join(out, unknown + ".journal.ndjson") : null;
         const why = gone
           ? l.reader + " on packet " + l.packet + " (meter " + l.meter_id + "): usage unknown. It was sent on lease " + gone.lease.lease_id + ", which the owner reconciled from the provider export " + (gone.close!.source ?? "(none named)") + " after its ledger was lost, and its send stopped before its reply was recorded, so no ledger shows its usage; read the lease's proxy journal " + journal + " and that export"
           : unknown
           ? l.reader + " on packet " + l.packet + " (meter " + l.meter_id + "): usage unknown. It was sent on lease " + unknown + ", which this ledger holds, and its send stopped before its reply was recorded; the ledger holds the call as unknown at its full reservation, so no settled usage shows it within the bound; read the lease's proxy journal " + journal
-          : l.reader + " on packet " + l.packet + " (meter " + l.meter_id + ") settled at " + usage!.input + " input and " + usage!.output + " output tokens, past the prereg's bound of " + R78_PRICE_BOUND.input_tokens + " input and " + R78_PRICE_BOUND.output_tokens + " output tokens, and its send stopped before its reply and halt were recorded";
+          : l.reader + " on packet " + l.packet + " (meter " + l.meter_id + ") settled at " + usage!.input + " input and " + usage!.output + " output tokens, past the prereg's bound of " + bound!.input_tokens + " input and " + bound!.output_tokens + " output tokens, and its send stopped before its reply and halt were recorded";
         write({ event: "halt", packet: l.packet, reader: l.reader, meter_id: l.meter_id, code: "E_SM_USAGE_HALT", why, usage: unknown ? null : usage, ...(gone ? { lease_id: gone.lease.lease_id, journal, source: gone.close!.source ?? null, source_sha256: gone.close!.source_sha256 ?? null } : unknown ? { lease_id: unknown, journal } : {}) });
         newHalts.push({ meter_id: l.meter_id!, why });
       }
@@ -324,7 +384,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
   result.lease_id = lease.lease_id;
   write({ event: "lease", lease_id: lease.lease_id });
   const journal = join(out, lease.lease_id + ".journal.ndjson");
-  const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "sm-send-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: DEFAULT_RETRY, env, fetch: o.fetch, sleep: o.sleep, maxOutputTokens: R78_PRICE_BOUND.output_tokens, refuseServerTools: true });
+  const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "sm-send-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: DEFAULT_RETRY, env, fetch: o.fetch, sleep: o.sleep, maxOutputTokens: spec.output_tokens, refuseServerTools: true });
   const scope = o.item + " only";
   let capped = false;
   let stop = null as { code: ReasonCode; why: string } | null;
@@ -332,8 +392,9 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
 
   const call = async (job: Job) => {
     const { provider, model } = MODEL[job.reader];
-    const body = { ...judgeRequest(provider, model, packets.get(job.packet)!.prompt, R78_PRICE_BOUND.output_tokens, provider === "openai" ? JUDGE_REASONING_EFFORT : undefined), ...PROXY_FIELDS[provider] };
-    const worst = reservationMicros(priceRequest(provider, body, R78_PRICE_BOUND.output_tokens, JUDGE_ROUTE[provider]));
+    const packet = packets.get(job.packet)!;
+    const body = { ...judgeRequest(provider, model, packet.prompt, spec.output_tokens, provider === "openai" ? JUDGE_REASONING_EFFORT : undefined), ...PROXY_FIELDS[provider] };
+    const worst = reservationMicros(priceRequest(provider, body, spec.output_tokens, JUDGE_ROUTE[provider]));
     const held = local.held(lease.lease_id);
     const room = lease.reserved_micros - held;
     if (room < worst) {
@@ -346,7 +407,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
       return;
     }
     const b = proxy.bind({ cell: { run_id: o.run_id, arm: job.reader, task: job.packet, model, trial: 1, attempt: 1 }, models: [provider + ":" + model], allowance_micros: worst });
-    write({ event: "send", packet: job.packet, reader: job.reader, meter_id: b.meter_id, worst_micros: worst });
+    write({ event: "send", packet: job.packet, reader: job.reader, meter_id: b.meter_id, worst_micros: worst, ...(packet.sha256 ? { packet_sha256: packet.sha256 } : {}) });
     result.sent++;
     let status = 0;
     let text = "";
@@ -375,8 +436,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
           const raw = join("raw", job.reader, job.packet + ".txt");
           mkdirSync(join(out, "raw", job.reader), { recursive: true });
           writeFileSync(join(out, raw), answer);
-          const { packet } = packets.get(job.packet)!;
-          const read = packet.schema === "sm-judge-packet.v1" ? readJudgeAnswer(answer, packet) : readLabelAnswer(answer);
+          const read = packet.read(answer);
           return read.ok ? { outcome: "answered", answer: read.answer, raw, ...base } : { outcome: "malformed", code: read.code, why: read.why, raw, ...base };
         }
       }
@@ -390,9 +450,10 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     const r: Parameters<typeof reply>[1] = !free ? failed : first ? { ...failed, outcome: "gap", first_code: first.code ?? "UPSTREAM", why: failed.why + "; its one resend after a first uncharged failure (" + (first.code ?? "UPSTREAM") + ") failed uncharged again, so it is a gap and is never sent again" } : { ...failed, outcome: "uncharged", why: failed.why + "; no answer and nothing charged, so the next send asks it once more" };
     const u = settled?.usage;
     const usage = u ? { input: u.input + u.cache_read + u.cache_write, output: u.output + u.reasoning } : null;
-    const past = usage !== null && (usage.input > R78_PRICE_BOUND.input_tokens || usage.output > R78_PRICE_BOUND.output_tokens);
+    const bound = spec.bound;
+    const past = bound !== null && usage !== null && (usage.input > bound.input_tokens || usage.output > bound.output_tokens);
     const halt = past
-      ? { code: "E_SM_USAGE_HALT" as ReasonCode, why: job.reader + " on packet " + job.packet + " (meter " + b.meter_id + ") reported " + usage!.input + " input and " + usage!.output + " output tokens, past the prereg's bound of " + R78_PRICE_BOUND.input_tokens + " input and " + R78_PRICE_BOUND.output_tokens + " output tokens" }
+      ? { code: "E_SM_USAGE_HALT" as ReasonCode, why: job.reader + " on packet " + job.packet + " (meter " + b.meter_id + ") reported " + usage!.input + " input and " + usage!.output + " output tokens, past the prereg's bound of " + bound!.input_tokens + " input and " + bound!.output_tokens + " output tokens" }
       : r.outcome === "allowance_stop"
         ? { code: "E_ALLOWANCE" as ReasonCode, why: job.reader + " on packet " + job.packet + " (meter " + b.meter_id + "): " + r.why }
         : null;

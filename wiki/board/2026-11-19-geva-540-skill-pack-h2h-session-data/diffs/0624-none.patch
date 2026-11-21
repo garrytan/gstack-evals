@@ -1,0 +1,89 @@
+diff --git a/Terminal.Gui/Views/Selectors/SelectorBase.cs b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+index f1f7ed1..af324ac 100644
+--- a/Terminal.Gui/Views/Selectors/SelectorBase.cs
++++ b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+@@ -527,8 +527,16 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+                 SubViews.ElementAt (i).Y = 0;
+                 SubViews.ElementAt (i).Margin.Thickness = new Thickness (0, 0, i < SubViews.Count - 1 ? _horizontalSpace : 0, 0);
+                 SubViews.ElementAt (i).Width = Dim.Auto ();
++
++                // DimAuto (used by this selector's Width/Height) sizes Pos.Align-based SubViews using their
++                // current Frame. Ensure the Frame reflects the new Margin/Width immediately; otherwise the
++                // selector's auto-size would be computed from stale (e.g. margin-less) frames and labels
++                // would be truncated until some unrelated layout pass happened.
++                SubViews.ElementAt (i).SetRelativeLayout (App?.Screen.Size ?? new Size (2048, 2048));
+             }
+         }
++
++        SetNeedsLayout ();
+     }
+ 
+     /// <summary>
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index f84b0da..aec12e1 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -1069,4 +1069,63 @@ public class OptionSelectorTests
+     }
+ 
+     #endregion
++
++    [Theory]
++    [InlineData (false)]
++    [InlineData (true)]
++    public void Horizontal_Labels_Set_After_Construction_Width_Fits_Content (bool initiallyHidden)
++    {
++        VirtualTimeProvider time = new ();
++        using IApplication app = Application.Create (time);
++        app.Init (DriverRegistry.Names.ANSI);
++        Runnable runnable = new () { Width = Dim.Fill (), Height = Dim.Fill () };
++
++        OptionSelector selector = new () { Y = 2, Orientation = Orientation.Horizontal };
++        runnable.Add (selector);
++
++        if (initiallyHidden)
++        {
++            selector.Visible = false;
++        }
++
++        app.Begin (runnable);
++
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++        selector.Values = [0, 1];
++        selector.Visible = true;
++
++        app.LayoutAndDraw ();
++
++        CheckBox [] checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (2, checkBoxes.Length);
++        int expected = checkBoxes.Sum (cb => cb.Frame.Width);
++        Assert.Equal ("TMDb".Length + 2, checkBoxes [1].Frame.Width);
++        Assert.Equal (expected, selector.Frame.Width);
++        Assert.True (checkBoxes [1].Frame.Right <= selector.Viewport.Width);
++
++        runnable.Dispose ();
++    }
++
++    [Fact]
++    public void Horizontal_Labels_Set_Before_Add_Width_Fits_Content ()
++    {
++        VirtualTimeProvider time = new ();
++        using IApplication app = Application.Create (time);
++        app.Init (DriverRegistry.Names.ANSI);
++        Runnable runnable = new () { Width = Dim.Fill (), Height = Dim.Fill () };
++
++        OptionSelector selector = new () { Y = 2, Orientation = Orientation.Horizontal };
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++        selector.Values = [0, 1];
++        runnable.Add (selector);
++
++        app.Begin (runnable);
++
++        CheckBox [] checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (checkBoxes.Sum (cb => cb.Frame.Width), selector.Frame.Width);
++        Assert.Equal ("TMDb".Length + 2, checkBoxes [1].Frame.Width);
++        Assert.True (checkBoxes [1].Frame.Right <= selector.Viewport.Width);
++
++        runnable.Dispose ();
++    }
+ }

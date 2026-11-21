@@ -1,0 +1,146 @@
+diff --git a/src/libuilogic/Ocr/FixEngine/OcrFixEngine.cs b/src/libuilogic/Ocr/FixEngine/OcrFixEngine.cs
+index 01f3b46..65f84d1 100644
+--- a/src/libuilogic/Ocr/FixEngine/OcrFixEngine.cs
++++ b/src/libuilogic/Ocr/FixEngine/OcrFixEngine.cs
+@@ -11,7 +11,7 @@ namespace Nikse.SubtitleEdit.Features.Ocr.FixEngine;
+ 
+ public interface IOcrFixEngine
+ {
+-    void Initialize(Subtitle subtitle, string threeLetterIsoLanguageName, SpellCheckDictionaryDisplay spellCheckDictionary);
++    void Initialize(Subtitle subtitle, string threeLetterIsoLanguageName, SpellCheckDictionaryDisplay? spellCheckDictionary);
+     OcrFixLineResult FixOcrErrors(int index, string text, bool doTryToGuessUnknownWords);
+     void Unload();
+     bool IsLoaded();
+@@ -52,14 +52,15 @@ public partial class OcrFixEngine : IOcrFixEngine, IDoSpell
+         _fiveLetterName = string.Empty;
+     }
+ 
+-    void IOcrFixEngine.Initialize(Subtitle subtitle, string threeLetterIsoLanguageName, SpellCheckDictionaryDisplay spellCheckDictionary)
++    void IOcrFixEngine.Initialize(Subtitle subtitle, string threeLetterIsoLanguageName, SpellCheckDictionaryDisplay? spellCheckDictionary)
+     {
+         _isLoaded = true;
+         var twoLetterIsoLanguageName = Iso639Dash2LanguageCode.GetTwoLetterCodeFromThreeLetterCode(threeLetterIsoLanguageName);
+         _twoLetterIsoLanguageName = twoLetterIsoLanguageName;
+-        _spellCheckManager.Initialize(spellCheckDictionary.DictionaryFileName, twoLetterIsoLanguageName);
++        var dictionaryFileName = spellCheckDictionary?.DictionaryFileName ?? string.Empty;
++        _spellCheckManager.Initialize(dictionaryFileName, twoLetterIsoLanguageName);
+ 
+-        _fiveLetterName = Path.GetFileNameWithoutExtension(spellCheckDictionary.DictionaryFileName);
++        _fiveLetterName = Path.GetFileNameWithoutExtension(dictionaryFileName);
+ 
+         _threeLetterIsoLanguageName = threeLetterIsoLanguageName;
+         _subtitle = subtitle;
+diff --git a/src/libuilogic/SpellCheck/SpellChecker.cs b/src/libuilogic/SpellCheck/SpellChecker.cs
+index 447d912..4a0ea59 100644
+--- a/src/libuilogic/SpellCheck/SpellChecker.cs
++++ b/src/libuilogic/SpellCheck/SpellChecker.cs
+@@ -114,6 +114,7 @@ public class SpellChecker : ISpellChecker, IDoSpell
+ 
+         if (!File.Exists(dictionaryFile))
+         {
++            _hunspellWeCantSpell = null;
+             return false;
+         }
+ 
+diff --git a/src/seconv/Core/FixCommonErrorsRunner.cs b/src/seconv/Core/FixCommonErrorsRunner.cs
+index dfbc1b1..2fcfdbf 100644
+--- a/src/seconv/Core/FixCommonErrorsRunner.cs
++++ b/src/seconv/Core/FixCommonErrorsRunner.cs
+@@ -1,4 +1,4 @@
+-using Nikse.SubtitleEdit.Core.Common;
++﻿using Nikse.SubtitleEdit.Core.Common;
+ using Nikse.SubtitleEdit.Core.Forms.FixCommonErrors;
+ using Nikse.SubtitleEdit.Core.Interfaces;
+ using Nikse.SubtitleEdit.Features.Ocr.FixEngine;
+@@ -130,7 +130,7 @@ internal static class FixCommonErrorsRunner
+     /// <summary>
+     /// Applies the OCR-fix engine (OCR replace lists + Hunspell spell-check guessing) to every line,
+     /// the headless equivalent of the GUI's "Fix common OCR errors". No-op when no dictionary folder
+-    /// is configured or no Hunspell dictionary matches the detected language. (#11744)
++    /// is configured. Without a matching Hunspell dictionary only the replace list is applied. (#11744)
+     /// </summary>
+     private static void RunOcrFix(Subtitle subtitle, string twoLetterLanguage)
+     {
+@@ -149,10 +149,6 @@ internal static class FixCommonErrorsRunner
+         var spellChecker = new SpellChecker();
+         var dictionary = spellChecker.GetDictionaryLanguages(folder)
+             .FirstOrDefault(d => d.GetThreeLetterCode() == threeLetter);
+-        if (dictionary == null)
+-        {
+-            return;
+-        }
+ 
+         IOcrFixEngine engine = new OcrFixEngine(spellChecker);
+         engine.Initialize(subtitle, threeLetter, dictionary);
+diff --git a/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs b/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
+index 7d4063b..189bed3 100644
+--- a/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
++++ b/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
+@@ -34,10 +34,6 @@ namespace Nikse.SubtitleEdit.Core.Forms.FixCommonErrors
+             var spellCheckManager = new SpellCheckManager();
+             var spellCheckers = spellCheckManager.GetDictionaryLanguages(Se.DictionariesFolder);
+             var spellChecker = spellCheckers.FirstOrDefault(x => x.GetThreeLetterCode() == threeLetterCode);
+-            if (spellChecker == null)
+-            {
+-                return;
+-            }
+ 
+             OcrFixEngine.Initialize(subtitle, threeLetterCode, spellChecker);
+ 
+diff --git a/tests/libuilogic/SpellCheck/OcrFixEngineWithoutDictionaryTests.cs b/tests/libuilogic/SpellCheck/OcrFixEngineWithoutDictionaryTests.cs
+new file mode 100644
+index 0000000..8c54ee3
+--- /dev/null
++++ b/tests/libuilogic/SpellCheck/OcrFixEngineWithoutDictionaryTests.cs
+@@ -0,0 +1,51 @@
++using System;
++using System.IO;
++using Nikse.SubtitleEdit.Core.Common;
++using Nikse.SubtitleEdit.Features.Ocr.FixEngine;
++using Nikse.SubtitleEdit.Features.SpellCheck;
++
++namespace LibUiLogicTests.SpellCheck;
++
++public class OcrFixEngineWithoutDictionaryTests
++{
++    [Fact]
++    public void ReplaceListIsAppliedWhenNoHunspellDictionaryIsInstalled()
++    {
++        var folder = Path.Combine(Path.GetTempPath(), "se-ocrfix-" + Guid.NewGuid().ToString("N"));
++        Directory.CreateDirectory(folder);
++        var previousFolder = SpellCheckConfig.DictionariesFolder;
++        try
++        {
++            File.WriteAllText(Path.Combine(folder, "spa_OCRFixReplaceList.xml"), """
++                <?xml version="1.0" encoding="utf-8"?>
++                <ReplaceList>
++                  <WholeWords>
++                    <Word from="aca" to="acá" />
++                    <Word from="Adios" to="Adiós" />
++                    <Word from="Algun" to="Algún" />
++                    <Word from="dia" to="día" />
++                    <Word from="volvere" to="volveré" />
++                  </WholeWords>
++                </ReplaceList>
++                """);
++            SpellCheckConfig.DictionariesFolder = () => folder;
++
++            var subtitle = new Subtitle();
++            subtitle.Paragraphs.Add(new Paragraph("Hola, aca estoy.", 0, 1000));
++            subtitle.Paragraphs.Add(new Paragraph("Adios.", 1000, 2000));
++            subtitle.Paragraphs.Add(new Paragraph("Algun dia volvere.", 2000, 3000));
++
++            IOcrFixEngine engine = new OcrFixEngine(new SpellChecker());
++            engine.Initialize(subtitle, "spa", null);
++
++            Assert.Equal("Hola, acá estoy.", engine.FixOcrErrors(0, subtitle.Paragraphs[0].Text, true).GetText());
++            Assert.Equal("Adiós.", engine.FixOcrErrors(1, subtitle.Paragraphs[1].Text, true).GetText());
++            Assert.Equal("Algún día volveré.", engine.FixOcrErrors(2, subtitle.Paragraphs[2].Text, true).GetText());
++        }
++        finally
++        {
++            SpellCheckConfig.DictionariesFolder = previousFolder;
++            Directory.Delete(folder, true);
++        }
++    }
++}

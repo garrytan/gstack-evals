@@ -1,0 +1,91 @@
+diff --git a/src/optimizer/common_aggregate_optimizer.cpp b/src/optimizer/common_aggregate_optimizer.cpp
+index d351ccb..0ea4d85 100644
+--- a/src/optimizer/common_aggregate_optimizer.cpp
++++ b/src/optimizer/common_aggregate_optimizer.cpp
+@@ -50,10 +50,13 @@ void CommonAggregateOptimizer::ExtractCommonAggregates(LogicalAggregate &aggr) {
+ 	for (idx_t i = 0; i < aggr.expressions.size(); i++) {
+ 		ProjectionIndex original_index(i + total_erased);
+ 		ProjectionIndex new_index(i);
+-		auto entry = aggregate_remap.find(*aggr.expressions[i]);
++		auto &expr = *aggr.expressions[i];
++		bool is_volatile = expr.IsVolatile();
++		auto entry = is_volatile ? aggregate_remap.end() : aggregate_remap.find(expr);
+ 		if (entry == aggregate_remap.end()) {
+-			// aggregate does not exist yet: add it to the map
+-			aggregate_remap[*aggr.expressions[i]] = new_index;
++			if (!is_volatile) {
++				aggregate_remap[expr] = new_index;
++			}
+ 			if (new_index != original_index) {
+ 				// this aggregate is not erased, however an aggregate BEFORE it has been erased
+ 				// so we need to remap this aggregate
+diff --git a/src/planner/binder/expression/bind_aggregate_expression.cpp b/src/planner/binder/expression/bind_aggregate_expression.cpp
+index 55c92b7..e98a4a9 100644
+--- a/src/planner/binder/expression/bind_aggregate_expression.cpp
++++ b/src/planner/binder/expression/bind_aggregate_expression.cpp
+@@ -331,12 +331,15 @@ BindResult BaseSelectBinder::BindAggregate(FunctionExpression &aggr, AggregateFu
+ 
+ 	// check for all the aggregates if this aggregate already exists
+ 	ProjectionIndex aggr_index;
+-	auto entry = node.aggregate_map.find(*aggregate);
++	bool is_volatile = aggregate->IsVolatile();
++	auto entry = is_volatile ? node.aggregate_map.end() : node.aggregate_map.find(*aggregate);
+ 	if (entry == node.aggregate_map.end()) {
+ 		// new aggregate: insert into aggregate list
+ 		auto &aggr_ref = *aggregate;
+ 		aggr_index = ColumnBinding::PushExpression(node.aggregates, std::move(aggregate));
+-		node.aggregate_map[aggr_ref] = aggr_index;
++		if (!is_volatile) {
++			node.aggregate_map[aggr_ref] = aggr_index;
++		}
+ 	} else {
+ 		// duplicate aggregate: simplify refer to this aggregate
+ 		aggr_index = entry->second;
+diff --git a/test/sql/aggregate/aggregates/test_volatile_aggregate_dedup.test b/test/sql/aggregate/aggregates/test_volatile_aggregate_dedup.test
+new file mode 100644
+index 0000000..ba848f5
+--- /dev/null
++++ b/test/sql/aggregate/aggregates/test_volatile_aggregate_dedup.test
+@@ -0,0 +1,42 @@
++# name: test/sql/aggregate/aggregates/test_volatile_aggregate_dedup.test
++# description: Identical aggregates or windows over volatile functions are evaluated independently
++# group: [aggregates]
++
++statement ok
++PRAGMA enable_verification
++
++query I
++SELECT any_value(uuid()::VARCHAR) = any_value(uuid()::VARCHAR) FROM range(3)
++----
++false
++
++query I
++SELECT sum(random()) = sum(random()) FROM range(100)
++----
++false
++
++query II
++SELECT g, any_value(uuid()::VARCHAR) OVER (PARTITION BY g) = any_value(uuid()::VARCHAR) OVER (PARTITION BY g)
++FROM (VALUES (1), (1), (2), (2)) t(g)
++ORDER BY g
++----
++1	false
++1	false
++2	false
++2	false
++
++query I
++SELECT count(*) FROM (
++	SELECT g,
++		any_value(uuid()::VARCHAR) OVER (PARTITION BY g) AS id_a,
++		any_value(uuid()::VARCHAR) OVER (PARTITION BY g) AS id_b
++	FROM (VALUES (1), (1), (2), (2)) t(g)
++) WHERE id_a = id_b
++----
++0
++
++# non-volatile duplicates are still deduplicated
++query II
++SELECT sum(i), sum(i) FROM range(10) t(i)
++----
++45	45

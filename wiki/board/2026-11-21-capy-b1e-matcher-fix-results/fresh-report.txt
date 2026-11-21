@@ -1,0 +1,23 @@
+== claude-opus-5-5, B1e fresh draw: gstack main 5df6b5a8cf21 (1.102.0.0), hooks on by default, 60 tasks
+  keyless coverage (the hook at the pin): prove-it alone 52, first of two 0, second of two 0, not named 8
+  gstack-main: loaded 48/60 80.0% [68.2, 88.2]; at the first call 48; /verify loaded 0; followed 22/60 [25.6, 49.3]; gaps 0, cap stops 0, safety stops 0, audit 0, passes 34 (descriptive), cost $26.44 ($0.441 a graded session); not loaded: hook log missing 0, hook did not name prove-it 8, line not delivered 0, loaded /verify instead 0, load failed 0, named, not loaded 4, never named 0
+  none: loaded 0/60 0.0% [0.0, 6.0]; at the first call 0; /verify loaded 0; followed 0/60 [0.0, 6.0]; gaps 0, cap stops 0, safety stops 0, audit 0, passes 34 (descriptive), cost $18.66 ($0.311 a graded session)
+  reading: fresh draw: the hook loaded prove-it in 48 of 60, at or above the bar of 39
+  hook put prove-it only (52 sessions): prove-it loaded 48, /verify loaded 0, neither 4
+  hook put prove-it first of two (0 sessions): prove-it loaded 0, /verify loaded 0, neither 0
+  hook put prove-it second of two (0 sessions): prove-it loaded 0, /verify loaded 0, neither 0
+  hook put prove-it not named (8 sessions): prove-it loaded 0, /verify loaded 0, neither 8
+  hook log missing (0 sessions): prove-it loaded 0
+  hook line before the first output (proxy): 52 of 60, quoted 0
+  loaded, gstack-main - none: +80.0 points [+66.8, +88.2] on 60 paired tasks (48 vs 0 discordant)
+  followed, gstack-main - none: +36.7 points [+24.1, +49.3] on 60 paired tasks (22 vs 0 discordant)
+  hook names prove-it (52 tasks): gstack-main 48/52, none 0/52
+  hook does not name prove-it (8 tasks): gstack-main 0/8, none 0/8
+  _interface tasks (3 tasks): gstack-main 1/3, none 0/3
+  other tasks (57 tasks): gstack-main 47/57, none 0/57
+  length tertile 1 (587 to 1534 characters) (20 tasks): gstack-main 13/20, none 0/20
+  length tertile 2 (1554 to 2602 characters) (20 tasks): gstack-main 19/20, none 0/20
+  length tertile 3 (2792 to 48265 characters) (20 tasks): gstack-main 16/20, none 0/20
+  in-sample reading: in-sample: the hook loaded prove-it in 45 of 60, at or above the bar of 39
+  decision: the CLAUDE.md routing block is cut: the hook clears the bar in-sample and on the fresh draw
+  R48 for the CLAUDE.md routing block: CUT-CANDIDATE for the CLAUDE.md routing block: the default hook reaches the block's count without it, in-sample and on fresh tasks

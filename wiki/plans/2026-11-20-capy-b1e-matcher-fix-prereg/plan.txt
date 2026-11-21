@@ -1,0 +1,3 @@
+b1e-smoke: smoke-opus (4); 4 sessions; expected $1.58, open-session reserve $20.00, VM $7.20, formula cap $30, recorded cap $30
+b1e-in: b1e-in-1 (20), b1e-in-2 (20), b1e-in-3 (20); 60 sessions; expected $28.80, open-session reserve $30.00, VM $14.88, formula cap $90, recorded cap $90
+b1e-fresh: b1e-fresh-1 (40), b1e-fresh-2 (40), b1e-fresh-3 (40); 120 sessions; expected $47.40, open-session reserve $30.00, VM $14.88, formula cap $110, recorded cap $110

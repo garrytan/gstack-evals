@@ -1,0 +1,33 @@
+diff --git a/cell.go b/cell.go
+index 1cac3e4..ddb5550 100644
+--- a/cell.go
++++ b/cell.go
+@@ -1657,6 +1657,9 @@ func (ws *xlsxWorksheet) mergeCellsParser(cell string) (string, error) {
+ 				_ = sortCoordinates(rect)
+ 				ws.MergeCells.Cells[i].rect = rect
+ 			}
++			if len(ws.MergeCells.Cells[i].rect) == 0 {
++				continue
++			}
+ 			if cellInRange([]int{col, row}, ws.MergeCells.Cells[i].rect) {
+ 				cell = strings.Split(ws.MergeCells.Cells[i].Ref, ":")[0]
+ 				break
+diff --git a/cell_test.go b/cell_test.go
+index 386c649..43a0476 100644
+--- a/cell_test.go
++++ b/cell_test.go
+@@ -1311,3 +1311,14 @@ func TestGetCellStringFunc(t *testing.T) {
+ 	assert.NoError(t, err)
+ 	assert.NoError(t, f.Close())
+ }
++
++func TestMergeCellsParserEmptyRef(t *testing.T) {
++	f := NewFile()
++	ws, ok := f.Sheet.Load("xl/worksheets/sheet1.xml")
++	assert.True(t, ok)
++	ws.(*xlsxWorksheet).MergeCells = &xlsxMergeCells{Cells: []*xlsxMergeCell{{Ref: ""}}}
++	assert.NoError(t, f.SetCellValue("Sheet1", "A1", "a"))
++	val, err := f.GetCellValue("Sheet1", "A1")
++	assert.NoError(t, err)
++	assert.Equal(t, "a", val)
++}

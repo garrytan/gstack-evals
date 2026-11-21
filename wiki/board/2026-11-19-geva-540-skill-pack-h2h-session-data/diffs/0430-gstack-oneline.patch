@@ -1,0 +1,20 @@
+diff --git a/Core/Relationships/RelationshipResolver.cs b/Core/Relationships/RelationshipResolver.cs
+index 0c1314a..273313a 100644
+--- a/Core/Relationships/RelationshipResolver.cs
++++ b/Core/Relationships/RelationshipResolver.cs
+@@ -281,7 +281,14 @@ namespace CKAN
+                 IReadOnlyList<CkanModule>? candidates = null;
+                 try
+                 {
+-                    candidates = resolved.Candidates(descriptor, modlist.Values,
++                    candidates = resolved.Candidates(descriptor,
++                                                     // When listing recommendations and suggestions,
++                                                     // don't hide ones that conflict with each other
++                                                     options.get_recommenders
++                                                     && options.proceed_with_inconsistencies
++                                                     && reason is not SelectionReason.Depends
++                                                         ? Array.Empty<CkanModule>()
++                                                         : modlist.Values,
+                                                      registry, game);
+                     log.DebugFormat("Got {0} candidates for {1}",
+                                     candidates.Count, descriptor);

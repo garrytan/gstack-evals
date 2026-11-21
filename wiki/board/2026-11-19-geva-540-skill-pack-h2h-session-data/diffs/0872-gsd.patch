@@ -1,0 +1,283 @@
+diff --git a/unmarshaler.go b/unmarshaler.go
+index 189be52..6b7b17e 100644
+--- a/unmarshaler.go
++++ b/unmarshaler.go
+@@ -62,8 +62,12 @@ func (d *Decoder) DisallowUnknownFields() *Decoder {
+ // that don't have a straightforward TOML representation to provide their own
+ // decoding logic.
+ //
+-// Currently, types can only decode from a single value. Tables and array tables
+-// are not supported.
++// Types implementing the interface can be decoded from a single value, or from
++// a table (including the root of the document and array tables). When decoding
++// from a table, UnmarshalTOML is called once with a node of kind InlineTable
++// whose children are the KeyValue expressions directly part of that table, in
++// document order. Sub-tables defined with their own header ([a.b]) are decoded
++// separately.
+ //
+ // *Unstable:* This method does not follow the compatibility guarantees of
+ // semver. It can be changed or removed without a new major version being
+@@ -273,6 +277,15 @@ func (d *decoder) handleRootExpression(expr *unstable.Node, v reflect.Value) err
+ 	var err error
+ 	var first bool // used for to clear array tables on first use
+ 
++	if expr.Kind == unstable.KeyValue && !d.skipUntilTable {
++		if u, ok := d.tableUnmarshaler(v); ok {
++			// The root of the document implements the Unmarshaler
++			// interface: gather all the root key-values and hand them over.
++			d.stashExpr()
++			return d.handleKeyValuesUnmarshaler(u)
++		}
++	}
++
+ 	if !(d.skipUntilTable && expr.Kind == unstable.KeyValue) {
+ 		first, err = d.seen.CheckExpression(expr)
+ 		if err != nil {
+@@ -599,6 +612,10 @@ func (d *decoder) handleTable(key unstable.Iterator, v reflect.Value) (reflect.V
+ // Handle root expressions until the end of the document or the next
+ // non-key-value.
+ func (d *decoder) handleKeyValues(v reflect.Value) (reflect.Value, error) {
++	if u, ok := d.tableUnmarshaler(v); ok {
++		return reflect.Value{}, d.handleKeyValuesUnmarshaler(u)
++	}
++
+ 	var rv reflect.Value
+ 	for d.nextExpr() {
+ 		expr := d.expr()
+@@ -628,6 +645,53 @@ func (d *decoder) handleKeyValues(v reflect.Value) (reflect.Value, error) {
+ 	return rv, nil
+ }
+ 
++// tableUnmarshaler returns the unstable.Unmarshaler implemented by v (or the
++// value it points to), if the unmarshaler interface is enabled.
++func (d *decoder) tableUnmarshaler(v reflect.Value) (unstable.Unmarshaler, bool) {
++	if !d.unmarshalerInterface {
++		return nil, false
++	}
++	for v.Kind() == reflect.Ptr {
++		if v.IsNil() && !v.CanSet() {
++			return nil, false
++		}
++		v = initAndDereferencePointer(v)
++	}
++	if !v.CanAddr() || !v.Addr().CanInterface() {
++		return nil, false
++	}
++	u, ok := v.Addr().Interface().(unstable.Unmarshaler)
++	return u, ok
++}
++
++// handleKeyValuesUnmarshaler collects all the key-value expressions until the
++// end of the document or the next table, and passes them to the Unmarshaler as
++// a single InlineTable node.
++func (d *decoder) handleKeyValuesUnmarshaler(u unstable.Unmarshaler) error {
++	var kvs []*unstable.Node
++	for d.nextExpr() {
++		expr := d.expr()
++		if expr.Kind != unstable.KeyValue {
++			d.stashExpr()
++			break
++		}
++
++		_, err := d.seen.CheckExpression(expr)
++		if err != nil {
++			return err
++		}
++
++		// The parser reuses its nodes on every expression; keep a copy.
++		kvs = append(kvs, unstable.NewInlineTable([]*unstable.Node{expr}).Child())
++	}
++
++	if err := d.p.Error(); err != nil {
++		return err
++	}
++
++	return u.UnmarshalTOML(unstable.NewInlineTable(kvs))
++}
++
+ type (
+ 	handlerFn    func(key unstable.Iterator, v reflect.Value) (reflect.Value, error)
+ 	valueMakerFn func() reflect.Value
+diff --git a/unmarshaler_test.go b/unmarshaler_test.go
+index 6ee6636..a5a91ad 100644
+--- a/unmarshaler_test.go
++++ b/unmarshaler_test.go
+@@ -3998,3 +3998,121 @@ foo = "bar"`,
+ 		})
+ 	}
+ }
++
++// orderedKV records the key-values it is decoded from, in document order.
++type orderedKV struct {
++	Keys   []string
++	Values []string
++}
++
++func (o *orderedKV) UnmarshalTOML(node *unstable.Node) error {
++	if node.Kind != unstable.InlineTable {
++		return fmt.Errorf("expected inline table, got %s", node.Kind)
++	}
++	it := node.Children()
++	for it.Next() {
++		kv := it.Node()
++		if kv.Kind != unstable.KeyValue {
++			return fmt.Errorf("expected key-value, got %s", kv.Kind)
++		}
++		var parts []string
++		k := kv.Key()
++		for k.Next() {
++			parts = append(parts, string(k.Node().Data))
++		}
++		o.Keys = append(o.Keys, strings.Join(parts, "."))
++		o.Values = append(o.Values, string(kv.Value().Data))
++	}
++	return nil
++}
++
++type panicUnmarshaler struct{}
++
++func (*panicUnmarshaler) UnmarshalTOML(*unstable.Node) error {
++	panic("we should see this panic")
++}
++
++func TestUnmarshal_CustomUnmarshalerTables(t *testing.T) {
++	t.Run("root is called (issue)", func(t *testing.T) {
++		var d panicUnmarshaler
++		assert.Panics(t, func() {
++			_ = toml.NewDecoder(strings.NewReader(`foo = "bar"`)).
++				EnableUnmarshalerInterface().
++				Decode(&d)
++		})
++	})
++
++	t.Run("root keeps order", func(t *testing.T) {
++		var d orderedKV
++		err := toml.NewDecoder(strings.NewReader("z = 1\na.b = 'x'\nm = 3\n")).
++			EnableUnmarshalerInterface().Decode(&d)
++		assert.NoError(t, err)
++		assert.Equal(t, []string{"z", "a.b", "m"}, d.Keys)
++		assert.Equal(t, []string{"1", "x", "3"}, d.Values)
++	})
++
++	t.Run("root not called when disabled", func(t *testing.T) {
++		var d panicUnmarshaler
++		err := toml.NewDecoder(strings.NewReader(`foo = "bar"`)).Decode(&d)
++		assert.NoError(t, err)
++	})
++
++	t.Run("tables, pointers, maps and array tables", func(t *testing.T) {
++		type cfg struct {
++			Name   string
++			Table  orderedKV
++			Ptr    *orderedKV
++			Inline orderedKV
++			Map    map[string]orderedKV
++			Arr    []orderedKV
++		}
++		doc := `
++name = "n"
++inline = { b = 2, a = 1 }
++
++[table]
++y = 1
++x = 2
++
++[ptr]
++q = 'p'
++
++[map.one]
++k = 'v'
++
++[[arr]]
++c = 1
++[[arr]]
++d = 2
++e = 3
++`
++		var c cfg
++		err := toml.NewDecoder(strings.NewReader(doc)).EnableUnmarshalerInterface().Decode(&c)
++		assert.NoError(t, err)
++		assert.Equal(t, "n", c.Name)
++		assert.Equal(t, []string{"b", "a"}, c.Inline.Keys)
++		assert.Equal(t, []string{"y", "x"}, c.Table.Keys)
++		assert.Equal(t, []string{"1", "2"}, c.Table.Values)
++		assert.Equal(t, []string{"q"}, c.Ptr.Keys)
++		assert.Equal(t, []string{"k"}, c.Map["one"].Keys)
++		assert.Equal(t, 2, len(c.Arr))
++		assert.Equal(t, []string{"c"}, c.Arr[0].Keys)
++		assert.Equal(t, []string{"d", "e"}, c.Arr[1].Keys)
++	})
++
++	t.Run("error is returned", func(t *testing.T) {
++		type cfg struct{ T errUnmarshaler }
++		err := toml.NewDecoder(strings.NewReader("[t]\na = 1\n")).EnableUnmarshalerInterface().Decode(&cfg{})
++		assert.Error(t, err)
++	})
++
++	t.Run("duplicate keys still detected", func(t *testing.T) {
++		var d orderedKV
++		err := toml.NewDecoder(strings.NewReader("a = 1\na = 2\n")).EnableUnmarshalerInterface().Decode(&d)
++		assert.Error(t, err)
++	})
++}
++
++type errUnmarshaler struct{}
++
++func (*errUnmarshaler) UnmarshalTOML(*unstable.Node) error { return fmt.Errorf("boom") }
+diff --git a/unstable/unmarshaler.go b/unstable/unmarshaler.go
+index 00cfd6d..83452b7 100644
+--- a/unstable/unmarshaler.go
++++ b/unstable/unmarshaler.go
+@@ -5,3 +5,52 @@ package unstable
+ type Unmarshaler interface {
+ 	UnmarshalTOML(value *Node) error
+ }
++
++// NewInlineTable returns a new node of kind InlineTable whose children are
++// deep copies of the provided KeyValue nodes, in order.
++//
++// The nodes returned by the Parser are only valid until the next call to
++// NextExpression. This function allows to retain a set of expressions (for
++// example all the key-values of a table) beyond that point, by copying them
++// into a new, independent tree. Data slices are shared with the source nodes.
++//
++// *Unstable:* This function does not follow the compatibility guarantees of
++// semver. It can be changed or removed without a new major version being
++// issued.
++func NewInlineTable(keyValues []*Node) *Node {
++	c := nodeCopier{nodes: make([]Node, 1, 1+len(keyValues)*4)}
++	c.nodes[0] = Node{Kind: InlineTable}
++	prev := -1
++	for _, kv := range keyValues {
++		idx := c.copy(kv)
++		if prev < 0 {
++			c.nodes[0].child = idx
++		} else {
++			c.nodes[prev].next = idx - prev
++		}
++		prev = idx
++	}
++	return &c.nodes[0]
++}
++
++type nodeCopier struct {
++	nodes []Node
++}
++
++// copy appends a deep copy of n (and its children, but not its siblings) to
++// the backing array and returns its index.
++func (c *nodeCopier) copy(n *Node) int {
++	idx := len(c.nodes)
++	c.nodes = append(c.nodes, Node{Kind: n.Kind, Raw: n.Raw, Data: n.Data})
++	prev := -1
++	for child := n.Child(); child != nil; child = child.Next() {
++		ci := c.copy(child)
++		if prev < 0 {
++			c.nodes[idx].child = ci - idx
++		} else {
++			c.nodes[prev].next = ci - prev
++		}
++		prev = ci
++	}
++	return idx
++}

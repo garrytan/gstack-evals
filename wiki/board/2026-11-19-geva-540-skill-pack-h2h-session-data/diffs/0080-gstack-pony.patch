@@ -1,0 +1,66 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java b/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
+index 891cf2c..dd27ed2 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
++++ b/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
+@@ -314,6 +314,16 @@ public class S3Controller {
+                 s3Service.deleteBucketOwnershipControls(bucket);
+                 return Response.noContent().build();
+             }
++            if (hasQueryParam(uriInfo, "replication")) {
++                s3Service.deleteBucketReplication(bucket);
++                return Response.noContent().build();
++            }
++            // A sub-resource-qualified DELETE must never delete the bucket itself.
++            String query = uriInfo.getRequestUri().getRawQuery();
++            if (query != null && !query.isEmpty() && !query.equals("x-id=DeleteBucket")) {
++                throw new AwsException("NotImplemented",
++                        "A header or query you provided implies functionality that is not implemented.", 501);
++            }
+             s3Service.deleteBucket(bucket);
+             return Response.noContent().build();
+         } catch (AwsException e) {
+diff --git a/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java b/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
+index c60cc0f..2e83cb8 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
++++ b/src/main/java/io/github/hectorvent/floci/services/s3/S3Service.java
+@@ -1822,6 +1822,12 @@ public class S3Service implements Resettable {
+         bucketStore.put(bucketName, bucket);
+     }
+ 
++    /** Replication configuration is not modeled; only bucket existence is checked. */
++    public void deleteBucketReplication(String bucketName) {
++        bucketStore.get(bucketName)
++                .orElseThrow(() -> new AwsException("NoSuchBucket", "The specified bucket does not exist.", 404));
++    }
++
+     public void deleteBucketOwnershipControls(String bucketName) {
+         Bucket bucket = bucketStore.get(bucketName)
+                 .orElseThrow(() -> new AwsException("NoSuchBucket", "The specified bucket does not exist.", 404));
+diff --git a/src/test/java/io/github/hectorvent/floci/services/s3/S3DeleteBucketReplicationIntegrationTest.java b/src/test/java/io/github/hectorvent/floci/services/s3/S3DeleteBucketReplicationIntegrationTest.java
+new file mode 100644
+index 0000000..44a52c5
+--- /dev/null
++++ b/src/test/java/io/github/hectorvent/floci/services/s3/S3DeleteBucketReplicationIntegrationTest.java
+@@ -0,0 +1,22 @@
++package io.github.hectorvent.floci.services.s3;
++
++import io.quarkus.test.junit.QuarkusTest;
++import org.junit.jupiter.api.Test;
++
++import static io.restassured.RestAssured.given;
++
++@QuarkusTest
++class S3DeleteBucketReplicationIntegrationTest {
++
++    @Test
++    void deleteReplicationKeepsBucket() {
++        String bucket = "delete-replication-int-test";
++        given().when().put("/" + bucket).then().statusCode(200);
++        given().when().delete("/" + bucket + "?replication").then().statusCode(204);
++        given().when().head("/" + bucket).then().statusCode(200);
++        given().when().delete("/" + bucket + "?unknownSubresource").then().statusCode(501);
++        given().when().head("/" + bucket).then().statusCode(200);
++        given().when().delete("/" + bucket).then().statusCode(204);
++        given().when().delete("/" + bucket + "?replication").then().statusCode(404);
++    }
++}

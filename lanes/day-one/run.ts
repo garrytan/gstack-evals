@@ -38,8 +38,8 @@ import { pool } from "../product-value/meter.ts";
 import { meterSlot } from "../office-hours-founder/run/run.ts";
 import type { Meter } from "../product-value/meter.ts";
 import { startApp, stopApp, type AppRun, type AppWrite } from "./app.ts";
-import { armPlan, loadedSkills, readExposure, type Exposure, type SkillLoad } from "./exposure.ts";
-import { armPrompt, BUILD_PROMPT, GSTACK_ARMS, LIMITS, MODELS, type PlanArm } from "./frozen.ts";
+import { armPlan, findRun, gatePending, loadedSkills, readExposure, WORK, type Exposure, type SkillLoad } from "./exposure.ts";
+import { armPrompt, BUILD_PROMPT, CHECKER_SHA256, GSTACK_ARMS, LIMITS, MODELS, type PlanArm } from "./frozen.ts";
 import { ownerLoop, ownerPrompt, sourceCounts, type OwnerTurn } from "./owner.ts";
 import { attemptOutcome, browserAnswered, endLoop, launchSession, micros, settle, type AttemptRead, type LaunchInput, type Outcome } from "./sessions.ts";
 import { buildSeed, copySamples, planSeed, type Unit } from "./units.ts";
@@ -87,6 +87,8 @@ export interface StageInput {
   /** Micro-dollars the rig's lease holds at open (leaseAmount: cap or less, when the item has less left); rounds are admitted inside it. Unset, cap. */
   lease?: number;
   ownerCap: number;
+  /** Micro-dollars the responder's lease holds at open (cli.ts openOwnerMeter: ownerCap or less, when the owner item has less left); rounds are admitted inside it. Unset, ownerCap. */
+  ownerLease?: number;
   /** Micro-dollars the gstack arms' Astra voice slots may spend in this launch, inside cap (C2's own capped line). */
   voiceCap: number;
   parallel: number;
@@ -265,23 +267,7 @@ function reconcile(dir: string, ledger: string | null): AttemptRead {
   return { termination: { kind: "infra", incident: "an attempt a crash left unfinished, reconciled" }, web: 0, gstack_reads: [], contained: [], micros: planner, voice: meter?.voice_meter_id ? { micros: voice, requests: 0, refused: 0 } : null, out: null };
 }
 
-/** Whether autoplan's run in the live work dir waits at its gate. */
-function gatePending(work: string): boolean {
-  const root = join(work, STATE_ROOT_DIR);
-  if (!existsSync(root)) return false;
-  try {
-    const found = Bun.spawnSync(["find", root, "-name", "run.json", "-newer", join(work, "plan.md")]).stdout.toString().trim().split("\n").filter(Boolean);
-    return found.some((f) => {
-      try {
-        return JSON.parse(readFileSync(f, "utf8"))?.status === "gate_pending";
-      } catch {
-        return false;
-      }
-    });
-  } catch {
-    return false;
-  }
-}
+const text = (f: string) => (existsSync(f) ? readFileSync(f, "utf8") : "");
 
 /** A stage tag: it names the stage's dir under the sealed --out, so it may never leave it. */
 export const TAG = /^[a-z0-9-]+$/;
@@ -298,7 +284,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
   if (before?.stops.some((s) => s.code === "CAP_STOP")) throw new Error("E_USAGE " + dir + " ended in a cap stop, an incomplete run that is never resumed; its stops.json stands");
   const halt = before?.stops.find((s) => s.code !== "E_DAYONE_ADMISSION");
   if (halt) throw new Error("E_USAGE " + dir + " halted (" + halt.code + ": " + halt.message + "); no session starts in it again until the Captain clears it, and its stops.json stands");
-  const frozen = freeze(join(dir, "manifest.json"), { schema: "day-one.stage.v1", stage: o.stage, units: o.units.map((u) => u.id).sort(), reps: o.reps, arms: o.arms, cells: cells.map(cellId), cap_micros: o.cap, owner_cap_micros: o.ownerCap, voice_cap_micros: o.voiceCap, owner_channel: o.ownerChannel, limits: LIMITS, models: MODELS });
+  const frozen = freeze(join(dir, "manifest.json"), { schema: "day-one.stage.v1", stage: o.stage, units: o.units.map((u) => u.id).sort(), reps: o.reps, arms: o.arms, cells: cells.map(cellId), cap_micros: o.cap, owner_cap_micros: o.ownerCap, voice_cap_micros: o.voiceCap, owner_channel: o.ownerChannel, limits: LIMITS, models: MODELS, ...(o.stage === "check" ? { checker_sha256: CHECKER_SHA256 } : {}) });
   if ("problem" in frozen) throw new Error("E_USAGE " + frozen.problem);
   const done = readRows(dir, (cut) => o.log(join(dir, "rows.ndjson") + " ended in a cut-off row of " + cut.length + " bytes; removed, so its cell's pending file adopts it by digest or its attempt marker reconciles it"), () => deps.crash?.("repair", dir));
   const haltRow = [...done.values()].find((r) => r.state === "halt");
@@ -330,6 +316,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
     result.owner_micros += Math.round(r.owner_usd * D);
   }
   const room = Math.min(o.cap, result.spent_micros + (o.lease ?? o.cap));
+  const ownerRoom = Math.min(o.ownerCap, result.owner_micros + (o.ownerLease ?? o.ownerCap));
   const adoptedHalt = [...done.values()].find((r) => r.state === "halt");
   if (adoptedHalt) {
     result.stops.push({ code: adoptedHalt.code!, message: adoptedHalt.id + ": " + adoptedHalt.why + "; adopted after a crash, so the launch stops for the Captain" });
@@ -397,7 +384,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
               if (r.text !== null) return { text: r.text };
               return { failed: r.status === 402 || /E_ALLOWANCE/.test(r.problem ?? "") ? "allowance" : "provider", detail: (r.problem ?? "status " + r.status).slice(0, 300) };
             },
-            ...(isGstack(c.arm) ? { gatePending: () => gatePending(join(sdir, "work", "app")) } : {}),
+            ...(isGstack(c.arm) ? { gatePending: () => gatePending(join(sdir, "work", "app"), text(join(sdir, "host", "transcript.ndjson"))) } : {}),
           });
           ownerState = loop.state;
           nextUser = loop.nextUser;
@@ -472,7 +459,7 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
           if (outcome0.state !== "retry") end = outcome0;
           continue;
         }
-        read = await launch({ rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: c.stage === "build" ? "build" : c.arm, cell: c.unit + "-r" + c.rep + "-" + c.stage + "-" + c.arm, rep: c.rep, attempt, model: lim.model, dir: sdir, seed, prompt, minutes: lim.minutes, turns: lim.turns, allowanceMicros: micros(lim.usd), nextUser, ...(c.stage === "build" && o.nodeVolume ? { nodeVolume: o.nodeVolume } : {}), ...(planning && isGstack(c.arm) ? { gstack: { skill: "autoplan", voiceModel: MODELS.voice, voiceMicros: micros(lim.voice_usd) } } : {}) });
+        read = await launch({ rig, policy: o.policy, docker: o.docker, runId: o.runId, arm: c.stage === "build" ? "build" : c.arm, cell: c.unit + "-r" + c.rep + "-" + c.stage + "-" + c.arm, rep: c.rep, attempt, model: lim.model, dir: sdir, seed, prompt, minutes: lim.minutes, turns: lim.turns, allowanceMicros: micros(lim.usd), nextUser, ...(planning ? { hold: true as const } : {}), ...(c.stage === "build" && o.nodeVolume ? { nodeVolume: o.nodeVolume } : {}), ...(planning && isGstack(c.arm) ? { gstack: { skill: "autoplan", voiceModel: MODELS.voice, voiceMicros: micros(lim.voice_usd) } } : {}) });
         if (ownerState) {
           loopFailed = ownerState.failed;
           owner = { turns: ownerState.turns, counts: sourceCounts(ownerState.turns) };
@@ -489,13 +476,14 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
       result.voice_micros += read.voice?.micros ?? 0;
       let outcome = settle(attemptOutcome(read, loopFailed), attempt);
       if (outcome.state === "ended" && planning && read.out) {
-        const p = armPlan(read.out, base, isGstack(c.arm) ? join(sdir, "host", "gstack-state") : null);
+        const found = isGstack(c.arm) ? findRun([{ dir: read.out, seen: WORK }, { dir: join(sdir, "host", "gstack-state"), seen: WORK + "/" + STATE_ROOT_DIR }], text(join(sdir, "host", "transcript.ndjson"))) : null;
+        const p = armPlan(read.out, base, found?.run ?? null);
         if (!p.text.trim() && c.arm === "n" && attempt === 1) outcome = { state: "retry", why: "no plan.md (an arm stop)" };
         else {
           plan = { sha256: sha(p.text), words: p.text.split(/\s+/).filter(Boolean).length, from: p.from };
           planText = p.text;
         }
-        if (isGstack(c.arm)) exposure = readExposure(join(sdir, "host", "gstack-state"), read.voice?.requests ?? 0);
+        if (found) exposure = readExposure(found, read.voice?.requests ?? 0);
       }
       if (outcome.state === "ended" && c.stage === "build" && read.out) {
         partialTree = join(buildDir(o.out, c.unit, c.rep, c.arm), "tree.partial");
@@ -561,8 +549,8 @@ export async function runStage(o: StageInput, deps: StageDeps): Promise<StageRes
       const worst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).usd + cellLimits(c).voice_usd), 0);
       const ownerWorst = o.ownerChannel ? round.reduce((s, c) => s + 2 * micros(cellLimits(c).owner_usd), 0) : 0;
       const voiceWorst = round.reduce((s, c) => s + 2 * micros(cellLimits(c).voice_usd), 0);
-      if (result.spent_micros + worst > room || result.owner_micros + ownerWorst > o.ownerCap || result.voice_micros + voiceWorst > o.voiceCap) {
-        result.stops.push({ code: "E_DAYONE_ADMISSION", message: "the round from cell " + (i + 1) + " has a worst case of " + usd(worst) + " on the item (" + usd(voiceWorst) + " of it on the voice) and " + usd(ownerWorst) + " on the responder, more than this launch may still spend (" + usd(room - result.spent_micros) + ", " + usd(o.voiceCap - result.voice_micros) + " and " + usd(o.ownerCap - result.owner_micros) + "); nothing in it ran. Fix: relaunch this stage with a smaller --parallel (ended cells stay ended); if a single cell does not fit, the line is short and goes to the Captain" });
+      if (result.spent_micros + worst > room || result.owner_micros + ownerWorst > ownerRoom || result.voice_micros + voiceWorst > o.voiceCap) {
+        result.stops.push({ code: "E_DAYONE_ADMISSION", message: "the round from cell " + (i + 1) + " has a worst case of " + usd(worst) + " on the item (" + usd(voiceWorst) + " of it on the voice) and " + usd(ownerWorst) + " on the responder, more than this launch may still spend (" + usd(room - result.spent_micros) + ", " + usd(o.voiceCap - result.voice_micros) + " and " + usd(ownerRoom - result.owner_micros) + "); nothing in it ran. Fix: relaunch this stage with a smaller --parallel (ended cells stay ended); if a single cell does not fit, the line is short and goes to the Captain" });
         break;
       }
       await pool(o.parallel, round.map((c) => () => runCell(c)));

@@ -1,0 +1,45 @@
+diff --git a/src/Quartz/Core/JobRunShell.cs b/src/Quartz/Core/JobRunShell.cs
+index ac98412..d6f0418 100644
+--- a/src/Quartz/Core/JobRunShell.cs
++++ b/src/Quartz/Core/JobRunShell.cs
+@@ -59,6 +59,7 @@ public class JobRunShell : SchedulerListenerSupport
+     private QuartzScheduler? qs;
+     private readonly IScheduler scheduler;
+     private readonly TriggerFiredBundle firedTriggerBundle;
++    private ExecutionContext? executionContext;
+ 
+     /// <summary>
+     /// Create a JobRunShell instance with the given settings.
+@@ -109,6 +110,9 @@ public class JobRunShell : SchedulerListenerSupport
+         }
+ 
+         jec = new JobExecutionContextImpl(scheduler, firedTriggerBundle, job);
++
++        // capture execution context so that async locals set by the job factory flow to job execution
++        executionContext = ExecutionContext.Capture();
+     }
+ 
+     /// <summary>
+@@ -123,7 +127,21 @@ public class JobRunShell : SchedulerListenerSupport
+     /// run method to be called in that separately executing thread.
+     /// </summary>
+     /// <param name="cancellationToken">The cancellation instruction.</param>
+-    public virtual async Task Run(CancellationToken cancellationToken = default)
++    public virtual Task Run(CancellationToken cancellationToken = default)
++    {
++        var capturedContext = executionContext;
++        executionContext = null;
++        if (capturedContext is null)
++        {
++            return RunInternal(cancellationToken);
++        }
++
++        Task? task = null;
++        ExecutionContext.Run(capturedContext, _ => task = RunInternal(cancellationToken), null);
++        return task!;
++    }
++
++    private async Task RunInternal(CancellationToken cancellationToken)
+     {
+         Context.CallerId.Value = Guid.NewGuid();
+         qs!.AddInternalSchedulerListener(this);

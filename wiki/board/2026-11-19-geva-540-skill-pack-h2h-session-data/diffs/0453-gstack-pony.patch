@@ -1,0 +1,144 @@
+diff --git a/internal/storage/embeddeddolt/schema.go b/internal/storage/embeddeddolt/schema.go
+index 1e86ec8..7fc8ef0 100644
+--- a/internal/storage/embeddeddolt/schema.go
++++ b/internal/storage/embeddeddolt/schema.go
+@@ -144,6 +144,65 @@ func migrateUp(ctx context.Context, tx *sql.Tx) (int, error) {
+ 	return len(pending), nil
+ }
+ 
++// ensureIgnoredTables re-creates the dolt_ignore'd wisp tables if they are
++// missing. Because they are ignored, they live only in the working set and are
++// absent after a clone, a branch switch, or a backfilled restore — even though
++// schema_migrations records migrations 0020-0023 as applied. Idempotent.
++func ensureIgnoredTables(ctx context.Context, tx *sql.Tx) error {
++	rows, err := tx.QueryContext(ctx, `SELECT table_name FROM information_schema.tables
++		WHERE table_schema = DATABASE() AND table_name IN
++		('wisps', 'wisp_labels', 'wisp_dependencies', 'wisp_events', 'wisp_comments')`)
++	if err != nil {
++		return fmt.Errorf("checking wisp tables: %w", err)
++	}
++	have := map[string]bool{}
++	for rows.Next() {
++		var name string
++		if err := rows.Scan(&name); err != nil {
++			_ = rows.Close()
++			return fmt.Errorf("checking wisp tables: %w", err)
++		}
++		have[strings.ToLower(name)] = true
++	}
++	if err := rows.Close(); err != nil {
++		return fmt.Errorf("checking wisp tables: %w", err)
++	}
++	if err := rows.Err(); err != nil {
++		return fmt.Errorf("checking wisp tables: %w", err)
++	}
++	if len(have) == 5 {
++		return nil
++	}
++
++	// Replay the migrations that build the wisp tables, skipping the
++	// non-idempotent parts for tables that already exist.
++	// dolt_ignore patterns (REPLACE, idempotent) must precede table creation.
++	stmts := []string{"0019_wisps_dolt_ignore.up.sql"}
++	if !have["wisps"] {
++		stmts = append(stmts, "0020_create_wisps.up.sql",
++			"ALTER TABLE wisps ADD COLUMN no_history TINYINT(1) DEFAULT 0") // wisps half of 0023
++	}
++	stmts = append(stmts, "0021_create_wisp_auxiliary.up.sql") // CREATE TABLE IF NOT EXISTS
++	if !have["wisp_dependencies"] {
++		stmts = append(stmts, "0022_wisp_dep_type_index.up.sql")
++	}
++
++	for _, s := range stmts {
++		query := s
++		if strings.HasSuffix(s, ".up.sql") {
++			data, err := upMigrations.ReadFile("schema/" + s)
++			if err != nil {
++				return fmt.Errorf("reading migration %s: %w", s, err)
++			}
++			query = string(data)
++		}
++		if _, err := tx.ExecContext(ctx, query); err != nil {
++			return fmt.Errorf("recreating wisp tables (%s): %w", s, err)
++		}
++	}
++	return nil
++}
++
+ // backfillMigrations marks all known migrations as applied without executing them.
+ // Used when a database is restored from a backup that predates the schema_migrations
+ // tracking table — the schema is already correct, we just need to record that fact.
+diff --git a/internal/storage/embeddeddolt/schema_test.go b/internal/storage/embeddeddolt/schema_test.go
+index 13125f2..5bbc4bc 100644
+--- a/internal/storage/embeddeddolt/schema_test.go
++++ b/internal/storage/embeddeddolt/schema_test.go
+@@ -194,3 +194,56 @@ func TestSchemaAfterInit(t *testing.T) {
+ 	cleanup2()
+ 	store2.Close()
+ }
++
++// TestWispTablesRecreatedOnOpen verifies that the dolt_ignore'd wisp tables
++// are re-created on open when missing from the working set (e.g. after a
++// clone or branch switch), even though all migrations are recorded as applied.
++func TestWispTablesRecreatedOnOpen(t *testing.T) {
++	if os.Getenv("BEADS_TEST_EMBEDDED_DOLT") != "1" {
++		t.Skip("set BEADS_TEST_EMBEDDED_DOLT=1 to run embedded dolt tests")
++	}
++
++	ctx := t.Context()
++	beadsDir := filepath.Join(t.TempDir(), ".beads")
++	dataDir := filepath.Join(beadsDir, "embeddeddolt")
++
++	store, err := embeddeddolt.New(ctx, beadsDir, "testdb", "main")
++	if err != nil {
++		t.Fatalf("New: %v", err)
++	}
++	store.Close()
++
++	db, cleanup, err := embeddeddolt.OpenSQL(ctx, dataDir, "testdb", "main")
++	if err != nil {
++		t.Fatalf("OpenSQL: %v", err)
++	}
++	if _, err := db.ExecContext(ctx, "DROP TABLE wisps, wisp_labels, wisp_dependencies, wisp_events, wisp_comments"); err != nil {
++		cleanup()
++		t.Fatalf("dropping wisp tables: %v", err)
++	}
++	cleanup()
++
++	store, err = embeddeddolt.New(ctx, beadsDir, "testdb", "main")
++	if err != nil {
++		t.Fatalf("reopen New: %v", err)
++	}
++	defer store.Close()
++
++	db, cleanup, err = embeddeddolt.OpenSQL(ctx, dataDir, "testdb", "main")
++	if err != nil {
++		t.Fatalf("OpenSQL: %v", err)
++	}
++	defer cleanup()
++
++	for _, q := range []string{
++		"SELECT no_history FROM wisps LIMIT 0",
++		"SELECT 1 FROM wisp_labels LIMIT 0",
++		"SELECT 1 FROM wisp_dependencies USE INDEX (idx_wisp_dep_type_depends) LIMIT 0",
++		"SELECT 1 FROM wisp_events LIMIT 0",
++		"SELECT 1 FROM wisp_comments LIMIT 0",
++	} {
++		if _, err := db.ExecContext(ctx, q); err != nil {
++			t.Errorf("%s: %v", q, err)
++		}
++	}
++}
+diff --git a/internal/storage/embeddeddolt/store.go b/internal/storage/embeddeddolt/store.go
+index d9f0dcc..807e23b 100644
+--- a/internal/storage/embeddeddolt/store.go
++++ b/internal/storage/embeddeddolt/store.go
+@@ -245,7 +245,7 @@ func (s *EmbeddedDoltStore) initSchema(ctx context.Context) error {
+ 				return fmt.Errorf("dolt commit after migrations: %w", err)
+ 			}
+ 		}
+-		return nil
++		return ensureIgnoredTables(ctx, tx)
+ 	})
+ }
+ 

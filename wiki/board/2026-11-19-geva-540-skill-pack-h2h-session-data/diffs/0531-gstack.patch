@@ -1,0 +1,73 @@
+diff --git a/backend/modules/data/domain/dataset/service/item_snapshot.go b/backend/modules/data/domain/dataset/service/item_snapshot.go
+index 2ed2a22..57453ef 100644
+--- a/backend/modules/data/domain/dataset/service/item_snapshot.go
++++ b/backend/modules/data/domain/dataset/service/item_snapshot.go
+@@ -123,10 +123,9 @@ func (s *DatasetServiceImpl) commitProgress(ctx context.Context, processCtx *sna
+ 		}
+ 		return nil
+ 	}
+-	if processCtx.version.SnapshotStatus == entity.SnapshotStatusUnstarted {
+-		if err := s.commitToInProgress(ctx, processCtx); err != nil {
+-			return err
+-		}
++	// persist progress (cursor) after every batch so that a restarted job can resume from the latest checkpoint
++	if err := s.commitToInProgress(ctx, processCtx); err != nil {
++		return err
+ 	}
+ 	return nil
+ }
+diff --git a/backend/modules/data/domain/dataset/service/item_snapshot_test.go b/backend/modules/data/domain/dataset/service/item_snapshot_test.go
+index ac57298..da95d17 100644
+--- a/backend/modules/data/domain/dataset/service/item_snapshot_test.go
++++ b/backend/modules/data/domain/dataset/service/item_snapshot_test.go
+@@ -16,6 +16,7 @@ import (
+ 	confmocks "github.com/coze-dev/coze-loop/backend/modules/data/domain/component/conf/mocks"
+ 	mqmock "github.com/coze-dev/coze-loop/backend/modules/data/domain/dataset/component/mq/mocks"
+ 	"github.com/coze-dev/coze-loop/backend/modules/data/domain/dataset/entity"
++	"github.com/coze-dev/coze-loop/backend/modules/data/domain/dataset/repo"
+ 	mock_repo "github.com/coze-dev/coze-loop/backend/modules/data/domain/dataset/repo/mocks"
+ 	"github.com/coze-dev/coze-loop/backend/modules/data/pkg/pagination"
+ )
+@@ -263,3 +264,42 @@ func TestDatasetServiceImpl_commitToFailed(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestDatasetServiceImpl_CommitProgress_EveryBatch(t *testing.T) {
++	ctrl := gomock.NewController(t)
++	defer ctrl.Finish()
++
++	mockRepo := mock_repo.NewMockIDatasetAPI(ctrl)
++	service := &DatasetServiceImpl{repo: mockRepo}
++	processCtx := &snapshotContext{
++		spaceID:   1,
++		versionID: 1,
++		version: &entity.DatasetVersion{
++			ID:               1,
++			SpaceID:          1,
++			SnapshotStatus:   entity.SnapshotStatusUnstarted,
++			SnapshotProgress: &entity.SnapshotProgress{},
++		},
++	}
++
++	cursors := []string{"c1", "c2", "c3"}
++	var persisted []string
++	mockRepo.EXPECT().PatchVersion(gomock.Any(), gomock.Any(), gomock.Any()).
++		DoAndReturn(func(_ context.Context, patch, where *entity.DatasetVersion, _ ...repo.Option) error {
++			persisted = append(persisted, patch.SnapshotProgress.Cursor)
++			return nil
++		}).Times(len(cursors))
++
++	for i, c := range cursors {
++		processCtx.version.SnapshotProgress.Cursor = c
++		if err := service.commitProgress(context.Background(), processCtx, true); err != nil {
++			t.Fatalf("batch %d: unexpected err: %v", i, err)
++		}
++		if got := processCtx.version.UpdateVersion; got != int64(i+1) {
++			t.Fatalf("batch %d: expected update_version %d, got %d", i, i+1, got)
++		}
++	}
++	if fmt.Sprint(persisted) != fmt.Sprint(cursors) {
++		t.Fatalf("expected progress persisted for every batch %v, got %v", cursors, persisted)
++	}
++}

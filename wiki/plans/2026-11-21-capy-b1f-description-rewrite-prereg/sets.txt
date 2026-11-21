@@ -1,0 +1,9 @@
+pool 89 tasks from 77 repositories, sorted sha256 36c7b92de330e618c4560b121f987c32491bf8bac6b0bd5de07b85c0951fecf7
+primary 81 tasks from 71 repositories, sorted sha256 b4e9dea8d3cef6e93e5baeaea8af8fe43aeb5e96d63137569ea0a738d7d38aeb (pool minus 8 feature-titled)
+nonfit 27 tasks from 24 repositories, sorted sha256 f9ac8566e250d70139f127c5d2f47dcb79e49556ae4bbbdc30e46e4acd56670d
+extension candidates 175 (not feature-titled, kept by the oracle preflight, outside B1, the pilot and primary): 67 outside B1 repositories, 108 inside, of which 48 scored
+extension 81 tasks from 67 repositories, sorted sha256 eff3f3777e45937b8c605058e6cad927a5ad4e05f3d405bba8a3f5d654c25af4 (67 outside B1 repositories, 14 drawn from inside with seed 20261121)
+reserve 34 tasks in seeded order, sha256 9d31f8c9f56895d7bced4223678b36c679e4817fdb15a446e00f8a4709f86688
+never ran on this rig: primary set 61 of 162 (all in the extension); non-fit 11 of 27
+supply sample, sha256 7645bd3018c8af16bb797b8c4a44aa6b7b30af9288b6ed04bd228079d3ef946f: scipp__plopp-513 on own, iluvcapra__pycmx-15 on hook, itsdnns__docsight-437 on long, joke2k__faker-2309 on required, openai__openai-agents-python-1984 on hook, pgmpy__pgmpy-3137 on long, mmornati__home-assistant-csnet-home-132 on required, sciunto-org__python-bibtexparser-515 on hook, bluesky__ophyd-async-1165 on long, line__line-bot-sdk-python-981_interface on required
+class changed by the added bug words: tox-dev__tox-3846 feature -> not feature | New-style versions with factor (3.14-tests) don't set the version

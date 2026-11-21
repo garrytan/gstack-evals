@@ -1,0 +1,84 @@
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java
+index f1ea435..1a53b28 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java
+@@ -155,7 +155,23 @@ public class TextProcessor {
+     }
+ 
+     private static boolean areNeighborsTextChunks(TextChunk firstTextChunk, TextChunk secondTextChunk) {
++        double gap = secondTextChunk.getTextStart() - firstTextChunk.getTextEnd();
++        // Chunks are merged without inserting a space, so a gap wide enough to be a word
++        // separator must never be merged here. The bounding box height can be much larger
++        // than the font size (fonts with tall ascent/descent), so the height-based epsilon
++        // alone may swallow inter-word gaps (see TextLineProcessor space detection).
++        if (gap > getWordSpaceThreshold(firstTextChunk, secondTextChunk)) {
++            return false;
++        }
+         return NodeUtils.areCloseNumbers(firstTextChunk.getTextEnd(), secondTextChunk.getTextStart(),
+             NEIGHBORS_TEXT_CHUNKS_EPSILON * firstTextChunk.getBoundingBox().getHeight());
+     }
++
++    private static double getWordSpaceThreshold(TextChunk firstTextChunk, TextChunk secondTextChunk) {
++        double fontSize = Math.max(firstTextChunk.getFontSize(), secondTextChunk.getFontSize());
++        if (!(fontSize > 0)) {
++            return Double.MAX_VALUE;
++        }
++        return fontSize * TextChunkUtils.TEXT_LINE_SPACE_RATIO;
++    }
+ }
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java
+index 31a1629..477a082 100644
+--- a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java
+@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
+ import org.verapdf.wcag.algorithms.entities.IObject;
+ import org.verapdf.wcag.algorithms.entities.content.ImageChunk;
+ import org.verapdf.wcag.algorithms.entities.content.TextChunk;
++import org.verapdf.wcag.algorithms.entities.content.TextLine;
+ import org.verapdf.wcag.algorithms.entities.geometry.BoundingBox;
+ 
+ import java.util.ArrayList;
+@@ -186,6 +187,43 @@ public class TextProcessorTest {
+         Assertions.assertEquals("Hello", ((TextChunk) contents.get(0)).getValue());
+     }
+ 
++    /**
++     * Regression test: words drawn as separate chunks must not be glued together when the
++     * font has a tall bounding box (height much larger than font size), because the
++     * height-based neighbor epsilon would otherwise exceed the inter-word gap.
++     */
++    @Test
++    public void testMergeCloseTextChunksTallFontWordGapNotMerged() {
++        List<IObject> contents = new ArrayList<>();
++        String fontName = "TallFont";
++
++        // Font size 12, but bounding box height 36 (3x font size), word gap 3pt (0.25em)
++        TextChunk chunk1 = new TextChunk(new BoundingBox(0, 10.0, 100.0, 70.0, 136.0),
++            "Traditional", 12, 110.0);
++        chunk1.adjustSymbolEndsToBoundingBox(null);
++        chunk1.setFontName(fontName);
++        chunk1.setFontWeight(400);
++
++        TextChunk chunk2 = new TextChunk(new BoundingBox(0, 73.0, 100.0, 110.0, 136.0),
++            "search", 12, 110.0);
++        chunk2.adjustSymbolEndsToBoundingBox(null);
++        chunk2.setFontName(fontName);
++        chunk2.setFontWeight(400);
++
++        contents.add(chunk1);
++        contents.add(chunk2);
++
++        TextProcessor.mergeCloseTextChunks(contents);
++        contents = DocumentProcessor.removeNullObjectsFromList(contents);
++
++        Assertions.assertEquals(2, contents.size(),
++            "Chunks separated by a word-sized gap should not be merged without a space");
++
++        contents = TextLineProcessor.processTextLines(contents);
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("Traditional search", ((TextLine) contents.get(0)).getValue());
++    }
++
+     @Test
+     public void testMeasureReplacementCharRatioAllReplacement() {
+         List<IObject> contents = new ArrayList<>();

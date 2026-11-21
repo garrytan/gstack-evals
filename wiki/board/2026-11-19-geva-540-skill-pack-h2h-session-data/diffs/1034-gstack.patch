@@ -1,0 +1,60 @@
+diff --git a/pkg/server/server.go b/pkg/server/server.go
+index 86f17e8..6c2c6b3 100644
+--- a/pkg/server/server.go
++++ b/pkg/server/server.go
+@@ -861,12 +861,25 @@ func newMetricsMiddleware(reg prometheus.Registerer) func(http.Handler) http.Han
+ 			rec := statusCodeRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+ 			handler.ServeHTTP(&rec, r)
+ 			path := normalizedPath(r)
+-			requests.WithLabelValues(r.Method, path, strconv.Itoa(rec.statusCode)).Inc()
+-			duration.WithLabelValues(r.Method, path).Observe(time.Since(start).Seconds())
++			method := normalizedMethod(r.Method)
++			requests.WithLabelValues(method, path, strconv.Itoa(rec.statusCode)).Inc()
++			duration.WithLabelValues(method, path).Observe(time.Since(start).Seconds())
+ 		})
+ 	}
+ }
+ 
++// normalizedMethod clamps the HTTP method to a fixed allowlist so that
++// arbitrary client-supplied methods cannot create unbounded label cardinality.
++func normalizedMethod(method string) string {
++	switch method {
++	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete,
++		http.MethodOptions, http.MethodHead, http.MethodConnect, http.MethodTrace:
++		return method
++	default:
++		return "other"
++	}
++}
++
+ // normalizedPath returns a normalized mux path template representation
+ func normalizedPath(r *http.Request) string {
+ 	if route := mux.CurrentRoute(r); route != nil {
+diff --git a/pkg/server/server_test.go b/pkg/server/server_test.go
+index d4c9952..e8da0a5 100644
+--- a/pkg/server/server_test.go
++++ b/pkg/server/server_test.go
+@@ -2380,3 +2380,23 @@ func TestConfigHandler_ForceExpiration(t *testing.T) {
+ 		}
+ 	})
+ }
++
++func TestMetricsMiddlewareClampsMethodLabel(t *testing.T) {
++	reg := prometheus.NewRegistry()
++	mw := newMetricsMiddleware(reg)
++	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
++	for _, m := range []string{"M1", "M2", "FOO", "GET", "get"} {
++		req := httptest.NewRequest(http.MethodGet, "/", nil)
++		req.Method = m
++		h.ServeHTTP(httptest.NewRecorder(), req)
++	}
++	expected := `
++# HELP yopass_http_requests_total Total number of requests served by HTTP method, path and response code.
++# TYPE yopass_http_requests_total counter
++yopass_http_requests_total{code="200",method="GET",path="<other>"} 1
++yopass_http_requests_total{code="200",method="other",path="<other>"} 4
++`
++	if err := testutil.GatherAndCompare(reg, strings.NewReader(expected), "yopass_http_requests_total"); err != nil {
++		t.Fatal(err)
++	}
++}

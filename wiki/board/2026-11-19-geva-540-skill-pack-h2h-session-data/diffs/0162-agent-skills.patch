@@ -1,0 +1,578 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 11ccb2c..fdc5e2b 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -32,6 +32,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
+     non-MCP-first sentence.
+ 
+ ### Fixed
++- **`ctx_edit` no longer fails when `old_string` was copied from a compressed
++  `ctx_read` view.** Lossy modes such as `aggressive` (which `auto` can pick)
++  strip blank and comment-only lines, halve space indentation and merge runs of
++  closing braces, so an `old_string` taken from that view never matched the file
++  byte-for-byte and the edit failed. `ctx_edit` now has a last-resort match that
++  compares only significant lines (the same stripping rules, whitespace
++  collapsed). It is applied only when the match is unique and covers whole
++  lines. Unchanged lines are kept verbatim, stripped comments and blank lines
++  inside the span are preserved, and inserted lines are re-indented to the
++  file's style. Ambiguous or content-differing matches still fail as before.
+ - **The Codex `lean-ctx -c` SessionStart hook is no longer a redundant nag (#625).**
+   Codex's `PreToolUse` hook already rewrites every rewritable Bash command to
+   `lean-ctx -c "<command>"` transparently (`permissionDecision: allow` +
+diff --git a/rust/src/tools/ctx_edit.rs b/rust/src/tools/ctx_edit.rs
+index 7aff71f..25810de 100644
+--- a/rust/src/tools/ctx_edit.rs
++++ b/rust/src/tools/ctx_edit.rs
+@@ -280,6 +280,36 @@ pub fn run_io(params: &EditParams, last_mode: &str) -> (String, CacheEffect) {
+         }
+     }
+ 
++    // Last resort: old_string copied from a lossy ctx_read view (e.g.
++    // mode=aggressive strips blank/comment lines and re-indents). Only a
++    // unique whole-line match is applied; stripped lines are preserved.
++    if !params.replace_all {
++        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
++        if let Some(m) = crate::tools::edit_loose_match::find(content, old_str, new_str, ext)
++            && content.matches(&m.original).count() == 1
++        {
++            let args = ReplaceArgs {
++                content,
++                old_str: &m.original,
++                new_str: &m.replacement,
++                occurrences: 1,
++                replace_all: false,
++                old_tokens: count_tokens(&params.old_string),
++                new_tokens: count_tokens(&params.new_string),
++            };
++            let (text, effect) = do_replace(path, &pre, params, cap, &args);
++            let text = if text.starts_with('✓') {
++                format!(
++                    "{text}\nnote: old_string matched ignoring blank/comment lines and \
++                     indentation (compressed ctx_read view); stripped lines were preserved."
++                )
++            } else {
++                text
++            };
++            return (text, effect);
++        }
++    }
++
+     if content.contains(new_str) {
+         return (
+             format!(
+@@ -1394,4 +1424,127 @@ mod tests {
+         );
+         assert_eq!(std::fs::read_to_string(&file).unwrap(), "fn new() {}\n");
+     }
++
++    // ── old_string copied from a lossy `ctx_read` view ─────────
++    // `mode=aggressive` (also picked by `auto`) strips blank lines + comments,
++    // halves space indentation and merges runs of closing braces. An agent that
++    // copies `old_string` from that view must still be able to edit the file.
++
++    fn make_temp_rs(content: &str) -> NamedTempFile {
++        let mut f = tempfile::Builder::new().suffix(".rs").tempfile().unwrap();
++        f.write_all(content.as_bytes()).unwrap();
++        f
++    }
++
++    const STRIPPED_SRC: &str = "use std::collections::HashMap;\n\
++\n\
++// Some helper comment\n\
++fn compute(a: i32, b: i32) -> i32 {\n\
++\x20   let x = a + b;\n\
++\n\
++\x20   // explain y\n\
++\x20   let y = x * 2;\n\
++\x20   y\n\
++}\n";
++
++    #[test]
++    fn old_string_from_aggressive_view_is_applied() {
++        let f = make_temp_rs(STRIPPED_SRC);
++        // Sanity: this is exactly what the aggressive view shows the agent.
++        let view = crate::core::compressor::aggressive_compress(STRIPPED_SRC, Some("rs"));
++        assert!(view.contains("  let x = a + b;\n  let y = x * 2;"), "{view}");
++
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(
++                f.path(),
++                "  let x = a + b;\n  let y = x * 2;",
++                "  let x = a - b;\n  let y = x * 3;",
++                false,
++                false,
++            ),
++        );
++        assert!(result.contains("✓"), "edit from aggressive view must apply: {result}");
++        let content = std::fs::read_to_string(f.path()).unwrap();
++        assert_eq!(
++            content,
++            STRIPPED_SRC
++                .replace("let x = a + b;", "let x = a - b;")
++                .replace("let y = x * 2;", "let y = x * 3;"),
++            "stripped blank/comment lines and original indentation must be preserved"
++        );
++    }
++
++    #[test]
++    fn aggressive_view_inserted_lines_are_reindented() {
++        let f = make_temp_rs(STRIPPED_SRC);
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(
++                f.path(),
++                "  let y = x * 2;\n  y",
++                "  let y = x * 2;\n  if y > 10 {\n    return 0;\n  }\n  y",
++                false,
++                false,
++            ),
++        );
++        assert!(result.contains("✓"), "{result}");
++        let content = std::fs::read_to_string(f.path()).unwrap();
++        assert!(
++            content.contains(
++                "    // explain y\n    let y = x * 2;\n    if y > 10 {\n        return 0;\n    }\n    y\n}"
++            ),
++            "inserted lines must use the file's indentation: {content}"
++        );
++    }
++
++    #[test]
++    fn aggressive_view_merged_closing_braces_match() {
++        let src = "fn outer() {\n    if true {\n        run();\n    }\n}\n\nfn next() {}\n";
++        let f = make_temp_rs(src);
++        let view = crate::core::compressor::aggressive_compress(src, Some("rs"));
++        assert!(view.contains("    run();\n}}"), "{view}");
++
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(f.path(), "    run();\n}}", "    run_fast();\n}}", false, false),
++        );
++        assert!(result.contains("✓"), "{result}");
++        let content = std::fs::read_to_string(f.path()).unwrap();
++        assert_eq!(content, src.replace("run();", "run_fast();"));
++    }
++
++    #[test]
++    fn aggressive_view_ambiguous_match_is_not_applied() {
++        let src = "fn a() {\n    // one\n    go();\n}\nfn b() {\n    // two\n    go();\n}\n";
++        let f = make_temp_rs(src);
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(f.path(), "{\n  go();\n}", "{\n  stop();\n}", false, false),
++        );
++        assert!(result.contains("ERROR"), "ambiguous loose match must not apply: {result}");
++        assert_eq!(std::fs::read_to_string(f.path()).unwrap(), src);
++    }
++
++    #[test]
++    fn loose_match_does_not_ignore_real_content_differences() {
++        let f = make_temp_rs(STRIPPED_SRC);
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(
++                f.path(),
++                "  let x = a + c;\n  let y = x * 2;",
++                "  let x = 0;\n  let y = 0;",
++                false,
++                false,
++            ),
++        );
++        assert!(result.contains("ERROR"), "{result}");
++        assert_eq!(std::fs::read_to_string(f.path()).unwrap(), STRIPPED_SRC);
++    }
+ }
+diff --git a/rust/src/tools/edit_loose_match.rs b/rust/src/tools/edit_loose_match.rs
+new file mode 100644
+index 0000000..b82e35b
+--- /dev/null
++++ b/rust/src/tools/edit_loose_match.rs
+@@ -0,0 +1,370 @@
++//! Last-resort `ctx_edit` matching for an `old_string` copied out of a lossy
++//! `ctx_read` view.
++//!
++//! `ctx_read` modes such as `aggressive` (which `auto` may also pick) strip
++//! blank lines and comment-only lines, halve space indentation and merge runs
++//! of closing braces (`}` + `}` → `}}`). An agent that copies `old_string` from
++//! that view can never match the file byte-for-byte, so the edit failed.
++//!
++//! This module matches on *significant* lines only — blank and comment-only
++//! lines are skipped on both sides (with the exact rules of
++//! [`crate::core::compressor::aggressive_compress`]) and each line is compared
++//! with its whitespace collapsed. A match is only accepted when it is unique
++//! and covers whole lines of the file. The replacement then:
++//!
++//! - keeps every unchanged line *verbatim* from the file,
++//! - keeps the stripped blank/comment lines inside the span, and
++//! - re-indents inserted/changed lines to the file's indentation style.
++
++/// One significant (non-skipped) unit of a text: the line index it comes from,
++/// and its whitespace-collapsed key.
++#[derive(Debug, Clone)]
++struct Unit {
++    line: usize,
++    key: String,
++}
++
++/// A successful loose match: the exact original span to replace and its
++/// replacement (both using the file's line separator).
++#[derive(Debug)]
++pub(crate) struct LooseMatch {
++    pub(crate) original: String,
++    pub(crate) replacement: String,
++}
++
++/// Closing tokens that `aggressive_compress` merges onto one line.
++const CLOSERS: [&str; 4] = ["});", "};", ");", "}"];
++
++/// Splits a line made up solely of closing tokens (e.g. `}}` or `});}`) into
++/// its tokens; returns `None` for any other line.
++fn split_closers(trimmed: &str) -> Option<Vec<&'static str>> {
++    let mut rest = trimmed;
++    let mut out = Vec::new();
++    while !rest.is_empty() {
++        let tok = CLOSERS.iter().find(|c| rest.starts_with(**c))?;
++        out.push(*tok);
++        rest = &rest[tok.len()..];
++    }
++    if out.is_empty() { None } else { Some(out) }
++}
++
++fn collapse_ws(s: &str) -> String {
++    s.split_whitespace().collect::<Vec<_>>().join(" ")
++}
++
++/// Mirrors the line-skipping rules of `aggressive_compress`.
++struct SkipRules {
++    is_python: bool,
++    is_html: bool,
++    is_sql: bool,
++    is_shell: bool,
++}
++
++impl SkipRules {
++    fn new(ext: &str) -> Self {
++        Self {
++            is_python: ext == "py",
++            is_html: matches!(ext, "html" | "htm" | "xml" | "svg"),
++            is_sql: ext == "sql",
++            is_shell: matches!(ext, "sh" | "bash" | "zsh" | "fish"),
++        }
++    }
++
++    /// Classifies every line: `true` = stripped (blank or comment-only).
++    fn skipped(&self, lines: &[&str]) -> Vec<bool> {
++        let mut in_block = false;
++        lines
++            .iter()
++            .map(|line| {
++                let t = line.trim();
++                if t.is_empty() {
++                    return true;
++                }
++                if in_block {
++                    if t.contains("*/") || (self.is_html && t.contains("-->")) {
++                        in_block = false;
++                    }
++                    return true;
++                }
++                if t.starts_with("/*") || (self.is_html && t.starts_with("<!--")) {
++                    if !(t.contains("*/") || t.contains("-->")) {
++                        in_block = true;
++                    }
++                    return true;
++                }
++                (t.starts_with("//") && !t.starts_with("///"))
++                    || t.starts_with('*')
++                    || (self.is_python && t.starts_with('#'))
++                    || (self.is_sql && t.starts_with("--"))
++                    || (self.is_shell && t.starts_with('#') && !t.starts_with("#!"))
++                    || (!self.is_python && t.starts_with('#') && t.contains('['))
++            })
++            .collect()
++    }
++
++    fn units(&self, lines: &[&str]) -> Vec<Unit> {
++        let skipped = self.skipped(lines);
++        let mut out = Vec::new();
++        for (i, line) in lines.iter().enumerate() {
++            if skipped[i] {
++                continue;
++            }
++            let t = line.trim();
++            if let Some(toks) = split_closers(t) {
++                out.extend(toks.into_iter().map(|k| Unit {
++                    line: i,
++                    key: k.to_string(),
++                }));
++            } else {
++                out.push(Unit {
++                    line: i,
++                    key: collapse_ws(t),
++                });
++            }
++        }
++        out
++    }
++}
++
++fn indent_of(line: &str) -> &str {
++    &line[..line.len() - line.trim_start().len()]
++}
++
++/// Finds a unique, whole-line loose match of `old_str` in `content` and builds
++/// the replacement for `new_str`. Returns `None` when there is no match, or
++/// more than one (ambiguous edits are never applied loosely).
++pub(crate) fn find(content: &str, old_str: &str, new_str: &str, ext: &str) -> Option<LooseMatch> {
++    let rules = SkipRules::new(ext);
++    let sep = if content.contains("\r\n") { "\r\n" } else { "\n" };
++
++    let file_lines: Vec<&str> = content.lines().collect();
++    let old_norm = old_str.replace("\r\n", "\n");
++    let old_lines: Vec<&str> = old_norm.lines().collect();
++    let file_units = rules.units(&file_lines);
++    let needle = rules.units(&old_lines);
++    if needle.is_empty() || needle.len() > file_units.len() {
++        return None;
++    }
++
++    // Whole-line constraint: the match must start at the first unit of a file
++    // line and end at the last unit of a file line.
++    let starts_line = |i: usize| i == 0 || file_units[i - 1].line != file_units[i].line;
++    let ends_line = |i: usize| i + 1 == file_units.len() || file_units[i + 1].line != file_units[i].line;
++
++    let mut hit: Option<usize> = None;
++    for start in 0..=file_units.len() - needle.len() {
++        let end = start + needle.len() - 1;
++        if starts_line(start)
++            && ends_line(end)
++            && needle
++                .iter()
++                .zip(&file_units[start..=end])
++                .all(|(n, f)| n.key == f.key)
++        {
++            if hit.is_some() {
++                return None;
++            }
++            hit = Some(start);
++        }
++    }
++    let start = hit?;
++    let matched = &file_units[start..start + needle.len()];
++    let first_line = matched[0].line;
++    let last_line = matched[matched.len() - 1].line;
++
++    // Map each significant old_string line to the file lines it covers.
++    let mut old_groups: Vec<(String, usize, usize)> = Vec::new(); // (key, lo, hi)
++    let mut old_indent_pairs: Vec<(usize, String)> = Vec::new();
++    {
++        let mut i = 0;
++        while i < needle.len() {
++            let ol = needle[i].line;
++            let mut j = i;
++            while j + 1 < needle.len() && needle[j + 1].line == ol {
++                j += 1;
++            }
++            let lo = matched[i].line;
++            let hi = matched[j].line;
++            let key = needle[i..=j]
++                .iter()
++                .map(|u| u.key.as_str())
++                .collect::<Vec<_>>()
++                .join(" ");
++            old_groups.push((key, lo, hi));
++            if lo == hi {
++                let w = indent_of(old_lines[ol]).len();
++                old_indent_pairs.push((w, indent_of(file_lines[lo]).to_string()));
++            }
++            i = j + 1;
++        }
++    }
++
++    let new_norm = new_str.replace("\r\n", "\n");
++    let new_lines: Vec<&str> = new_norm.lines().collect();
++    let new_keys: Vec<String> = new_lines
++        .iter()
++        .map(|l| match split_closers(l.trim()) {
++            Some(toks) => toks.join(" "),
++            None => collapse_ws(l.trim()),
++        })
++        .collect();
++
++    // LCS alignment between significant old lines and new lines.
++    let (n, m) = (old_groups.len(), new_lines.len());
++    let mut lcs = vec![vec![0usize; m + 1]; n + 1];
++    for a in (0..n).rev() {
++        for b in (0..m).rev() {
++            lcs[a][b] = if old_groups[a].0 == new_keys[b] && !new_keys[b].is_empty() {
++                lcs[a + 1][b + 1] + 1
++            } else {
++                lcs[a + 1][b].max(lcs[a][b + 1])
++            };
++        }
++    }
++
++    // Diff ops from the LCS table.
++    let same = |a: usize, b: usize| old_groups[a].0 == new_keys[b] && !new_keys[b].is_empty();
++    let mut ops: Vec<Op> = Vec::new();
++    let (mut a, mut b) = (0, 0);
++    while a < n || b < m {
++        if a < n && b < m && same(a, b) {
++            ops.push(Op::Keep(a));
++            a += 1;
++            b += 1;
++        } else if a < n && (b >= m || lcs[a + 1][b] >= lcs[a][b + 1]) {
++            ops.push(Op::Del(a));
++            a += 1;
++        } else {
++            ops.push(Op::Ins(b));
++            b += 1;
++        }
++    }
++
++    let reindent = Reindent::new(&old_indent_pairs, content);
++    let mut out: Vec<String> = Vec::new();
++    let mut next_file_line = first_line;
++    let mut i = 0;
++    while i < ops.len() {
++        if let Op::Keep(a) = ops[i] {
++            // Unchanged: keep the file's lines verbatim (incl. stripped gaps).
++            let hi = old_groups[a].2;
++            out.extend(file_lines[next_file_line..=hi].iter().map(|s| (*s).to_string()));
++            next_file_line = hi + 1;
++            i += 1;
++            continue;
++        }
++        // A change hunk: pair removed and inserted lines positionally so a
++        // stripped comment above a rewritten line stays above its rewrite.
++        let mut dels = Vec::new();
++        let mut ins = Vec::new();
++        while i < ops.len() {
++            match ops[i] {
++                Op::Del(a) => dels.push(a),
++                Op::Ins(b) => ins.push(b),
++                Op::Keep(_) => break,
++            }
++            i += 1;
++        }
++        for k in 0..dels.len().max(ins.len()) {
++            if let Some(&a) = dels.get(k) {
++                let (_, lo, hi) = old_groups[a];
++                out.extend(file_lines[next_file_line..lo].iter().map(|s| (*s).to_string()));
++                next_file_line = hi + 1;
++            }
++            if let Some(&b) = ins.get(k) {
++                out.push(reindent.apply(new_lines[b]));
++            }
++        }
++    }
++    debug_assert_eq!(next_file_line, last_line + 1);
++
++    Some(LooseMatch {
++        original: file_lines[first_line..=last_line].join(sep),
++        replacement: out.join(sep),
++    })
++}
++
++#[derive(Clone, Copy)]
++enum Op {
++    Keep(usize),
++    Del(usize),
++    Ins(usize),
++}
++
++/// Translates indentation from the lossy view back to the file's style.
++struct Reindent {
++    exact: Vec<(usize, String)>,
++    unit: char,
++    scale: usize,
++}
++
++impl Reindent {
++    fn new(pairs: &[(usize, String)], content: &str) -> Self {
++        let unit = if pairs.iter().any(|(_, f)| f.starts_with('\t'))
++            || content.lines().any(|l| l.starts_with('\t'))
++        {
++            '\t'
++        } else {
++            ' '
++        };
++        // Infer the view→file width ratio from matched indented lines.
++        let scale = pairs
++            .iter()
++            .find(|(w, f)| *w > 0 && !f.is_empty() && f.chars().count() % *w == 0)
++            .map_or(1, |(w, f)| f.chars().count() / *w);
++        Self {
++            exact: pairs.to_vec(),
++            unit,
++            scale,
++        }
++    }
++
++    fn apply(&self, line: &str) -> String {
++        let body = line.trim_start();
++        if body.is_empty() {
++            return String::new();
++        }
++        let w = line.len() - body.len();
++        if let Some((_, f)) = self.exact.iter().find(|(pw, _)| *pw == w) {
++            return format!("{f}{body}");
++        }
++        let width = if self.unit == '\t' { w } else { w * self.scale };
++        format!("{}{body}", self.unit.to_string().repeat(width))
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn split_closers_only_accepts_pure_closer_runs() {
++        assert_eq!(split_closers("}}"), Some(vec!["}", "}"]));
++        assert_eq!(split_closers("});}"), Some(vec!["});", "}"]));
++        assert_eq!(split_closers("} else {"), None);
++    }
++
++    #[test]
++    fn exact_text_without_stripped_lines_round_trips() {
++        let c = "a\n    b\nc\n";
++        let m = find(c, "  b", "  B", "rs").unwrap();
++        assert_eq!(m.original, "    b");
++        assert_eq!(m.replacement, "    B");
++    }
++
++    #[test]
++    fn deleted_line_keeps_preceding_comment() {
++        let c = "fn f() {\n    // note\n    drop_me();\n    keep();\n}\n";
++        let m = find(c, "  drop_me();\n  keep();", "  keep();", "rs").unwrap();
++        assert_eq!(m.original, "    drop_me();\n    keep();");
++        assert_eq!(m.replacement, "    keep();");
++    }
++
++    #[test]
++    fn crlf_file_keeps_crlf() {
++        let c = "x {\r\n\r\n    a();\r\n    b();\r\n}\r\n";
++        let m = find(c, "  a();\n  b();", "  a();\n  c();", "rs").unwrap();
++        assert_eq!(m.original, "    a();\r\n    b();");
++        assert_eq!(m.replacement, "    a();\r\n    c();");
++    }
++}
+diff --git a/rust/src/tools/mod.rs b/rust/src/tools/mod.rs
+index aec9fe3..3ac35eb 100644
+--- a/rust/src/tools/mod.rs
++++ b/rust/src/tools/mod.rs
+@@ -73,6 +73,7 @@ pub mod ctx_tree;
+ pub mod ctx_verify;
+ pub mod ctx_workflow;
+ pub(crate) mod edit_io;
++pub(crate) mod edit_loose_match;
+ pub(crate) mod edit_recovery;
+ pub(crate) mod graph_meta;
+ pub(crate) mod knowledge_shared;

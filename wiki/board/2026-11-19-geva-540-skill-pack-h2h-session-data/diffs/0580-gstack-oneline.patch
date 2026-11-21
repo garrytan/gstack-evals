@@ -1,0 +1,145 @@
+diff --git a/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go b/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
+index 56b17b5..758a108 100644
+--- a/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
++++ b/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
+@@ -1,7 +1,13 @@
+ package dnsproxy
+ 
+ import (
++	"sort"
++	"strings"
++	"sync"
++
+ 	"github.com/prometheus/client_golang/prometheus"
++	dto "github.com/prometheus/client_model/go"
++	"google.golang.org/protobuf/proto"
+ )
+ 
+ type metrics struct {
+@@ -10,7 +16,10 @@ type metrics struct {
+ 	UpstreamRequestFailureCount prometheus.Counter
+ }
+ 
+-var m *metrics
++var (
++	m         *metrics
++	collector *labeledCollector
++)
+ 
+ func newMetrics() *metrics {
+ 	if m != nil {
+@@ -20,12 +29,12 @@ func newMetrics() *metrics {
+ 		Name: "kuma_dp_dns_upstream_request_duration_seconds",
+ 		Help: "The duration of the proxied requests.",
+ 	})
+-	prometheus.MustRegister(upstreamRequestDuration)
+ 	requestDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
+ 		Name: "kuma_dp_dns_request_duration_seconds",
+ 		Help: "The duration of the request (inclusive of request that use internal DNS map).",
+ 	})
+-	prometheus.MustRegister(requestDuration)
++	collector = &labeledCollector{inner: []prometheus.Collector{upstreamRequestDuration, requestDuration}}
++	prometheus.MustRegister(collector)
+ 	upstreamRequestFailureCount := prometheus.NewCounter(prometheus.CounterOpts{
+ 		Name: "kuma_dp_dns_upstream_request_failure_count",
+ 		Help: "The total number of failed upstream requests.",
+@@ -37,3 +46,79 @@ func newMetrics() *metrics {
+ 	}
+ 	return m
+ }
++
++// SetMetricsLabels sets constant labels (e.g. kuma_workload, mesh, k8s_kuma_io_namespace, kuma_io_zone)
++// on DNS metrics so they match labels added to Envoy metrics.
++func SetMetricsLabels(extraLabels map[string]string) {
++	if collector == nil {
++		return
++	}
++	var labels []*dto.LabelPair
++	for k, v := range extraLabels {
++		if k == "" || v == "" {
++			continue
++		}
++		labels = append(labels, &dto.LabelPair{Name: proto.String(sanitizeLabelName(k)), Value: proto.String(v)})
++	}
++	sort.Slice(labels, func(i, j int) bool { return labels[i].GetName() < labels[j].GetName() })
++	collector.mu.Lock()
++	collector.labels = labels
++	collector.mu.Unlock()
++}
++
++// labeledCollector is an unchecked collector which adds labels, that can change at runtime, to inner metrics.
++type labeledCollector struct {
++	mu     sync.RWMutex
++	labels []*dto.LabelPair
++	inner  []prometheus.Collector
++}
++
++func (c *labeledCollector) Describe(chan<- *prometheus.Desc) {}
++
++func (c *labeledCollector) Collect(ch chan<- prometheus.Metric) {
++	c.mu.RLock()
++	labels := c.labels
++	c.mu.RUnlock()
++	innerCh := make(chan prometheus.Metric)
++	go func() {
++		for _, in := range c.inner {
++			in.Collect(innerCh)
++		}
++		close(innerCh)
++	}()
++	for metric := range innerCh {
++		ch <- &labeledMetric{Metric: metric, labels: labels}
++	}
++}
++
++type labeledMetric struct {
++	prometheus.Metric
++	labels []*dto.LabelPair
++}
++
++func (l *labeledMetric) Write(out *dto.Metric) error {
++	if err := l.Metric.Write(out); err != nil {
++		return err
++	}
++	out.Label = append(out.Label, l.labels...)
++	sort.Slice(out.Label, func(i, j int) bool { return out.Label[i].GetName() < out.Label[j].GetName() })
++	return nil
++}
++
++func sanitizeLabelName(name string) string {
++	var b strings.Builder
++	for i, r := range name {
++		switch {
++		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r == '_':
++			b.WriteRune(r)
++		case r >= '0' && r <= '9':
++			if i == 0 {
++				b.WriteRune('_')
++			}
++			b.WriteRune(r)
++		default:
++			b.WriteRune('_')
++		}
++	}
++	return b.String()
++}
+diff --git a/app/kuma-dp/pkg/dataplane/meshmetrics/component.go b/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
+index e207929..bcea8a4 100644
+--- a/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
++++ b/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
+@@ -12,6 +12,7 @@ import (
+ 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+ 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+ 
++	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/dnsproxy"
+ 	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/metrics"
+ 	"github.com/kumahq/kuma/v2/pkg/core"
+ 	"github.com/kumahq/kuma/v2/pkg/core/runtime/component"
+@@ -255,6 +256,7 @@ func (m *Manager) reconfigureBackend(ctx context.Context, backendName string, ba
+ }
+ 
+ func (m *Manager) Step(configuration dpapi.MeshMetricDpConfig) error {
++	dnsproxy.SetMetricsLabels(configuration.Observability.Metrics.ExtraLabels)
+ 	newApplicationsToScrape := m.mapApplicationToApplicationToScrape(configuration.Observability.Metrics.Applications, configuration.Observability.Metrics.Sidecar, configuration.Observability.Metrics.ExtraLabels)
+ 	m.configurePrometheus(newApplicationsToScrape, getPrometheusBackends(configuration.Observability.Metrics.Backends))
+ 	return m.configureOpenTelemetryExporter(m.ctx, newApplicationsToScrape, getOpenTelemetryBackends(configuration.Observability.Metrics.Backends))

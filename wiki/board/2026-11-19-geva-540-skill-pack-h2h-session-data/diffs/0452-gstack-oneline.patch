@@ -1,0 +1,73 @@
+diff --git a/internal/storage/embeddeddolt/schema.go b/internal/storage/embeddeddolt/schema.go
+index 1e86ec8..9c698e1 100644
+--- a/internal/storage/embeddeddolt/schema.go
++++ b/internal/storage/embeddeddolt/schema.go
+@@ -169,3 +169,54 @@ func backfillMigrations(ctx context.Context, tx *sql.Tx) (int, error) {
+ 	}
+ 	return n, nil
+ }
++
++// ensureIgnoredTables re-creates the dolt_ignore'd wisp tables (wisps, wisp_*)
++// if they are missing. These tables live only in the working set and are not
++// part of commit history, so they may be absent even when all migrations have
++// been recorded as applied. Safe to call repeatedly.
++func ensureIgnoredTables(ctx context.Context, tx *sql.Tx) error {
++	exists := func(name string) (bool, error) {
++		var n int
++		err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = ? AND table_schema = DATABASE()", name).Scan(&n)
++		return n > 0, err
++	}
++	run := func(file string) error {
++		data, err := upMigrations.ReadFile("schema/" + file)
++		if err != nil {
++			return fmt.Errorf("reading migration %s: %w", file, err)
++		}
++		if _, err := tx.ExecContext(ctx, strings.TrimSpace(string(data))); err != nil {
++			return fmt.Errorf("re-creating ignored tables (%s): %w", file, err)
++		}
++		return nil
++	}
++
++	ok, err := exists("wisps")
++	if err != nil {
++		return fmt.Errorf("checking wisps table: %w", err)
++	}
++	if !ok {
++		if err := run("0020_create_wisps.up.sql"); err != nil {
++			return err
++		}
++		if _, err := tx.ExecContext(ctx, "ALTER TABLE wisps ADD COLUMN no_history TINYINT(1) DEFAULT 0"); err != nil {
++			return fmt.Errorf("re-creating ignored tables (wisps.no_history): %w", err)
++		}
++	}
++
++	ok, err = exists("wisp_dependencies")
++	if err != nil {
++		return fmt.Errorf("checking wisp_dependencies table: %w", err)
++	}
++	// 0021 uses CREATE TABLE IF NOT EXISTS, so it also fills in any other
++	// missing wisp_* auxiliary tables.
++	if err := run("0021_create_wisp_auxiliary.up.sql"); err != nil {
++		return err
++	}
++	if !ok {
++		if err := run("0022_wisp_dep_type_index.up.sql"); err != nil {
++			return err
++		}
++	}
++	return nil
++}
+diff --git a/internal/storage/embeddeddolt/store.go b/internal/storage/embeddeddolt/store.go
+index d9f0dcc..6984aa6 100644
+--- a/internal/storage/embeddeddolt/store.go
++++ b/internal/storage/embeddeddolt/store.go
+@@ -237,6 +237,9 @@ func (s *EmbeddedDoltStore) initSchema(ctx context.Context) error {
+ 		if err != nil {
+ 			return err
+ 		}
++		if err := ensureIgnoredTables(ctx, tx); err != nil {
++			return err
++		}
+ 		if applied > 0 {
+ 			if _, err := tx.ExecContext(ctx, "CALL DOLT_ADD('-A')"); err != nil {
+ 				return fmt.Errorf("dolt add after migrations: %w", err)

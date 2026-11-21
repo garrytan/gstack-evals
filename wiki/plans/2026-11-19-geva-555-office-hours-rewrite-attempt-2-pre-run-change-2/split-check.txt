@@ -1,0 +1,52 @@
+# Stage 1's split at Sol's measured skill central of $2.04: each item's need at 1.35 times central, the $1 move
+# into ohr-s1-arms, and the lane's own checks on the new split. Run read-only from the lane tree at f04c48a5 with bun;
+# a repair item's need is the largest round reservation, since the repair must start its first round at 1.35 times central.
+
+// Scratch, read-only: stage 1's split at Sol's measured skill central of $2.04, each item's own need at 1.35 times
+// central, the $1 move into ohr-s1-arms, and the lane's own checks on the new split. Run from ~/.capy/work/ohr2/wt.
+import { CENTRAL, SCHEDULES, SPLIT, finishesUpTo, scheduleProblems, splitProblems, walkSchedule } from "./lanes/office-hours-rewrite/ledger.ts";
+(CENTRAL.session as any).sol = { skill: 2.04, none: 0.3 };
+const s1 = SCHEDULES.find((s) => s.name === "stage1")!, rep = SCHEDULES.find((s) => s.name === "stage1-repair")!;
+const needs = (split: typeof SPLIT) => {
+  const a = walkSchedule(s1, 1.35, split);
+  const r = walkSchedule(rep, 1.35, split), r0 = walkSchedule(rep, 0, split);
+  const first = Math.round(1.35 * Math.min(r.ran, 3) * CENTRAL.label * 1e6) / 1e6 + 1;
+  return { "ohr-s1-arms": a.need.arms, "ohr-s1-sim": a.need.sim, "ohr-s1-labels": a.need.labels, "ohr-s1-repair-arms": r0.need.arms, "ohr-s1-repair-sim": r0.need.sim, "ohr-s1-repair-labels": Math.round(first * 100) / 100 } as Record<string, number>;
+};
+const show = (name: string, split: typeof SPLIT) => {
+  const n = needs(split);
+  console.log(name);
+  for (const p of split.filter((x) => x.line === "stage1")) console.log("  " + p.item.padEnd(22) + " cap $" + String(p.cap).padStart(4) + "  need at 1.35x $" + n[p.item]!.toFixed(2).padStart(7) + "  room $" + (p.cap - n[p.item]!).toFixed(2).padStart(6));
+  console.log("  stage 1 total $" + split.filter((x) => x.line === "stage1").reduce((s, p) => s + p.cap, 0));
+  console.log("  " + SCHEDULES.map((s) => s.name + " finishes up to " + finishesUpTo(s, split)).join("; "));
+  console.log("  scheduleProblems: " + JSON.stringify(scheduleProblems(split)) + "; splitProblems: " + JSON.stringify(splitProblems(split)));
+  return n;
+};
+const n = show("Sol skill central $2.04, split as built", SPLIT);
+const donors = SPLIT.filter((p) => p.line === "stage1" && p.item !== "ohr-s1-arms").map((p) => ({ item: p.item, room: p.cap - n[p.item]! })).sort((a, b) => b.room - a.room);
+console.log("donor with the most room: " + donors[0]!.item + " ($" + donors[0]!.room.toFixed(2) + ")");
+const moved = SPLIT.map((p) => p.item === "ohr-s1-arms" ? { ...p, cap: p.cap + 1 } : p.item === donors[0]!.item ? { ...p, cap: p.cap - 1 } : p);
+show("Sol skill central $2.04, $1 moved from " + donors[0]!.item + " into ohr-s1-arms", moved);
+
+# Printed:
+Sol skill central $2.04, split as built
+  ohr-s1-arms            cap $ 151  need at 1.35x $ 151.41  room $ -0.41
+  ohr-s1-sim             cap $  14  need at 1.35x $  13.45  room $  0.55
+  ohr-s1-labels          cap $   7  need at 1.35x $   6.10  room $  0.90
+  ohr-s1-repair-arms     cap $  38  need at 1.35x $  33.00  room $  5.00
+  ohr-s1-repair-sim      cap $   7  need at 1.35x $   6.00  room $  1.00
+  ohr-s1-repair-labels   cap $   3  need at 1.35x $   1.24  room $  1.76
+  stage 1 total $220
+  stage1 finishes up to 1.345; stage1-repair finishes up to 0.057; stage2 finishes up to 1.354; stage2-particle finishes up to 1.363
+  scheduleProblems: ["stage1: does not finish at 1.35 times central; ohr-s1-arms holds $151 and needs $151.41, so the launch stops after 21 of 24 rounds"]; splitProblems: ["stage1: does not finish at 1.35 times central; ohr-s1-arms holds $151 and needs $151.41, so the launch stops after 21 of 24 rounds"]
+donor with the most room: ohr-s1-repair-arms ($5.00)
+Sol skill central $2.04, $1 moved from ohr-s1-repair-arms into ohr-s1-arms
+  ohr-s1-arms            cap $ 152  need at 1.35x $ 151.41  room $  0.59
+  ohr-s1-sim             cap $  14  need at 1.35x $  13.45  room $  0.55
+  ohr-s1-labels          cap $   7  need at 1.35x $   6.83  room $  0.17
+  ohr-s1-repair-arms     cap $  37  need at 1.35x $  33.00  room $  4.00
+  ohr-s1-repair-sim      cap $   7  need at 1.35x $   6.00  room $  1.00
+  ohr-s1-repair-labels   cap $   3  need at 1.35x $   1.24  room $  1.76
+  stage 1 total $220
+  stage1 finishes up to 1.356; stage1-repair finishes up to 0.045; stage2 finishes up to 1.354; stage2-particle finishes up to 1.363
+  scheduleProblems: []; splitProblems: []

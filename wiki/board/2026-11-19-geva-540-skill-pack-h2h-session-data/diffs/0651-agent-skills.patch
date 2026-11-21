@@ -1,0 +1,111 @@
+diff --git a/execution/rerun/rerun.go b/execution/rerun/rerun.go
+index 9ac1725..dba6cb7 100644
+--- a/execution/rerun/rerun.go
++++ b/execution/rerun/rerun.go
+@@ -33,6 +33,7 @@ var failedMeta *failedMetadata
+ 
+ func init() {
+ 	failedMeta = newFailedMetaData()
++	failedScenarioRows = make(map[string]map[int]bool)
+ }
+ 
+ type failedMetadata struct {
+@@ -96,11 +97,42 @@ func ListenFailedScenarios(wg *sync.WaitGroup, specDirs []string) {
+ 	}()
+ }
+ 
++// failedScenarioRows tracks, per failed scenario item, which data table rows failed.
++// It is used to undo a failure when a scenario passes on a retry (--max-retries-count).
++var failedScenarioRows = make(map[string]map[int]bool)
++
+ func prepareScenarioFailedMetadata(res *result.ScenarioResult, sce *gauge.Scenario, executionInfo *gauge_messages.ExecutionInfo) {
++	specPath := executionInfo.GetCurrentSpec().GetFileName()
++	item := fmt.Sprintf("%s:%v", util.RelPathToProjectRoot(specPath), sce.Span.Start)
+ 	if res.GetFailed() {
+-		specPath := executionInfo.GetCurrentSpec().GetFileName()
+-		failedScenario := util.RelPathToProjectRoot(specPath)
+-		failedMeta.addFailedItem(specPath, fmt.Sprintf("%s:%v", failedScenario, sce.Span.Start))
++		if _, ok := failedScenarioRows[item]; !ok {
++			failedScenarioRows[item] = make(map[int]bool)
++		}
++		failedScenarioRows[item][sce.ScenarioDataTableRowIndex] = true
++		failedMeta.addFailedItem(specPath, item)
++		return
++	}
++	if executionInfo.GetCurrentScenario().GetRetries().GetCurrentRetry() > 0 {
++		removeFailedScenarioRow(specPath, item, sce.ScenarioDataTableRowIndex)
++	}
++}
++
++// removeFailedScenarioRow forgets an earlier failed attempt of a scenario row that has now passed on retry.
++func removeFailedScenarioRow(specPath, item string, rowIndex int) {
++	rows, ok := failedScenarioRows[item]
++	if !ok {
++		return
++	}
++	delete(rows, rowIndex)
++	if len(rows) > 0 {
++		return
++	}
++	delete(failedScenarioRows, item)
++	if items, ok := failedMeta.failedItemsMap[specPath]; ok {
++		delete(items, item)
++		if len(items) == 0 {
++			delete(failedMeta.failedItemsMap, specPath)
++		}
+ 	}
+ }
+ 
+diff --git a/execution/rerun/rerun_test.go b/execution/rerun/rerun_test.go
+index 922f25c..cd48dc9 100644
+--- a/execution/rerun/rerun_test.go
++++ b/execution/rerun/rerun_test.go
+@@ -33,6 +33,7 @@ func (s *MySuite) SetUpTest(c *C) {
+ 	p, _ := filepath.Abs("_testdata")
+ 	config.ProjectRoot = p
+ 	failedMeta = newFailedMetaData()
++	failedScenarioRows = make(map[string]map[int]bool)
+ }
+ 
+ func (s *MySuite) TestIfFailedFileIsCreated(c *C) {
+@@ -122,3 +123,40 @@ func (s *MySuite) TestGetAllFailedItems(c *C) {
+ 
+ 	c.Assert(failedItems, DeepEquals, []string{"scn1", "scn2", "scn3"})
+ }
++
++func (s *MySuite) TestScenarioPassedOnRetryIsNotMarkedAsFailed(c *C) {
++	spec1Rel := filepath.Join("specs", "example1.spec")
++	spec1Abs := filepath.Join(config.ProjectRoot, spec1Rel)
++	sce := &gauge.Scenario{Span: &gauge.Span{Start: 2}}
++	failedAttempt := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_FAILED}}
++	passedRetry := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_PASSED}}
++	specInfo := &gauge_messages.SpecInfo{FileName: spec1Abs}
++
++	prepareScenarioFailedMetadata(failedAttempt, sce, &gauge_messages.ExecutionInfo{CurrentSpec: specInfo,
++		CurrentScenario: &gauge_messages.ScenarioInfo{Retries: &gauge_messages.ScenarioRetriesInfo{MaxRetries: 1, CurrentRetry: 0}}})
++	prepareScenarioFailedMetadata(passedRetry, sce, &gauge_messages.ExecutionInfo{CurrentSpec: specInfo,
++		CurrentScenario: &gauge_messages.ScenarioInfo{Retries: &gauge_messages.ScenarioRetriesInfo{MaxRetries: 1, CurrentRetry: 1}}})
++
++	c.Assert(failedMeta.getFailedItems(), DeepEquals, []string{})
++}
++
++func (s *MySuite) TestFailedTableRowIsKeptWhenAnotherRowPassesOnRetry(c *C) {
++	spec1Rel := filepath.Join("specs", "example1.spec")
++	spec1Abs := filepath.Join(config.ProjectRoot, spec1Rel)
++	row0 := &gauge.Scenario{Span: &gauge.Span{Start: 2}, ScenarioDataTableRowIndex: 0}
++	row1 := &gauge.Scenario{Span: &gauge.Span{Start: 2}, ScenarioDataTableRowIndex: 1}
++	failed := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_FAILED}}
++	passed := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_PASSED}}
++	specInfo := &gauge_messages.SpecInfo{FileName: spec1Abs}
++	info := func(retry int32) *gauge_messages.ExecutionInfo {
++		return &gauge_messages.ExecutionInfo{CurrentSpec: specInfo,
++			CurrentScenario: &gauge_messages.ScenarioInfo{Retries: &gauge_messages.ScenarioRetriesInfo{MaxRetries: 1, CurrentRetry: retry}}}
++	}
++
++	prepareScenarioFailedMetadata(failed, row0, info(0))
++	prepareScenarioFailedMetadata(failed, row0, info(1))
++	prepareScenarioFailedMetadata(failed, row1, info(0))
++	prepareScenarioFailedMetadata(passed, row1, info(1))
++
++	c.Assert(failedMeta.getFailedItems(), DeepEquals, []string{spec1Rel + ":2"})
++}

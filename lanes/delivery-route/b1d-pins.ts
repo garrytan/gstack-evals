@@ -51,6 +51,9 @@ export const GSTACK_ARM = {
   userOnly: ["land-and-deploy", "modernize"],
 } as const;
 
+/** A gstack pin as the arm checks read it; B1e's arm (b1e-pins.ts) is another one. */
+export type GstackPin = { repo: string; sha: string; version: string; setup: string; blobs: Readonly<Record<string, string>>; hooks: readonly (readonly [string, string | null, string, number, string])[]; config: Readonly<Record<string, string>> };
+
 // The held-out arms. project-md is B1c's arm unchanged (spec, tar and manifest). project-md-noescape is B1c's arm with one
 // change to its block: the escape clause after "Route only to skills in the session's available-skills list" goes, and
 // nothing else in the block, the placement script or the tree changes. none is B1's no-gstack arm.
@@ -89,9 +92,10 @@ export const B1D_SMOKE = ["aallan__vera-662_interface", "imperialcollegelondon__
 
 // Items, caps and the all-in stop. Planning rates per session (B1D_ARMS): gstack-main at B1's gstack-shaped Opus mean ($0.4773)
 // rounded up, the two project-file arms at B1c's measured mean ($0.4143) rounded up, none at B1's Opus none mean ($0.3072)
-// rounded up. The caps are the ones the Captain recorded.
+// rounded up. The caps are the ones the Captain recorded. The all-in stop went from $340 to $400 on 2026-11-19, before the
+// pilot, measured on the whole thread's counter (a dated pre-data change the results list).
 export const B1D = {
-  stopUsd: 340,
+  stopUsd: 400,
   hostRoot: "b1d",
   ledgerPort: "9950",
   armManifests: "arms/manifests/b1d",

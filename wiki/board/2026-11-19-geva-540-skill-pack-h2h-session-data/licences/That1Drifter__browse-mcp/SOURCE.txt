@@ -1,0 +1,3 @@
+https://github.com/That1Drifter/browse-mcp at 504575243652660565abbee7b269aace55886126
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): not listed
+Root licence and notice files at that commit: LICENSE, NOTICE.md

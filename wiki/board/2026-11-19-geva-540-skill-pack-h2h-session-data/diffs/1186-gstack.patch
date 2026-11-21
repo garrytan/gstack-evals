@@ -1,0 +1,437 @@
+diff --git a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/exportSpace.test.ts b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/exportSpace.test.ts
+index cbcee38..c84c672 100644
+--- a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/exportSpace.test.ts
++++ b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/exportSpace.test.ts
+@@ -42,6 +42,7 @@ describe('exportSpace', () => {
+     expect(mockContentfulExport).toHaveBeenCalledWith({
+       ...testArgs,
+       managementToken: mockConfig.accessToken,
++      host: mockConfig.host ?? 'api.contentful.com',
+       environmentId: 'test-environment',
+       exportDir: process.cwd(),
+       contentFile: 'contentful-export-test-space-id.json',
+@@ -108,12 +109,6 @@ describe('exportSpace', () => {
+       maxAllowedLimit: 500,
+       deliveryToken: 'test-delivery-token',
+ 
+-      // Network options
+-      host: 'eu.contentful.com',
+-      hostDelivery: 'cdn.contentful.com',
+-      proxy: 'user:pass@proxy:8080',
+-      rawProxy: true,
+-
+       // Logging and debugging
+       headers: {
+         'X-Custom': 'value',
+@@ -121,7 +116,6 @@ describe('exportSpace', () => {
+       },
+       errorLogFile: '/logs/export.log',
+       useVerboseRenderer: true,
+-      config: '/config/export.json',
+     });
+ 
+     const tool = createExportSpaceTool(mockConfig);
+@@ -130,6 +124,7 @@ describe('exportSpace', () => {
+     expect(mockContentfulExport).toHaveBeenCalledWith({
+       ...testArgs,
+       managementToken: mockConfig.accessToken,
++      host: mockConfig.host ?? 'api.contentful.com',
+     });
+ 
+     expect(result.content[0].text).toContain('Space exported successfully');
+@@ -159,4 +154,28 @@ describe('exportSpace', () => {
+       ],
+     });
+   });
++  it('should ignore attacker-controlled network options in args', async () => {
++    const testArgs = {
++      ...createExportTestArgs({ spaceId: 'victim-space' }),
++      host: 'attacker.example.com',
++      hostDelivery: 'attacker.example.com',
++      proxy: 'attacker.example.com:8080',
++      rawProxy: true,
++      insecure: true,
++      config: '/tmp/evil.json',
++      managementToken: 'attacker-token',
++    } as any;
++
++    const tool = createExportSpaceTool(mockConfig);
++    await tool(testArgs);
++
++    const options = mockContentfulExport.mock.calls[0][0];
++    expect(options.host).toBe(mockConfig.host ?? 'api.contentful.com');
++    expect(options.managementToken).toBe(mockConfig.accessToken);
++    expect(options).not.toHaveProperty('hostDelivery');
++    expect(options).not.toHaveProperty('proxy');
++    expect(options).not.toHaveProperty('rawProxy');
++    expect(options).not.toHaveProperty('insecure');
++    expect(options).not.toHaveProperty('config');
++  });
+ });
+diff --git a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/exportSpace.ts b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/exportSpace.ts
+index edaa21f..4323fb1 100644
+--- a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/exportSpace.ts
++++ b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/exportSpace.ts
+@@ -3,7 +3,11 @@ import {
+   createSuccessResponse,
+   withErrorHandling,
+ } from '../../../utils/response.js';
+-import { BaseToolSchema, createClientConfig } from '../../../utils/tools.js';
++import {
++  BaseToolSchema,
++  createClientConfig,
++  stripUnsafeNetworkOptions,
++} from '../../../utils/tools.js';
+ import type { ContentfulConfig } from '../../../config/types.js';
+ import {
+   EntryQuerySchema,
+@@ -96,13 +100,6 @@ export const ExportSpaceToolParams = BaseToolSchema.extend({
+     .string()
+     .optional()
+     .describe('CDA token to export only published content (excludes tags)'),
+-  host: z.string().optional().describe('Management API host'),
+-  hostDelivery: z.string().optional().describe('Delivery API host'),
+-  proxy: z.string().optional().describe('HTTP/HTTPS proxy config'),
+-  rawProxy: z
+-    .boolean()
+-    .optional()
+-    .describe('Pass raw proxy config directly to Axios'),
+   headers: z
+     .record(z.string())
+     .optional()
+@@ -112,10 +109,6 @@ export const ExportSpaceToolParams = BaseToolSchema.extend({
+     .boolean()
+     .optional()
+     .describe('Line-by-line logging, useful for CI'),
+-  config: z
+-    .string()
+-    .optional()
+-    .describe('Path to a JSON config file with all options'),
+ });
+ 
+ type Params = z.infer<typeof ExportSpaceToolParams>;
+@@ -131,9 +124,15 @@ export function createExportSpaceTool(config: ContentfulConfig) {
+     }
+ 
+     // Consolidate args with defaults and additional required fields
++    // Network/connection settings (host, proxy, insecure, config files, etc.)
++    // must never come from tool arguments: they would allow redirecting the
++    // management token to an arbitrary endpoint. Strip them defensively and
++    // always use the server-configured host.
++    const safeArgs = stripUnsafeNetworkOptions(args as Record<string, unknown>);
+     const exportOptions = {
+-      ...args,
++      ...safeArgs,
+       managementToken,
++      host: clientConfig.host,
+       environmentId: args.environmentId || 'master',
+       exportDir: args.exportDir || process.cwd(),
+       contentFile: args.contentFile || `contentful-export-${args.spaceId}.json`,
+diff --git a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/importSpace.test.ts b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/importSpace.test.ts
+index b40bb60..cedcf6b 100644
+--- a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/importSpace.test.ts
++++ b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/importSpace.test.ts
+@@ -38,6 +38,7 @@ describe('importSpace', () => {
+     expect(mockContentfulImport).toHaveBeenCalledWith({
+       ...testArgs,
+       managementToken: mockConfig.accessToken,
++      host: mockConfig.host ?? 'api.contentful.com',
+       environmentId: 'test-environment',
+     });
+ 
+@@ -87,11 +88,6 @@ describe('importSpace', () => {
+       retryLimit: 15,
+       rateLimit: 10,
+ 
+-      // Network options
+-      host: 'eu.contentful.com',
+-      proxy: 'user:pass@proxy:8080',
+-      rawProxy: true,
+-
+       // Logging and debugging
+       headers: {
+         'X-Custom': 'value',
+@@ -99,7 +95,6 @@ describe('importSpace', () => {
+       },
+       errorLogFile: '/logs/import.log',
+       useVerboseRenderer: true,
+-      config: '/config/import.json',
+     });
+ 
+     const tool = createImportSpaceTool(mockConfig);
+@@ -108,6 +103,7 @@ describe('importSpace', () => {
+     expect(mockContentfulImport).toHaveBeenCalledWith({
+       ...testArgs,
+       managementToken: mockConfig.accessToken,
++      host: mockConfig.host ?? 'api.contentful.com',
+     });
+ 
+     expect(result.content[0].text).toContain('Space imported successfully');
+@@ -135,4 +131,29 @@ describe('importSpace', () => {
+       ],
+     });
+   });
++  it('should ignore attacker-controlled network options in args', async () => {
++    const testArgs = {
++      ...createImportTestArgs({ spaceId: 'victim-space' }),
++      content: { contentTypes: [], entries: [] },
++      host: 'attacker.example.com',
++      hostDelivery: 'attacker.example.com',
++      proxy: 'attacker.example.com:8080',
++      rawProxy: true,
++      insecure: true,
++      config: '/tmp/evil.json',
++      managementToken: 'attacker-token',
++    } as any;
++
++    const tool = createImportSpaceTool(mockConfig);
++    await tool(testArgs);
++
++    const options = mockContentfulImport.mock.calls[0][0];
++    expect(options.host).toBe(mockConfig.host ?? 'api.contentful.com');
++    expect(options.managementToken).toBe(mockConfig.accessToken);
++    expect(options).not.toHaveProperty('hostDelivery');
++    expect(options).not.toHaveProperty('proxy');
++    expect(options).not.toHaveProperty('rawProxy');
++    expect(options).not.toHaveProperty('insecure');
++    expect(options).not.toHaveProperty('config');
++  });
+ });
+diff --git a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/importSpace.ts b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/importSpace.ts
+index 1ab4fed..e785ce7 100644
+--- a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/importSpace.ts
++++ b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/importSpace.ts
+@@ -3,7 +3,11 @@ import {
+   createSuccessResponse,
+   withErrorHandling,
+ } from '../../../utils/response.js';
+-import { BaseToolSchema, createClientConfig } from '../../../utils/tools.js';
++import {
++  BaseToolSchema,
++  createClientConfig,
++  stripUnsafeNetworkOptions,
++} from '../../../utils/tools.js';
+ import type { ContentfulConfig } from '../../../config/types.js';
+ 
+ export const ImportSpaceToolParams = BaseToolSchema.extend({
+@@ -66,15 +70,6 @@ export const ImportSpaceToolParams = BaseToolSchema.extend({
+     .optional()
+     .default(10)
+     .describe('Max retries for asset processing'),
+-  host: z.string().optional().describe('Management API host'),
+-  proxy: z
+-    .string()
+-    .optional()
+-    .describe('HTTP/HTTPS proxy string (host:port or user:pass@host:port)'),
+-  rawProxy: z
+-    .boolean()
+-    .optional()
+-    .describe('Pass proxy config directly to Axios'),
+   rateLimit: z
+     .number()
+     .optional()
+@@ -89,10 +84,6 @@ export const ImportSpaceToolParams = BaseToolSchema.extend({
+     .boolean()
+     .optional()
+     .describe('Line-by-line progress output (good for CI)'),
+-  config: z
+-    .string()
+-    .optional()
+-    .describe('Path to config JSON file (merged with CLI args)'),
+ });
+ 
+ type Params = z.infer<typeof ImportSpaceToolParams>;
+@@ -108,9 +99,15 @@ export function createImportSpaceTool(config: ContentfulConfig) {
+     }
+ 
+     // Consolidate args with defaults and additional required fields
++    // Network/connection settings (host, proxy, insecure, config files, etc.)
++    // must never come from tool arguments: they would allow redirecting the
++    // management token to an arbitrary endpoint. Strip them defensively and
++    // always use the server-configured host.
++    const safeArgs = stripUnsafeNetworkOptions(args as Record<string, unknown>);
+     const importOptions = {
+-      ...args,
++      ...safeArgs,
+       managementToken,
++      host: clientConfig.host,
+       environmentId: args.environmentId || 'master',
+     } as any;
+ 
+diff --git a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/mockClient.ts b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/mockClient.ts
+index 9323c17..11787be 100644
+--- a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/mockClient.ts
++++ b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/mockClient.ts
+@@ -135,7 +135,6 @@ export const createExportTestArgs = (
+   contentOnly: false,
+   downloadAssets: false,
+   maxAllowedLimit: 1000,
+-  rawProxy: false,
+   useVerboseRenderer: false,
+   ...overrides,
+ });
+diff --git a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/paramCollection.test.ts b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/paramCollection.test.ts
+index 060d3d1..a9c0f43 100644
+--- a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/paramCollection.test.ts
++++ b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/paramCollection.test.ts
+@@ -130,8 +130,6 @@ describe('paramCollection', () => {
+           mimetype_group: 'image',
+           limit: 50,
+         },
+-        host: 'custom.contentful.com',
+-        proxy: 'http://proxy:8080',
+         headers: {
+           'X-Custom-Header': 'value',
+         },
+@@ -174,16 +172,12 @@ describe('paramCollection', () => {
+         assetsDirectory: '/assets',
+         timeout: 5000,
+         retryLimit: 15,
+-        host: 'eu.contentful.com',
+-        proxy: 'user:pass@proxy:8080',
+-        rawProxy: true,
+         rateLimit: 10,
+         headers: {
+           Authorization: 'Bearer token',
+         },
+         errorLogFile: '/logs/import-errors.log',
+         useVerboseRenderer: false,
+-        config: '/config/import.json',
+       },
+     };
+ 
+diff --git a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/paramCollection.ts b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/paramCollection.ts
+index f3f662f..2279f6b 100644
+--- a/packages/mcp-tools/src/tools/jobs/space-to-space-migration/paramCollection.ts
++++ b/packages/mcp-tools/src/tools/jobs/space-to-space-migration/paramCollection.ts
+@@ -85,13 +85,6 @@ export const ParamCollectionToolParams = BaseToolSchema.extend({
+         .optional()
+         .describe('Download asset files to disk'),
+ 
+-      host: z.string().optional().describe('Management API host'),
+-      hostDelivery: z.string().optional().describe('Delivery API host'),
+-      proxy: z.string().optional().describe('HTTP/HTTPS proxy config'),
+-      rawProxy: z
+-        .boolean()
+-        .optional()
+-        .describe('Pass raw proxy config directly to Axios'),
+       maxAllowedLimit: z.number().optional().describe('Page size for requests'),
+       headers: z
+         .record(z.any())
+@@ -106,10 +99,6 @@ export const ParamCollectionToolParams = BaseToolSchema.extend({
+         .boolean()
+         .optional()
+         .describe('Line-by-line logging, useful for CI'),
+-      config: z
+-        .string()
+-        .optional()
+-        .describe('Path to a JSON config file with all options'),
+     })
+     .optional(),
+ 
+@@ -170,15 +159,6 @@ export const ParamCollectionToolParams = BaseToolSchema.extend({
+         .optional()
+         .describe('Max retries for asset processing'),
+ 
+-      host: z.string().optional().describe('Management API host'),
+-      proxy: z
+-        .string()
+-        .optional()
+-        .describe('HTTP/HTTPS proxy string (host:port or user:pass@host:port)'),
+-      rawProxy: z
+-        .boolean()
+-        .optional()
+-        .describe('Pass proxy config directly to Axios'),
+       rateLimit: z
+         .number()
+         .optional()
+@@ -193,10 +173,6 @@ export const ParamCollectionToolParams = BaseToolSchema.extend({
+         .boolean()
+         .optional()
+         .describe('Line-by-line progress output (good for CI)'),
+-      config: z
+-        .string()
+-        .optional()
+-        .describe('Path to config JSON file (merged with CLI args)'),
+     })
+     .optional(),
+ });
+@@ -231,16 +207,11 @@ queryEntries            // [array] - Export only entries that match query parame
+ queryAssets             // [array] - Export only assets that match query parameters
+ downloadAssets          // [boolean] - Download asset files to disk
+ 
+-host                    // [string] [default: 'api.contentful.com'] - Management API host
+-hostDelivery            // [string] [default: 'cdn.contentful.com'] - Delivery API host
+-proxy                   // [string] - HTTP/HTTPS proxy config
+-rawProxy                // [boolean] - Pass raw proxy config directly to Axios
+ maxAllowedLimit         // [number] [default: 1000] - Page size for requests
+ headers                 // [object] - Additional headers to include in requests
+ 
+ errorLogFile            // [string] - Path to error log output file
+ useVerboseRenderer      // [boolean] [default: false] - Line-by-line logging, useful for CI
+-config                  // [string] - Path to a JSON config file with all options
+     `,
+   },
+   import: {
+@@ -265,15 +236,11 @@ assetsDirectory         // [string] - Path to directory containing exported asse
+ timeout                 // [number] [default: 3000] - Time between retries during asset processing (ms)
+ retryLimit              // [number] [default: 10] - Max retries for asset processing
+ 
+-host                    // [string] [default: 'api.contentful.com'] - Management API host
+-proxy                   // [string] - HTTP/HTTPS proxy string (host:port or user:pass@host:port)
+-rawProxy                // [boolean] - Pass proxy config directly to Axios
+ rateLimit               // [number] [default: 7] - Max requests per second to the API
+ headers                 // [object] - Additional headers to attach to requests
+ 
+ errorLogFile            // [string] - Path to error log file
+ useVerboseRenderer      // [boolean] [default: false] - Line-by-line progress output (good for CI)
+-config                  // [string] - Path to config JSON file (merged with CLI args)
+     `,
+   },
+ };
+diff --git a/packages/mcp-tools/src/utils/tools.ts b/packages/mcp-tools/src/utils/tools.ts
+index 8b36540..a5bdfe8 100644
+--- a/packages/mcp-tools/src/utils/tools.ts
++++ b/packages/mcp-tools/src/utils/tools.ts
+@@ -47,3 +47,41 @@ export function createClientConfig(config: ContentfulConfig): ClientOptions {
+ 
+   return clientConfig;
+ }
++
++/**
++ * Option keys that control where/how requests are sent (or that can load
++ * arbitrary options from disk). These must never be taken from tool
++ * arguments, as they would let a caller redirect requests carrying the
++ * server's management token to an attacker-controlled endpoint.
++ */
++export const UNSAFE_NETWORK_OPTION_KEYS = [
++  'host',
++  'hostDelivery',
++  'hostUpload',
++  'port',
++  'basePath',
++  'baseURL',
++  'proxy',
++  'rawProxy',
++  'httpAgent',
++  'httpsAgent',
++  'insecure',
++  'config',
++  'accessToken',
++  'managementToken',
++  'adapter',
++] as const;
++
++/**
++ * Returns a shallow copy of `args` with all network/connection related
++ * options removed.
++ */
++export function stripUnsafeNetworkOptions<T extends Record<string, unknown>>(
++  args: T,
++): Omit<T, (typeof UNSAFE_NETWORK_OPTION_KEYS)[number]> {
++  const copy: Record<string, unknown> = { ...args };
++  for (const key of UNSAFE_NETWORK_OPTION_KEYS) {
++    delete copy[key];
++  }
++  return copy as Omit<T, (typeof UNSAFE_NETWORK_OPTION_KEYS)[number]>;
++}

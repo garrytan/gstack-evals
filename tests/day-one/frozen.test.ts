@@ -6,6 +6,7 @@ import { main } from "../../lanes/day-one/cli.ts";
 import * as F from "../../lanes/day-one/frozen.ts";
 import { ALL_IN_USD, ITEMS, ledgerCapUsd, projectionUsd } from "../../lanes/day-one/ledger.ts";
 import { UNIT_ID } from "../../lanes/day-one/units.ts";
+import { checkPrompt } from "../../lanes/day-one/verdict.ts";
 
 const prereg = readFileSync(join(import.meta.dir, "../..", F.PREREG), "utf8");
 const TEXTS = { COMMON_ASK: F.COMMON_ASK, REVIEW_ASK: F.REVIEW_ASK, DAY_ONE_PASS: F.DAY_ONE_PASS, AUTOPLAN_LINE: F.AUTOPLAN_LINE, OWNER_NOTICE: F.OWNER_NOTICE, PLATFORM: F.PLATFORM, BUILD_PROMPT: F.BUILD_PROMPT, CHECK_HEADER: F.CHECK_HEADER, CHECK_FOOTER: F.CHECK_FOOTER, OWNER_HEAD: F.OWNER_HEAD, OWNER_RULES: F.OWNER_RULES, OWNER_CLOSING: F.OWNER_CLOSING, GATE_REPLY: F.GATE_REPLY, LIMITS: F.limitsTable(), ...Object.fromEntries(F.PROBE_QUESTIONS.map((q, i) => ["PROBE_" + (i + 1), q])) };
@@ -35,11 +36,31 @@ describe("the day-one prereg holds the frozen values", () => {
     expect([F.UNIT_SETS.set.labels.length, F.UNIT_SETS.spares.labels.length, F.UNIT_SETS.practice.labels.length, F.UNIT_SETS.cat1.labels.length]).toEqual([15, 3, 3, 2]);
     for (const s of Object.values(F.UNIT_SETS)) expect(prereg).toContain(s.digest);
   });
-  test("A's gstack pin is in the prereg; the strengthened arms wait for theirs", () => {
-    expect(F.GSTACK_PINS.a).toEqual({ repo: "garrytan/gstack", sha: "5b4fa9ea335e3ba743a36e3269da95980b77b32d", version: "1.99.5.0" });
-    expect(prereg).toContain(F.GSTACK_PINS.a.sha!);
-    expect(F.GSTACK_PINS["s-full"].sha).toBeNull();
+  test("every gstack arm's pin is in the dated pin change, and the browser image in the prereg", () => {
+    expect(F.GSTACK_PINS).toEqual({
+      a: { repo: "garrytan/gstack", sha: "e671a531f4ede3d63b3143c96903466c960aca58", version: "1.100.0.0" },
+      "s-full": { repo: "garrytan/gstack", sha: "798782aeea7548d979878b7b559f5fc47bea2400", version: "1.100.0.0" },
+      "s-dayone": { repo: "garrytan/gstack", sha: "a2a421ba6734a861fee93234aa9fb4373dc858d0", version: "1.100.0.0" },
+    });
+    const change = readFileSync(join(import.meta.dir, "../..", F.PIN_CHANGE), "utf8");
+    for (const pin of Object.values(F.GSTACK_PINS)) expect(change).toContain(pin.sha!);
+    expect(change).toContain("2026-11-17-geva-546-day-one-usefulness-prereg");
     expect(prereg).toContain(F.BROWSER_IMAGE.split("@")[1]!);
+  });
+  // Value: protects=the checker's identity, which binds a validation to the check stages it may count: fails_when=a check stage that ran another checker model or other limits carries the validated checker's hash; why_new=the day-one results review, which found the hash covered only the checker's texts; seam=checkerIdentity and CHECKER_SHA256 in lanes/day-one/frozen.ts; no_claim=the validation gate, which tests/day-one/cli.test.ts covers
+  test("the checker's identity covers its texts, its model and its limits", () => {
+    expect(F.CHECKER_SHA256).toBe(F.checkerIdentity(F.MODELS.checker, F.LIMITS.check));
+    expect(F.checkerIdentity("openai/gpt-6.2-sol", F.LIMITS.check)).not.toBe(F.CHECKER_SHA256);
+    expect(F.checkerIdentity(F.MODELS.checker, { ...F.LIMITS.check, turns: 401 })).not.toBe(F.CHECKER_SHA256);
+    expect(F.checkerIdentity(F.MODELS.checker, { ...F.LIMITS.check, minutes: 90 })).not.toBe(F.CHECKER_SHA256);
+  });
+  test("the checker repair is in its dated change and sits between the frozen header and the tasks", () => {
+    const change = readFileSync(join(import.meta.dir, "../..", F.REPAIR_CHANGE), "utf8");
+    expect(change).toContain(F.CHECK_REPAIR);
+    expect(prereg).not.toContain(F.CHECK_REPAIR);
+    const list = { tasks: [{ id: "t1", rank: 1, task: "Add a plant", success: "It shows after a reload", data: null }] } as unknown as Parameters<typeof checkPrompt>[0];
+    expect(checkPrompt(list).startsWith(F.CHECK_HEADER + "\n\n" + F.CHECK_REPAIR + "\n\nTask t1: ")).toBe(true);
+    expect(checkPrompt(list).endsWith(F.CHECK_FOOTER)).toBe(true);
   });
   test("the caps total the all-in stop and day1-plans' ledger cap carries the voice", () => {
     expect(ITEMS.reduce((a, i) => a + i.capUsd, 0)).toBe(ALL_IN_USD);

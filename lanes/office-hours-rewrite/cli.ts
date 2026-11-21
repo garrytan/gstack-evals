@@ -8,21 +8,26 @@
 //   run, rows   one launch on the Docker rig, and its rows against the frozen manifest (run/cli.ts)
 //   score       packets, check-packets, judges (production labels) and sessions (scored rows)
 //   judge-check the live judge probes, the gold pass, the check labels and section 12's judge check (ohr-judge-check)
-//   read        admission, decision (section 10's table) and report (section 11's lead table)
+//   read        admission, interim (stage 2's one look at its half), decision (section 10's table) and report (section 11's lead table)
 //   dryrun, e2e, preflight: keyless proof before any paid stage
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { CODES, docAnchor, isReasonCode, type ReasonCode } from "../../src/errors/codes.ts";
-import { writeSealed } from "../office-hours-founder/author/files.ts";
+import { sha256, writeSealed } from "../office-hours-founder/author/files.ts";
 import { insideRepo } from "../review-noloss/suite.ts";
-import { ageSealer, openCustody, sealCustody, SHM, writeAuthoring } from "./author/custody.ts";
-import { authorRun, checkAnswers, haltOf } from "./author/run.ts";
-import { gitReader, loadScreen } from "./author/screens.ts";
-import { GOLD_EFFORT, JUDGE_EFFORT, SEED } from "./frozen.ts";
+import { AuthorError } from "../office-hours-founder/author/files.ts";
+import { ageDecrypter, ageSealer, inShm, lockCheckpoints, openCustody, plaintextSha256, readJournal, readReuse, sealCustody, sealedJournal, SHM, writeAuthoring } from "./author/custody.ts";
+import { authorRun, checkAnswers, haltOf, type Checkpoint, type Reuse } from "./author/run.ts";
+import { gitReader, loadScreen, rescreen, SCREEN_SOURCES } from "./author/screens.ts";
+import { GOLD_EFFORT, JUDGE_EFFORT, REUSE_PLAINTEXT_SHA256, SEED } from "./frozen.ts";
 import { admission, admissionState, type AdmissionReading } from "./read/admission.ts";
+import { skillLoads } from "./read/load.ts";
 import { decide } from "./read/decision.ts";
+import { authoringEnd, readStops } from "./read/stops.ts";
+import { SPLIT } from "./ledger.ts";
 import type { HandRead } from "./read/guards.ts";
-import { leadTable, rates } from "./read/report.ts";
+import { interimLook, launchManifests, lookGate, readLook } from "./read/look.ts";
+import { leadTable, rates, sensitivity, solTrust } from "./read/report.ts";
 import { rowsCommand, runCommand } from "./run/cli.ts";
 import { buildCommit, loadBriefs } from "./run/manifest.ts";
 import { readRows, scheduledRows } from "./run/rows.ts";
@@ -97,41 +102,98 @@ export function readBriefs(dir: string): Map<string, Brief> {
 /** Every row of the named launch folders. */
 export const launchRows = (dirs: readonly string[]): SessionRow[] => dirs.flatMap((d) => [...readRows(d).values()].map((l) => l.row));
 
-async function withWire<T>(o: { dir: string; item: string; cap: string | undefined; label: string; record?: string; ledger?: string; env: Env; io: Io; cmd: string; buildCommit?: string }, body: (w: Wire) => Promise<T>): Promise<T> {
-  const w = await openWire({ dir: o.dir, item: o.item, capMicros: dollars(o.cap, "--spend-cap"), label: o.label, record: o.record, ledger: o.ledger, env: o.env, io: o.io, buildCommit: o.buildCommit });
+/** Runs body on an open wire and closes it, with the scope of a cap stop the body ended on, which makes that stop final on the item. */
+async function withWire<T>(o: { dir: string; item: string; cap: string | undefined; label: string; runId?: string; record?: string; ledger?: string; env: Env; io: Io; cmd: string; buildCommit?: string }, body: (w: Wire, capStop: (scope: string) => void) => Promise<T>): Promise<T> {
+  const w = await openWire({ dir: o.dir, item: o.item, capMicros: dollars(o.cap, "--spend-cap"), label: o.label, runId: o.runId, record: o.record, ledger: o.ledger, env: o.env, io: o.io, buildCommit: o.buildCommit });
+  let scope: string | undefined;
   try {
-    return await body(w);
+    return await body(w, (s) => (scope = s));
   } finally {
-    await w.close(o.cmd);
+    await w.close(o.cmd, scope);
   }
 }
 
-const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --out <new sealed path> --recipients <age recipients file> --gstack <clone holding both pins> --item <ledger item> --spend-cap <usd> [--concurrency <n>] [--record <dir>] [--ledger <path>]";
+const AUTHOR_USAGE = "gstack-evals ohr author --work <new dir under /dev/shm> --out <new sealed path> --recipients <age recipients file> --identity <age identity file> (--reuse <the first attempt's sealed authoring output> | --resume <a sealed checkpoint-<drafts>.age>) --gstack <clone holding both pins> --item <ledger item> --spend-cap <usd> [--meter <the stopped run's meter dir under /dev/shm, if it survived>] [--concurrency <n>] [--record <dir>] [--ledger <path>]";
 
-/** ohr author: authorRun, then the placed briefs, every outcome and the judge check's answers sealed with age. */
+/**
+ * ohr author: authorRun from the reused briefs (a new run) or from a sealed checkpoint and the draft records sealed after
+ * it (a stopped run), sealing every settled draft and a checkpoint after every batch into the checkpoints folder (the
+ * new run's <out>.checkpoints, or the checkpoint's own folder), then the placed briefs, every outcome and the judge
+ * check's answers sealed with age. A resume continues the run id its checkpoint records on the same ledger item, with
+ * or without the stopped run's meter dir; that dir only adds its reply cache. Spend and the cap's room come from the
+ * ledger item, and the projection's scale from the sealed records' per-draft spend. The command holds a flock on the
+ * run's checkpoints folder from before it reads the journal or leases until it exits, a resume refuses a run that ended
+ * on a cap stop or another --item, a run that ends on a cap stop closes its lease with it, and --out, whose folder holds
+ * the checkpoints, stays off /dev/shm so a reboot keeps them.
+ */
 async function author(argv: string[], io: Io, env: Env): Promise<number> {
-  const f = flags(argv, { one: ["--work", "--out", "--recipients", "--gstack", "--item", "--spend-cap", "--concurrency", "--record", "--ledger"] });
-  need(f, "ohr author", ["--work", "--out", "--recipients", "--gstack", "--item", "--spend-cap"]);
+  const f = flags(argv, { one: ["--work", "--out", "--recipients", "--identity", "--reuse", "--resume", "--meter", "--gstack", "--item", "--spend-cap", "--concurrency", "--record", "--ledger"] });
+  need(f, "ohr author", ["--work", "--out", "--recipients", "--identity", "--gstack", "--item", "--spend-cap"]);
+  if (f.has("--reuse") === f.has("--resume")) usage("ohr author takes one of --reuse, for a new run, and --resume, for a stopped one. Usage: " + AUTHOR_USAGE);
   const work = resolve(one(f, "--work")!);
-  if (!work.startsWith(SHM + "/")) usage("--work " + work + " is not under " + SHM + "; plaintext briefs live only in memory-backed storage. Usage: " + AUTHOR_USAGE);
+  if (!inShm(work)) usage("--work " + work + " is not under " + SHM + "; plaintext briefs live only in memory-backed storage. Usage: " + AUTHOR_USAGE);
   if (existsSync(work)) usage("--work " + work + " exists; every run writes into a new work directory");
   const out = fresh("--out", one(f, "--out")!);
+  if (inShm(out)) usage("--out " + out + " is under " + SHM + "; the sealed output and the checkpoints beside it go on storage that survives a reboot");
   const concurrency = Number(one(f, "--concurrency") ?? "4");
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) usage("--concurrency is a whole number of at least 1");
+  const meter = resolve(one(f, "--meter") ?? work + ".meter");
+  if (f.has("--meter") && (!inShm(meter) || !existsSync(meter))) usage("--meter " + meter + " is not an existing meter directory under " + SHM);
+  const identity = resolve(one(f, "--identity")!);
+  const resumeFrom = f.has("--resume") ? outside("--resume", one(f, "--resume")!) : null;
+  const checkpoints = resumeFrom ? dirname(resumeFrom) : fresh("--out", out + ".checkpoints");
+  const item = one(f, "--item")!;
+  let reuse: Reuse | undefined, resume: (Checkpoint & { run_id: string; item: string }) | undefined;
+  if (resumeFrom) {
+    lockCheckpoints(checkpoints);
+    resume = readJournal(resumeFrom, ageDecrypter(identity), work, item);
+  } else {
+    const sealed = outside("--reuse", one(f, "--reuse")!);
+    const sha = plaintextSha256(sealed, identity);
+    if (sha !== REUSE_PLAINTEXT_SHA256) throw new AuthorError("E_OHR_REUSE", sealed + "'s plaintext has sha256 " + sha + ", not the " + REUSE_PLAINTEXT_SHA256 + " section 4 records for the first attempt's authoring output");
+    reuse = readReuse(sealed, ageDecrypter(identity), work);
+    for (const x of reuse.failed) io.err("E_OHR_REUSE " + x.id + " in slot " + x.slot + " is not reused: " + x.why + "; its slot is drafted again");
+    mkdirSync(checkpoints, { recursive: true, mode: 0o700 });
+    lockCheckpoints(checkpoints);
+  }
   const screen = loadScreen(gitReader(resolve(one(f, "--gstack")!)));
   const cap = dollars(one(f, "--spend-cap"), "--spend-cap") / 1e6;
-  return withWire({ dir: work + ".meter", item: one(f, "--item")!, cap: one(f, "--spend-cap"), label: "ohr-author", record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr author" }, async (w) => {
-    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent }, { cap, concurrency });
+  const sealer = ageSealer(resolve(one(f, "--recipients")!));
+  return withWire({ dir: meter, item, cap: one(f, "--spend-cap"), label: "ohr-author", runId: resume?.run_id, record: one(f, "--record"), ledger: one(f, "--ledger"), env, io, cmd: "ohr author" }, async (w, capStop) => {
+    const run = await authorRun({ call: w.call, label: labeller(w.judge), parse: parseBlock, screen, spent: w.spent, spentOn: w.spentOn }, { cap, concurrency, reuse, resume, journal: sealedJournal({ dir: checkpoints, work, sealer, runId: w.runId, item }) });
+    if (run.stopped === "cap") capStop("ohr author: authoring's cap stop (" + (run.codes.join(", ") || "the cap less the spend held no brief allowance") + ")");
     const sink = openCustody(work, out);
     const summary = writeAuthoring(sink, run);
     writeSealed(sink, "authoring/check-answers.json", JSON.stringify(checkAnswers(run), null, 2) + "\n");
-    sealCustody(sink, out, ageSealer(resolve(one(f, "--recipients")!)));
+    sealCustody(sink, out, sealer);
     io.out(JSON.stringify(summary, null, 2));
-    io.out("ohr author: sealed to " + out + "; the meter's cache stays in " + work + ".meter");
+    io.out("ohr author: sealed to " + out + "; every draft record and checkpoint is sealed in " + checkpoints + "; the meter's cache stays in " + meter);
     const halt = haltOf(run, () => null);
     if (halt) io.err(halt.message);
     return halt ? 2 : 0;
   });
+}
+
+const RESCREEN_USAGE = "gstack-evals ohr rescreen --briefs-dir <dir> --gstack <gstack clone holding both pins>";
+
+/**
+ * ohr rescreen: authoring's vocabulary check (author/brief.ts checkBrief's first step) over every brief in a briefs
+ * directory, with the screen loadScreen builds from the pins (pre-run change 5). Keyless. It prints the screen's size and
+ * digest, then each brief's id and pass, or fail with the check's name, its counts and the files that hold a hit; it
+ * never prints brief text or a barred sequence. Exit 0 when every brief passes, 2 when any fails.
+ */
+async function rescreenCommand(argv: string[], io: Io): Promise<number> {
+  const f = flags(argv, { one: ["--briefs-dir", "--gstack"] });
+  need(f, "ohr rescreen", ["--briefs-dir", "--gstack"]);
+  const dir = outside("--briefs-dir", one(f, "--briefs-dir")!);
+  const screen = loadScreen(gitReader(resolve(one(f, "--gstack")!)));
+  const results = rescreen(screen, dir);
+  if (!results.length) usage("--briefs-dir " + dir + " holds no briefs. Usage: " + RESCREEN_USAGE);
+  io.out("ohr rescreen: the screen holds " + screen.grams.size + " five-word sequences, sha256 " + sha256(JSON.stringify([...screen.grams].sort())) + ", from " + SCREEN_SOURCES.map((s) => s.commit.slice(0, 8) + ":" + s.path).join(", "));
+  for (const r of results) io.out(r.id + " " + (r.pass ? "pass" : "fail vocabulary: barred sequences " + r.sequences + ", named terms " + r.terms + ", in " + r.files.join(", ")));
+  const failed = results.filter((r) => !r.pass).length;
+  io.out("ohr rescreen: " + results.length + " briefs, " + (results.length - failed) + " pass, " + failed + " fail");
+  return failed ? 2 : 0;
 }
 
 const AUDIT_USAGE = "gstack-evals ohr audit --briefs-dir <dir> --item <ledger item> --spend-cap <usd> --out <new record.json> [--parallel <n>] [--record <dir>] [--ledger <path>]";
@@ -270,8 +332,9 @@ async function judgeCheckCommand(argv: string[], io: Io, env: Env): Promise<numb
 
 const READ_USAGE = [
   "gstack-evals ohr read admission --scored <stage 1 scored.json> --launch <stage 1 out dir>... --audit <audit record.json> --judge-check <check.json> --label-usd <dollars a session> --out <new file> [--prior <earlier admission.json>]",
-  "gstack-evals ohr read decision --scored <stage 2 scored.json> --admission <admission.json>... --judge-check <check.json> --hand-reads <file> --out <new file> [--cap-stop]",
-  "gstack-evals ohr read report --scored <scored.json> --out <new file>",
+  "gstack-evals ohr read interim --scored <stage 2 first part scored.json> --launch <stage 2 first part out dir> --out <new file>",
+  "gstack-evals ohr read decision --scored <stage 2 scored.json> --admission <admission.json>... --judge-check <check.json> --hand-reads <file> --launch <launch out dir>... --record <ledger record dir> --authoring <sealed authoring output> --identity <age identity file> --out <new file> --interim <interim.json> [--cap-stop]",
+  "gstack-evals ohr read report --scored <scored.json> --out <new file> --launch <launch out dir>... --interim <interim.json>",
 ].join("\n");
 
 const passed = (p: string) => {
@@ -287,29 +350,60 @@ function read(argv: string[], io: Io): number {
     const out = fresh("--out", one(f, "--out")!);
     const label_usd = Number(one(f, "--label-usd"));
     if (!(label_usd >= 0)) usage("--label-usd is the measured label dollars a session");
-    const reading = admission({ rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)), sessions: launchRows(f.get("--launch")!.map((d) => outside("--launch", d))), audit: { pass: readJson<{ read: string }>(outside("--audit", one(f, "--audit")!)).read === "pass" }, judges: passed(outside("--judge-check", one(f, "--judge-check")!)), label_usd });
+    const sessions = launchRows(f.get("--launch")!.map((d) => outside("--launch", d)));
+    const reading = admission({ rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)), sessions, loads: skillLoads(sessions), audit: { pass: readJson<{ read: string }>(outside("--audit", one(f, "--audit")!)).read === "pass" }, judges: passed(outside("--judge-check", one(f, "--judge-check")!)), label_usd });
     const reads = [...(f.has("--prior") ? [readJson<AdmissionReading>(one(f, "--prior")!)] : []), reading];
     const state = admissionState(reads);
     writeJson(out, { ...reading, state });
     for (const c of reading.conditions) io.out(c.id + " " + (c.pass ? "pass" : "FAIL") + " " + JSON.stringify(c.values));
+    const a8 = reading.conditions.find((c) => c.id === "A8")!.values as { left_out: string[]; stage2_particle_arms: string[] };
+    if (a8.left_out.length) io.out("ohr read admission: A8 leaves " + a8.left_out.join(", ") + " out of stage 2; launch particle-1's stage 2 with --arms " + a8.stage2_particle_arms.join(" "));
     io.out("ohr read admission: " + state);
     return state === "admitted" ? 0 : 2;
   }
-  if (sub === "decision") {
-    const f = flags(rest, { one: ["--scored", "--judge-check", "--hand-reads", "--out"], many: ["--admission"], bool: ["--cap-stop"] });
-    need(f, "ohr read decision", ["--scored", "--admission", "--judge-check", "--hand-reads", "--out"]);
+  if (sub === "interim") {
+    const f = flags(rest, { one: ["--scored", "--launch", "--out"] });
+    need(f, "ohr read interim", ["--scored", "--launch", "--out"]);
     const out = fresh("--out", one(f, "--out")!);
-    const d = decide({ rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)), admission: admissionState(f.get("--admission")!.map((p) => readJson<AdmissionReading>(p))), cap_stop: f.has("--cap-stop"), judge_checks: passed(outside("--judge-check", one(f, "--judge-check")!)), hand_reads: readJson<HandRead[]>(outside("--hand-reads", one(f, "--hand-reads")!)) });
+    const record = interimLook({ launch: outside("--launch", one(f, "--launch")!), rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)) });
+    writeJson(out, record);
+    const r = record.read;
+    if (r.action === "continue") {
+      io.out("ohr read interim: continue; run the second part with --part second and --interim naming this record, whose numbers stay unread until the final read");
+      return 0;
+    }
+    const n = (x: number | null) => (x === null ? "undefined (every cluster differs by the same amount)" : x.toFixed(4));
+    io.out("ohr read interim: " + r.action + " at the half: estimate " + n(r.estimate) + " over " + r.C + " founder clusters, z " + n(r.z) + " against the bound " + n(r.bound) + ", conditional power " + n(r.cp));
+    io.out("ohr read interim: an estimate read at an early stop is possibly overstated; " + (r.action === "stop-new" ? "run the second half's builder briefs with --part second, then the final read" : "stage 2 ends at its half; go to the final read"));
+    return 0;
+  }
+  if (sub === "decision") {
+    const f = flags(rest, { one: ["--scored", "--judge-check", "--hand-reads", "--record", "--authoring", "--identity", "--out", "--interim"], many: ["--admission", "--launch"], bool: ["--cap-stop"] });
+    need(f, "ohr read decision", ["--scored", "--admission", "--judge-check", "--hand-reads", "--launch", "--record", "--authoring", "--identity", "--out", "--interim"]);
+    const out = fresh("--out", one(f, "--out")!);
+    const authoring = authoringEnd(outside("--authoring", one(f, "--authoring")!), ageDecrypter(resolve(one(f, "--identity")!)));
+    const stops = readStops({ launches: f.get("--launch")!.map((d) => outside("--launch", d)), record: resolve(one(f, "--record")!), items: [...new Set(SPLIT.map((p) => p.item))], authoring, flag: f.has("--cap-stop") });
+    for (const s of stops) io.out("ohr read decision: row 1 stop: " + s);
+    const rows = readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!));
+    const interim = readLook(outside("--interim", one(f, "--interim")!));
+    const look = lookGate({ look: interim.record, lookSha: interim.sha256, manifests: launchManifests(f.get("--launch")!.map((d) => outside("--launch", d))), rows });
+    const d = decide({ rows, admission: admissionState(f.get("--admission")!.map((p) => readJson<AdmissionReading>(p))), stops, judge_checks: passed(outside("--judge-check", one(f, "--judge-check")!)), hand_reads: readJson<HandRead[]>(outside("--hand-reads", one(f, "--hand-reads")!)), look });
     writeJson(out, d);
-    io.out("ohr read decision: row " + d.row + ", " + d.outcome);
+    io.out("ohr read decision: row " + d.row + ", " + d.outcome + (look.early ? " (stage 2 stopped at its half, " + look.action + "; the estimate is possibly overstated)" : ""));
     return 0;
   }
   if (sub === "report") {
-    const f = flags(rest, { one: ["--scored", "--out"] });
+    const f = flags(rest, { one: ["--scored", "--out", "--interim"], many: ["--launch"] });
     need(f, "ohr read report", ["--scored", "--out"]);
     const out = fresh("--out", one(f, "--out")!);
+    need(f, "ohr read report", ["--launch", "--interim"]);
     const rows = readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!));
-    writeJson(out, { lead: leadTable(rows), founder: rates(rows, "founder"), builder: rates(rows, "builder") });
+    const interim = readLook(outside("--interim", one(f, "--interim")!));
+    const look = lookGate({ look: interim.record, lookSha: interim.sha256, manifests: launchManifests(f.get("--launch")!.map((d) => outside("--launch", d))), rows });
+    const sol = solTrust(f.get("--launch")!.flatMap((d) => scheduledRows(outside("--launch", d))));
+    const sens = sensitivity(rows, new Set(sol.flagged.map((x) => x.cell)), look.level);
+    writeJson(out, { look: { ...look, possibly_overstated: look.early }, lead: leadTable(rows, {}, look.level), sensitivity: sens, sol, founder: rates(rows, "founder"), builder: rates(rows, "builder") });
+    io.out("ohr read report: sensitivity row with " + sens.flagged + " flagged Sol sessions scored as fails; " + sol.unreadable.length + " Sol cells missing on an unreadable rollout" + (sol.unreadable.length ? " (" + sol.unreadable.join(", ") + ")" : "") + "; " + sol.non_default.length + " Sol sessions with a non-default turn" + (sol.non_default.length ? " (" + sol.non_default.map((x) => x.cell).join(", ") + ")" : ""));
     io.out("ohr read report: written");
     return 0;
   }
@@ -320,11 +414,12 @@ function read(argv: string[], io: Io): number {
 export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
   author: { summary: "authoring under custody: the pilot, the draws and the sets, sealed with age", run: author },
   audit: { summary: "the fixed-script simulator audit over every sheet, GPT-6.2 Astra and Opus 5.5 at max", run: audit },
+  rescreen: { summary: "authoring's vocabulary check over a briefs directory, its screen read from the pins (keyless)", run: (argv, io) => rescreenCommand(argv, io) },
   run: { summary: "one launch (stage1, stage2 or stage2-particle) on the Docker rig with the simulated person", run: (argv, io, env) => runCommand(argv, io, env) },
   rows: { summary: "a launch's rows against its frozen manifest, with the end-state counts", run: (argv, io) => rowsCommand(argv, io) },
   score: { summary: "packets, check-packets, judges (production labels) and sessions (scored rows)", run: score },
   "judge-check": { summary: "the live judge probes, the gold pass, the check labels and section 12's judge check", run: judgeCheckCommand },
-  read: { summary: "admission (A1 to A7), decision (section 10's table) and report (section 11's lead table)", run: (argv, io) => read(argv, io) },
+  read: { summary: "admission (A1 to A7), interim (stage 2's one look at its half), decision (section 10's table) and report (section 11's lead table)", run: (argv, io) => read(argv, io) },
   dryrun: { summary: "the keyless dry run over every area's seams and one ledger lease per ledger item", run: async (argv, io) => (await import("./dryrun.ts")).run(argv, io) },
   e2e: { summary: "the keyless end to end on Docker, then a planted scoring pass through score and read", run: async (argv, io) => (await import("./e2e-score.ts")).run(argv, io) },
   preflight: { summary: "section 12's no-model preflight: the pins in the local gstack, Docker, the dry run and the end to end", run: async (argv, io, env) => (await import("./preflight.ts")).run(argv, io, env) },

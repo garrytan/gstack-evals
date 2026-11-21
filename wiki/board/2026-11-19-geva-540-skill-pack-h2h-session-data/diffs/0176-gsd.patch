@@ -1,0 +1,129 @@
+diff --git a/src/NAudio.Core/Wave/WaveOutputs/AiffFileWriter.cs b/src/NAudio.Core/Wave/WaveOutputs/AiffFileWriter.cs
+index c8a9e63..9975c90 100644
+--- a/src/NAudio.Core/Wave/WaveOutputs/AiffFileWriter.cs
++++ b/src/NAudio.Core/Wave/WaveOutputs/AiffFileWriter.cs
+@@ -209,7 +209,14 @@ public class AiffFileWriter : Stream
+ 
+         if (bytesPerSample <= 1)
+         {
+-            outStream.Write(data, offset, count);
++            // Input follows the 8-bit PCM WaveFormat convention (unsigned, offset by 128),
++            // but AIFF stores 8-bit samples as signed, so flip the sign bit.
++            byte[] signedData = new byte[count];
++            for (int i = 0; i < count; i++)
++            {
++                signedData[i] = (byte)(data[offset + i] ^ 0x80);
++            }
++            outStream.Write(signedData, 0, count);
+         }
+         else
+         {
+diff --git a/src/NAudio.Core/Wave/WaveStreams/AiffFileReader.cs b/src/NAudio.Core/Wave/WaveStreams/AiffFileReader.cs
+index 0fa542b..a3bb285 100644
+--- a/src/NAudio.Core/Wave/WaveStreams/AiffFileReader.cs
++++ b/src/NAudio.Core/Wave/WaveStreams/AiffFileReader.cs
+@@ -214,6 +214,8 @@ public class AiffFileReader : WaveStream
+     /// <summary>
+     /// Reads bytes from the AIFF File into the provided span.
+     /// AIFF sample data is big-endian on disk; this method swaps to little-endian.
++    /// AIFF 8-bit sample data is signed on disk; this method converts it to unsigned
++    /// (offset by 128), matching the usual 8-bit PCM WaveFormat convention.
+     /// <see cref="Stream.Read(Span{byte})"/>
+     /// </summary>
+     public override int Read(Span<byte> buffer)
+@@ -245,7 +247,13 @@ public class AiffFileReader : WaveStream
+             switch (WaveFormat.BitsPerSample)
+             {
+                 case 8:
+-                    // no swap required
++                    // AIFF 8-bit PCM is signed (two's complement), whereas the
++                    // WaveFormat PCM convention (as in WAV) is unsigned with a
++                    // 128 offset. No byte swap is needed, but flip the sign bit.
++                    for (int i = 0; i < read.Length; i++)
++                    {
++                        read[i] ^= 0x80;
++                    }
+                     break;
+                 case 16:
+                     for (int i = 0; i < read.Length; i += bytesPerSample)
+diff --git a/tests/NAudio.Core.Tests/Aiff/AiffReaderTests.cs b/tests/NAudio.Core.Tests/Aiff/AiffReaderTests.cs
+index ab24f0b..d7bb603 100644
+--- a/tests/NAudio.Core.Tests/Aiff/AiffReaderTests.cs
++++ b/tests/NAudio.Core.Tests/Aiff/AiffReaderTests.cs
+@@ -3,6 +3,7 @@ using NUnit.Framework;
+ using System.IO;
+ using NAudio.Wave;
+ using System.Diagnostics;
++using NAudio.Utils;
+ 
+ namespace NAudio.Core.Tests.Aiff;
+ 
+@@ -89,4 +90,68 @@ public class AiffReaderTests
+             while (reader.Read(buffer, 0, buffer.Length) > 0) { }
+         });
+     }
++
++    private static byte[] Build8BitMonoAiff(byte[] sampleData)
++    {
++        using var ms = new MemoryStream();
++        void WriteBE32(int v) { ms.WriteByte((byte)(v >> 24)); ms.WriteByte((byte)(v >> 16)); ms.WriteByte((byte)(v >> 8)); ms.WriteByte((byte)v); }
++        void WriteAscii(string s) { foreach (var c in s) ms.WriteByte((byte)c); }
++
++        WriteAscii("FORM");
++        WriteBE32(4 + (8 + 18) + (8 + 8 + sampleData.Length)); // sampleData.Length must be even (no pad byte written)
++        WriteAscii("AIFF");
++        WriteAscii("COMM");
++        WriteBE32(18);
++        ms.Write(new byte[] { 0x00, 0x01 }, 0, 2); // channels
++        WriteBE32(sampleData.Length); // sample frames
++        ms.Write(new byte[] { 0x00, 0x08 }, 0, 2); // sample size
++        ms.Write(new byte[] { 0x40, 0x0E, 0xAC, 0x44, 0, 0, 0, 0, 0, 0 }, 0, 10); // 44100 Hz
++        WriteAscii("SSND");
++        WriteBE32(8 + sampleData.Length);
++        WriteBE32(0); // offset
++        WriteBE32(0); // block size
++        ms.Write(sampleData, 0, sampleData.Length);
++        return ms.ToArray();
++    }
++
++    // AIFF 8-bit PCM is signed; it must not be interpreted as unsigned (WAV-style).
++    [Test]
++    [Category("UnitTest")]
++    public void EightBitAiffSamplesAreReadAsSigned()
++    {
++        byte[] raw = { 0x0A, 0x0A, 0x80, 0x83, 0x85, 0x88, 0x8A, 0x8D, 0x8F, 0x92, 0x00, 0x7F, 0xFF, 0x01 };
++        float[] expected = { 0.078125f, 0.078125f, -1f, -0.9765625f, -0.9609375f, -0.9375f, -0.921875f,
++            -0.8984375f, -0.8828125f, -0.859375f, 0f, 127 / 128f, -1 / 128f, 1 / 128f };
++
++        using var reader = new AiffFileReader(new MemoryStream(Build8BitMonoAiff(raw)));
++        var samples = new float[raw.Length];
++        int read = reader.ToSampleProvider().Read(samples);
++
++        Assert.That(read, Is.EqualTo(raw.Length));
++        Assert.That(samples, Is.EqualTo(expected));
++    }
++
++    [Test]
++    [Category("UnitTest")]
++    public void EightBitAiffWriteThenReadRoundTrips()
++    {
++        // WaveFormat 8-bit PCM convention: unsigned, 128 = silence
++        byte[] unsignedPcm = { 0x00, 0x40, 0x80, 0xC0, 0xFF, 0x8A };
++        var ms = new MemoryStream();
++        using (var writer = new AiffFileWriter(new IgnoreDisposeStream(ms), new WaveFormat(44100, 8, 1)))
++        {
++            writer.Write(unsignedPcm, 0, unsignedPcm.Length);
++        }
++
++        // on disk, AIFF stores signed bytes
++        var bytes = ms.ToArray();
++        var onDisk = new byte[unsignedPcm.Length];
++        Array.Copy(bytes, bytes.Length - unsignedPcm.Length, onDisk, 0, onDisk.Length);
++        Assert.That(onDisk, Is.EqualTo(new byte[] { 0x80, 0xC0, 0x00, 0x40, 0x7F, 0x0A }));
++
++        using var reader = new AiffFileReader(new MemoryStream(bytes));
++        var readBack = new byte[unsignedPcm.Length];
++        Assert.That(reader.Read(readBack, 0, readBack.Length), Is.EqualTo(unsignedPcm.Length));
++        Assert.That(readBack, Is.EqualTo(unsignedPcm));
++    }
+ }

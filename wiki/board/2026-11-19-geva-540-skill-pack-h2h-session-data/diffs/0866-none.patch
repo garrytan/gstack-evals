@@ -1,0 +1,317 @@
+diff --git a/internal/unstablehook/unstablehook.go b/internal/unstablehook/unstablehook.go
+new file mode 100644
+index 0000000..8635bdc
+--- /dev/null
++++ b/internal/unstablehook/unstablehook.go
+@@ -0,0 +1,10 @@
++// Package unstablehook exposes internal helpers of the unstable package to
++// the rest of go-toml without making them part of the public API.
++package unstablehook
++
++// NewInlineTable is set by the unstable package. It takes a list of
++// KeyValue expression nodes (of type *unstable.Node) and returns a deep copy
++// of them wrapped in a synthetic InlineTable node (*unstable.Node). The
++// returned node does not depend on the parser's internal buffers, so it
++// remains valid after the parser moves on to the next expression.
++var NewInlineTable func(kvs []interface{}) interface{}
+diff --git a/types.go b/types.go
+index 3c6b8fe..02f6af2 100644
+--- a/types.go
++++ b/types.go
+@@ -4,11 +4,14 @@ import (
+ 	"encoding"
+ 	"reflect"
+ 	"time"
++
++	"github.com/pelletier/go-toml/v2/unstable"
+ )
+ 
+ var timeType = reflect.TypeOf((*time.Time)(nil)).Elem()
+ var textMarshalerType = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
+ var textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
++var unmarshalerType = reflect.TypeOf((*unstable.Unmarshaler)(nil)).Elem()
+ var mapStringInterfaceType = reflect.TypeOf(map[string]interface{}(nil))
+ var sliceInterfaceType = reflect.TypeOf([]interface{}(nil))
+ var stringType = reflect.TypeOf("")
+diff --git a/unmarshaler.go b/unmarshaler.go
+index 189be52..c4c5d3f 100644
+--- a/unmarshaler.go
++++ b/unmarshaler.go
+@@ -14,6 +14,7 @@ import (
+ 
+ 	"github.com/pelletier/go-toml/v2/internal/danger"
+ 	"github.com/pelletier/go-toml/v2/internal/tracker"
++	"github.com/pelletier/go-toml/v2/internal/unstablehook"
+ 	"github.com/pelletier/go-toml/v2/unstable"
+ )
+ 
+@@ -62,8 +63,13 @@ func (d *Decoder) DisallowUnknownFields() *Decoder {
+ // that don't have a straightforward TOML representation to provide their own
+ // decoding logic.
+ //
+-// Currently, types can only decode from a single value. Tables and array tables
+-// are not supported.
++// When the target of a value implements the interface, UnmarshalTOML receives
++// that value's node. When the target of a table (the document root, a [table],
++// or an element of an [[array table]]) implements the interface,
++// UnmarshalTOML receives a synthetic InlineTable node whose children are the
++// table's key-value expressions, in document order. Sub-tables declared with
++// their own headers (for example [a.b] when the target of [a] implements the
++// interface) are still decoded into the Go value as usual.
+ //
+ // *Unstable:* This method does not follow the compatibility guarantees of
+ // semver. It can be changed or removed without a new major version being
+@@ -249,6 +255,12 @@ func (d *decoder) FromParser(v interface{}) error {
+ }
+ 
+ func (d *decoder) fromParser(root reflect.Value) error {
++	if u, ok := d.tableUnmarshaler(root); ok {
++		if err := d.handleKeyValuesUnmarshaler(u); err != nil {
++			return err
++		}
++	}
++
+ 	for d.nextExpr() {
+ 		err := d.handleRootExpression(d.expr(), root)
+ 		if err != nil {
+@@ -599,6 +611,10 @@ func (d *decoder) handleTable(key unstable.Iterator, v reflect.Value) (reflect.V
+ // Handle root expressions until the end of the document or the next
+ // non-key-value.
+ func (d *decoder) handleKeyValues(v reflect.Value) (reflect.Value, error) {
++	if u, ok := d.tableUnmarshaler(v); ok {
++		return reflect.Value{}, d.handleKeyValuesUnmarshaler(u)
++	}
++
+ 	var rv reflect.Value
+ 	for d.nextExpr() {
+ 		expr := d.expr()
+@@ -628,6 +644,66 @@ func (d *decoder) handleKeyValues(v reflect.Value) (reflect.Value, error) {
+ 	return rv, nil
+ }
+ 
++// tableUnmarshaler returns the unstable.Unmarshaler implemented by the table
++// target v (dereferencing and allocating pointers as needed), if the
++// unmarshaler interface is enabled.
++func (d *decoder) tableUnmarshaler(v reflect.Value) (unstable.Unmarshaler, bool) {
++	if !d.unmarshalerInterface || !v.IsValid() {
++		return nil, false
++	}
++
++	// Check the type first to avoid allocating pointers needlessly.
++	t := v.Type()
++	for t.Kind() == reflect.Ptr {
++		t = t.Elem()
++	}
++	if !reflect.PointerTo(t).Implements(unmarshalerType) {
++		return nil, false
++	}
++
++	for v.Kind() == reflect.Ptr {
++		if v.IsNil() && !v.CanSet() {
++			return nil, false
++		}
++		v = initAndDereferencePointer(v)
++	}
++
++	if !v.CanAddr() || !v.Addr().CanInterface() {
++		return nil, false
++	}
++	return v.Addr().Interface().(unstable.Unmarshaler), true
++}
++
++// handleKeyValuesUnmarshaler collects all the key-value expressions until the
++// end of the document or the next table, and provides them to u as a single
++// InlineTable node.
++func (d *decoder) handleKeyValuesUnmarshaler(u unstable.Unmarshaler) error {
++	var kvs []interface{}
++	for d.nextExpr() {
++		expr := d.expr()
++		if expr.Kind != unstable.KeyValue {
++			d.stashExpr()
++			break
++		}
++
++		_, err := d.seen.CheckExpression(expr)
++		if err != nil {
++			return err
++		}
++
++		// The parser reuses its buffers for each expression, so the
++		// expression needs to be copied before moving on.
++		kvs = append(kvs, unstablehook.NewInlineTable([]interface{}{expr}).(*unstable.Node).Child())
++	}
++
++	if err := d.p.Error(); err != nil {
++		return err
++	}
++
++	node := unstablehook.NewInlineTable(kvs).(*unstable.Node)
++	return u.UnmarshalTOML(node)
++}
++
+ type (
+ 	handlerFn    func(key unstable.Iterator, v reflect.Value) (reflect.Value, error)
+ 	valueMakerFn func() reflect.Value
+diff --git a/unmarshaler_test.go b/unmarshaler_test.go
+index 6ee6636..6f5eda0 100644
+--- a/unmarshaler_test.go
++++ b/unmarshaler_test.go
+@@ -3998,3 +3998,94 @@ foo = "bar"`,
+ 		})
+ 	}
+ }
++
++type orderedKVs struct {
++	Keys   []string
++	Values []string
++}
++
++func (o *orderedKVs) UnmarshalTOML(node *unstable.Node) error {
++	if node.Kind != unstable.InlineTable {
++		return fmt.Errorf("expected inline table, got %s", node.Kind)
++	}
++	it := node.Children()
++	for it.Next() {
++		kv := it.Node()
++		var parts []string
++		k := kv.Key()
++		for k.Next() {
++			parts = append(parts, string(k.Node().Data))
++		}
++		o.Keys = append(o.Keys, strings.Join(parts, "."))
++		o.Values = append(o.Values, string(kv.Value().Data))
++	}
++	return nil
++}
++
++func TestUnmarshal_CustomUnmarshalerTables(t *testing.T) {
++	t.Run("root document", func(t *testing.T) {
++		var d orderedKVs
++		err := toml.NewDecoder(strings.NewReader("z = \"1\"\na.b = \"2\"\nc = 3\n")).
++			EnableUnmarshalerInterface().Decode(&d)
++		assert.NoError(t, err)
++		assert.Equal(t, []string{"z", "a.b", "c"}, d.Keys)
++		assert.Equal(t, []string{"1", "2", "3"}, d.Values)
++	})
++
++	t.Run("root document error is returned", func(t *testing.T) {
++		var d errUnmarshaler
++		err := toml.NewDecoder(strings.NewReader(`foo = "bar"`)).
++			EnableUnmarshalerInterface().Decode(&d)
++		assert.Error(t, err)
++	})
++
++	t.Run("not called when disabled", func(t *testing.T) {
++		var d errUnmarshaler
++		err := toml.NewDecoder(strings.NewReader(`foo = "bar"`)).Decode(&d)
++		assert.NoError(t, err)
++	})
++
++	t.Run("tables, pointers, array tables and maps", func(t *testing.T) {
++		type cfg struct {
++			A    string
++			T    orderedKVs
++			P    *orderedKVs
++			Arr  []orderedKVs
++			M    map[string]orderedKVs
++			Last int
++		}
++		doc := `
++A = "x"
++[T]
++b = "1"
++a = "2"
++[P]
++y = "3"
++[[Arr]]
++k = "4"
++[[Arr]]
++l = "5"
++[M.one]
++q = "6"
++`
++		var c cfg
++		err := toml.NewDecoder(strings.NewReader(doc)).
++			EnableUnmarshalerInterface().Decode(&c)
++		assert.NoError(t, err)
++		assert.Equal(t, "x", c.A)
++		assert.Equal(t, []string{"b", "a"}, c.T.Keys)
++		assert.Equal(t, []string{"1", "2"}, c.T.Values)
++		assert.Equal(t, []string{"y"}, c.P.Keys)
++		assert.Equal(t, 2, len(c.Arr))
++		assert.Equal(t, []string{"k"}, c.Arr[0].Keys)
++		assert.Equal(t, []string{"5"}, c.Arr[1].Values)
++		assert.Equal(t, []string{"q"}, c.M["one"].Keys)
++		assert.Equal(t, []string{"6"}, c.M["one"].Values)
++	})
++}
++
++type errUnmarshaler struct{}
++
++func (e *errUnmarshaler) UnmarshalTOML(*unstable.Node) error {
++	return errors.New("called")
++}
+diff --git a/unstable/copy.go b/unstable/copy.go
+new file mode 100644
+index 0000000..601a508
+--- /dev/null
++++ b/unstable/copy.go
+@@ -0,0 +1,58 @@
++package unstable
++
++import "github.com/pelletier/go-toml/v2/internal/unstablehook"
++
++func init() {
++	unstablehook.NewInlineTable = func(kvs []interface{}) interface{} {
++		nodes := make([]*Node, len(kvs))
++		for i, kv := range kvs {
++			nodes[i] = kv.(*Node)
++		}
++		return newInlineTable(nodes)
++	}
++}
++
++// newInlineTable deep-copies the given KeyValue nodes into a fresh backing
++// array, rooted at a synthetic InlineTable node.
++func newInlineTable(kvs []*Node) *Node {
++	r := &root{}
++	r.nodes = append(r.nodes, Node{Kind: InlineTable})
++	if len(kvs) > 0 {
++		first := kvs[0].Raw
++		last := kvs[len(kvs)-1].Raw
++		if last.Offset+last.Length >= first.Offset {
++			r.nodes[0].Raw = Range{Offset: first.Offset, Length: last.Offset + last.Length - first.Offset}
++		}
++	}
++
++	prev := -1
++	for _, kv := range kvs {
++		idx := copyNodeTree(r, kv)
++		if prev < 0 {
++			r.nodes[0].child = idx
++		} else {
++			r.nodes[prev].next = idx - prev
++		}
++		prev = idx
++	}
++	return &r.nodes[0]
++}
++
++// copyNodeTree appends a deep copy of n and its children to r and returns
++// the index of the copy. The next field of the copy is left to zero.
++func copyNodeTree(r *root, n *Node) int {
++	idx := len(r.nodes)
++	r.nodes = append(r.nodes, Node{Kind: n.Kind, Raw: n.Raw, Data: n.Data})
++
++	prev := -1
++	for c := n.Child(); c != nil; c = c.Next() {
++		cidx := copyNodeTree(r, c)
++		if prev < 0 {
++			r.nodes[idx].child = cidx - idx
++		} else {
++			r.nodes[prev].next = cidx - prev
++		}
++		prev = cidx
++	}
++	return idx
++}

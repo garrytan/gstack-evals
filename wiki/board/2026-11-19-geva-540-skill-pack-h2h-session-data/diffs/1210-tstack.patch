@@ -1,0 +1,158 @@
+diff --git a/content/file/file.go b/content/file/file.go
+index cacf199..8e4529a 100644
+--- a/content/file/file.go
++++ b/content/file/file.go
+@@ -625,6 +625,9 @@ func (s *Store) resolveWritePath(name string) (string, error) {
+ 		if strings.HasPrefix(rel, "../") || rel == ".." {
+ 			return "", ErrPathTraversalDisallowed
+ 		}
++		if err := ensureNoSymlinkEscape(base, target); err != nil {
++			return "", err
++		}
+ 	}
+ 	if s.DisableOverwrite {
+ 		if _, err := os.Stat(path); err == nil {
+@@ -636,6 +639,58 @@ func (s *Store) resolveWritePath(name string) (string, error) {
+ 	return path, nil
+ }
+ 
++// ensureNoSymlinkEscape checks that target, after resolving symlinks in the
++// portion of the path that already exists, remains within base.
++// base and target must be absolute and target must lexically be under base.
++func ensureNoSymlinkEscape(base, target string) error {
++	resolvedBase, err := filepath.EvalSymlinks(base)
++	if err != nil {
++		if os.IsNotExist(err) {
++			// working directory does not exist yet; nothing can be a symlink
++			// under it.
++			return nil
++		}
++		return err
++	}
++
++	// find the deepest existing ancestor (or target itself)
++	existing := target
++	var rest []string
++	for {
++		if _, err := os.Lstat(existing); err == nil {
++			break
++		} else if !os.IsNotExist(err) {
++			return err
++		}
++		parent := filepath.Dir(existing)
++		if parent == existing {
++			return nil
++		}
++		rest = append([]string{filepath.Base(existing)}, rest...)
++		existing = parent
++	}
++
++	resolved, err := filepath.EvalSymlinks(existing)
++	if err != nil {
++		if os.IsNotExist(err) {
++			// dangling symlink: following it on write could escape base
++			return ErrPathTraversalDisallowed
++		}
++		return err
++	}
++	resolved = filepath.Join(append([]string{resolved}, rest...)...)
++
++	rel, err := filepath.Rel(resolvedBase, resolved)
++	if err != nil {
++		return ErrPathTraversalDisallowed
++	}
++	rel = filepath.ToSlash(rel)
++	if strings.HasPrefix(rel, "../") || rel == ".." {
++		return ErrPathTraversalDisallowed
++	}
++	return nil
++}
++
+ // status returns the nameStatus for the given name.
+ func (s *Store) status(name string) *nameStatus {
+ 	v, _ := s.nameToStatus.LoadOrStore(name, &nameStatus{sync.RWMutex{}, false})
+diff --git a/content/file/file_unix_test.go b/content/file/file_unix_test.go
+index 96915d8..5d9e0a7 100644
+--- a/content/file/file_unix_test.go
++++ b/content/file/file_unix_test.go
+@@ -20,10 +20,12 @@ package file
+ import (
+ 	"bytes"
+ 	"context"
++	"errors"
+ 	"os"
+ 	"path/filepath"
+ 	"testing"
+ 
++	"github.com/opencontainers/go-digest"
+ 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+ 	"oras.land/oras-go/v2"
+ )
+@@ -472,3 +474,67 @@ func TestStore_Dir_OverwriteSymlink_RemovalFailed(t *testing.T) {
+ 		t.Fatal("error calling Chmod(), error =", err)
+ 	}
+ }
++
++func TestStore_File_Push_DisallowSymlinkTraversal(t *testing.T) {
++	content := []byte("hello world")
++	workDir := t.TempDir()
++	outsideDir := t.TempDir()
++	if err := os.Symlink(outsideDir, filepath.Join(workDir, "out")); err != nil {
++		t.Fatal("error calling Symlink(), error =", err)
++	}
++	outsideFile := filepath.Join(outsideDir, "pwn.txt")
++	if err := os.Symlink(outsideFile, filepath.Join(workDir, "link.txt")); err != nil {
++		t.Fatal("error calling Symlink(), error =", err)
++	}
++
++	for _, name := range []string{"out/pwn.txt", "out/sub/pwn.txt", "link.txt"} {
++		t.Run(name, func(t *testing.T) {
++			s, err := New(workDir)
++			if err != nil {
++				t.Fatal("Store.New() error =", err)
++			}
++			defer s.Close()
++			desc := ocispec.Descriptor{
++				MediaType: "test",
++				Digest:    digest.FromBytes(content),
++				Size:      int64(len(content)),
++				Annotations: map[string]string{
++					ocispec.AnnotationTitle: name,
++				},
++			}
++			err = s.Push(context.Background(), desc, bytes.NewReader(content))
++			if !errors.Is(err, ErrPathTraversalDisallowed) {
++				t.Errorf("Store.Push() error = %v, want %v", err, ErrPathTraversalDisallowed)
++			}
++			entries, err := os.ReadDir(outsideDir)
++			if err != nil {
++				t.Fatal(err)
++			}
++			if len(entries) != 0 {
++				t.Errorf("unexpected write outside working dir: %v", entries)
++			}
++		})
++	}
++
++	// symlink inside working dir pointing inside working dir is allowed
++	if err := os.Mkdir(filepath.Join(workDir, "in"), 0777); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.Symlink(filepath.Join(workDir, "in"), filepath.Join(workDir, "inlink")); err != nil {
++		t.Fatal(err)
++	}
++	s, err := New(workDir)
++	if err != nil {
++		t.Fatal("Store.New() error =", err)
++	}
++	defer s.Close()
++	desc := ocispec.Descriptor{
++		MediaType:   "test",
++		Digest:      digest.FromBytes(content),
++		Size:        int64(len(content)),
++		Annotations: map[string]string{ocispec.AnnotationTitle: "inlink/ok.txt"},
++	}
++	if err := s.Push(context.Background(), desc, bytes.NewReader(content)); err != nil {
++		t.Errorf("Store.Push() error = %v", err)
++	}
++}

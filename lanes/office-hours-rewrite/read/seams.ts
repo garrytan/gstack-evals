@@ -3,14 +3,24 @@
 // wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg, section 12 stage 1's dry run: every row of section 10 on
 // planted data, and every gate on planted known-good and known-bad cases). Each seam drives one frozen rule on one side
 // of its edge through this area's code, on invented rows that are never eval briefs. The fixture builders are exported
-// for tests/ohr/read.
-import { ARMS, MODELS, PRIMARY_MODELS } from "../frozen.ts";
-import type { ArmId, EndState, KeptWhole, ModelId, ScoredSession, Seam, SessionRow } from "../types.ts";
+// for tests/ohr/read. The second attempt adds the stops.json read (its section 3, items 9 and 10): planted launch stops
+// and ledger records, read with no flag. Its pre-run change 3 adds A8, the full-load check: planted host files read through
+// read/load.ts, a whole body and a cut one on each host, and a particle-1 arm left out.
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { openLease, recordApproval, recordStop } from "../../../src/runner/ledger/ledger.ts";
+import { ARMS, CONTAINER_HOME, MODELS, PRIMARY_MODELS } from "../frozen.ts";
+import { SPLIT } from "../ledger.ts";
+import type { ArmId, EndState, KeptWhole, ModelId, ScoredSession, Seam, SessionRow, SkillArm } from "../types.ts";
 import { admission, admissionState, type AdmissionId } from "./admission.ts";
 import { builderRightCall, keptWhole, type State } from "./builder.ts";
 import { decide, type Decision, type DecisionInput } from "./decision.ts";
 import { g1, g2, g3, missingLimits, type HandRead } from "./guards.ts";
+import { CLAUDE_SESSION, skillLoad, type Bodies, type LoadRead } from "./load.ts";
 import { correctedNewcombe, newcombe, tInterval, type KeptPair } from "./stats.ts";
+import { readStops, type AuthoringEnd } from "./stops.ts";
 
 // ---- Fixtures ----
 
@@ -71,7 +81,7 @@ export function founderRows(p: FounderPlan): ScoredSession[] {
 /** One run row as the run side hands it in, a block in an interactive skill session (or a clean none session). */
 export const sessionRow = (o: Partial<SessionRow>): SessionRow => ({
   stage: 1, brief: "k01", model: "opus", arm: "none", end: "block", code: null, block: null, founder_turns: [], closings: 1, founder_done: true, replies: 6,
-  session_kind: (o.arm ?? "none") === "none" ? null : "interactive", guard_failures: 0, gstack_reads: [], usd: 1, sim_usd: 0.1, attempts: 1, transcript: null, state_root: null, ...o,
+  session_kind: (o.arm ?? "none") === "none" ? null : "interactive", served_model: null, cli_version: null, guard_failures: 0, gstack_reads: [], usd: 1, sim_usd: 0.1, attempts: 1, transcript: null, state_root: null, ...o,
 });
 
 /** Stage 1's calibration briefs: twins k01 and k02, twins k03 and k04, unpaired founders k05 and k06, builders k07 and k08. */
@@ -92,11 +102,15 @@ export interface Stage1Plan {
   kind?: { brief: string; arm: ArmId; model: ModelId; value: string | null; missing?: boolean };
   /** One none-arm session that read a gstack file. */
   read?: { brief: string; model: ModelId };
+  /** One skill session whose body did not arrive whole (A8). */
+  short?: { brief: string; arm: SkillArm; model: ModelId };
+  /** One skill session's A8 read in place of the planted whole one, matched by brief, model and arm. */
+  load?: LoadRead;
 }
 
 /** A stage 1 that admits: every condition passes, 0.3 to 1 dollars a session, 6 cents of labels a session. */
-export function stage1Input(p: Stage1Plan): { rows: ScoredSession[]; sessions: SessionRow[]; audit: { pass: boolean }; judges: { astra: boolean; opus: boolean }; label_usd: number } {
-  const rows: ScoredSession[] = [], sessions: SessionRow[] = [];
+export function stage1Input(p: Stage1Plan): { rows: ScoredSession[]; sessions: SessionRow[]; loads: LoadRead[]; audit: { pass: boolean }; judges: { astra: boolean; opus: boolean }; label_usd: number } {
+  const rows: ScoredSession[] = [], sessions: SessionRow[] = [], loads: LoadRead[] = [];
   const right = p.currentRight ?? 8;
   let k = 0;
   for (const model of MODELS) for (const arm of ARMS) CALIBRATION.forEach((brief, j) => {
@@ -115,8 +129,67 @@ export function stage1Input(p: Stage1Plan): { rows: ScoredSession[]; sessions: S
       end: readHere ? "contaminated" : kindHere && p.kind!.missing ? "missing" : "block",
     }));
     sessions.push(sessionRow({ brief, model, arm, usd, gstack_reads: readHere ? ["/root/.claude/skills/gstack/office-hours/SKILL.md"] : [], ...(kindHere ? { session_kind: p.kind!.value, end: p.kind!.missing ? "missing" : "block" } : {}) }));
+    if (arm === "none") return;
+    const short = p.short?.brief === brief && is(p.short);
+    const planted: LoadRead = { brief, model, arm, file: "planted", pass: !short, sha256: short ? null : "planted", why: short ? "a planted cut body" : "a planted whole body" };
+    loads.push(p.load && p.load.brief === brief && p.load.model === model && p.load.arm === arm ? p.load : planted);
   });
-  return { rows, sessions, audit: { pass: true }, judges: { astra: true, opus: true }, label_usd: 0.06 };
+  return { rows, sessions, loads, audit: { pass: true }, judges: { astra: true, opus: true }, label_usd: 0.06 };
+}
+
+/** One planted host dir for A8's reader: the transcript and, on Claude Code, its session file, around a planted body. */
+export interface LoadPlant {
+  host: "claude" | "codex";
+  arm: SkillArm;
+  /** Whose body arrives; the arm's own by default. */
+  body?: SkillArm;
+  /** Characters cut off the body's end. */
+  cut?: number;
+  /** Claude Code's start-step output between the head and the tail; PLANTED_START by default. */
+  start?: string;
+  /** Claude Code's head in place of the planted one. */
+  head?: string;
+  /** What follows the body: Claude Code's ARGUMENTS line, or Codex's closing tag, by default. */
+  tail?: string;
+  /** The record the body rides in; a user record by default. */
+  role?: "user" | "assistant";
+  /** The file A8 reads: written (the default), missing, a directory, or text with no skill block. */
+  copy?: "written" | "missing" | "dir" | "junk";
+}
+/** A planted body per pin; each shows an ARGUMENTS line inside itself, so the boundary is read by length, not by the first such line. Codex's <skill> item carries it whole; on Claude Code it is the tail. */
+const plantedBody = (arm: SkillArm) => "# The planted office-hours body, " + arm + " pin\n\n" + Array.from({ length: 40 }, (_, k) => "Line " + (k + 1) + " of the planted " + arm + " body, caf\u00e9 included.").join("\n") + "\n\nARGUMENTS: an example inside the body\n\nThe end of the planted " + arm + " body.\n";
+/** Claude Code's planted head, the same at both pins; like the real one it names other session kinds. */
+const PLANTED_HEAD = "# The planted office-hours head\n\nThe preamble's own text names SESSION_KIND: spawned and SESSION_KIND: headless.\n" + Array.from({ length: 20 }, (_, k) => "Head line " + (k + 1) + ", caf\u00e9 included.").join("\n") + "\n";
+/** Claude Code's planted start-step output, what the skill's load-time start line printed. */
+export const PLANTED_START = "SESSION_KIND: interactive\nREPO_MODE: solo";
+const plantedTail = (arm: SkillArm) => "\n" + plantedBody(arm);
+export function plantLoad(o: LoadPlant): { row: SessionRow; bodies: Bodies; want: string; done: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), "ohr-a8-"));
+  const host = join(dir, "host");
+  mkdirSync(host);
+  const claudeWhole = (arm: SkillArm) => (o.head ?? PLANTED_HEAD) + (o.start ?? PLANTED_START) + plantedTail(arm);
+  const whole = o.host === "claude" ? claudeWhole(o.body ?? o.arm) : plantedBody(o.body ?? o.arm);
+  const body = whole.slice(0, whole.length - (o.cut ?? 0));
+  const text = o.host === "claude"
+    ? "Base directory for this skill: " + CONTAINER_HOME + "/.claude/skills/office-hours\n\n" + body + (o.tail ?? "\n\nARGUMENTS: the founder's first message")
+    : "<skill>\n<name>office-hours</name>\n<path>" + CONTAINER_HOME + "/.local/share/gstack/.agents/skills/gstack-office-hours/SKILL.md</path>\n" + body + (o.tail ?? "\n</skill>");
+  const opening = JSON.stringify({ type: "user", message: { role: "user", content: "/office-hours the founder's first message" } });
+  const record = JSON.stringify({ type: o.role ?? "user", message: { role: o.role ?? "user", content: [{ type: "text", text }] } });
+  const file = join(host, o.host === "claude" ? CLAUDE_SESSION : "transcript.ndjson");
+  if (o.host === "claude") writeFileSync(join(host, "transcript.ndjson"), opening + "\n");
+  const copy = o.copy ?? "written";
+  if (copy === "written") writeFileSync(file, opening + "\n" + record + "\n");
+  else if (copy === "dir") mkdirSync(file);
+  else if (copy === "junk") writeFileSync(file, opening + "\nnot a json line\n");
+  const sum = (x: string) => createHash("sha256").update(x).digest("hex");
+  const part = (x: string) => ({ sha256: sum(x), chars: x.length });
+  const [current, next] = [plantedBody("current"), plantedBody("new")];
+  const bodies: Bodies = {
+    claude: { current: { head: part(PLANTED_HEAD), tail: part(plantedTail("current")) }, new: { head: part(PLANTED_HEAD), tail: part(plantedTail("new")) } },
+    codex: { current: { sha256: sum(current), bytes: Buffer.byteLength(current) }, new: { sha256: sum(next), bytes: Buffer.byteLength(next) } },
+  };
+  const want = sum(o.host === "claude" ? claudeWhole(o.arm) : plantedBody(o.arm));
+  return { row: sessionRow({ brief: "k01", model: o.host === "codex" ? "sol" : "opus", arm: o.arm, transcript: join(host, "transcript.ndjson") }), bodies, want, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
 // ---- Section 10 on planted data ----
@@ -137,7 +210,7 @@ export interface Planted {
   builder?: Parameters<typeof builderRows>[0];
   reads?: HandRead[];
   admission?: DecisionInput["admission"];
-  cap_stop?: boolean;
+  stops?: string[];
   judge_checks?: DecisionInput["judge_checks"];
 }
 
@@ -163,10 +236,10 @@ export const PLANTED: Record<string, Planted> = {
   "harm-over-cut": { row: 2, also: [3, 5], founder: { R: by({ current: () => true, none: () => true }) } },
   "incomplete-unrepaired": { row: 1, also: [4], founder: { R: by(MERGE) }, admission: "repair" },
   "incomplete-fix-method": { row: 1, also: [4], founder: { R: by(MERGE) }, admission: "fix-method" },
-  "incomplete-cap-stop": { row: 1, also: [4], founder: { R: by(MERGE) }, cap_stop: true },
+  "incomplete-cap-stop": { row: 1, also: [4], founder: { R: by(MERGE) }, stops: ["ledger item ohr-s2-arms: CAP_STOP planted"] },
   "incomplete-missing-limit": { row: 1, also: [4], founder: { R: by(MERGE), end: (arm, j, m) => (arm === "none" && m === "opus" && j < 3 ? "contaminated" : undefined) } },
   "incomplete-judge-check": { row: 1, also: [4], founder: { R: by(MERGE) }, judge_checks: { astra: true, opus: false } },
-  "incomplete-over-harm": { row: 1, also: [2], founder: { R: by({ current: (c) => c < 8, new: (c) => c < 3 }) }, cap_stop: true },
+  "incomplete-over-harm": { row: 1, also: [2], founder: { R: by({ current: (c) => c < 8, new: (c) => c < 3 }) }, stops: ["ledger item ohr-s2-arms: CAP_STOP planted"] },
 };
 
 export function plant(name: string): DecisionInput {
@@ -175,7 +248,7 @@ export function plant(name: string): DecisionInput {
   return {
     rows: [...founderRows(p.founder), ...builderRows(p.builder ?? {})],
     admission: p.admission ?? "admitted",
-    cap_stop: p.cap_stop ?? false,
+    stops: p.stops ?? [],
     judge_checks: p.judge_checks ?? { astra: true, opus: true },
     hand_reads: p.reads ?? [],
   };
@@ -252,6 +325,35 @@ const admissionSeams: Seam[] = [
     seam("admission " + id + " (" + what + "): known-good passes", () => { const ok = admit(good, id); return [ok, ok ? "pass" : "fail"]; }),
     seam("admission " + id + " (" + what + "): known-bad fails", () => { const ok = admit(bad, id); return [!ok, ok ? "pass" : "fail"]; }),
   ]),
+  ...(["claude", "codex"] as const).flatMap((host) => {
+    const model: ModelId = host === "claude" ? "opus" : "sol";
+    const on = host === "claude" ? "Claude Code's session file" : "Codex's <skill> item";
+    const a8 = (o: Omit<LoadPlant, "host" | "arm">) => {
+      const p = plantLoad({ host, arm: "new", ...o });
+      try {
+        const read = skillLoad({ ...p.row, brief: "k02", model }, p.bodies);
+        const c = admission(stage1Input({ load: read })).conditions.find((x) => x.id === "A8")!;
+        return { pass: c.pass, why: read.why };
+      } finally {
+        p.done();
+      }
+    };
+    return [
+      seam("admission A8 (" + model + " new's body whole in " + on + "): known-good passes", () => { const r = a8({}); return [r.pass, r.why]; }),
+      seam("admission A8 (" + model + " new's body one character short in " + on + "): known-bad fails", () => { const r = a8({ cut: 1 }); return [!r.pass, r.why]; }),
+      seam("admission A8 (" + model + " new's copy missing): known-bad fails", () => { const r = a8({ copy: "missing" }); return [!r.pass, r.why]; }),
+      seam("admission A8 (" + model + " new's copy unreadable): known-bad fails", () => { const r = a8({ copy: "dir" }); return [!r.pass, r.why]; }),
+    ];
+  }),
+  seam("admission A8: a particle-1 skill body cut short leaves that arm out of particle-1's stage 2, and admission holds", () => {
+    const c = admission(stage1Input({ short: { brief: "k05", arm: "current", model: "particle" } })).conditions.find((x) => x.id === "A8")!;
+    return [c.pass && JSON.stringify(c.values.stage2_particle_arms) === JSON.stringify(["none", "new"]), JSON.stringify({ left_out: c.values.left_out, stage2_particle_arms: c.values.stage2_particle_arms })];
+  }),
+  seam("admission A8: a skill session with no read fails", () => {
+    const x = stage1Input({});
+    const c = admission({ ...x, loads: x.loads.slice(1) }).conditions.find((y) => y.id === "A8")!;
+    return [!c.pass, JSON.stringify(c.values.short)];
+  }),
   seam("admission: one repair, then FIX-METHOD", () => {
     const bad = admission(stage1Input({ currentRight: 12 })), ok = admission(stage1Input({}));
     const s = [admissionState([bad]), admissionState([bad, ok]), admissionState([bad, bad])];
@@ -259,4 +361,41 @@ const admissionSeams: Seam[] = [
   }),
 ];
 
-export const seams: Seam[] = [...statSeams, ...rowSeams, ...gateSeams, ...admissionSeams];
+/** The lane's ledger items, each read for a recorded cap stop. */
+export const ITEMS = [...new Set(SPLIT.map((p) => p.item))];
+/** A planted stop record in a fresh temp folder: one launch's stops.json, and a ledger record whose named items each hold a cap stop. */
+export function plantStops(o: { launch: { code: string; message: string }[]; capped: readonly string[] }): { launch: string; record: string; done: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), "ohr-stops-"));
+  const launch = join(dir, "launch");
+  mkdirSync(launch);
+  writeFileSync(join(launch, "stops.json"), JSON.stringify({ stops: o.launch, unrun: [] }) + "\n");
+  const record = join(dir, "record");
+  for (const item of o.capped) {
+    recordApproval(record, { action: "init", item, cap_micros: 1_000_000, quotes: [{ words: "a planted stop on a temporary ledger, not an approval", by: "lanes/office-hours-rewrite/read/seams.ts", source: "the second attempt's section 3, item 10" }], admission: "warn" });
+    recordStop(record, openLease(record, null, { item, run_id: "ohr-seam-" + item, amount_micros: 1_000_000 }).lease_id, item + ":planted");
+  }
+  return { launch, record, done: () => rmSync(dir, { recursive: true, force: true }) };
+}
+const FILLED: AuthoringEnd = { stopped: "quotas", full: true };
+const stopSeam = (name: string, o: { launch?: { code: string; message: string }[]; capped?: string[]; authoring?: AuthoringEnd; flag?: boolean }, want: { stops: number; row: 1 | 4 }) =>
+  seam("stops: " + name, () => {
+    const p = plantStops({ launch: o.launch ?? [], capped: o.capped ?? [] });
+    try {
+      const stops = readStops({ launches: [p.launch], record: p.record, items: ITEMS, authoring: o.authoring ?? FILLED, flag: o.flag ?? false });
+      const d = decide({ ...plant("merge"), stops });
+      return [stops.length === want.stops && d.row === want.row, "row " + d.row + "; " + (stops.join("; ") || "no stops")];
+    } finally {
+      p.done();
+    }
+  });
+const stopSeams: Seam[] = [
+  stopSeam("a CAP_STOP in a launch's stops.json reads row 1 with no flag", { launch: [{ code: "CAP_STOP", message: "s2-0042: the ledger refused the round" }] }, { stops: 1, row: 1 }),
+  stopSeam("a launch's stop that is not about money adds none, and MERGE stands", { launch: [{ code: "E_OHR_MODEL_DRIFT", message: "s2-0042: a reply named another model" }] }, { stops: 0, row: 4 }),
+  stopSeam("a ledger item's recorded cap stop reads row 1 with no flag", { capped: ["ohr-s2-arms"] }, { stops: 1, row: 1 }),
+  stopSeam("authoring's cap stop after all 88 calibration and comparison briefs were placed does not count", { capped: ["ohr-author"], authoring: { stopped: "cap", full: true } }, { stops: 0, row: 4 }),
+  stopSeam("authoring's cap stop before they were placed counts, from the ledger and from authoring's end", { capped: ["ohr-author"], authoring: { stopped: "cap", full: false } }, { stops: 2, row: 1 }),
+  stopSeam("authoring that ended on a halt reads row 1, even with calibration and comparison full", { authoring: { stopped: "halt", full: true } }, { stops: 1, row: 1 }),
+  stopSeam("--cap-stop adds a stop", { flag: true }, { stops: 1, row: 1 }),
+];
+
+export const seams: Seam[] = [...statSeams, ...rowSeams, ...gateSeams, ...admissionSeams, ...stopSeams];

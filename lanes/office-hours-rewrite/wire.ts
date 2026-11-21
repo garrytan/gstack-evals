@@ -16,10 +16,18 @@
 // it never becomes a missing label, an empty auditor answer or a resend. call itself, which authoring uses, is unchanged.
 // The run area's launches open their own meter for the simulator and lease the arms through the rig; nothing there
 // calls Astra.
+// A command's launches are one run on one ledger item. A relaunch keeps the run id from run.json in its dir, or from
+// runId when that dir was lost (a resume names the run its sealed checkpoint records). Its lease reserves the spend cap
+// less what the item has already committed, after the meter settles the dead launch's lease from the local ledger, and
+// spent() reads committed spend from the item: earlier leases' closes, an earlier lease still open at its whole
+// reservation, and this launch's metered spend with its unknown calls held at their reservation. A command that ends on
+// a cap stop closes with it, so the item admits no later lease.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AuditCall } from "../../src/persona-sim/audit.ts";
 import type { SimCall } from "../../src/persona-sim/sim.ts";
+import { recordPath } from "../../src/runner/ledger/paths.ts";
+import { readItem } from "../../src/runner/ledger/record.ts";
 import { newRunId } from "../../src/skill-eval/cli/call.ts";
 import { AUDIT_MAX_TOKENS, RESEND } from "../office-hours-founder/audit.ts";
 import type { Caller } from "../office-hours-founder/author/files.ts";
@@ -65,10 +73,12 @@ export interface WireOptions {
   /** Holds run.json, the meter's journal and the reply cache; outside the repository, on tmpfs for sealed work. */
   dir: string;
   item: string;
-  /** The most the lease reserves, in micro-dollars. */
+  /** The most the run commits on the item over all its launches, in micro-dollars; a launch reserves it less what the item has committed. */
   capMicros: number;
   /** A run id prefix for a new run; a dir with run.json resumes its run id. */
   label: string;
+  /** The run to continue when dir holds no run.json; a dir whose run.json names another run is refused. */
+  runId?: string;
   /** The gstack-evals commit the run is built from (run/manifest.ts buildCommit), recorded in run.json; a resume on another commit is refused. */
   buildCommit?: string;
   record?: string;
@@ -86,9 +96,13 @@ export interface Wire {
   judge: JudgeCaller;
   sim: (label: string) => SimCall;
   auditor: (who: (typeof AUDIT.auditors)[number]) => AuditCall;
-  /** Settled spend on this run so far, in dollars, earlier launches of the same run included. */
+  runId: string;
+  /** Committed spend on the ledger item so far, in dollars: earlier launches' closes and open leases, and this launch's metered spend and unknown calls. */
   spent: () => number;
-  close: (cmd: string) => Promise<number>;
+  /** Dollars this launch's calls took for one brief: calls labelled <brief>[.<attempt>]:..., as authoring labels them. */
+  spentOn: (brief: string) => number;
+  /** Settles the lease; capStop, the scope of a cap stop the command ended on, makes it final on the item. */
+  close: (cmd: string, capStop?: string) => Promise<number>;
 }
 
 export async function openWire(o: WireOptions): Promise<Wire> {
@@ -97,17 +111,22 @@ export async function openWire(o: WireOptions): Promise<Wire> {
   const runFile = join(o.dir, "run.json");
   const prior = existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string; spent_micros: number; build_commit?: string }) : null;
   if (prior && o.buildCommit && prior.build_commit !== o.buildCommit) throw new MeterError("E_OHR_BUILD_COMMIT", runFile + " records build commit " + (prior.build_commit ?? "none") + ", and this checkout is " + o.buildCommit + "; a run resumes only on the commit it started on");
-  const runId = prior?.run_id ?? newRunId(o.label);
-  const before = prior?.spent_micros ?? 0;
+  if (prior && o.runId && prior.run_id !== o.runId) throw new MeterError("E_OHR_RESUME", runFile + " records run " + prior.run_id + ", not " + o.runId + "; a meter dir serves one run");
+  const runId = prior?.run_id ?? o.runId ?? newRunId(o.label);
   const commit = o.buildCommit ? { build_commit: o.buildCommit } : {};
   const cacheDir = join(o.dir, "cache");
   const vdir = join(cacheDir, "versions");
   mkdirSync(vdir, { recursive: true, mode: 0o700 });
-  writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: before, ...commit }) + "\n");
-  const meter = await openMeter({ item: o.item, runId, out: join(o.dir, "meter"), cacheDir, maxOutputTokens: 32_000, amountMicros: o.capMicros, emptyBound: EMPTY_BOUND, drainMs: o.drainMs, record: o.record, ledger: o.ledger, env: o.env, fetch: versionTap(o.upstream ?? fetch, vdir), warn: (code, m) => o.io.err(code + " " + m) });
+  writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: prior?.spent_micros ?? 0, ...commit }) + "\n");
+  const meter = await openMeter({ item: o.item, runId, out: join(o.dir, "meter"), cacheDir, maxOutputTokens: 32_000, amountMicros: o.capMicros, lessCommitted: true, emptyBound: EMPTY_BOUND, drainMs: o.drainMs, record: o.record, ledger: o.ledger, env: o.env, fetch: versionTap(o.upstream ?? fetch, vdir), warn: (code, m) => o.io.err(code + " " + m) });
+  const record = recordPath(o.record, o.env).path;
+  const earlier = readItem(record, o.item).leases.reduce((t, { lease, close }) => (lease.lease_id === meter.leaseId ? t : t + (close ? close.spent_micros + close.unknown_micros : lease.reserved_micros)), 0);
+  const byBrief = new Map<string, number>();
   const call: Caller = async (req) => {
     const model = routed(req.model);
     const res = await meter.call({ ...req, model });
+    const brief = req.label.split(":")[0]!.replace(/\.\d+$/, "");
+    byBrief.set(brief, (byBrief.get(brief) ?? 0) + (res.micros ?? 0));
     if (model === "gemini" && res.text !== null && !VERTEX.test(res.served_by ?? "")) throw new MeterError("E_PV_PROVIDER_DRIFT", MODELS.gemini.id + " was served by " + (res.served_by ?? "an unnamed provider") + ", not Google Vertex; stop and ask the Captain");
     return res;
   };
@@ -133,10 +152,12 @@ export async function openWire(o: WireOptions): Promise<Wire> {
     judge,
     sim,
     auditor,
-    spent: () => (before + meter.spent()) / 1e6,
-    async close(cmd) {
-      const c = await meter.close();
-      writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: before + c.spent_micros, ...commit }) + "\n");
+    runId,
+    spent: () => (earlier + meter.spent() + meter.unknown()) / 1e6,
+    spentOn: (brief) => (byBrief.get(brief) ?? 0) / 1e6,
+    async close(cmd, capStop) {
+      const c = await meter.close(capStop);
+      writeFileSync(runFile, JSON.stringify({ run_id: runId, spent_micros: readItem(record, o.item).committed_micros, ...commit }) + "\n");
       o.io.out(cmd + ": settled " + (c.spent_micros / 1e6).toFixed(4) + " dollars on " + o.item + (c.unknown_micros ? ", " + (c.unknown_micros / 1e6).toFixed(4) + " unknown" : ""));
       return c.spent_micros;
     },

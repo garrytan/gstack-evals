@@ -1,0 +1,104 @@
+diff --git a/pkg/kube/proxy.go b/pkg/kube/proxy.go
+index c346704..1e0c7ee 100644
+--- a/pkg/kube/proxy.go
++++ b/pkg/kube/proxy.go
+@@ -3,9 +3,11 @@ package kube
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"io"
+ 	"net/http"
+ 	"net/url"
++	"strings"
+ 
+ 	"github.com/gin-gonic/gin"
+ 	"k8s.io/client-go/rest"
+@@ -60,7 +62,22 @@ func HandleProxy(c *gin.Context, client *K8sClient, kind, namespace, name, proxy
+ 	}
+ }
+ 
++func validProxySegment(s string) bool {
++	return s != "" && s != "." && s != ".." && !strings.ContainsAny(s, `/\`)
++}
++
+ func buildProxyURL(host, kind, namespace, name, path, rawQuery string) (string, error) {
++	for _, s := range []string{kind, namespace, name} {
++		if !validProxySegment(s) {
++			return "", fmt.Errorf("invalid proxy target %q", s)
++		}
++	}
++	for _, s := range strings.Split(strings.ReplaceAll(path, `\`, "/"), "/") {
++		if s == "." || s == ".." {
++			return "", errors.New("invalid proxy path")
++		}
++	}
++
+ 	path, err := url.JoinPath(host, "api/v1/namespaces", namespace, kind, name, "proxy", path)
+ 	if err != nil {
+ 		return "", err
+diff --git a/pkg/kube/proxy_test.go b/pkg/kube/proxy_test.go
+index 617963d..d090f01 100644
+--- a/pkg/kube/proxy_test.go
++++ b/pkg/kube/proxy_test.go
+@@ -30,6 +30,60 @@ func TestBuildProxyURL(t *testing.T) {
+ 			rawQuery:  "b=2&a=1",
+ 			want:      "https://example.com/api/v1/namespaces/default/pods/nginx/proxy/logs/?a=1&b=2",
+ 		},
++		{
++			name:      "rejects dot-dot traversal in proxy path",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "nginx",
++			path:      "/../../../../kube-system/secrets",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects backslash traversal in proxy path",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "nginx",
++			path:      `/..\..\secrets`,
++			wantErr:   true,
++		},
++		{
++			name:      "rejects slash traversal in resource name",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "../../kube-system/secrets",
++			path:      "",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects dot-dot resource name",
++			host:      "https://example.com",
++			kind:      "services",
++			namespace: "default",
++			resource:  "..",
++			path:      "/",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects traversal in namespace",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default/../kube-system",
++			resource:  "nginx",
++			path:      "",
++			wantErr:   true,
++		},
++		{
++			name:      "allows dots inside segments",
++			host:      "https://example.com",
++			kind:      "services",
++			namespace: "default",
++			resource:  "my.svc",
++			path:      "/static/app..min.js",
++			want:      "https://example.com/api/v1/namespaces/default/services/my.svc/proxy/static/app..min.js",
++		},
+ 		{
+ 			name:      "rejects invalid query",
+ 			host:      "https://example.com",

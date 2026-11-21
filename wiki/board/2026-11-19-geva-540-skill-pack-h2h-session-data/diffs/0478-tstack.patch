@@ -1,0 +1,139 @@
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header-whitespace/expected.out b/plugins/inputs/turbostat/testcases/repeated-header-whitespace/expected.out
+new file mode 100644
+index 0000000..bcf0ac4
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header-whitespace/expected.out
+@@ -0,0 +1,34 @@
++turbostat,apic=-,core=-,cpu=-,x2apic=- average_frequency_mhz=41,busy_frequency_mhz=3431,busy_percent=1.2,c1=2836,c1_percent=0.33,c2=10698,c2_percent=5.55,c3=15564,c3_percent=93.03,core_power_watt=1.12,ipc=0.98,irq=30422,package_power_watt=24.55,poll=1412,poll_percent=0.04,tsc_frequency_mhz=3793,usec=966
++turbostat,apic=0,core=0,cpu=0,x2apic=0 average_frequency_mhz=34,busy_frequency_mhz=3083,busy_percent=1.09,c1=102,c1_percent=0.57,c2=785,c2_percent=6.81,c3=1282,c3_percent=91.68,core_power_watt=0.14,ipc=0.92,irq=2306,package_power_watt=24.55,poll=63,poll_percent=0.04,tsc_frequency_mhz=3793,usec=54
++turbostat,apic=1,core=0,cpu=8,x2apic=1 average_frequency_mhz=27,busy_frequency_mhz=3522,busy_percent=0.77,c1=293,c1_percent=0.37,c2=899,c2_percent=5.49,c3=668,c3_percent=93.47,ipc=1.11,irq=1781,poll=78,poll_percent=0.03,tsc_frequency_mhz=3793,usec=30
++turbostat,apic=2,core=1,cpu=1,x2apic=2 average_frequency_mhz=91,busy_frequency_mhz=3665,busy_percent=2.49,c1=205,c1_percent=0.72,c2=1087,c2_percent=10.56,c3=1342,c3_percent=86.4,core_power_watt=0.27,ipc=0.78,irq=2867,poll=165,poll_percent=0.08,tsc_frequency_mhz=3793,usec=69
++turbostat,apic=3,core=1,cpu=9,x2apic=3 average_frequency_mhz=112,busy_frequency_mhz=3851,busy_percent=2.92,c1=51,c1_percent=0.24,c2=703,c2_percent=6.79,c3=1197,c3_percent=90.19,ipc=1.13,irq=2441,poll=64,poll_percent=0.05,tsc_frequency_mhz=3793,usec=76
++turbostat,apic=4,core=2,cpu=2,x2apic=4 average_frequency_mhz=38,busy_frequency_mhz=3469,busy_percent=1.09,c1=105,c1_percent=0.4,c2=646,c2_percent=6.18,c3=1240,c3_percent=92.48,core_power_watt=0.15,ipc=0.87,irq=2192,poll=89,poll_percent=0.06,tsc_frequency_mhz=3793,usec=69
++turbostat,apic=5,core=2,cpu=10,x2apic=5 average_frequency_mhz=20,busy_frequency_mhz=3488,busy_percent=0.56,c1=107,c1_percent=0.39,c2=694,c2_percent=5.36,c3=908,c3_percent=93.8,ipc=0.97,irq=1794,poll=73,poll_percent=0.04,tsc_frequency_mhz=3793,usec=50
++turbostat,apic=6,core=3,cpu=3,x2apic=6 average_frequency_mhz=105,busy_frequency_mhz=3546,busy_percent=2.96,c1=563,c1_percent=0.63,c2=908,c2_percent=8.5,c3=1130,c3_percent=88.05,core_power_watt=0.17,ipc=1.29,irq=2545,poll=477,poll_percent=0.06,tsc_frequency_mhz=3793,usec=40
++turbostat,apic=7,core=3,cpu=11,x2apic=7 average_frequency_mhz=21,busy_frequency_mhz=3250,busy_percent=0.65,c1=931,c1_percent=0.38,c2=542,c2_percent=3.99,c3=623,c3_percent=95.07,ipc=0.78,irq=1293,poll=46,poll_percent=0.01,tsc_frequency_mhz=3793,usec=35
++turbostat,apic=8,core=4,cpu=4,x2apic=8 average_frequency_mhz=29,busy_frequency_mhz=3044,busy_percent=0.94,c1=57,c1_percent=0.07,c2=880,c2_percent=4.87,c3=894,c3_percent=94.24,core_power_watt=0.1,ipc=0.85,irq=1948,poll=37,poll_percent=0.03,tsc_frequency_mhz=3793,usec=70
++turbostat,apic=9,core=4,cpu=12,x2apic=9 average_frequency_mhz=14,busy_frequency_mhz=3127,busy_percent=0.46,c1=55,c1_percent=0.34,c2=484,c2_percent=4.05,c3=674,c3_percent=95.24,ipc=0.66,irq=1315,poll=43,poll_percent=0.03,tsc_frequency_mhz=3793,usec=50
++turbostat,apic=10,core=5,cpu=5,x2apic=10 average_frequency_mhz=44,busy_frequency_mhz=3481,busy_percent=1.26,c1=78,c1_percent=0.46,c2=449,c2_percent=4.4,c3=885,c3_percent=93.99,core_power_watt=0.13,ipc=1.04,irq=1581,poll=52,poll_percent=0.03,tsc_frequency_mhz=3793,usec=68
++turbostat,apic=11,core=5,cpu=13,x2apic=11 average_frequency_mhz=46,busy_frequency_mhz=3155,busy_percent=1.45,c1=106,c1_percent=0.3,c2=921,c2_percent=7.13,c3=1298,c3_percent=91.28,ipc=0.51,irq=2525,poll=38,poll_percent=0.03,tsc_frequency_mhz=3793,usec=39
++turbostat,apic=12,core=6,cpu=6,x2apic=12 average_frequency_mhz=23,busy_frequency_mhz=3114,busy_percent=0.75,c1=57,c1_percent=0.21,c2=486,c2_percent=4.33,c3=911,c3_percent=94.82,core_power_watt=0.09,ipc=0.98,irq=1607,poll=81,poll_percent=0.04,tsc_frequency_mhz=3793,usec=41
++turbostat,apic=13,core=6,cpu=14,x2apic=13 average_frequency_mhz=15,busy_frequency_mhz=2951,busy_percent=0.51,c1=56,c1_percent=0.11,c2=496,c2_percent=3.94,c3=739,c3_percent=95.53,ipc=0.61,irq=1496,poll=29,poll_percent=0.02,tsc_frequency_mhz=3793,usec=31
++turbostat,apic=14,core=7,cpu=7,x2apic=14 average_frequency_mhz=20,busy_frequency_mhz=3178,busy_percent=0.62,c1=14,c1_percent=0.03,c2=195,c2_percent=1.59,c3=658,c3_percent=97.82,core_power_watt=0.07,ipc=1.51,irq=950,poll=44,poll_percent=0.01,tsc_frequency_mhz=3793,usec=40
++turbostat,apic=15,core=7,cpu=15,x2apic=15 average_frequency_mhz=19,busy_frequency_mhz=2966,busy_percent=0.65,c1=56,c1_percent=0.15,c2=523,c2_percent=4.85,c3=1115,c3_percent=94.47,ipc=0.79,irq=1781,poll=33,poll_percent=0.02,tsc_frequency_mhz=3793,usec=29
++turbostat,apic=-,core=-,cpu=-,x2apic=- average_frequency_mhz=45,busy_frequency_mhz=3531,busy_percent=1.29,c1=1707,c1_percent=0.3,c2=9650,c2_percent=5.22,c3=13511,c3_percent=93.3,core_power_watt=1.01,ipc=0.88,irq=27018,package_power_watt=24.08,poll=941,poll_percent=0.04,tsc_frequency_mhz=3793,usec=1044
++turbostat,apic=0,core=0,cpu=0,x2apic=0 average_frequency_mhz=44,busy_frequency_mhz=3429,busy_percent=1.29,c1=293,c1_percent=0.34,c2=660,c2_percent=6.11,c3=1302,c3_percent=92.4,core_power_watt=0.15,ipc=1.04,irq=2341,package_power_watt=24.08,poll=136,poll_percent=0.06,tsc_frequency_mhz=3793,usec=73
++turbostat,apic=1,core=0,cpu=8,x2apic=1 average_frequency_mhz=36,busy_frequency_mhz=3707,busy_percent=0.98,c1=294,c1_percent=0.53,c2=893,c2_percent=6.91,c3=720,c3_percent=91.68,ipc=0.88,irq=1845,poll=97,poll_percent=0.07,tsc_frequency_mhz=3793,usec=49
++turbostat,apic=2,core=1,cpu=1,x2apic=2 average_frequency_mhz=98,busy_frequency_mhz=3816,busy_percent=2.57,c1=88,c1_percent=0.32,c2=727,c2_percent=7.62,c3=1127,c3_percent=89.63,core_power_watt=0.15,ipc=0.57,irq=2233,poll=96,poll_percent=0.05,tsc_frequency_mhz=3793,usec=43
++turbostat,apic=3,core=1,cpu=9,x2apic=3 average_frequency_mhz=69,busy_frequency_mhz=3465,busy_percent=1.99,c1=90,c1_percent=0.18,c2=423,c2_percent=4.25,c3=829,c3_percent=93.69,ipc=0.97,irq=1485,poll=35,poll_percent=0.02,tsc_frequency_mhz=3793,usec=32
++turbostat,apic=4,core=2,cpu=2,x2apic=4 average_frequency_mhz=49,busy_frequency_mhz=3601,busy_percent=1.36,c1=139,c1_percent=0.2,c2=959,c2_percent=8.73,c3=1149,c3_percent=89.86,core_power_watt=0.15,ipc=0.94,irq=2480,poll=102,poll_percent=0.07,tsc_frequency_mhz=3793,usec=67
++turbostat,apic=5,core=2,cpu=10,x2apic=5 average_frequency_mhz=31,busy_frequency_mhz=3613,busy_percent=0.85,c1=81,c1_percent=0.25,c2=1040,c2_percent=7.12,c3=636,c3_percent=91.88,ipc=0.7,irq=1811,poll=18,poll_percent=0.01,tsc_frequency_mhz=3793,usec=49
++turbostat,apic=6,core=3,cpu=3,x2apic=6 average_frequency_mhz=83,busy_frequency_mhz=3384,busy_percent=2.45,c1=190,c1_percent=0.93,c2=1238,c2_percent=11.9,c3=1377,c3_percent=84.89,core_power_watt=0.18,ipc=0.68,irq=3117,poll=140,poll_percent=0.1,tsc_frequency_mhz=3793,usec=40
++turbostat,apic=7,core=3,cpu=11,x2apic=7 average_frequency_mhz=38,busy_frequency_mhz=3768,busy_percent=1,c1=90,c1_percent=0.64,c2=257,c2_percent=2.13,c3=914,c3_percent=96.33,ipc=0.89,irq=1360,poll=17,poll_percent=0.01,tsc_frequency_mhz=3793,usec=34
++turbostat,apic=8,core=4,cpu=4,x2apic=8 average_frequency_mhz=47,busy_frequency_mhz=3451,busy_percent=1.36,c1=61,c1_percent=0.17,c2=657,c2_percent=3.43,c3=737,c3_percent=95.15,core_power_watt=0.11,ipc=1.17,irq=1617,poll=25,poll_percent=0.01,tsc_frequency_mhz=3793,usec=68
++turbostat,apic=9,core=4,cpu=12,x2apic=9 average_frequency_mhz=20,busy_frequency_mhz=3303,busy_percent=0.61,c1=62,c1_percent=0.31,c2=451,c2_percent=4.06,c3=562,c3_percent=95.09,ipc=0.7,irq=1146,poll=39,poll_percent=0.03,tsc_frequency_mhz=3793,usec=51
++turbostat,apic=10,core=5,cpu=5,x2apic=10 average_frequency_mhz=66,busy_frequency_mhz=3441,busy_percent=1.91,c1=74,c1_percent=0.34,c2=672,c2_percent=6.54,c3=981,c3_percent=91.32,core_power_watt=0.14,ipc=1,irq=1938,poll=84,poll_percent=0.06,tsc_frequency_mhz=3793,usec=41
++turbostat,apic=11,core=5,cpu=13,x2apic=11 average_frequency_mhz=49,busy_frequency_mhz=3434,busy_percent=1.42,c1=48,c1_percent=0.03,c2=397,c2_percent=3.61,c3=1079,c3_percent=95.07,ipc=0.84,irq=1685,poll=66,poll_percent=0.02,tsc_frequency_mhz=3793,usec=35
++turbostat,apic=12,core=6,cpu=6,x2apic=12 average_frequency_mhz=23,busy_frequency_mhz=3442,busy_percent=0.66,c1=49,c1_percent=0.11,c2=294,c2_percent=2.79,c3=459,c3_percent=96.51,core_power_watt=0.08,ipc=1.08,irq=909,poll=18,poll_percent=0.01,tsc_frequency_mhz=3793,usec=74
++turbostat,apic=13,core=6,cpu=14,x2apic=13 average_frequency_mhz=32,busy_frequency_mhz=3594,busy_percent=0.89,c1=35,c1_percent=0.16,c2=384,c2_percent=4.16,c3=800,c3_percent=94.89,ipc=0.99,irq=1364,poll=27,poll_percent=0.02,tsc_frequency_mhz=3793,usec=50
++turbostat,apic=14,core=7,cpu=7,x2apic=14 average_frequency_mhz=20,busy_frequency_mhz=3224,busy_percent=0.62,c1=57,c1_percent=0.09,c2=198,c2_percent=1.97,c3=493,c3_percent=97.39,core_power_watt=0.06,ipc=1.09,irq=794,poll=26,poll_percent=0.02,tsc_frequency_mhz=3793,usec=67
++turbostat,apic=15,core=7,cpu=15,x2apic=15 average_frequency_mhz=23,busy_frequency_mhz=3620,busy_percent=0.63,c1=56,c1_percent=0.15,c2=400,c2_percent=2.21,c3=346,c3_percent=97.06,ipc=1.11,irq=893,poll=15,poll_percent=0.01,tsc_frequency_mhz=3793,usec=48
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header-whitespace/input.txt b/plugins/inputs/turbostat/testcases/repeated-header-whitespace/input.txt
+new file mode 100644
+index 0000000..b993809
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header-whitespace/input.txt
+@@ -0,0 +1,36 @@
++usec    Time_Of_Day_Seconds     Core    CPU     APIC    X2APIC  Avg_MHz Busy%   Bzy_MHz TSC_MHz IPC     IRQ     POLL    C1      C2      C3      POLL%   C1%     C2%     C3%     CorWatt PkgWatt
++  966   1745932475.967756       -       -       -       -       41      1.20    3431    3793    0.98    30422   1412    2836    10698   15564   0.04    0.33    5.55    93.03   1.12    24.55
++   54   1745932475.966844       0       0       0       0       34      1.09    3083    3793    0.92    2306    63      102     785     1282    0.04    0.57    6.81    91.68   0.14    24.55
++   30   1745932475.966883       0       8       1       1       27      0.77    3522    3793    1.11    1781    78      293     899     668     0.03    0.37    5.49    93.47
++   69   1745932475.966962       1       1       2       2       91      2.49    3665    3793    0.78    2867    165     205     1087    1342    0.08    0.72    10.56   86.40   0.27
++   76   1745932475.967055       1       9       3       3       112     2.92    3851    3793    1.13    2441    64      51      703     1197    0.05    0.24    6.79    90.19
++   69   1745932475.967141       2       2       4       4       38      1.09    3469    3793    0.87    2192    89      105     646     1240    0.06    0.40    6.18    92.48   0.15
++   50   1745932475.967208       2       10      5       5       20      0.56    3488    3793    0.97    1794    73      107     694     908     0.04    0.39    5.36    93.80
++   40   1745932475.967258       3       3       6       6       105     2.96    3546    3793    1.29    2545    477     563     908     1130    0.06    0.63    8.50    88.05   0.17
++   35   1745932475.967304       3       11      7       7       21      0.65    3250    3793    0.78    1293    46      931     542     623     0.01    0.38    3.99    95.07
++   70   1745932475.967385       4       4       8       8       29      0.94    3044    3793    0.85    1948    37      57      880     894     0.03    0.07    4.87    94.24   0.10
++   50   1745932475.967451       4       12      9       9       14      0.46    3127    3793    0.66    1315    43      55      484     674     0.03    0.34    4.05    95.24
++   68   1745932475.967532       5       5       10      10      44      1.26    3481    3793    1.04    1581    52      78      449     885     0.03    0.46    4.40    93.99   0.13
++   39   1745932475.967587       5       13      11      11      46      1.45    3155    3793    0.51    2525    38      106     921     1298    0.03    0.30    7.13    91.28
++   41   1745932475.967635       6       6       12      12      23      0.75    3114    3793    0.98    1607    81      57      486     911     0.04    0.21    4.33    94.82   0.09
++   31   1745932475.967673       6       14      13      13      15      0.51    2951    3793    0.61    1496    29      56      496     739     0.02    0.11    3.94    95.53
++   40   1745932475.967720       7       7       14      14      20      0.62    3178    3793    1.51    950     44      14      195     658     0.01    0.03    1.59    97.82   0.07
++   29   1745932475.967756       7       15      15      15      19      0.65    2966    3793    0.79    1781    33      56      523     1115    0.02    0.15    4.85    94.47
++usec	Time_Of_Day_Seconds	Core	CPU	APIC	X2APIC	Avg_MHz	Busy%	Bzy_MHz	TSC_MHz	IPC	IRQ	POLL	C1	C2	C3	POLL%	C1%	C2%	C3%	CorWatt	PkgWatt	
++ 1044   1745932480.974284       -       -       -       -       45      1.29    3531    3793    0.88    27018   941     1707    9650    13511   0.04    0.30    5.22    93.30   1.01    24.08
++   73   1745932480.973313       0       0       0       0       44      1.29    3429    3793    1.04    2341    136     293     660     1302    0.06    0.34    6.11    92.40   0.15    24.08
++   49   1745932480.973378       0       8       1       1       36      0.98    3707    3793    0.88    1845    97      294     893     720     0.07    0.53    6.91    91.68
++   43   1745932480.973430       1       1       2       2       98      2.57    3816    3793    0.57    2233    96      88      727     1127    0.05    0.32    7.62    89.63   0.15
++   32   1745932480.973471       1       9       3       3       69      1.99    3465    3793    0.97    1485    35      90      423     829     0.02    0.18    4.25    93.69
++   67   1745932480.973558       2       2       4       4       49      1.36    3601    3793    0.94    2480    102     139     959     1149    0.07    0.20    8.73    89.86   0.15
++   49   1745932480.973624       2       10      5       5       31      0.85    3613    3793    0.70    1811    18      81      1040    636     0.01    0.25    7.12    91.88
++   40   1745932480.973676       3       3       6       6       83      2.45    3384    3793    0.68    3117    140     190     1238    1377    0.10    0.93    11.90   84.89   0.18
++   34   1745932480.973720       3       11      7       7       38      1.00    3768    3793    0.89    1360    17      90      257     914     0.01    0.64    2.13    96.33
++   68   1745932480.973809       4       4       8       8       47      1.36    3451    3793    1.17    1617    25      61      657     737     0.01    0.17    3.43    95.15   0.11
++   51   1745932480.973878       4       12      9       9       20      0.61    3303    3793    0.70    1146    39      62      451     562     0.03    0.31    4.06    95.09
++   41   1745932480.973929       5       5       10      10      66      1.91    3441    3793    1.00    1938    84      74      672     981     0.06    0.34    6.54    91.32   0.14
++   35   1745932480.973974       5       13      11      11      49      1.42    3434    3793    0.84    1685    66      48      397     1079    0.02    0.03    3.61    95.07
++   74   1745932480.974068       6       6       12      12      23      0.66    3442    3793    1.08    909     18      49      294     459     0.01    0.11    2.79    96.51   0.08
++   50   1745932480.974134       6       14      13      13      32      0.89    3594    3793    0.99    1364    27      35      384     800     0.02    0.16    4.16    94.89
++   67   1745932480.974223       7       7       14      14      20      0.62    3224    3793    1.09    794     26      57      198     493     0.02    0.09    1.97    97.39   0.06
++   48   1745932480.974284       7       15      15      15      23      0.63    3620    3793    1.11    893     15      56      400     346     0.01    0.15    2.21    97.06
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header-whitespace/telegraf.conf b/plugins/inputs/turbostat/testcases/repeated-header-whitespace/telegraf.conf
+new file mode 100644
+index 0000000..b4d44da
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header-whitespace/telegraf.conf
+@@ -0,0 +1 @@
++[[inputs.turbostat]]
+diff --git a/plugins/inputs/turbostat/turbostat.go b/plugins/inputs/turbostat/turbostat.go
+index 48671e6..29fcb62 100644
+--- a/plugins/inputs/turbostat/turbostat.go
++++ b/plugins/inputs/turbostat/turbostat.go
+@@ -122,17 +122,21 @@ func (t *Turbostat) Start(acc telegraf.Accumulator) error {
+ 			acc.AddError(scanner.Err())
+ 			return
+ 		}
+-		header := scanner.Text()
+-		columns := make([]column, 0, 50)
+-		for _, s := range strings.Fields(header) {
+-			columns = append(columns, createColumn(s))
+-		}
++		header := strings.Fields(scanner.Text())
++		columns := parseHeader(header)
+ 		for scanner.Scan() {
+-			line := scanner.Text()
+-			if line == header {
++			values := strings.Fields(scanner.Text())
++			if len(values) == 0 {
++				continue
++			}
++			// Turbostat repeats the header periodically. The repeated header may
++			// differ from the first one in whitespace or in the set of columns,
++			// so detect it by its first field and re-parse the columns.
++			if len(header) > 0 && values[0] == header[0] {
++				header = values
++				columns = parseHeader(header)
+ 				continue
+ 			}
+-			values := strings.Fields(line)
+ 			acc.AddError(processValues(acc, columns, values))
+ 		}
+ 		acc.AddError(scanner.Err())
+@@ -189,6 +193,15 @@ func processValues(acc telegraf.Accumulator, columns []column, values []string)
+ 	return nil
+ }
+ 
++// Creates the columns from the fields of a Turbostat header line.
++func parseHeader(fields []string) []column {
++	columns := make([]column, 0, len(fields))
++	for _, s := range fields {
++		columns = append(columns, createColumn(s))
++	}
++	return columns
++}
++
+ // Creates a column struct from a Turbostat column name.
+ func createColumn(s string) column {
+ 	// Add underscores around words known not to have delimiters.

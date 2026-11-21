@@ -61,6 +61,7 @@ exit 0
 REFUSED_HOME = {"none": None, "pack": {".capy", ".local/share/gstack", ".gstack"}, "gstack": {".capy"}}
 GIT = 'GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$1" -c safe.directory="*" -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.excludesFile=/dev/null'
 TREE_TAR = GIT + ' rev-parse --git-dir >/dev/null && { printf ".git\\0"; ' + GIT + ' ls-files -z --cached --others --exclude-standard; } | tar -C "$1" --null -T - -cf "$2/tree.tar" --ignore-failed-read --warning=no-file-removed 2>"$2/tree.tar.err"; s=$?; [ "$s" -le 1 ] || { cat "$2/tree.tar.err" >&2; exit "$s"; }'
+GEN_TRIES, GEN_WAIT_S = 5, 3
 TREE = re.compile(r"^H2H_TREE ([0-9a-f]{64}) files=(\d+)$", re.M)
 
 
@@ -152,6 +153,10 @@ class Turns(PfSession):
             self.mcp = {k: ({**v, "env": {"npm_config_offline": "true", **(v.get("env") or {})}} if isinstance(v, dict) and v.get("command") else v) for k, v in servers.items()}
             self.summary["mcp_servers"] = sorted(self.mcp)
         return self.mcp
+
+    def version(self) -> None:
+        """Records the agent CLI's version in the summary before the slot opens (ext/h2h_codex.py records Codex's)."""
+        self.summary["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
 
     def tree(self):
         try:
@@ -245,7 +250,7 @@ class Turns(PfSession):
         cfg, out = self.cfg, self.summary
         repo, work = cfg["repo"], cfg["work"]
         self.check()
-        out["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
+        self.version()
         start = self.sh('mkdir -p "$2" && bash "$1/capture.sh" filters "$3"', cfg["sh_dir"], work, repo)
         self.filters = start.stdout if start.returncode == 0 else b""
         out["trees"].append(self.tree())
@@ -285,6 +290,11 @@ class Turns(PfSession):
                 else:
                     break
         finally:
+            if cfg.get("generations"):
+                try:
+                    self.generations(slot)
+                except Exception as e:
+                    self.summary["generations_error"] = f"{type(e).__name__}: {e}"[:300]
             out["slot"]["close"] = self.slots.close(slot, "agent_finished")
         try:
             self.step("tree", (), TREE_TAR, repo, work)
@@ -293,6 +303,45 @@ class Turns(PfSession):
             raise RuntimeError("E_H2H_CAPTURE " + str(e)) from None
         out["capture"] = {"tree_tar_bytes": (self.out / "tree.tar").stat().st_size}
         return out
+
+    def generations(self, slot: dict) -> None:
+        """Part P (the config's generations key): before the slot closes, reads each answer's OpenRouter generation record by
+        its id (an assistant message id in the home's Claude Code session logs, sub-agents' included) through the slot's free
+        generation route, and writes one line per id to generations.jsonl for ext/session.ts's served-by check, with the
+        generation id the proxy named in its x-h2h-generation-id header (the answer's X-Generation-Id), or null. A record not
+        found yet is asked again up to GEN_TRIES times; whatever was read last is written, and nothing here stops the close
+        (run() records any error in the summary as generations_error). A message Claude Code wrote itself (model
+        "<synthetic>") has no generation record and is skipped."""
+        ids = []
+        try:
+            text = self.sh('find "$1"/.claude/projects -name "*.jsonl" -exec cat {} + 2>/dev/null', self.cfg["home"]).stdout.decode(errors="replace")
+        except Exception as e:
+            text = ""
+            self.summary["generations_error"] = f"{type(e).__name__}: {e}"[:300]
+        for line in text.splitlines():
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            i = m["message"].get("id") if isinstance(m, dict) and m.get("type") == "assistant" and isinstance(m.get("message"), dict) and m["message"].get("model") != "<synthetic>" else None
+            if isinstance(i, str) and i not in ids:
+                ids.append(i)
+        with (self.out / "generations.jsonl").open("w") as f:
+            for i in ids:
+                status, body, gen = 0, "", None
+                for attempt in range(GEN_TRIES if re.fullmatch(r"[A-Za-z0-9_-]+", i) else 0):
+                    req = urllib.request.Request(slot["base_url"].rstrip("/") + "/v1/generation?id=" + i, headers={"authorization": "Bearer " + slot["token"]})
+                    try:
+                        with urllib.request.urlopen(req, timeout=30) as r:
+                            status, body, gen = r.status, r.read().decode(errors="replace"), r.headers.get("x-h2h-generation-id")
+                    except urllib.error.HTTPError as e:
+                        status, body, gen = e.code, e.read().decode(errors="replace"), e.headers.get("x-h2h-generation-id")
+                    except Exception as e:
+                        status, body, gen = 0, f"{type(e).__name__}: {e}"[:300], None
+                    if status == 200 or attempt == GEN_TRIES - 1:
+                        break
+                    time.sleep(GEN_WAIT_S)
+                f.write(json.dumps({"id": i, "status": status, "text": body, "generation_id": gen}) + "\n")
 
     def copy_out(self, src: str, dest: Path) -> None:
         """Copies a file the session's container wrote to the host: docker cp under Harbor, a plain copy on the host."""

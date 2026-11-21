@@ -1,0 +1,239 @@
+diff --git a/compiler-core/src/erlang/tests/inlining.rs b/compiler-core/src/erlang/tests/inlining.rs
+index df9ef86..1d75a7f 100644
+--- a/compiler-core/src/erlang/tests/inlining.rs
++++ b/compiler-core/src/erlang/tests/inlining.rs
+@@ -312,3 +312,54 @@ fn divide(a, b) {
+ "
+     );
+ }
++
++#[test]
++fn inlined_parameter_in_record_update() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub type Config {
++  Config(host: String, ssl: Bool)
++}
++
++pub fn set_ssl(config: Config, value: Result(Bool, Nil)) {
++  use ssl <- result.map(value)
++  Config(..config, ssl:)
++}
++"
++    );
++}
++
++#[test]
++fn parameter_used_in_clause_guard_is_not_inlined() {
++    assert_erl!(
++        "
++pub fn main() {
++  fn(x) {
++    case 1 {
++      _ if x -> 1
++      _ -> 2
++    }
++  }(True)
++}
++"
++    );
++}
++
++#[test]
++fn parameter_used_in_bit_array_size_pattern_is_not_inlined() {
++    assert_erl!(
++        "
++pub fn main(bits) {
++  fn(size) {
++    case bits {
++      <<_:size(size)>> -> 1
++      _ -> 2
++    }
++  }(8)
++}
++"
++    );
++}
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_parameter_in_record_update.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_parameter_in_record_update.snap
+new file mode 100644
+index 0000000..7691584
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_parameter_in_record_update.snap
+@@ -0,0 +1,39 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++expression: "\nimport gleam/result\n\npub type Config {\n  Config(host: String, ssl: Bool)\n}\n\npub fn set_ssl(config: Config, value: Result(Bool, Nil)) {\n  use ssl <- result.map(value)\n  Config(..config, ssl:)\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub type Config {
++  Config(host: String, ssl: Bool)
++}
++
++pub fn set_ssl(config: Config, value: Result(Bool, Nil)) {
++  use ssl <- result.map(value)
++  Config(..config, ssl:)
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([set_ssl/2]).
++-export_type([config/0]).
++
++-type config() :: {config, binary(), boolean()}.
++
++-file("project/test/my/mod.gleam", 8).
++-spec set_ssl(config(), {ok, boolean()} | {error, nil}) -> {ok, config()} |
++    {error, nil}.
++set_ssl(Config, Value) ->
++    case Value of
++        {ok, Value@1} ->
++            {ok, {config, erlang:element(2, Config), Value@1}};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_bit_array_size_pattern_is_not_inlined.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_bit_array_size_pattern_is_not_inlined.snap
+new file mode 100644
+index 0000000..9d1ab56
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_bit_array_size_pattern_is_not_inlined.snap
+@@ -0,0 +1,36 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++expression: "\npub fn main(bits) {\n  fn(size) {\n    case bits {\n      <<_:size(size)>> -> 1\n      _ -> 2\n    }\n  }(8)\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++pub fn main(bits) {
++  fn(size) {
++    case bits {
++      <<_:size(size)>> -> 1
++      _ -> 2
++    }
++  }(8)
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/1]).
++
++-file("project/test/my/mod.gleam", 2).
++-spec main(bitstring()) -> integer().
++main(Bits) ->
++    begin
++        Size = 8,
++        case Bits of
++            <<_:Size>> ->
++                1;
++
++            _ ->
++                2
++        end
++    end.
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_clause_guard_is_not_inlined.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_clause_guard_is_not_inlined.snap
+new file mode 100644
+index 0000000..8ed13f2
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameter_used_in_clause_guard_is_not_inlined.snap
+@@ -0,0 +1,36 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++expression: "\npub fn main() {\n  fn(x) {\n    case 1 {\n      _ if x -> 1\n      _ -> 2\n    }\n  }(True)\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++pub fn main() {
++  fn(x) {
++    case 1 {
++      _ if x -> 1
++      _ -> 2
++    }
++  }(True)
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/0]).
++
++-file("project/test/my/mod.gleam", 2).
++-spec main() -> integer().
++main() ->
++    begin
++        X = true,
++        case 1 of
++            _ when X ->
++                1;
++
++            _ ->
++                2
++        end
++    end.
+diff --git a/compiler-core/src/inline.rs b/compiler-core/src/inline.rs
+index 81df9e9..9d7127b 100644
+--- a/compiler-core/src/inline.rs
++++ b/compiler-core/src/inline.rs
+@@ -479,7 +479,22 @@ impl Inliner<'_> {
+                 record_assignment: record_assignment
+                     .map(|assignment| Box::new(self.assignment(*assignment))),
+                 constructor: self.boxed_expression(constructor),
+-                arguments,
++                arguments: arguments
++                    .into_iter()
++                    .map(
++                        |TypedCallArg {
++                             label,
++                             location,
++                             value,
++                             implicit,
++                         }| TypedCallArg {
++                            label,
++                            location,
++                            value: self.expression(value),
++                            implicit,
++                        },
++                    )
++                    .collect(),
+             },
+         }
+     }
+@@ -1004,7 +1019,9 @@ impl<'ast> Visit<'ast> for FindInlinableParameters {
+         _type_: &'ast Arc<Type>,
+         location: &'ast SrcSpan,
+     ) {
+-        self.register_reference(name, *location);
++        // Clause guards cannot contain arbitrary expressions, so we cannot
++        // inline a parameter which is referenced inside one.
++        _ = self.parameters.remove(&(name.clone(), *location));
+     }
+ 
+     fn visit_typed_bit_array_size_variable(
+@@ -1018,8 +1035,10 @@ impl<'ast> Visit<'ast> for FindInlinableParameters {
+             Some(constructor) => &constructor.variant,
+             None => return,
+         };
++        // Bit array size patterns cannot contain arbitrary expressions, so we
++        // cannot inline a parameter which is referenced inside one.
+         if let ValueConstructorVariant::LocalVariable { location, .. } = variant {
+-            self.register_reference(name, *location);
++            _ = self.parameters.remove(&(name.clone(), *location));
+         }
+     }
+ 

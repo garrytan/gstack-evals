@@ -1,0 +1,127 @@
+diff --git a/.changeset/safe-action-locations.md b/.changeset/safe-action-locations.md
+new file mode 100644
+index 0000000..8e76fd2
+--- /dev/null
++++ b/.changeset/safe-action-locations.md
+@@ -0,0 +1,5 @@
++---
++'@sveltejs/kit': patch
++---
++
++fix: prevent open redirect via enhanced form actions on paths beginning with `//`
+diff --git a/packages/kit/src/runtime/app/forms/client.js b/packages/kit/src/runtime/app/forms/client.js
+index 67a67c1..323661f 100644
+--- a/packages/kit/src/runtime/app/forms/client.js
++++ b/packages/kit/src/runtime/app/forms/client.js
+@@ -7,7 +7,8 @@ import {
+ 	applyAction,
+ 	apply_action_navigation,
+ 	handle_error,
+-	is_current_location
++	is_current_location,
++	is_same_origin_location
+ } from '../../client/client.js';
+ import { notify_version } from '#app/state/client';
+ import { deserialize } from './shared.js';
+@@ -86,7 +87,12 @@ export function enhance(form_element, submit = noop) {
+ 		}
+ 
+ 		const destination =
+-			navigate && result.type !== 'redirect' && !is_current_location(result.location)
++			navigate &&
++			result.type !== 'redirect' &&
++			// only navigate within the current origin — a location that resolves elsewhere
++			// (e.g. a protocol-relative `//evil.com`) is applied to the current page instead
++			is_same_origin_location(result.location) &&
++			!is_current_location(result.location)
+ 				? result.location
+ 				: undefined;
+ 
+diff --git a/packages/kit/src/runtime/client/client.js b/packages/kit/src/runtime/client/client.js
+index 1929168..4f384e9 100644
+--- a/packages/kit/src/runtime/client/client.js
++++ b/packages/kit/src/runtime/client/client.js
+@@ -3017,6 +3017,7 @@ export function is_current_location(value) {
+ 
+ 	const destination = resolve_url(value);
+ 	const current = new URL(location.href);
++	if (destination.origin !== current.origin) return false;
+ 	if (destination.pathname !== current.pathname) return false;
+ 
+ 	const keys = new Set([...destination.searchParams.keys(), ...current.searchParams.keys()]);
+@@ -3035,6 +3036,16 @@ export function is_current_location(value) {
+ 	return true;
+ }
+ 
++/**
++ * Whether the given action location resolves to the current origin
++ * @param {string | undefined} value
++ * @returns {boolean}
++ */
++export function is_same_origin_location(value) {
++	if (value === undefined) return true;
++	return resolve_url(value).origin === origin;
++}
++
+ /**
+  * Navigate to where a form submission should land, rendering that page with the given result
+  * — what the browser would do for a native submission.
+@@ -3044,6 +3055,13 @@ export function is_current_location(value) {
+  * @returns {Promise<void>}
+  */
+ export function apply_action_navigation(location, result, refresh_all) {
++	// never let a non-redirect action result navigate away from the current origin
++	if (resolve_url(location).origin !== origin) {
++		return Promise.reject(
++			new Error(`Cannot navigate to an action location on another origin: ${location}`)
++		);
++	}
++
+ 	return _goto(location, {
+ 		type: 'form',
+ 		refreshAll: refresh_all,
+diff --git a/packages/kit/src/runtime/server/page/actions.js b/packages/kit/src/runtime/server/page/actions.js
+index 210cae6..c43bc1e 100644
+--- a/packages/kit/src/runtime/server/page/actions.js
++++ b/packages/kit/src/runtime/server/page/actions.js
+@@ -81,7 +81,14 @@ export function get_action_location(url) {
+ 		}
+ 	}
+ 
+-	return location.pathname + location.search;
++	// a pathname beginning with `//` would otherwise produce a protocol-relative URL
++	// (e.g. `//evil.com/...`) that resolves to another origin. Prefixing it with `/.`
++	// preserves the double slash while keeping it a path on the current origin
++	const pathname = location.pathname.startsWith('//')
++		? '/.' + location.pathname
++		: location.pathname;
++
++	return pathname + location.search;
+ }
+ 
+ /**
+diff --git a/packages/kit/src/runtime/server/page/actions.spec.js b/packages/kit/src/runtime/server/page/actions.spec.js
+index 08f2793..93403c8 100644
+--- a/packages/kit/src/runtime/server/page/actions.spec.js
++++ b/packages/kit/src/runtime/server/page/actions.spec.js
+@@ -126,3 +126,20 @@ test('explains that actions cannot return a Response', () => {
+ 		{ contains: ['/a'], cause: expect.any(Error) }
+ 	);
+ });
++
++test('get_action_location does not produce protocol-relative locations for paths beginning with //', async () => {
++	const { get_action_location } = await import('./actions.js');
++	const location = get_action_location(new URL('http://localhost//evil.com/a?/save&x=1'));
++
++	expect(location.startsWith('//')).toBe(false);
++	// resolves to the same path on the current origin, preserving the double slash
++	const resolved = new URL(location, 'http://localhost/');
++	expect(resolved.origin).toBe('http://localhost');
++	expect(resolved.pathname).toBe('//evil.com/a');
++	expect(resolved.search).toBe('?x=1');
++});
++
++test('get_action_location keeps ordinary paths unchanged', async () => {
++	const { get_action_location } = await import('./actions.js');
++	expect(get_action_location(new URL('http://localhost/a/b?/save&x=1'))).toBe('/a/b?x=1');
++});

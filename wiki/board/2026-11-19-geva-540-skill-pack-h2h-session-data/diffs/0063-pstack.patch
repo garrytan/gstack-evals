@@ -1,0 +1,127 @@
+diff --git a/paimon-common/src/main/java/org/apache/paimon/data/serializer/RowCompactedSerializer.java b/paimon-common/src/main/java/org/apache/paimon/data/serializer/RowCompactedSerializer.java
+index 4ceffc8..c88e677 100644
+--- a/paimon-common/src/main/java/org/apache/paimon/data/serializer/RowCompactedSerializer.java
++++ b/paimon-common/src/main/java/org/apache/paimon/data/serializer/RowCompactedSerializer.java
+@@ -40,6 +40,7 @@ import org.apache.paimon.types.DataType;
+ import org.apache.paimon.types.RowKind;
+ import org.apache.paimon.types.RowType;
+ import org.apache.paimon.types.VectorType;
++import org.apache.paimon.utils.SortUtil;
+ import org.apache.paimon.utils.TypeCheckUtils;
+ import org.apache.paimon.utils.VarLengthIntUtils;
+ 
+@@ -733,14 +734,30 @@ public class RowCompactedSerializer implements Serializer<InternalRow> {
+         private final RowReader reader1;
+         private final RowReader reader2;
+         private final FieldReader[] fieldReaders;
++        private final Comparator<Object>[] fieldComparators;
+ 
++        @SuppressWarnings("unchecked")
+         public SliceComparator(RowType rowType) {
+             int bitSetInBytes = calculateBitSetInBytes(rowType.getFieldCount());
+             this.reader1 = new RowReader(bitSetInBytes);
+             this.reader2 = new RowReader(bitSetInBytes);
+             this.fieldReaders = new FieldReader[rowType.getFieldCount()];
++            this.fieldComparators = new Comparator[rowType.getFieldCount()];
+             for (int i = 0; i < rowType.getFieldCount(); i++) {
+-                fieldReaders[i] = createFieldReader(rowType.getTypeAt(i));
++                DataType type = rowType.getTypeAt(i);
++                fieldReaders[i] = createFieldReader(type);
++                fieldComparators[i] = createFieldComparator(type);
++            }
++        }
++
++        @SuppressWarnings({"unchecked", "rawtypes"})
++        private static Comparator<Object> createFieldComparator(DataType type) {
++            switch (type.getTypeRoot()) {
++                case BINARY:
++                case VARBINARY:
++                    return (o1, o2) -> SortUtil.compareBinary((byte[]) o1, (byte[]) o2);
++                default:
++                    return (o1, o2) -> ((Comparable) o1).compareTo(o2);
+             }
+         }
+ 
+@@ -760,8 +777,7 @@ public class RowCompactedSerializer implements Serializer<InternalRow> {
+                         FieldReader fieldReader = fieldReaders[i];
+                         Object o1 = fieldReader.readField(reader1, i);
+                         Object o2 = fieldReader.readField(reader2, i);
+-                        @SuppressWarnings({"unchecked", "rawtypes"})
+-                        int comp = ((Comparable) o1).compareTo(o2);
++                        int comp = fieldComparators[i].compare(o1, o2);
+                         if (comp != 0) {
+                             return comp;
+                         }
+diff --git a/paimon-common/src/test/java/org/apache/paimon/data/serializer/RowCompactedSerializerTest.java b/paimon-common/src/test/java/org/apache/paimon/data/serializer/RowCompactedSerializerTest.java
+index 9b55fe2..cfe7671 100644
+--- a/paimon-common/src/test/java/org/apache/paimon/data/serializer/RowCompactedSerializerTest.java
++++ b/paimon-common/src/test/java/org/apache/paimon/data/serializer/RowCompactedSerializerTest.java
+@@ -23,17 +23,21 @@ import org.apache.paimon.data.BinaryVector;
+ import org.apache.paimon.data.GenericRow;
+ import org.apache.paimon.data.InternalRow;
+ import org.apache.paimon.data.variant.GenericVariant;
++import org.apache.paimon.memory.MemorySlice;
+ import org.apache.paimon.types.DataType;
+ import org.apache.paimon.types.DataTypes;
+ import org.apache.paimon.types.RowType;
+ 
+ import org.junit.jupiter.api.Test;
+ 
++import java.util.Comparator;
++
+ import static org.apache.paimon.data.BinaryString.fromString;
+ import static org.apache.paimon.data.serializer.InternalRowSerializerTest.createArray;
+ import static org.apache.paimon.data.serializer.InternalRowSerializerTest.createMap;
+ import static org.apache.paimon.data.serializer.InternalRowSerializerTest.createRow;
+ import static org.apache.paimon.data.serializer.InternalRowSerializerTest.deepEqualsInternalRow;
++import static org.assertj.core.api.Assertions.assertThat;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ 
+ /** Test for {@link RowCompactedSerializer}. */
+@@ -237,6 +241,46 @@ abstract class RowCompactedSerializerTest extends SerializerTestInstance<Interna
+         }
+     }
+ 
++    static final class BinaryKeyTest extends RowCompactedSerializerTest {
++
++        private static final InternalRow[] SORTED_ROWS =
++                new InternalRow[] {
++                    GenericRow.of(null, 1),
++                    GenericRow.of(new byte[0], 1),
++                    GenericRow.of(new byte[] {0x00}, 1),
++                    GenericRow.of(new byte[] {0x7F}, 1),
++                    GenericRow.of(new byte[] {0x7F, 0x00}, 0),
++                    GenericRow.of(new byte[] {0x7F, 0x00}, 1),
++                    GenericRow.of(new byte[] {(byte) 0x80}, 1),
++                    GenericRow.of(new byte[] {(byte) 0xFF}, 1)
++                };
++
++        public BinaryKeyTest() {
++            super(getRowSerializer(), SORTED_ROWS);
++        }
++
++        private static RowCompactedSerializer getRowSerializer() {
++            return new RowCompactedSerializer(RowType.of(DataTypes.VARBINARY(10), DataTypes.INT()));
++        }
++
++        @Test
++        public void testSliceComparatorOrdersBinaryUnsigned() {
++            RowCompactedSerializer serializer = getRowSerializer();
++            Comparator<MemorySlice> comparator = serializer.createSliceComparator();
++            for (int i = 0; i < SORTED_ROWS.length; i++) {
++                for (int j = 0; j < SORTED_ROWS.length; j++) {
++                    MemorySlice left =
++                            MemorySlice.wrap(serializer.serializeToBytes(SORTED_ROWS[i]));
++                    MemorySlice right =
++                            MemorySlice.wrap(serializer.serializeToBytes(SORTED_ROWS[j]));
++                    assertThat(Integer.signum(comparator.compare(left, right)))
++                            .as("compare row %s with row %s", i, j)
++                            .isEqualTo(Integer.compare(i, j));
++                }
++            }
++        }
++    }
++
+     static final class NestedInternalRowTest extends RowCompactedSerializerTest {
+ 
+         private static final RowType NESTED_DATA_TYPE =

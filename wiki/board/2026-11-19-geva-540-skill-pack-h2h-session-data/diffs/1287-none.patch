@@ -1,0 +1,52 @@
+diff --git a/__tests__/utils/convertTokenData.test.js b/__tests__/utils/convertTokenData.test.js
+index f50aa0e..bfe3f9c 100644
+--- a/__tests__/utils/convertTokenData.test.js
++++ b/__tests__/utils/convertTokenData.test.js
+@@ -94,5 +94,19 @@ describe('utils', () => {
+         });
+       });
+     });
++
++    it('should not allow prototype pollution when converting to object', () => {
++      const result = convertTokenData(
++        [
++          { key: '{__proto__.polluted}', value: 'malicious' },
++          { key: '{foo.__proto__.polluted}', value: 'malicious' },
++          { key: '{colors.red}', value: '#f00' },
++        ],
++        { output: 'object' },
++      );
++      expect({}.polluted).to.be.undefined;
++      expect(Object.prototype).to.not.have.property('polluted');
++      expect(result).to.eql({ colors: { red: { key: '{colors.red}', value: '#f00' } } });
++    });
+   });
+ });
+diff --git a/lib/utils/convertTokenData.js b/lib/utils/convertTokenData.js
+index c3dabb0..19d7b34 100644
+--- a/lib/utils/convertTokenData.js
++++ b/lib/utils/convertTokenData.js
+@@ -25,6 +25,8 @@ function convertToTokenMap(flattenedTokens) {
+   );
+ }
+ 
++const UNSAFE_KEYS = ['__proto__'];
++
+ /**
+  * @param {Token[]} tokenArray
+  * @returns
+@@ -34,9 +36,13 @@ function convertToTokenObject(tokenArray) {
+   tokenArray.forEach((token) => {
+     const { key } = token;
+     const keyArr = /** @type {string} */ (key).replace('{', '').replace('}', '').split('.');
++    if (keyArr.some((k) => UNSAFE_KEYS.includes(k))) {
++      // prevent prototype pollution
++      return;
++    }
+     let slice = obj;
+     keyArr.forEach((k, i, arr) => {
+-      if (slice[k] === undefined) {
++      if (!Object.prototype.hasOwnProperty.call(slice, k) || slice[k] === undefined) {
+         slice[k] = {};
+       }
+       // end

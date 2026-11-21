@@ -1,0 +1,84 @@
+diff --git a/agentscope-core/src/main/java/io/agentscope/core/ReActAgent.java b/agentscope-core/src/main/java/io/agentscope/core/ReActAgent.java
+index 6778e17..c06b150 100644
+--- a/agentscope-core/src/main/java/io/agentscope/core/ReActAgent.java
++++ b/agentscope-core/src/main/java/io/agentscope/core/ReActAgent.java
+@@ -3550,6 +3550,7 @@ public class ReActAgent extends AgentBase implements AutoCloseable {
+                             AssistantMessage.builder()
+                                     .name(getName())
+                                     .content(TextBlock.builder().text(recoveryText).build())
++                                    .generateReason(GenerateReason.INTERRUPTED)
+                                     .build();
+                     scope.state.contextMutable().add(recoveryMsg);
+                     return saveStateToSession(scope)
+diff --git a/agentscope-core/src/test/java/io/agentscope/core/agent/ReActAgentPerSessionStateTest.java b/agentscope-core/src/test/java/io/agentscope/core/agent/ReActAgentPerSessionStateTest.java
+index 5d88b1f..5bc4d77 100644
+--- a/agentscope-core/src/test/java/io/agentscope/core/agent/ReActAgentPerSessionStateTest.java
++++ b/agentscope-core/src/test/java/io/agentscope/core/agent/ReActAgentPerSessionStateTest.java
+@@ -26,9 +26,11 @@ import io.agentscope.core.event.AgentEndEvent;
+ import io.agentscope.core.event.AgentEvent;
+ import io.agentscope.core.event.AgentStartEvent;
+ import io.agentscope.core.message.ContentBlock;
++import io.agentscope.core.message.GenerateReason;
+ import io.agentscope.core.message.Msg;
+ import io.agentscope.core.message.MsgRole;
+ import io.agentscope.core.message.TextBlock;
++import io.agentscope.core.message.UserMessage;
+ import io.agentscope.core.model.ChatModelBase;
+ import io.agentscope.core.model.ChatResponse;
+ import io.agentscope.core.model.GenerateOptions;
+@@ -154,6 +156,55 @@ class ReActAgentPerSessionStateTest {
+                 "interrupt recovery message should be persisted to the state store");
+     }
+ 
++    @Test
++    @DisplayName(
++            "targeted user interrupt returns INTERRUPTED, persists recovery and isolates sessions")
++    void targetedUserInterruptReturnsInterruptedReason() throws Exception {
++        InMemoryAgentStateStore store = new InMemoryAgentStateStore();
++        CountDownLatch subscribed = new CountDownLatch(2);
++        ReActAgent agent =
++                ReActAgent.builder()
++                        .name("asst")
++                        .sysPrompt("hi")
++                        .model(new DelayedFirstChunkModel(subscribed))
++                        .stateStore(store)
++                        .build();
++        RuntimeContext target = RuntimeContext.builder().userId("u1").sessionId("sessA").build();
++        RuntimeContext bystander = RuntimeContext.builder().userId("u1").sessionId("sessB").build();
++
++        CompletableFuture<Msg> targetFuture =
++                agent.call(List.of(userMsg("hello-a")), target)
++                        .subscribeOn(Schedulers.parallel())
++                        .toFuture();
++        CompletableFuture<Msg> bystanderFuture =
++                agent.call(List.of(userMsg("hello-b")), bystander)
++                        .subscribeOn(Schedulers.parallel())
++                        .toFuture();
++
++        assertTrue(subscribed.await(5, TimeUnit.SECONDS), "both model streams should start");
++        agent.interrupt("u1", "sessA", new UserMessage("stop"));
++
++        Msg interrupted = targetFuture.get(5, TimeUnit.SECONDS);
++        assertEquals(GenerateReason.INTERRUPTED, interrupted.getGenerateReason());
++        assertEquals(
++                "I noticed that you have interrupted me. What can I do for you?",
++                interrupted.getTextContent());
++
++        Msg completed = bystanderFuture.get(5, TimeUnit.SECONDS);
++        assertEquals(GenerateReason.MODEL_STOP, completed.getGenerateReason());
++        assertEquals("model reply", completed.getTextContent());
++
++        ReActAgent reborn = agent(store);
++        assertTrue(
++                allText(reborn.getAgentState("u1", "sessA"))
++                        .contains("I noticed that you have interrupted me. What can I do for you?"),
++                "interrupt recovery message should be persisted for the targeted session");
++        assertFalse(
++                allText(reborn.getAgentState("u1", "sessB"))
++                        .contains("I noticed that you have interrupted me. What can I do for you?"),
++                "non-targeted session must not receive the recovery message");
++    }
++
+     private static final class DelayedFirstChunkModel extends ChatModelBase {
+         private final CountDownLatch subscribed;
+ 
