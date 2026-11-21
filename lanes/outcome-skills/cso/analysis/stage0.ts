@@ -16,7 +16,6 @@ export interface Stage0Input { units: string[]; sessions: SessionRecord[]; score
 export interface Stage0Cell { model: CsoModel; arm: CsoArm; pass: boolean; reasons: { unit: string | null; reason: string }[] }
 
 const ARMS: CsoArm[] = ["none", "cso", "untold"];
-/** Stage 0 runs Opus and particle-1; the Sol stage has its own Codex smoke (deviation CV6). */
 const MODELS: CsoModel[] = ["opus", "particle"];
 
 /** Pass or fail per arm and model that runs in stage 0, with every reason it failed. */
