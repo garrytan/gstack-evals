@@ -37,7 +37,7 @@ Part R's keyless smoke missed it, because its stand-in model only read SKILL.md 
 
 - `lanes/codex-hooks/r/pins.ts` defines part R's Codex settings: the settings every arm already passed (`features.sleep_tool=false`) plus `allow_login_shell=false`. The prepare step passes them to r-on, r-off and r-none alike, and the run manifest records them.
 - The model's shell commands now run with the container's PATH, as Claude Code's do. A call that asks for `login: true` does not run. Codex answers it with "login shell is disabled by config; omit `login` or set it to false." This matches B2's fix (`-c allow_login_shell=false` on its Codex command line), so the two lanes stay alike. Neither lane changes the image.
-- Each row of part R's session table now has `login_refused`: the number of tool results that carry Codex's refusal, whether from a direct call or from inside a code-mode exec. The results report gives each arm's total.
+- Each row of part R's session table now has `login_refused`: the number of Codex's refusals in the session's tool results, counted once per refusal, so two refused calls inside one code-mode exec count as two. It counts the refusal text wherever it appears, so a model that echoes the text would be counted too. The results post sums it per arm from the table.
 
 ## 3. How it was checked
 
