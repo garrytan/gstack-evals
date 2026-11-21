@@ -184,4 +184,4 @@ The launcher commands are L1's under B1e's profile: host root ~/b1e, ledger port
 
 ## Credits
 
-The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19, B1d installs gstack itself at 5afef04e31de, and B1e at 5df6b5a8cf21. NOTICE.md has the rows.
+The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19. B1d installs gstack itself at 5afef04e31de, and B1e at 5df6b5a8cf21, at build time; neither commits gstack's code. NOTICE.md has rows for the bytes this repo vendors.
