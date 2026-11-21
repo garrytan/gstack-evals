@@ -32,6 +32,7 @@ export type Detection = {
   named_in_text: boolean;
   line_delivered: boolean;
   guard: { denies: number; codex_rejects: number };
+  login_refused: number;
   audit: { calls: number };
 };
 
@@ -40,6 +41,9 @@ export type Detection = {
  *  exec policy rejects rm -f style commands in every arm; those are counted on their own. */
 export const CAREFUL_DENY = "Command blocked by PreToolUse hook: [careful]";
 const CODEX_REJECT = /rejected: .* not permitted/;
+/** Codex's answer to a shell call that asks for a login shell under part R's allow_login_shell=false (pre-run change 3),
+ *  as a direct exec_command result or inside a Code Mode exec's output. */
+export const LOGIN_REFUSED = "login shell is disabled by config";
 /** The read audit (r-none): a call naming a gstack path, a SKILL.md, a skills folder or a Capy drive. */
 const AUDIT = /gstack|SKILL\.md|\/skills\/|\.capy\/drive/i;
 
@@ -168,7 +172,7 @@ export function detect(ev: string, skills: Record<DetectSkill, SkillLines> = rea
   }
   const steps_arrived = outputs.some((o) => o.text.includes(PROVE_IT.stepLine));
   const guard = { denies: outputs.filter((o) => o.text.includes(CAREFUL_DENY)).length, codex_rejects: outputs.filter((o) => CODEX_REJECT.test(o.text)).length };
-  return { root, threads, first_call, loads, steps_arrived, named_in_text, line_delivered, guard, audit: { calls: auditCalls } };
+  return { root, threads, first_call, loads, steps_arrived, named_in_text, line_delivered, guard, login_refused: outputs.filter((o) => o.text.includes(LOGIN_REFUSED)).length, audit: { calls: auditCalls } };
 }
 
 /** Where the session's own hook log put prove-it, from the first line it wrote for the root thread (the task's prompt;

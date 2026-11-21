@@ -11,7 +11,8 @@
 // request with no effort or a trial with no request line is an infrastructure gap. The load fields come from detect.ts (section 4.5 and 4.6), and an
 // allowance stop says whether the proxy refused a reservation before the session spent $5 or its spend reached $5. The
 // destructive-command check's denies and r-none's read audit (calls naming gstack or skill paths, and whether any skill text
-// arrived) come from the rollout too.
+// arrived) come from the rollout too, and so does the count of shell calls Codex refused for asking for a login shell
+// (pre-run change 3).
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readSessionRows, sessionsByTrial, type SessionRow } from "../../../quick/laneb/analysis/analyze.ts";
@@ -42,6 +43,7 @@ export type RRow = {
   init: { model: string | null; reasoning_effort: string | null; codex_version: string | null; hook_trust: boolean | null; switches: Record<string, string | null> | null } | null;
   loads: { prove_it: SkillLoad; verify: SkillLoad; steps_arrived: boolean; named_in_text: boolean; line_delivered: boolean; hook: HookRead; why_no_load: Reason | null } | null;
   destructive: { denies: number; codex_rejects: number } | null;
+  login_refused: number | null;
   read_audit: { calls: number; skill_text: boolean } | null;
 };
 
@@ -144,6 +146,7 @@ export function rRow(dir: string, ctx: { part: string | null; sessions: Map<stri
     sub_agents: { count: subs.length, other_models: [...new Set(subs.flatMap((t) => t.models).filter((m) => m !== MODEL))] },
     init: init ? { model: init.model ?? null, reasoning_effort: init.reasoning_effort ?? null, codex_version: init.codex_version ?? null, hook_trust: init.hook_trust ?? null, switches: init.switches ?? null } : null,
     destructive: det ? det.guard : null,
+    login_refused: det ? det.login_refused : null,
     read_audit: det && arm === "r-none" ? { calls: det.audit.calls, skill_text: Object.values(det.loads).some((l) => l.loaded || l.b_excluded > 0) } : null,
     loads: det && hook ? { prove_it: det.loads["prove-it"], verify: det.loads["gstack-verify"], steps_arrived: det.steps_arrived, named_in_text: det.named_in_text, line_delivered: det.line_delivered, hook, why_no_load: arm === "r-on" ? whyNoLoad(det, hook) : null } : null,
   };

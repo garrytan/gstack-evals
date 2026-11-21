@@ -10,14 +10,14 @@
 import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { codexArgs, codexEnv, type CodexOptions } from "../../../src/adapters/codex/driver.ts";
-import { AGENT, ARM_SETTINGS, ARMS, CODEX, CODEX_BIN, CODEX_HOME, GSTACK, GSTACK_CONFIG, isArm, MODEL, PROXY_CONFIG, PROXY_SLOT, QUESTION_REPLY, R, R_EFFORT, REPO, sha256 } from "./pins.ts";
+import { AGENT, ARMS, CODEX, CODEX_BIN, CODEX_HOME, GSTACK, GSTACK_CONFIG, isArm, MODEL, PROXY_CONFIG, PROXY_SLOT, QUESTION_REPLY, R, R_EFFORT, R_SETTINGS, REPO, sha256 } from "./pins.ts";
 
 const DROP = ["max_output_tokens", "sdk_max_turns"];
 const KEEP = ["skip_install", "arm", "arm_tar", "arm_sha256", "upstream_model", "session_cap_usd", "persona_path", "wrapper_path", "session_kind", "closing_line", "strip_snapshot", "repo_dir"];
 
 /** The session's Codex options for an arm, as the shared driver takes them. */
 export const codexOptions = (gstack: boolean): Pick<CodexOptions, "model" | "provider" | "proxy" | "effort" | "settings" | "hookTrust"> =>
-  ({ model: MODEL, provider: "openai", proxy: { baseUrl: "http://__GATEWAY__:8787", slot: PROXY_SLOT, token: "" }, effort: R_EFFORT, settings: { ...ARM_SETTINGS }, hookTrust: gstack });
+  ({ model: MODEL, provider: "openai", proxy: { baseUrl: "http://__GATEWAY__:8787", slot: PROXY_SLOT, token: "" }, effort: R_EFFORT, settings: { ...R_SETTINGS }, hookTrust: gstack });
 
 /** One Lane B agent entry as the Codex agent for its arm, with the arm manifest's records. */
 export function codexAgent(agent: { name: string; import_path: string; kwargs: Record<string, unknown> }, manifest: { tree: { digest: string }; prompt_input: { sha256: string } }) {
@@ -47,7 +47,7 @@ export function codexRun(run: string) {
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
   const m = JSON.parse(readFileSync(join(run, "manifest.json"), "utf8"));
   m.proxy_config_sha256 = sha256(readFileSync(join(run, "proxy.json")));
-  m.codex_hooks_r = { proxy_config: "lanes/codex-hooks/r/proxy.json", agent: AGENT.import_path, codex: CODEX.version, codex_bin: CODEX_BIN, model: MODEL, effort: R_EFFORT, settings: ARM_SETTINGS, question_reply_sha256: sha256(QUESTION_REPLY) };
+  m.codex_hooks_r = { proxy_config: "lanes/codex-hooks/r/proxy.json", agent: AGENT.import_path, codex: CODEX.version, codex_bin: CODEX_BIN, model: MODEL, effort: R_EFFORT, settings: R_SETTINGS, question_reply_sha256: sha256(QUESTION_REPLY) };
   writeFileSync(join(run, "manifest.json"), JSON.stringify(m, null, 2) + "\n");
 }
 

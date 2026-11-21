@@ -132,6 +132,7 @@ describe("destructive-command check, read audit and the table row", () => {
   test("a gstack deny and Codex's own reject are counted apart", () => {
     expect(d("careful").guard).toEqual({ denies: 1, codex_rejects: 1 });
     expect(d("direct").guard).toEqual({ denies: 0, codex_rejects: 0 });
+    expect([d("careful").login_refused, d("direct").login_refused]).toEqual([0, 0]);
   });
   test("the read audit counts calls naming gstack or skill paths", () => {
     expect(d("none-direct").audit.calls).toBe(1);
@@ -149,6 +150,7 @@ describe("destructive-command check, read audit and the table row", () => {
     expect([row.outcome, row.reason]).toEqual(["graded", "graded"]);
     expect(row.loads).toMatchObject({ prove_it: { loaded: true, at_first_call: true }, line_delivered: true, hook: { position: "alone" }, why_no_load: null });
     expect(row.destructive).toEqual({ denies: 0, codex_rejects: 0 });
+    expect(row.login_refused).toBe(0);
     expect(row.read_audit).toBeNull();
     rmSync(dir, { recursive: true, force: true });
   });

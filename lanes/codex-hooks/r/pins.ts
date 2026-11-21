@@ -14,6 +14,12 @@ export { ARM_SETTINGS, CHANGE_1, CLOSING, CODEX, EFFORT, GSTACK, MODEL, PREREG, 
 export const sha256 = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
 export const HERE = "lanes/codex-hooks/r";
 
+// Part R's Codex settings (pre-run change 3): ARM_SETTINGS, and the model's shell commands run in a non-login shell. A
+// login shell reads the task image's /etc/profile, which resets PATH and drops the testbed's bin and /opt/laneb/bin (bun),
+// so every gstack command refused and the model ran another Python. Codex refuses a request for a login shell under this
+// setting; table.ts counts those requests.
+export const R_SETTINGS: Readonly<Record<string, boolean>> = { ...ARM_SETTINGS, allow_login_shell: false };
+
 // The part machinery's settings: B1's seed orders each part's tasks and arms (seeded() in quick/laneb/l1/l1.ts), six
 // sessions at once, 20 tasks a part (60 sessions with three arms), its own host root, ledger port and manifests.
 export const R = {
