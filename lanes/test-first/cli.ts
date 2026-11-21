@@ -14,7 +14,7 @@ import { runSessions } from "./sessions.ts";
 import { buildImages, imagesRecord, readImagesRecord, writeImagesRecord } from "./images.ts";
 import { approve, dryRun, guardParts, itemTotals, launchGuard, markDone, planLines, type Order } from "./money.ts";
 import { B2, drawnTasks, isItem, ITEM_NAMES, LABELS, MODELS, PILOT_TASKS, sha256, type Item } from "./pins.ts";
-import { B2_PROFILE, withCarry } from "./plans.ts";
+import { B2_PROFILE, pilotRows, withCarry } from "./plans.ts";
 import { buildB2Table, type B2Row } from "./table.ts";
 
 const USAGE = "E_USAGE usage: b2 arms build|manifests <dir> [--register] | arms check [<dir>] | sessions run --out <dir> [--arms <dir>] [--codex <vendor dir>] [--record] | plan | dry-run | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> [--part <part>] --counter-usd <dollars> --counter-as-of <time> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> (host-up, launch and relaunch also --counter-usd and --counter-as-of) | images --out <dir> [--shard k/n] | images --record <file> <dir>... | table <config.json> <out.jsonl> | look <table.jsonl> --out <record> | report <table.jsonl> [--stage end|look] [--item b2-pilot] [--out <md>]";
@@ -37,14 +37,15 @@ export function readOrder(ledgers: Partial<Record<Item, Row[]>>, env: Record<str
 }
 
 // The launch guard's inputs: the work dir's plan and parts, the item's own ledger (LEDGER, or the host mirror l1.ts keeps),
-// every other item's ledger as B2_LEDGERS/<item>.jsonl, the order records, and this thread's counter.
+// every other item's ledger as B2_LEDGERS/<item>.jsonl (b2-pilot's with every later pilot run's b2-pilot.<run>.jsonl carried in,
+// pre-run change 3), the order records, and this thread's counter.
 function guard(work: string, counter: { usd?: string; as_of?: string }, part: string | null, relaunching?: string) {
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
   const dir = process.env.B2_LEDGERS ?? "", own = process.env.LEDGER ?? "";
   if (!dir) throw new Error("E_USAGE b2 launch guard: set B2_LEDGERS to the folder of item ledgers (<item>.jsonl)");
   if (!isItem(plan.item)) throw new Error("E_USAGE b2 launch guard: " + work + " plans " + plan.item + ", not a B2 item");
   const ledgers: Partial<Record<Item, Row[]>> = {};
-  for (const i of ITEM_NAMES) if (existsSync(join(dir, i + ".jsonl"))) ledgers[i] = readRows(join(dir, i + ".jsonl"));
+  for (const i of ITEM_NAMES) if (existsSync(join(dir, i + ".jsonl"))) ledgers[i] = i === "b2-pilot" ? pilotRows(dir) : readRows(join(dir, i + ".jsonl"));
   const mirror = join(work, "host/ledger.jsonl");
   ledgers[plan.item as Item] = own && existsSync(own) ? readRows(own) : existsSync(mirror) ? readRows(mirror) : ledgers[plan.item as Item] ?? [];
   // Pre-run change 2: a re-pilot's guard adds the first pilot run's settled spend (B2_PILOT_CARRY, that run's ledger).

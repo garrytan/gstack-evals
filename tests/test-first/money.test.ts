@@ -7,8 +7,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ledger, readRows, toMicros, type Row } from "../../quick/laneb/runner/ledger.ts";
-import { approve, capOf, dryRun, infraRerun, launchGuard, markDone, orderProblems, planLines, type Order } from "../../lanes/test-first/money.ts";
-import { B2, CAPS_USD, drawnTasks, ITEM_NAMES, PREREG_CAPS_USD, type Item } from "../../lanes/test-first/pins.ts";
+import { approve, capOf, dryRun, infraRerun, itemGuard, launchGuard, markDone, orderProblems, planLines, type Order } from "../../lanes/test-first/money.ts";
+import { itemPlan } from "../../lanes/test-first/plans.ts";
+import { B2, CAPS_USD, drawnTasks, ITEM_NAMES, PREREG_CAPS_USD, RATES_USD, type Item } from "../../lanes/test-first/pins.ts";
 import { row } from "./fixtures/rows.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "b2-money-"));
@@ -52,7 +53,7 @@ describe("launch guard", () => {
   });
   test("refuses when this thread's counter takes the all-in total past $1,860", () => {
     expect(guard("b2-opus", { counter: 100 }).ok).toBe(true);
-    const g = guard("b2-opus", { counter: 900 });
+    const g = guard("b2-opus", { counter: 1200 });
     expect(g.ok).toBe(false);
     expect(g.why.join()).toContain("passes the $1860.00 stop");
   });
@@ -72,11 +73,13 @@ describe("launch guard", () => {
     expect(guard("b2-sol").why.join()).not.toContain("image check");
     expect(guard("b2-p1", { order: { images: null } }).ok).toBe(true);
   });
-  test("at change 1's $355 cap the plan's Sol rates project past it, so the guard refuses Sol's first counted part", () => {
+  test("at change 1's $355 cap the plan's Sol rates project past it; change 3's guard rate fits, so Sol's first counted part launches", () => {
+    const parts = itemPlan("b2-sol", drawnTasks().run, drawnTasks().pilot).parts;
+    const old = itemGuard("b2-sol", ledger("b2-sol"), parts, [], RATES_USD);
+    expect([old.total, old.fits]).toEqual([toMicros(467.58), false]);
     const g = guard("b2-sol");
-    expect(g.ok).toBe(false);
-    expect(g.why.join()).toContain("b2-sol's projection $467.58");
-    expect(g.why.join()).toContain("passes its cap $355.00");
+    expect(g.ok).toBe(true);
+    expect(g.lines.join()).toContain("b2-sol $237.00 of cap $355.00");
   });
   test("no part past the look's half without a look record that says continue", () => {
     expect(guard("b2-opus", { part: "b2-" + B2.lookParts, order: { look: null } }).ok).toBe(true);

@@ -149,6 +149,16 @@ export const RATES_USD: Record<ModelKey, Record<Arm, number>> = {
   sol: { none: 0.45, line: 0.45, gstack: 0.55, "prove-it": 0.65 },
   p1: { none: 0.15, line: 0.15, gstack: 0.17, "prove-it": 0.18 },
 };
+// Pre-run change 3 (wiki/plans/2026-11-21-geva-569-b2-test-first-change-3.md): the launch guard projects Sol's sessions at
+// 1.25 times both Sol pilots' measured cost per session, rounded up to the cent; every other rate, and the cap rule, keep the
+// plan's RATES_USD. The caps do not change.
+export const CHANGE_3 = "wiki/plans/2026-11-21-geva-569-b2-test-first-change-3.md";
+export const SOL_PILOTS = { sessions: 24, usd: 3.992361 } as const;
+export const SOL_GUARD_RATE_USD = Math.ceil((1.25 * SOL_PILOTS.usd * 100) / SOL_PILOTS.sessions) / 100;
+export const GUARD_RATES_USD: Record<ModelKey, Record<Arm, number>> = {
+  ...RATES_USD,
+  sol: { none: SOL_GUARD_RATE_USD, line: SOL_GUARD_RATE_USD, gstack: SOL_GUARD_RATE_USD, "prove-it": SOL_GUARD_RATE_USD },
+};
 // The cap rule rounds up to $5 (ceil5); a session's VM time for the part VM's blocks.
 export const CAP_ROUND_USD = 5;
 export const VM_HOURS_PER_SESSION = 0.05;

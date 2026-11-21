@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostTtlHours, itemCheck, L1, plannedCells, relaunchRects, type PartPlan } from "../../quick/laneb/l1/l1.ts";
 import { appendRow, fromMicros, Ledger, readRows, toMicros, type Row } from "../../quick/laneb/runner/ledger.ts";
-import { ARM_DEFS, B2, CAP_ROUND_USD, CAPS_USD, PREREG_CAPS_USD, isItem, ITEM_NAMES, ITEM_MODEL, modelKey, MODELS, RATES_USD, VM_HOURS_PER_SESSION, type Item } from "./pins.ts";
+import { ARM_DEFS, B2, CAP_ROUND_USD, CAPS_USD, GUARD_RATES_USD, PREREG_CAPS_USD, isItem, ITEM_NAMES, ITEM_MODEL, modelKey, MODELS, RATES_USD, VM_HOURS_PER_SESSION, type Item } from "./pins.ts";
 import { ITEMS, itemPlan, partNumber } from "./plans.ts";
 import { buildB2Table, pulledInputs, type B2Row } from "./table.ts";
 
@@ -65,11 +65,11 @@ export function markDone(path: string, item: Item) {
 }
 
 /** A part's planned model spend (its sessions at the planning rate of its model and arm) and its part VM's blocks. */
-export function partProjection(item: Item, p: PartPlan) {
+export function partProjection(item: Item, p: PartPlan, rates = RATES_USD) {
   const m = modelKey(p.model ?? ITEMS[item].model) ?? refuse("no planning rate for model " + (p.model ?? ITEMS[item].model));
   const cells = [...plannedCells(p).entries()];
   const sessions = cells.reduce((x, [, n]) => x + n, 0);
-  const model = toMicros(cells.reduce((x, [k, n]) => { const a = ARM_DEFS[k.split("\t")[1]!] ?? refuse("unknown arm " + k.split("\t")[1]); return x + n * RATES_USD[m][a.arm]; }, 0));
+  const model = toMicros(cells.reduce((x, [k, n]) => { const a = ARM_DEFS[k.split("\t")[1]!] ?? refuse("unknown arm " + k.split("\t")[1]); return x + n * rates[m][a.arm]; }, 0));
   const blocks = Math.max(1, Math.ceil((sessions * VM_HOURS_PER_SESSION) / Number(L1.vm.reserveHours)));
   return { sessions, model, vm: toMicros(blocks * blockUsd) };
 }
@@ -87,9 +87,10 @@ export function capOf(item: Item, parts: PartPlan[] = planOf(item)) {
 }
 
 /** The item guard: its spend so far, its parts still to run at their planned spend, the parallel reserve its sessions hold
- *  open, and its VM share (VM rows so far, the host's reserve for its TTL when none is open, each part left at its blocks). */
-export function itemGuard(item: Item, rows: Row[], parts: PartPlan[], finished: string[]) {
-  const t = itemTotals(rows, item), left = parts.filter((p) => !finished.includes(p.name)), proj = left.map((p) => partProjection(item, p));
+ *  open, and its VM share (VM rows so far, the host's reserve for its TTL when none is open, each part left at its blocks).
+ *  Parts left are projected at change 3's GUARD_RATES_USD. */
+export function itemGuard(item: Item, rows: Row[], parts: PartPlan[], finished: string[], rates = GUARD_RATES_USD) {
+  const t = itemTotals(rows, item), left = parts.filter((p) => !finished.includes(p.name)), proj = left.map((p) => partProjection(item, p, rates));
   const parallel = left.length ? toMicros(B2.concurrent * allowanceOf(item)) : 0;
   const model = t.settled - t.vmSettled + t.open - t.vmOpen + proj.reduce((x, p) => x + p.model, 0) + parallel;
   const host = !t.hostOpen && left.length ? toMicros(hostTtlHours(left.length) * L1.host.usdPerHour) : 0;

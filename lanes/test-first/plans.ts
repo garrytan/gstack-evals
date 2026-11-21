@@ -5,10 +5,10 @@
 // 22), a task's four arms in one part, in the order L1's seeded() gives from B2's seed. Claude Code parts use Lane B's Claude
 // agent with B1's cells; Sol's parts use B2's Codex agent on the Responses route (prepare-run.ts, proxy.json), with Codex in
 // each task image as part R builds it.
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { plannedCells, prefixOf, seeded, type ItemDef, type PartPlan, type Plan, type Profile, type Rect } from "../../quick/laneb/l1/l1.ts";
-import { type Row } from "../../quick/laneb/runner/ledger.ts";
+import { readRows, type Row } from "../../quick/laneb/runner/ledger.ts";
 import { attempt2Owed, itemTotals } from "./money.ts";
 import { ARM_DEFS, B2, CAPS_USD, drawnTasks, HERE, hostOf, HOSTS, isItem, ITEM_MODEL, ITEM_NAMES, LABELS, labelsOf, loadBundle, MODEL_KEYS, MODELS, REPO, TARS, type Item, type ModelKey } from "./pins.ts";
 
@@ -34,11 +34,20 @@ export function pilotModels(env = process.env.B2_PILOT_MODELS): ModelKey[] {
 /** Pre-run change 2: the re-pilot runs on a fresh b2-pilot ledger (L1 binds one run per ledger), and its launch guard reads
  *  that ledger with the first pilot run's settled spend added as one settled row, so the guard refuses a launch whose
  *  projection would take the two runs together past b2-pilot's one cap. */
-export function withCarry(own: Row[], first: Row[]): Row[] {
+export function withCarry(own: Row[], first: Row[], id = "carry-first-pilot", detail = "the first b2-pilot run's settled spend (pre-run change 2)"): Row[] {
   const t = itemTotals(first, "b2-pilot");
-  if (!t.done || t.open) throw new Error("E_B2_INPUT the first pilot's ledger is not done with every reserve settled; nothing to carry");
-  const row = { ts: new Date().toISOString(), item: "b2-pilot", id: "carry-first-pilot", usd_micros: t.settled, kind_detail: "the first b2-pilot run's settled spend (pre-run change 2)" };
+  if (!t.done || t.open) throw new Error("E_B2_INPUT a carried pilot ledger is not done with every reserve settled; nothing to carry");
+  const row = { ts: new Date().toISOString(), item: "b2-pilot", id, usd_micros: t.settled, kind_detail: detail };
   return [...own, { ...row, kind: "reserve" } as Row, { ...row, kind: "settle" } as Row];
+}
+
+/** Pre-run change 3: a counted item's guard reads b2-pilot as the first run's ledger (<dir>/b2-pilot.jsonl) with every later
+ *  pilot run's ledger (<dir>/b2-pilot.<run>.jsonl, marked done) carried in at its settled spend, so the all-in counts them all. */
+export function pilotRows(dir: string): Row[] {
+  const first = join(dir, "b2-pilot.jsonl");
+  if (!existsSync(first)) return [];
+  return readdirSync(dir).filter((f) => /^b2-pilot\.[\w-]+\.jsonl$/.test(f)).sort()
+    .reduce((rows, f) => withCarry(rows, readRows(join(dir, f)), "carry-" + f, "the settled spend of the later pilot run in " + f + " (pre-run change 3)"), readRows(first));
 }
 export const partName = (n: number) => "b2-" + n;
 /** A part's number in its item (b2-5 is 5), its attempt 2 and relaunch included; 0 for a pilot part. */
