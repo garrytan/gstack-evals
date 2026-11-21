@@ -7,11 +7,12 @@
 //   A call is for a folder when its --out is that folder, or (rep 4 of the smoke) when it is a start call (next or
 //   run naming a --plan) and gstack-autoplan created that run during it: the run.json's created_at lies between the
 //   transcript's timestamps on the message that made the Bash call and on the one that returned its result (a start run in
-//   the background, by run_in_background or a trailing & that ends its pipeline, list, subshell or group, spans from its
-//   call until the next start call begins or the transcript's last timestamp, whichever comes first), no other
-//   start call (in that Bash call or another) spans that time, and no other run the scan found was created in that
-//   span. So a --out the log cannot spell out (a command substitution, a variable set in
-//   another shell) still ties the start to the run it made. A start call that is for no record that counts is
+//   the background, by run_in_background or a trailing & that ends its statement, spans from its call until the message
+//   that made the next Bash call holding a start call, with or without a result, or the transcript's last timestamp,
+//   whichever comes first), no other start call (in that Bash call or another) spans that time unless the log spells
+//   out its --out and that --out is another folder, and no other run the scan found was created in that span. So a
+//   --out the log cannot spell out (a command substitution, a variable set in another shell or never set) still ties the
+//   start to the run it made, and a start whose --out the log spells out makes only the run at that --out. A start call that is for no record that counts is
 //   counted as unmatched. The record's plan_input is /work/app/plan.md or (rep 3 of the smoke) a regular file, reached
 //   through no symlink, inside that folder or /work/app that the session's own gstack-autoplan revise call with the
 //   same --out named as its --plan. Flags are read as gstack-autoplan reads them: the first separate --out or --plan.
@@ -23,14 +24,19 @@
 //   writing (a target the code builds at run time counts every run.json the code names). Of the records that count, the latest
 //   updated_at wins. Exposure and the live gate check (gatePending) read this one record. The scan never follows a
 //   symlink, as the copy-out does not.
-// - The command log is every Bash call in the transcript, subagents included, read as shell: variables a command sets,
-//   and HOME, GSTACK_STATE_ROOT and GSTACK_HOME as the sandbox sets them, are expanded (with ${X:-default}), ~ is
-//   HOME, PWD is the folder each Bash call starts in, wrappers (env, command, exec, nohup, time, timeout, sudo, nice)
-//   are stripped, a function body (NAME() { } or function NAME { }) is read where the function is called and never
-//   where it is defined, and command substitutions (in a redirect, a here-string or an arithmetic
-//   command too), eval and bash or sh -c strings are read as commands too. A relative path
-//   resolves against the folder the last cd left in that agent's shell (/work/app at first); a cd inside a subshell,
-//   a substitution or a child shell does not leave it.
+// - The command log is every Bash call in the transcript, subagents included, parsed by mvdan/sh's bash parser
+//   (sh-syntax, NOTICE.md) and walked as bash runs it: variables a command sets, and HOME, GSTACK_STATE_ROOT and
+//   GSTACK_HOME as the sandbox sets them, are expanded (with ${X:-default} and ${X:=default}), ~ is HOME, PWD is the
+//   folder each Bash call starts in, wrappers (env, command, exec, nohup, time, timeout, sudo, nice) are stripped, a
+//   function body is read where the function is called, with its arguments as $1, $2 and "$@", and never where it is
+//   defined (command and builtin skip functions, and a function already being called is not read again), a for loop
+//   reads its body once per item, and command substitutions, process substitutions, eval and bash or sh -c strings
+//   and heredocs are read as commands too. A relative path resolves against the folder the last cd left in that
+//   agent's shell (/work/app at first). A subshell, a pipeline member, a statement an & ends, a substitution and a
+//   child shell each get a copy of the shell, so a cd, a variable or a function they set does not leave them; a child
+//   shell starts with no functions. A Bash call the parser refuses (after splitting an EOF) line in two, as bash 5
+//   reads it), or one that runs more than 10,000 commands or nests more than 16 deep, is unreadable, and a session
+//   with an unreadable Bash call has no record that counts: the reader refuses rather than guesses.
 // - Exposed (dated change of 2026-11-18, pin change 1, section 11): the run is complete (the gate was answered and
 //   applied) or waits at its final gate: status gate_pending, with the gate written at or after the close of every phase
 //   in the run's phase order, each closed or skipped. A run waiting for an amendment (amend_pending), back in review
@@ -50,6 +56,7 @@
 //   subagents included, with its path, for the loaded-skill log. On an arm with no gstack any entry marks the session.
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, posix, relative, sep } from "node:path";
+import { BinCmdOperator, ParExpOperator, parse, RedirOperator } from "sh-syntax/sync";
 import { readTranscript } from "../../src/trial/review/readers.ts";
 import { STATE_ROOT_DIR } from "../../src/trial/state-root.ts";
 
@@ -140,225 +147,24 @@ function regularFile(roots: RunRoot[], p: string): string | null {
   return null;
 }
 
-type Piece = { t: string; q: boolean; sub?: string; here?: boolean };
-type Tok = { op: string } | { word: Piece[] };
+/** A word as the shell expands it, and whether the log spells all of it out: no command substitution, unset variable or expansion the reader does not model. */
+type Field = { t: string; known: boolean };
 
-/** The index after the "))" that closes an arithmetic command opening at s[i] ("(("), or -1 when the parens close as two nested subshells. */
-function arithmeticEnd(s: string, i: number): number {
-  let depth = 2;
-  for (let j = i + 2; j < s.length; j++) {
-    if (s[j] === "(") depth++;
-    else if (s[j] === ")" && --depth === 1) return s[j + 1] === ")" ? j + 2 : -1;
-  }
-  return -1;
-}
+/** Stops reading a Bash call: bash's grammar refuses it, or it repeats or nests past the reader's bounds. */
+class Unreadable extends Error {}
+/** The most simple commands one Bash call may run, and the deepest it may nest substitutions, child shells and function calls, before it is unreadable. */
+const STEPS = 10_000;
+const DEPTH = 16;
 
-/** The command substitution that opens at s[i] ("$(" or a backtick): its inner text and the index after it. A heredoc's body inside it is skipped, so its quotes and parens do not count. */
-function substitution(s: string, i: number): { inner: string; end: number } {
-  if (s[i] === "`") {
-    let j = i + 1;
-    while (j < s.length && s[j] !== "`") j += s[j] === "\\" ? 2 : 1;
-    return { inner: s.slice(i + 1, j), end: j + 1 };
-  }
-  if (s[i + 2] === "(") {
-    const e = arithmeticEnd(s, i + 1);
-    if (e > 0) return { inner: s.slice(i + 2, e - 1), end: e };
-  }
-  let depth = 1;
-  let j = i + 2;
-  let q: string | null = null;
-  const heredocs: string[] = [];
-  while (j < s.length && depth) {
-    const c = s[j]!;
-    if (q) {
-      if (c === q) q = null;
-      else if (c === "\\" && q === '"') j++;
-    } else if (c === "'" || c === '"') q = c;
-    else if (c === "\\") j++;
-    else if (c === "(") {
-      const e = s[j + 1] === "(" ? arithmeticEnd(s, j) : -1;
-      if (e > 0) {
-        j = e;
-        continue;
-      }
-      depth++;
-    } else if (c === ")") depth--;
-    else if (c === "<" && s[j + 1] === "<") {
-      if (s[j + 2] === "<") {
-        j += 3;
-        continue;
-      }
-      j += 2;
-      if (s[j] === "-") j++;
-      while (s[j] === " ") j++;
-      let d = "";
-      while (j < s.length && !/[\s;&|<>()]/.test(s[j]!)) d += s[j++];
-      heredocs.push(d.replace(/['"\\]/g, ""));
-      continue;
-    } else if (c === "\n" && heredocs.length) {
-      j++;
-      for (const d of heredocs.splice(0)) {
-        while (j < s.length) {
-          const e = s.indexOf("\n", j);
-          const line = s.slice(j, e < 0 ? s.length : e);
-          const close = line.trimStart();
-          if (close.startsWith(d + ")")) {
-            j += line.length - close.length + d.length;
-            break;
-          }
-          j = e < 0 ? s.length : e + 1;
-          if (line.trim() === d) break;
-        }
-      }
-      continue;
-    }
-    j++;
-  }
-  return { inner: s.slice(i + 2, j - 1), end: j };
-}
+const OUTPUTS = new Set<number>([RedirOperator.RdrOut, RedirOperator.AppOut, RedirOperator.RdrAll, RedirOperator.AppAll, RedirOperator.RdrClob, RedirOperator.AppClob, RedirOperator.RdrAllClob, RedirOperator.AppAllClob, RedirOperator.RdrInOut]);
+const DEFAULTS = new Set<number>([ParExpOperator.DefaultUnset, ParExpOperator.DefaultUnsetOrNull, ParExpOperator.AssignUnset, ParExpOperator.AssignUnsetOrNull]);
 
-/** Shell words and operators. q marks text that is never expanded; a substitution is kept as its own piece with its command. A heredoc's body joins its command as one more word. */
-function lex(s: string): Tok[] {
-  const out: Tok[] = [];
-  const heredocs: { d: string; body: Piece }[] = [];
-  let cur: Piece[] | null = null;
-  const push = (t: string, q: boolean) => {
-    const w = (cur ??= []);
-    const last = w[w.length - 1];
-    if (last && last.q === q && last.sub === undefined) last.t += t;
-    else w.push({ t, q });
-  };
-  const sub = (i: number): number => {
-    const r = substitution(s, i);
-    (cur ??= []).push({ t: s.slice(i, r.end), q: true, sub: r.inner });
-    return r.end;
-  };
-  const flush = () => {
-    if (cur) out.push({ word: cur });
-    cur = null;
-  };
-  let i = 0;
-  while (i < s.length) {
-    const c = s[i]!;
-    if (c === "'") {
-      const e = s.indexOf("'", i + 1);
-      const end = e < 0 ? s.length : e;
-      push(s.slice(i + 1, end), true);
-      i = end + 1;
-    } else if (c === '"') {
-      push("", false);
-      let j = i + 1;
-      while (j < s.length && s[j] !== '"') {
-        const d = s[j]!;
-        if (d === "\\" && '"\\$`'.includes(s[j + 1] ?? "")) {
-          push(s[j + 1]!, true);
-          j += 2;
-        } else if ((d === "$" && s[j + 1] === "(") || d === "`") j = sub(j);
-        else {
-          push(d, false);
-          j++;
-        }
-      }
-      i = j + 1;
-    } else if ((c === "$" && s[i + 1] === "(") || c === "`") {
-      i = sub(i);
-    } else if (c === "\\") {
-      if (s[i + 1] !== "\n") push(s[i + 1] ?? "", true);
-      i += 2;
-    } else if (c === "#" && !cur) {
-      while (i < s.length && s[i] !== "\n") i++;
-    } else if (c === " " || c === "\t") {
-      flush();
-      i++;
-    } else if (c === "\n") {
-      flush();
-      i++;
-      while (heredocs.length) {
-        const { d, body: at } = heredocs.shift()!;
-        const body: string[] = [];
-        while (i < s.length) {
-          const e = s.indexOf("\n", i);
-          const line = s.slice(i, e < 0 ? s.length : e);
-          i = e < 0 ? s.length : e + 1;
-          if (line.trim() === d) break;
-          body.push(line);
-        }
-        at.t = body.join("\n");
-      }
-      out.push({ op: c });
-    } else if (";|&()".includes(c)) {
-      flush();
-      const arithmetic = c === "(" && s[i + 1] === "(" ? arithmeticEnd(s, i) : -1;
-      if (arithmetic > 0) {
-        for (let j = i + 2; j < arithmetic - 2; ) {
-          if ((s[j] === "$" && s[j + 1] === "(") || s[j] === "`") {
-            const r = substitution(s, j);
-            out.push({ word: [{ t: "", q: true, sub: r.inner }] });
-            j = r.end;
-          } else j++;
-        }
-        i = arithmetic;
-        continue;
-      }
-      const two = s.slice(i, i + 2);
-      const op = two === "&&" || two === "||" ? two : c;
-      out.push({ op });
-      i += op.length;
-    } else if (c === ">" || c === "<") {
-      const w = cur as Piece[] | null;
-      if (w?.length === 1 && !w[0]!.q && /^\d+$/.test(w[0]!.t)) cur = null;
-      else flush();
-      let op = c;
-      i++;
-      if (s[i] === c) {
-        op += c;
-        i++;
-      }
-      if (op === "<<" && s[i] === "<") {
-        i++;
-        out.push({ op: "<" });
-        continue;
-      }
-      if (op === "<<") {
-        if (s[i] === "-") i++;
-        while (s[i] === " ") i++;
-        let d = "";
-        while (i < s.length && !/[\s;&|<>()]/.test(s[i]!)) d += s[i++];
-        flush();
-        const body: Piece = { t: "", q: true, here: true };
-        out.push({ word: [body] });
-        heredocs.push({ d: d.replace(/['"\\]/g, ""), body });
-        continue;
-      }
-      if (s[i] === "&") {
-        i++;
-        while (/[\d-]/.test(s[i] ?? "")) i++;
-        continue;
-      }
-      if (s[i] === "|") i++;
-      out.push({ op });
-    } else {
-      push(c, false);
-      i++;
-    }
-  }
-  flush();
+/** Each line that closes a heredoc and the substitution around it at once (EOF)), split in two, as bash 5 reads it. */
+const splitHeredocParens = (s: string): string => {
+  let out = s;
+  for (const m of s.matchAll(/<<-?[ \t]*(['"]?)([A-Za-z_][\w.-]*)\1/g)) out = out.replace(new RegExp("^([ \\t]*" + m[2]!.replace(/[.-]/g, "\\$&") + ")\\)", "gm"), "$1\n)");
   return out;
-}
-
-const VAR = /\$\{([A-Za-z_]\w*)(?:(:?)([-=])([^}]*))?\}|\$([A-Za-z_]\w*)/g;
-const expandText = (t: string, env: Map<string, string>): string =>
-  t.replace(VAR, (_, name: string | undefined, colon: string | undefined, op: string | undefined, dflt: string | undefined, bare: string | undefined) => {
-    if (bare) return env.get(bare) ?? "";
-    const v = env.get(name!);
-    if (!op) return v ?? "";
-    if (colon ? v : v !== undefined) return v!;
-    const d = expandText(dflt ?? "", env);
-    if (op === "=") env.set(name!, d);
-    return d;
-  });
-
-const expand = (w: Piece[], env: Map<string, string>): string => w.map((p, k) => (p.q ? p.t : expandText(k === 0 && /^~(\/|$)/.test(p.t) ? HOME + p.t.slice(1) : p.t, env))).join("");
+};
 
 /** The files an interpreter's inline code opens for writing, as written in the code; every run.json it names when a target is not a literal. */
 function writeTargets(code: string): string[] {
@@ -374,7 +180,7 @@ function writeTargets(code: string): string[] {
   for (const m of code.matchAll(/\b(?:writeFileSync|writeFile|appendFileSync|appendFile|Bun\.write)\(\s*([^,()]+?)\s*,/g)) targets.push(value(m[1]!));
   for (const m of code.matchAll(/\bPath\(\s*([^()]+?)\s*\)\.(?:write_text|write_bytes)/g)) targets.push(value(m[1]!));
   for (const m of code.matchAll(/\b(?:os\.replace|os\.rename|shutil\.copy\w*|shutil\.move|renameSync|copyFileSync)\(\s*[^,()]+?\s*,\s*([^,()]+?)\s*[,)]/g)) targets.push(value(m[1]!));
-  const named = code.split(/[\s'"(),=]+/).flatMap((t) => (t.includes("run.json") ? [t.slice(0, t.lastIndexOf("run.json") + 8)] : []));
+  const named = code.split(/[\s'"(),=:;[\]{}`]+/).flatMap((t) => (t.includes("run.json") ? t.split(/(?<=run\.json)/).filter((x) => x.endsWith("run.json")) : []));
   return targets.flatMap((t) => (t === null ? named : [t]));
 }
 
@@ -382,21 +188,22 @@ const EDITS = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
 const INTERPRETERS = new Set(["python", "python3", "node", "bun", "perl", "ruby"]);
 const WRAPPERS = new Set(["command", "exec", "nohup", "time", "builtin", "sudo", "nice"]);
 const SHELLS = new Set(["bash", "sh", "zsh", "dash"]);
-/** Reserved words that open or continue a compound command; the command they lead still runs. */
-const RESERVED = new Set(["if", "then", "else", "elif", "do", "while", "until", "!", "{"]);
-const reserved = (w: Piece[] | undefined) => w !== undefined && w.length === 1 && !w[0]!.q && RESERVED.has(w[0]!.t);
 /** The gstack-autoplan verbs that start a run from a plan file. */
 const STARTS = new Set(["next", "run"]);
 
 export interface CommandLog {
-  /** Each gstack-autoplan call: its verb, its --out and --plan as absolute paths in the session, and its Bash call's id. */
-  calls: { verb: string; out: string | null; plan: string | null; use: string; seq: number; bg: boolean }[];
+  /** Each gstack-autoplan call: its verb, its --out and --plan as absolute paths in the session, whether the log spells its --out out, and its Bash call's id. */
+  calls: { verb: string; out: string | null; plan: string | null; known: boolean; use: string; seq: number; bg: boolean }[];
   /** Each Bash call's span: the transcript's timestamp on the message that made the call and on the message that returned its result. */
   spans: Map<string, { from: number; to: number }>;
+  /** Each Bash call's start: the transcript's timestamp on the message that made it, with or without a result. */
+  made: Map<string, number>;
   /** Every path the log wrote other than through gstack-autoplan. */
   writes: Set<string>;
   /** Every folder a recursive copy, mv or rsync may have filled or replaced, with the command's place in the log, its Bash call's id and whether it ran in the background. */
   trees: { path: string; seq: number; use: string; bg: boolean }[];
+  /** The Bash calls the reader could not read. */
+  unreadable: string[];
   /** The transcript's last timestamp. */
   end: number;
 }
@@ -408,177 +215,289 @@ const SANDBOX_ENV: [string, string][] = [
   ["GSTACK_HOME", WORK + "/" + STATE_ROOT_DIR],
 ];
 
+/** One shell's state: its folder, variables, functions and positional parameters, the functions being called, and how deep it nests. */
 interface Ctx {
   cwd: string;
-  env: Map<string, string>;
+  env: Map<string, Field>;
+  funcs: Map<string, any>;
+  args: string[];
+  stack: string[];
+  depth: number;
 }
 
 /** The session's command log under the rule above. */
 export function commandLog(transcript: string): CommandLog {
-  const log: CommandLog = { calls: [], writes: new Set(), trees: [], spans: new Map(), end: -Infinity };
+  const log: CommandLog = { calls: [], writes: new Set(), trees: [], spans: new Map(), made: new Map(), unreadable: [], end: -Infinity };
   let use = "";
   let seq = 0;
-  let funcs = new Map<string, Tok[]>();
-  const child = (c: Ctx): Ctx => ({ cwd: c.cwd, env: new Map(c.env) });
-  const simple = (raw: Piece[][], ctx: Ctx, depth: number) => {
-    const ws: string[] = [];
-    const words: Piece[][] = [];
-    for (const w of raw) {
-      for (const p of w) if (p.sub !== undefined) shell(p.sub, child(ctx), depth + 1);
-      const m = words.every(reserved) && !w[0]!.q ? /^([A-Za-z_]\w*)=/.exec(w[0]!.t) : null;
-      if (m) ctx.env.set(m[1]!, expand([{ t: w[0]!.t.slice(m[0].length), q: false }, ...w.slice(1)], ctx.env));
-      else {
-        ws.push(expand(w, ctx.env));
-        words.push(w);
-      }
-    }
-    const order = ++seq;
-    let k = 0;
-    for (;;) {
-      const name = posix.basename(ws[k] ?? "");
-      if (reserved(words[k])) k++;
-      else if (name === "function" && !words[k]![0]!.q) k += 2;
-      else if (WRAPPERS.has(name)) {
-        k++;
-        while ((ws[k] ?? "").startsWith("-")) k++;
-      } else if (name === "env") {
-        k++;
-        while (k < ws.length && (ws[k]!.startsWith("-") || /^[A-Za-z_]\w*=/.test(ws[k]!))) k++;
-      } else if (name === "timeout") {
-        k++;
-        while ((ws[k] ?? "").startsWith("-")) k++;
-        k++;
-      } else break;
-    }
-    const [cmd, ...args] = ws.slice(k);
-    if (!cmd) return;
-    const body = funcs.get(cmd);
-    if (body) return run(body, ctx, depth + 1);
-    const argWords = words.slice(k + 1);
-    const name = posix.basename(cmd);
-    const at = (p: string) => posix.resolve(ctx.cwd, p);
-    const paths = args.filter((a) => !a.startsWith("-"));
-    if (name === "export") {
-      for (const a of args) if (/^[A-Za-z_]\w*=/.test(a)) ctx.env.set(a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1));
-    } else if (name === "cd") {
-      if (paths[0] !== undefined || !args.length) ctx.env.set("PWD", (ctx.cwd = at(paths[0] ?? HOME)));
-    } else if (name === "eval") {
-      shell(args.join(" "), ctx, depth + 1);
-    } else if (SHELLS.has(name)) {
-      const c = args.findIndex((a) => /^-[a-z]*c$/.test(a));
-      const here = argWords.find((w) => w.length === 1 && w[0]!.here);
-      if (args.includes("-n")) return;
-      if (c >= 0 && args[c + 1] !== undefined) shell(args[c + 1]!, child(ctx), depth + 1);
-      else if (here) shell(here[0]!.t, child(ctx), depth + 1);
-    } else if (name === "gstack-autoplan") {
-      const flag = (f: string) => {
-        const i = args.indexOf(f);
-        return i >= 0 ? (args[i + 1] ?? null) : null;
-      };
-      const out = flag("--out");
-      const plan = flag("--plan");
-      log.calls.push({ verb: args[0] ?? "", out: out === null ? null : at(out), plan: plan === null ? null : at(plan), use, seq: order, bg: false });
-    } else if (name === "tee" || name === "truncate" || (name === "sed" && args.some((a) => /^(-[a-zA-Z]*i|--in-place)/.test(a)))) {
-      for (const p of paths) log.writes.add(at(p));
-    } else if (["cp", "mv", "install", "ln"].includes(name) && paths.length > 1) {
-      const to = paths[paths.length - 1]!;
-      const whole = name === "mv" || (name === "cp" && args.some((a) => /^(-[a-zA-Z]*[rRa][a-zA-Z]*|--recursive|--archive)$/.test(a)));
-      log.writes.add(at(to));
-      for (const from of paths.slice(0, -1)) {
-        const into = at(posix.join(to, posix.basename(from)));
-        log.writes.add(into);
-        if (whole && !/\.\w+$/.test(from)) log.trees.push({ path: at(to), seq: order, use, bg: false }, { path: into, seq: order, use, bg: false });
-      }
-    } else if (name === "rsync" && paths.length > 1) {
-      log.trees.push({ path: at(paths[paths.length - 1]!), seq: order, use, bg: false });
-    } else if (name === "dd") {
-      for (const a of args) if (a.startsWith("of=")) log.writes.add(at(a.slice(3)));
-    } else if (INTERPRETERS.has(name)) {
-      for (const t of writeTargets(args.join(" "))) log.writes.add(at(t));
-    }
+  let steps = 0;
+  const child = (c: Ctx, funcs = new Map(c.funcs)): Ctx => ({ cwd: c.cwd, env: new Map(c.env), funcs, args: [...c.args], stack: [...c.stack], depth: c.depth + 1 });
+  const background = (fn: () => void) => {
+    const from = seq;
+    fn();
+    for (const c of [...log.calls, ...log.trees]) if (c.seq > from) c.bg = true;
   };
-  const shell = (command: string, top: Ctx, depth: number): void => run(lex(command), top, depth);
-  const run = (toks: Tok[], top: Ctx, depth: number): void => {
-    if (depth > 8) return;
-    const scopes: Ctx[] = [];
-    const marks: number[] = [];
-    let mark = seq;
-    let ctx = top;
-    let raw: Piece[][] = [];
-    let redirect: string | null = null;
-    const end = () => {
-      simple(raw, ctx, depth);
-      raw = [];
-      redirect = null;
+
+  const read = (input: string, ctx: Ctx): void => {
+    if (ctx.depth > DEPTH) throw new Unreadable();
+    let src = input;
+    let file: any;
+    try {
+      file = parse(src);
+    } catch {
+      src = splitHeredocParens(input);
+      try {
+        file = parse(src);
+      } catch {
+        throw new Unreadable();
+      }
+    }
+    const bytes = Buffer.from(src);
+    const text = (n: any) => bytes.subarray(n.start, n.end).toString();
+    const unescape = (v: string, quoted: boolean) => v.replace(quoted ? /\\(\n|[$`"\\])/g : /\\([\s\S])/g, (_, c: string) => (c === "\n" ? "" : c));
+
+    const subs = (n: any, c: Ctx): void => {
+      if (Array.isArray(n)) return n.forEach((x) => subs(x, c));
+      if (!n || typeof n !== "object") return;
+      if (n.type === "CmdSubst" || n.type === "ProcSubst") return list(n.stmts, child(c));
+      for (const v of Object.values(n)) if (v && typeof v === "object") subs(v, c);
     };
-    const op = (t: Tok | undefined, o: string) => t !== undefined && "op" in t && t.op === o;
-    const bare = (t: Tok | undefined) => (t !== undefined && "word" in t && t.word.length === 1 && !t.word[0]!.q ? t.word[0]!.t : null);
-    for (let i = 0; i < toks.length; i++) {
-      const tok = toks[i]!;
-      if (!raw.length && !redirect) {
-        let j = -1;
-        let name = bare(tok);
-        if (name === "function" && /^[\w.:-]+$/.test(bare(toks[i + 1]) ?? "")) {
-          name = bare(toks[i + 1]);
-          j = op(toks[i + 2], "(") && op(toks[i + 3], ")") ? i + 4 : i + 2;
-        } else if (name !== null && /^[\w.:-]+$/.test(name) && op(toks[i + 1], "(") && op(toks[i + 2], ")")) j = i + 3;
-        while (j >= 0 && op(toks[j], "\n")) j++;
-        if (j >= 0 && bare(toks[j]) === "{") {
-          let open = 1;
-          let atCmd = true;
-          let k = j + 1;
-          for (; k < toks.length; k++) {
-            const t = toks[k]!;
-            if ("op" in t) atCmd = t.op !== ">" && t.op !== ">>" && t.op !== "<";
-            else if (atCmd && bare(t) === "{") open++;
-            else if (atCmd && bare(t) === "}" && --open === 0) break;
-            else atCmd = false;
-          }
-          funcs.set(name!, toks.slice(j + 1, k));
-          i = k;
-          continue;
-        }
-        if (name === "{") {
-          marks.push(mark);
-          mark = seq;
-        } else if (name === "}" && marks.length) mark = marks.pop()!;
+    const param = (p: any, c: Ctx): Field => {
+      const name: string = p.param?.value ?? "";
+      if (p.flags || p.excl || p.length || p.width || p.isSet || p.nestedParam || p.index || p.subscripts?.length || p.modifiers?.length || p.slice || p.repl || p.names) {
+        subs(p, c);
+        return { t: "", known: false };
       }
-      if ("op" in tok) {
-        if (tok.op === ">" || tok.op === ">>" || tok.op === "<") {
-          redirect = tok.op;
-          continue;
+      const v: Field | undefined = /^[1-9]\d*$/.test(name) ? (c.args[Number(name) - 1] === undefined ? undefined : { t: c.args[Number(name) - 1]!, known: true }) : name === "@" || name === "*" ? { t: c.args.join(" "), known: true } : name === "#" ? { t: String(c.args.length), known: true } : /^[A-Za-z_]\w*$/.test(name) ? c.env.get(name) : undefined;
+      if (!p.exp) return v ?? { t: "", known: false };
+      if (!DEFAULTS.has(p.exp.op)) {
+        subs(p.exp, c);
+        return { t: "", known: false };
+      }
+      const orNull = p.exp.op === ParExpOperator.DefaultUnsetOrNull || p.exp.op === ParExpOperator.AssignUnsetOrNull;
+      if (v && (!orNull || v.t !== "")) return v;
+      const d = p.exp.word ? piece(p.exp.word.parts, c, false, false) : { t: "", known: true };
+      if ((p.exp.op === ParExpOperator.AssignUnset || p.exp.op === ParExpOperator.AssignUnsetOrNull) && /^[A-Za-z_]\w*$/.test(name)) c.env.set(name, d);
+      return d;
+    };
+    const piece = (parts: any[], c: Ctx, quoted: boolean, first: boolean): Field => {
+      let t = "";
+      let known = true;
+      parts.forEach((p, i) => {
+        let f: Field;
+        if (p.type === "Lit") {
+          const v = unescape(p.value, quoted);
+          f = { t: !quoted && first && i === 0 && /^~(\/|$)/.test(v) ? HOME + v.slice(1) : v, known: true };
+        } else if (p.type === "SglQuoted") f = { t: p.value, known: true };
+        else if (p.type === "DblQuoted") f = piece(p.parts, c, true, false);
+        else if (p.type === "ParamExp") f = param(p, c);
+        else if (p.type === "CmdSubst") {
+          list(p.stmts, child(c));
+          f = { t: text(p), known: false };
+        } else {
+          subs(p, c);
+          f = { t: text(p), known: false };
         }
-        end();
-        if (tok.op === "&") {
-          for (const c of log.calls) if (c.seq > mark) c.bg = true;
-          for (const t of log.trees) if (t.seq > mark) t.bg = true;
+        t += f.t;
+        known &&= f.known;
+      });
+      return { t, known };
+    };
+    const fields = (w: any, c: Ctx): Field[] => {
+      const only = w.parts.length === 1 ? (w.parts[0].type === "DblQuoted" && w.parts[0].parts.length === 1 ? w.parts[0].parts[0] : w.parts[0]) : null;
+      if (only?.type === "ParamExp" && only.param?.value === "@" && !only.exp && !only.length && !only.slice && !only.index) return c.args.map((t) => ({ t, known: true }));
+      return [piece(w.parts, c, false, true)];
+    };
+    const redirect = (r: any, c: Ctx): string | null => {
+      if (r.op === RedirOperator.Hdoc || r.op === RedirOperator.DashHdoc) {
+        if (!r.hdoc) return "";
+        return r.word.parts.every((p: any) => p.type === "Lit") && !text(r.word).includes("\\") ? piece(r.hdoc.parts, c, true, false).t : text(r.hdoc);
+      }
+      const w = piece(r.word.parts, c, false, true).t;
+      if (r.op === RedirOperator.WordHdoc) return w + "\n";
+      if (OUTPUTS.has(r.op) || (r.op === RedirOperator.DplOut && !/^(\d+|-)$/.test(w))) log.writes.add(posix.resolve(c.cwd, w));
+      return null;
+    };
+
+    const call = (x: any, c: Ctx, stdin: string | null) => {
+      if (++steps > STEPS) throw new Unreadable();
+      const words = x.args.flatMap((w: any) => fields(w, c)) as Field[];
+      const assigns: [string, Field][] = x.assigns.map((a: any) => [a.name.value, a.value ? piece(a.value.parts, c, false, true) : (subs(a.array, c), { t: "", known: !a.array })]);
+      if (!words.length) {
+        for (const [n, v] of assigns) c.env.set(n, v);
+        return;
+      }
+      const ws = words.map((w) => w.t);
+      const order = ++seq;
+      let k = 0;
+      let bypass = false;
+      for (;;) {
+        const name = posix.basename(ws[k] ?? "");
+        if (WRAPPERS.has(name)) {
+          bypass ||= name === "command" || name === "builtin";
+          k++;
+          while ((ws[k] ?? "").startsWith("-")) k++;
+        } else if (name === "env") {
+          k++;
+          while (k < ws.length && (ws[k]!.startsWith("-") || /^[A-Za-z_]\w*=/.test(ws[k]!))) k++;
+        } else if (name === "timeout") {
+          k++;
+          while ((ws[k] ?? "").startsWith("-")) k++;
+          k++;
+        } else break;
+      }
+      const [cmd, ...args] = ws.slice(k);
+      if (!cmd) return;
+      const argFields = words.slice(k + 1);
+      const scoped = (fn: () => void) => {
+        const saved = assigns.map(([n]) => [n, c.env.get(n)] as const);
+        for (const [n, v] of assigns) c.env.set(n, v);
+        fn();
+        for (const [n, v] of saved) v === undefined ? c.env.delete(n) : c.env.set(n, v);
+      };
+      const body = bypass ? undefined : c.funcs.get(cmd);
+      if (body) {
+        if (c.stack.includes(cmd)) return;
+        const saved = { args: c.args, depth: c.depth };
+        if (++c.depth > DEPTH) throw new Unreadable();
+        c.args = args;
+        c.stack.push(cmd);
+        scoped(() => stmt(body, c));
+        c.stack.pop();
+        Object.assign(c, saved);
+        return;
+      }
+      const name = posix.basename(cmd);
+      const at = (p: string) => posix.resolve(c.cwd, p);
+      const paths = args.filter((a) => !a.startsWith("-"));
+      if (name === "cd") {
+        if (paths[0] !== undefined || !args.length) {
+          c.cwd = at(paths[0] ?? HOME);
+          c.env.set("PWD", { t: c.cwd, known: true });
         }
-        if (tok.op === "&" || tok.op === ";" || tok.op === "\n") mark = seq;
-        else if (tok.op === "(") {
-          marks.push(mark);
-          mark = seq;
-          scopes.push(ctx);
-          ctx = child(ctx);
-        } else if (tok.op === ")") {
-          if (marks.length) mark = marks.pop()!;
-          if (scopes.length) ctx = scopes.pop()!;
+      } else if (name === "eval") {
+        c.depth++;
+        scoped(() => read(args.join(" "), c));
+        c.depth--;
+      } else if (SHELLS.has(name)) {
+        if (args.includes("-n")) return;
+        const i = args.findIndex((a) => /^-[a-z]*c$/.test(a));
+        const script = i >= 0 ? args[i + 1] : stdin;
+        if (script === undefined || script === null) return;
+        const sub = child(c, new Map());
+        for (const [n, v] of assigns) sub.env.set(n, v);
+        sub.args = i >= 0 ? args.slice(i + 3) : [];
+        read(script, sub);
+      } else if (name === "gstack-autoplan") {
+        const flag = (f: string) => {
+          const i = args.indexOf(f);
+          return i >= 0 ? (argFields[i + 1] ?? null) : null;
+        };
+        const out = flag("--out");
+        const plan = flag("--plan");
+        log.calls.push({ verb: args[0] ?? "", out: out === null ? null : at(out.t), plan: plan === null ? null : at(plan.t), known: out !== null && out.known, use, seq: order, bg: false });
+      } else if (name === "tee" || name === "truncate" || (name === "sed" && args.some((a) => /^(-[a-zA-Z]*i|--in-place)/.test(a)))) {
+        for (const p of paths) log.writes.add(at(p));
+      } else if (["cp", "mv", "install", "ln"].includes(name) && paths.length > 1) {
+        const to = paths[paths.length - 1]!;
+        const whole = name === "mv" || (name === "cp" && args.some((a) => /^(-[a-zA-Z]*[rRa][a-zA-Z]*|--recursive|--archive)$/.test(a)));
+        log.writes.add(at(to));
+        for (const from of paths.slice(0, -1)) {
+          const into = at(posix.join(to, posix.basename(from)));
+          log.writes.add(into);
+          if (whole && !/\.\w+$/.test(from)) log.trees.push({ path: at(to), seq: order, use, bg: false }, { path: into, seq: order, use, bg: false });
         }
-      } else if (redirect) {
-        for (const p of tok.word) if (p.sub !== undefined) shell(p.sub, child(ctx), depth + 1);
-        if (redirect !== "<") log.writes.add(posix.resolve(ctx.cwd, expand(tok.word, ctx.env)));
-        redirect = null;
-      } else raw.push(tok.word);
-    }
-    end();
+      } else if (name === "rsync" && paths.length > 1) {
+        log.trees.push({ path: at(paths[paths.length - 1]!), seq: order, use, bg: false });
+      } else if (name === "dd") {
+        for (const a of args) if (a.startsWith("of=")) log.writes.add(at(a.slice(3)));
+      } else if (INTERPRETERS.has(name)) {
+        for (const t of writeTargets([...args, stdin ?? ""].join(" "))) log.writes.add(at(t));
+      }
+    };
+
+    const stmt = (s: any, c: Ctx): void => {
+      if (s.background || s.coprocess) return background(() => command(s, child(c)));
+      command(s, c);
+    };
+    const command = (s: any, c: Ctx): void => {
+      const x = s.cmd;
+      if (x?.type === "FuncDecl") {
+        c.funcs.set(x.name.value, x.body);
+        return;
+      }
+      let stdin: string | null = null;
+      for (const r of s.redirs) stdin = redirect(r, c) ?? stdin;
+      if (!x) return;
+      switch (x.type) {
+        case "CallExpr":
+          return call(x, c, stdin);
+        case "Block":
+          return list(x.stmts, c);
+        case "Subshell":
+          return list(x.stmts, child(c));
+        case "BinaryCmd":
+          if (x.op === BinCmdOperator.Pipe || x.op === BinCmdOperator.PipeAll) {
+            stmt(x.x, child(c));
+            return stmt(x.y, child(c));
+          }
+          stmt(x.x, c);
+          return stmt(x.y, c);
+        case "IfClause":
+          for (let b = x; b; b = b.else) {
+            list(b.cond ?? [], c);
+            list(b.then ?? [], c);
+          }
+          return;
+        case "WhileClause":
+          list(x.cond, c);
+          return list(x.do, c);
+        case "ForClause": {
+          if (x.loop.type !== "WordIter") {
+            subs(x.loop, c);
+            return list(x.do, c);
+          }
+          const items = x.loop.inPos?.line ? x.loop.items.flatMap((w: any) => fields(w, c)) : c.args.map((t) => ({ t, known: true }));
+          for (const v of items) {
+            c.env.set(x.loop.name.value, v);
+            list(x.do, c);
+          }
+          return;
+        }
+        case "CaseClause":
+          fields(x.word, c);
+          for (const item of x.items) {
+            subs(item.patterns, c);
+            list(item.stmts, c);
+          }
+          return;
+        case "TimeClause":
+          return x.stmt ? stmt(x.stmt, c) : undefined;
+        case "CoprocClause":
+          return background(() => stmt(x.stmt, child(c)));
+        case "DeclClause":
+          for (const a of x.args) {
+            if (!a.naked && a.name && a.value) c.env.set(a.name.value, piece(a.value.parts, c, false, true));
+            else subs(a, c);
+          }
+          return;
+        default:
+          return subs(x, c);
+      }
+    };
+    const list = (stmts: any[], c: Ctx): void => {
+      for (const s of stmts) stmt(s, c);
+    };
+    list(file.stmts, ctx);
   };
+
   const cwds = new Map<string, string>();
-  const made = new Map<string, number>();
   for (const m of readTranscript(transcript)) {
     const when = Date.parse(String(m.timestamp ?? ""));
     if (!Number.isNaN(when)) log.end = Math.max(log.end, when);
     if (m.type === "user" && Array.isArray(m.message?.content)) {
       for (const b of m.message.content as Record<string, any>[]) {
-        const from = made.get(b?.tool_use_id);
+        const from = log.made.get(b?.tool_use_id);
         if (b?.type === "tool_result" && from !== undefined && when >= from) log.spans.set(b.tool_use_id, { from, to: when });
       }
     }
@@ -587,15 +506,20 @@ export function commandLog(transcript: string): CommandLog {
     for (const b of m.message.content as Record<string, any>[]) {
       if (b?.type !== "tool_use") continue;
       const cwd = cwds.get(agent) ?? WORK;
-      const ctx: Ctx = { cwd, env: new Map([...SANDBOX_ENV, ["PWD", cwd]]) };
       if (EDITS.includes(b.name)) {
         const p = b.input?.file_path ?? b.input?.notebook_path;
-        if (typeof p === "string") log.writes.add(posix.resolve(ctx.cwd, p));
+        if (typeof p === "string") log.writes.add(posix.resolve(cwd, p));
       } else if (b.name === "Bash" && typeof b.input?.command === "string") {
         use = String(b.id ?? "");
-        if (!Number.isNaN(when)) made.set(use, when);
-        funcs = new Map();
-        shell(b.input.command, ctx, 0);
+        if (!Number.isNaN(when)) log.made.set(use, when);
+        const ctx: Ctx = { cwd, env: new Map([...SANDBOX_ENV, ["PWD", cwd]].map(([k, v]) => [k!, { t: v!, known: true }])), funcs: new Map(), args: [], stack: [], depth: 0 };
+        steps = 0;
+        try {
+          read(b.input.command, ctx);
+        } catch (e) {
+          if (!(e instanceof Unreadable)) throw e;
+          log.unreadable.push(use);
+        }
         if (b.input.run_in_background === true) for (const c of [...log.calls, ...log.trees]) if (c.use === use) c.bg = true;
         cwds.set(agent, ctx.cwd);
       }
@@ -624,12 +548,12 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
     const w = log.spans.get(c.use);
     if (w === undefined || !Number.isFinite(at) || at < w.from) return false;
     if (!c.bg) return at <= w.to;
-    const next = starts.find((d) => d.seq > c.seq && log.spans.has(d.use));
-    return (next === undefined || at < log.spans.get(next.use)!.from) && at <= log.end;
+    const next = starts.find((d) => d.seq > c.seq && d.use !== c.use && log.made.has(d.use));
+    return (next === undefined || at < log.made.get(next.use)!) && at <= log.end;
   };
   const maker = new Map<string, Call>();
   for (const x of scanned) {
-    const by = starts.filter((c) => within(c, x.created));
+    const by = starts.filter((c) => within(c, x.created) && (!c.known || c.out === x.folder));
     if (by.length !== 1) continue;
     const c = by[0]!;
     if (scanned.filter((y) => within(c, y.created)).length === 1) maker.set(x.folder, c);
@@ -645,8 +569,9 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
         log.calls.some((c) => c.verb === "revise" && isFor(c, folder) && c.plan === input) &&
         regularFile(roots, input) !== null;
       const start = log.calls.find((c) => isStart(c) && isFor(c, folder));
-      const why =
-        input !== PLAN && !revised
+      const why = log.unreadable.length
+        ? "the session's command log holds Bash calls the reader cannot read (" + log.unreadable.join(", ") + "): bash's grammar refuses them, or they repeat or nest past " + STEPS + " commands or " + DEPTH + " levels, so no record can be shown untouched"
+        : input !== PLAN && !revised
           ? "plan_input " + JSON.stringify(input ?? null) + ", not " + PLAN + " or a regular file inside " + folder + " or " + WORK + " that the session's own gstack-autoplan revise --out " + folder + " --plan named"
           : start === undefined
             ? "no gstack-autoplan next or run call with --out " + folder + " and --plan " + PLAN + " in the session's command log"
