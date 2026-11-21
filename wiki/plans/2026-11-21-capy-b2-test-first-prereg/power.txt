@@ -1,0 +1,30 @@
+worked example, alpha 0.05 at t = 0.5: look 2.797, end 1.977 (published 2.797, 1.977)
+passes, alpha 0.04 two-sided, look at 92 of 183 tasks (t = 0.5027): look |z| >= 2.917, end |z| >= 2.068
+passes with a regression test, alpha 0.01 two-sided, read at the end only: |z| >= 2.576
+drift for 80% power under the passes bounds: 2.905 standard errors (one look at the end alone needs 2.802)
+
+Pooled passes contrast over the three models, 183 tasks, 126 repositories. Var(D) = sum over models of the
+discordant share, over M^2 T, times a design effect for repository clustering. B1 measured discordance on passes
+between a treated arm and none of 9/60 (Opus), 3/60 (Sol in Claude Code) and 6/60 (particle-1), and a design
+effect of 0.78 to 1.01 for task clustering across models.
+  B1 rates (0.15, 0.05, 0.10)  deff 1.00: SE 1.35 points, MDD 3.9 points
+  B1 rates (0.15, 0.05, 0.10)  deff 1.25: SE 1.51 points, MDD 4.4 points
+  all at 0.10                  deff 1.00: SE 1.35 points, MDD 3.9 points
+  all at 0.10                  deff 1.25: SE 1.51 points, MDD 4.4 points
+  all at 0.15                  deff 1.00: SE 1.65 points, MDD 4.8 points
+  all at 0.15                  deff 1.25: SE 1.85 points, MDD 5.4 points
+  all at 0.20                  deff 1.00: SE 1.91 points, MDD 5.5 points
+  all at 0.20                  deff 1.25: SE 2.13 points, MDD 6.2 points
+
+Per model, single look, Newcombe-style two-sided 0.05 at 80% power, MDD = (1.960 + 0.842) sqrt(disc / T):
+  discordant share 0.05: MDD 4.6 points
+  discordant share 0.10: MDD 6.5 points
+  discordant share 0.15: MDD 8.0 points
+  discordant share 0.20: MDD 9.3 points
+  discordant share 0.30: MDD 11.3 points
+
+Passes with a regression test, pooled, alpha 0.01 at the end, 80% power:
+  discordant share 0.15, deff 1.25: MDD 6.3 points
+  discordant share 0.20, deff 1.25: MDD 7.3 points
+  discordant share 0.30, deff 1.25: MDD 8.9 points
+  discordant share 0.40, deff 1.25: MDD 10.3 points
