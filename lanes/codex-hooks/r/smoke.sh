@@ -11,7 +11,7 @@ runner=$repo/quick/laneb/runner
 work=${WORK:?WORK=<a dir r prepare made>}
 task=${TASK:-delgan__loguru-1425}
 arm=${ARM:-r-on}
-out=${OUT:-$HOME/.capy/work/codex-hooks-r-smoke}
+out=${OUT:-${TMPDIR:-/tmp}/codex-hooks-r-smoke}
 rm -rf "$out" && mkdir -p "$out"
 mkdir -p "$out/tasks" && cp -r "$work/tasks/$task" "$out/tasks/$task"
 sed -i 's/^network_mode = .*/network_mode = "public"/' "$out/tasks/$task/task.toml"
@@ -21,8 +21,9 @@ const fs = require("node:fs"), e = process.env;
 const proxy = JSON.parse(fs.readFileSync(e.REPO + "/lanes/codex-hooks/r/proxy.json", "utf8"));
 proxy.routes.openai = { ...proxy.routes.openai, base_url: "http://127.0.0.1:8799", key_env: "FAKE_UPSTREAM_KEY" };
 fs.writeFileSync(e.OUT + "/proxy.json", JSON.stringify(proxy, null, 2));
-const text = fs.readFileSync(e.WORK + "/job.json", "utf8").replaceAll("/home/ubi/work/run/", e.WORK + "/").replaceAll("/home/ubi/work/runner/", e.RUNNER + "/").replaceAll("__GATEWAY__", e.GATEWAY);
-const job = JSON.parse(text);
+const path = require("node:path"), raw = fs.readFileSync(e.WORK + "/job.json", "utf8"), k0 = JSON.parse(raw).agents[0].kwargs;
+const up2 = (p) => path.dirname(path.dirname(p)) + "/";
+const job = JSON.parse(raw.replaceAll(up2(k0.arm_tar), e.WORK + "/").replaceAll(up2(k0.persona_path), e.RUNNER + "/").replaceAll("__GATEWAY__", e.GATEWAY));
 job.job_name = "smoke"; job.jobs_dir = e.OUT + "/jobs"; job.n_concurrent_trials = 1; job.retry = { ...job.retry, max_retries: 0 };
 job.agents = job.agents.filter((a) => a.kwargs.arm === e.ARM);
 if (job.agents.length !== 1) throw new Error("E_USAGE no agent for arm " + e.ARM + " in " + e.WORK + "/job.json");
