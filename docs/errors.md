@@ -312,6 +312,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
 | [E_H2HX_PREREG](#e_h2hx_prereg) | 2 | U20 |
 | [E_H2HX_INPUT](#e_h2hx_input) | 2 | U20 |
+| [E_H2HX_CODEX_RUNTIME](#e_h2hx_codex_runtime) | 2 | U20 |
+| [E_H2HX_CODEX_CONFIG](#e_h2hx_codex_config) | 2 | U20 |
+| [E_H2HX_CODEX_INSTALL](#e_h2hx_codex_install) | 2 | U20 |
+| [E_H2HX_CODEX_EXPOSURE](#e_h2hx_codex_exposure) | 2 | U20 |
 | [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
 | [E_H2H_INSTALL](#e_h2h_install) | 2 | U20 |
 | [E_H2H_PIN](#e_h2h_pin) | 2 | U20 |
@@ -2447,6 +2451,38 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 An extension command got input it can't use: an unknown part, stage or arm, a unit listed twice, a B1 unit, a non-O unit in part L, or an empty problem statement.
 
 Fix: Pass the part's own units and arms, each once, as the extension's preregistration lists them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_RUNTIME
+
+Part S's Codex runtime is not its pin: the platform tarball's sha256 differs from prereg.json, the binary does not print codex-cli 0.170.0, the runtime volume reads another version or digest or holds a file named codex on PATH, or a session's sol-agent link reads another version.
+
+Fix: Rebuild the runtime volume from the pinned tarball (ext/runtimes.ts buildExtRuntimeVolume). Change the pin only through the extension's preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_CONFIG
+
+A part S session's Codex config could not be made: the pack's own config.toml and the harness's settings do not make one TOML file, the pack sets a harness key (model, provider, effort, approvals, sandbox, update check, analytics, web search, bundled skills) to another value, or the file could not be written.
+
+Fix: Read the arm's installed config.toml. A pack that sets a harness key needs a dated change to the plan before its sessions run; never edit the pack's config by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_INSTALL
+
+A part S arm's Codex install did not build or does not match its pin: a clone is at another commit, a recipe step failed, the installed home holds a file the arm's rule refuses (a global AGENTS.md in s-gstack, other bytes than prereg.json's in s-gstack-line), or the home's tree hash is not its recorded pin.
+
+Fix: Rebuild the arm's home from its recipe (ext/codex-arms.ts) and read the step's output. A pin changes only through the extension's preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_EXPOSURE
+
+A part S session's exposure could not be read from its Codex rollouts: no rollout was copied out, a rollout line is not JSON, or the arm is not a part S arm.
+
+Fix: Read the session's codex-sessions/ folder and h2h-summary.json; a session whose exposure can't be read is never read as not exercised.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 

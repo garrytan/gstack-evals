@@ -153,6 +153,10 @@ class Turns(PfSession):
             self.summary["mcp_servers"] = sorted(self.mcp)
         return self.mcp
 
+    def version(self) -> None:
+        """Records the agent CLI's version in the summary before the slot opens (ext/h2h_codex.py records Codex's)."""
+        self.summary["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
+
     def tree(self):
         try:
             res = self.sh('bash "$1/treehash.sh" "$2"', self.cfg["sh_dir"], self.cfg["repo"])
@@ -245,7 +249,7 @@ class Turns(PfSession):
         cfg, out = self.cfg, self.summary
         repo, work = cfg["repo"], cfg["work"]
         self.check()
-        out["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
+        self.version()
         start = self.sh('mkdir -p "$2" && bash "$1/capture.sh" filters "$3"', cfg["sh_dir"], work, repo)
         self.filters = start.stdout if start.returncode == 0 else b""
         out["trees"].append(self.tree())
