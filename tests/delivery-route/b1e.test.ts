@@ -3,11 +3,11 @@
 // and the readings, the plan, caps and launch guard, the pilot's pass rules, the power table, and the six scripted sessions'
 // captures, each also changed so a check must fail.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { B1E_CASES, b1eApprove, b1eCap, b1eCaseProblems, b1eGuard, b1ePlan, b1eStats, b1eTotals, checkB1eRows, committedRoutes, counts, descriptionOf, inventoryDiff, listingFacts, loadB1eCaptured, mainReport, mdd, pairPower, pilotCells, pilotCheck, powerLines, reserveList, skillFile, skillProblems, supplyCells, taskList, verdictOf, VERDICTS, type B1eRow } from "../../lanes/delivery-route/b1e.ts";
-import { B1E, B1E_ARM_NAMES, B1E_CAPS_USD, B1E_PILOT, DESCRIPTIONS, EXT_ARMS, GSTACK_ARMS, RESERVE, SUPPLY, TASK_SETS } from "../../lanes/delivery-route/b1e-pins.ts";
+import { B1E_CASES, B1E_FILES, b1eApprove, b1eCap, b1eCaseProblems, b1eGuard, b1ePlan, b1eStats, b1eTotals, checkB1eRows, committedRoutes, counts, descriptionOf, inventoryDiff, listingFacts, loadB1eCaptured, mainReport, mdd, pairPower, pilotCells, pilotCheck, powerLines, reserveList, skillFile, skillProblems, supplyCells, taskList, verdictOf, VERDICTS, type B1eRow } from "../../lanes/delivery-route/b1e.ts";
+import { B1E, B1E_ARM_NAMES, B1E_CAPS_USD, B1E_PILOT, DESCRIPTIONS, EXT_ARMS, GSTACK_ARMS, GSTACK_STABLE, RESERVE, SUPPLY, TASK_SETS } from "../../lanes/delivery-route/b1e-pins.ts";
 import { twoArmPower, routeCounts } from "../../lanes/delivery-route/b1d.ts";
 import { B1D } from "../../lanes/delivery-route/b1d-pins.ts";
 import { sha256 } from "../../lanes/delivery-route/pins.ts";
@@ -40,6 +40,13 @@ describe("the task sets and the rewrites", () => {
     expect(skillProblems()).toEqual([]);
     for (const a of ["own", "long", "required"] as const) expect(descriptionOf(readFileSync(skillFile(a), "utf8"))!.length).toBe(DESCRIPTIONS[a].chars);
     expect(descriptionOf(readFileSync(skillFile("required"), "utf8"))!.startsWith("REQUIRED before any bug fix")).toBe(true);
+  });
+  test("b1e-build.sh is executable, reads gstack's repo, sha and loadout and prove-it's file from the pins, and the launch guard watches it", () => {
+    const f = "lanes/delivery-route/b1e-build.sh", text = readFileSync(join(import.meta.dir, "..", "..", f), "utf8");
+    for (const k of ["repo", "sha", "loadout", "prove_it", "own"]) expect(text).toContain("$(pin " + k + ")");
+    expect(text.includes(GSTACK_STABLE.sha) || text.includes(GSTACK_STABLE.tag)).toBe(false);
+    expect(statSync(join(import.meta.dir, "..", "..", f)).mode & 0o111).not.toBe(0);
+    expect(B1E_FILES).toContain(f);
   });
   test("a file inventory diff names only the paths whose rows differ", () => {
     const a = "sha256\tbytes\tmode\ttype\tpath\nx\t1\t644\tfile\ta\ny\t1\t644\tfile\tb\n";
