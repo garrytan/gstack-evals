@@ -40,7 +40,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, posix, resolve } from "node:path";
+import { dirname, join, posix, relative, resolve, sep } from "node:path";
 import { calibrationProbes, judgeCalibration, sentinelFor, withSentinel, type CalibrationFailure, type ProbeRun } from "../../adapters/calibration.ts";
 import { dockerInstaller, installArms, releaseInstalls, runHold, sentinelLayer, stackSources, type ArmInstall, type Layer } from "../../arms/install.ts";
 import { cellFor, cellSettings, type CellSettings } from "../../arms/cells.ts";
@@ -111,6 +111,8 @@ export interface HostRunInput {
   runId: string;
   out: string;
   tasksDir: string;
+  /** The loaded sidecar's path, left out of the fixture tree beside the lock; null when none was loaded. Unset means tasks.ext.json. */
+  sidecar?: string | null;
   policy: LoadedPolicy;
   arms: ArmSpec[];
   /** The target skill's name; null when no arm holds a skill. */
@@ -303,7 +305,8 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     return micros;
   };
   const byId = new Map(o.tasks.map((t) => [t.id, t]));
-  const fixtureTree = dirTreeSha256(o.tasksDir, new Set([SIDECAR_FILE, LOCK_FILE]));
+  const sidecar = o.sidecar === undefined ? SIDECAR_FILE : o.sidecar && relative(o.tasksDir, resolve(o.sidecar)).split(sep).join("/");
+  const fixtureTree = dirTreeSha256(o.tasksDir, new Set([LOCK_FILE, ...(sidecar && !/^\.\.(\/|$)/.test(sidecar) ? [sidecar] : [])]));
   const keyOf = (model: string, arm: ArmSpec, task: ContractTask): SessionKey => {
     const entry = o.entries[task.id];
     const { judge: _rubric, ...agentEntry } = entry ?? {};

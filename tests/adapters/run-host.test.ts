@@ -270,7 +270,7 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     expect([...readJournal(out).values()].every((e) => e.key.parts.adapter_sha256 !== undefined)).toBe(true);
   }, 300_000);
 
-  // Value: protects=the judge is keyed apart from the agent's session: --resume with a new judge model or rubric judges every journaled session again from its journaled answer and evidence and reruns none of them, with the same judge it judges nothing, and a changed agent key (with --repair) reruns the session and judges it again; every judge request marks the task's shared prefix for Anthropic's prompt cache; fails_when=a judge change reruns or refuses agent sessions (a rubric edit in the tasks sidecar or lock on disk included), a change to any other file in the tasks directory goes unnoticed, a reused judgment from another judge counts, an agent change keeps the old judgment, or the judge's request loses its cache marker; why_new=the Captain's brief for GEVA-563 (take the judge out of the agent-session cache key, test both directions); seam=runOnHost's reuse, needsJudgment and adjudicate, judgeKey, cells.ndjson; no_claim=a real judge model's answers or the provider's cache hit rate
+  // Value: protects=the judge is keyed apart from the agent's session: --resume with a new judge model or rubric judges every journaled session again from its journaled answer and evidence and reruns none of them, with the same judge it judges nothing, and a changed agent key (with --repair) reruns the session and judges it again; every judge request marks the task's shared prefix for Anthropic's prompt cache; fails_when=a judge change reruns or refuses agent sessions (a rubric edit in the tasks sidecar, a sidecar named by --ext in a subfolder, or the lock on disk included), a change to any other file in the tasks directory goes unnoticed, a reused judgment from another judge counts, an agent change keeps the old judgment, or the judge's request loses its cache marker; why_new=the Captain's brief for GEVA-563 (take the judge out of the agent-session cache key, test both directions); seam=runOnHost's reuse, needsJudgment and adjudicate, judgeKey, cells.ndjson; no_claim=a real judge model's answers or the provider's cache hit rate
   test("a judge change judges journaled sessions again without rerunning them, and an agent change reruns and judges them", async () => {
     let sessions = 0;
     const script: Script = (turn) => {
@@ -336,9 +336,16 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     const changed = { image_digest: null, recipe: "test", host_version: "test", adapter_sha256: "changed", isolation: "process", verifier: "test" } as const;
     const stale = await again({ keyBase: changed });
     expect([stale.run.stale.map((s) => s.code), stale.sessions, stale.judged.length]).toEqual([["E_CACHE_STALE", "E_CACHE_STALE", "E_CACHE_STALE"], 0, 0]);
-    const repaired = await again({ keyBase: changed, repair: true });
+    const rubrics = join(tasks, "meta", "rubrics.json");
+    mkdirSync(join(tasks, "meta"));
+    writeFileSync(rubrics, JSON.stringify({ schema_version: 1, tasks: { hello: { judge: "The answer greets the user." } } }));
+    const repaired = await again({ keyBase: changed, repair: true, sidecar: rubrics });
     expect([repaired.run.stale, repaired.sessions >= 3, repaired.judged, repaired.run.input.records.map((r) => r.judge)]).toEqual([[], true, Array(3).fill("gpt-6.1-sol"), ["done", "done", "done"]]);
     expect(journal().slice(-3).every((e) => e.key.parts.adapter_sha256 !== journal()[0].key.parts.adapter_sha256 && firstKeys.has(e.judge_key))).toBe(true);
+
+    writeFileSync(rubrics, JSON.stringify({ schema_version: 1, tasks: { hello: { judge: "The answer greets the user warmly." } } }));
+    const custom = await again({ keyBase: changed, sidecar: rubrics, entries: { hello: { judge: "The answer greets the user warmly." } } });
+    expect([custom.run.stale, custom.sessions, custom.judged.length]).toEqual([[], 0, 3]);
   }, 600_000);
 
   // Value: protects=skill-eval runs a persona task on Codex end to end: the model's request_user_input_async question goes to the policy's usersim model through its own slot, the answer comes back as the next user message, and every Codex session pins the reasoning effort codex 0.166.0's catalog gives its model (low for gpt-6.1-sol) in init.json; fails_when=a Codex persona task gets the fallback, the question is lost, or a session runs on Codex's own default effort; why_new=interactive tasks on Codex and the effort pin; seam=runOnHost's session, hostDriver, catalogEffort; no_claim=a real usersim model's answers

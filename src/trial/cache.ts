@@ -71,16 +71,16 @@ export function cacheStale(cell: string, changed: readonly SessionKeyPart[]): Ca
 /**
  * A directory's tree hash: every entry's relative path, type, executable bit and content (a symlink's target), sorted.
  * Directories with no files still count. Each entry is one JSON array, so a space or newline in a name or target cannot
- * make two trees serialize alike. Names in skip are left out at the top level of root only. Used for the fixture tree,
- * which skips the tasks sidecar and the lock, and for an arm's installed tree, which skips nothing.
+ * make two trees serialize alike. Paths in skip, relative to root with / between names, are left out. Used for the
+ * fixture tree, which skips the tasks sidecar and the lock, and for an arm's installed tree, which skips nothing.
  */
 export function dirTreeSha256(root: string, skip: ReadonlySet<string> = new Set()): string {
   const lines: string[] = [];
   const walk = (dir: string, rel: string) => {
     for (const name of readdirSync(dir).sort()) {
-      if (!rel && skip.has(name)) continue;
       const path = join(dir, name);
       const relPath = rel ? rel + "/" + name : name;
+      if (skip.has(relPath)) continue;
       const st = lstatSync(path);
       if (st.isSymbolicLink()) lines.push(JSON.stringify(["l", relPath, readlinkSync(path)]));
       else if (st.isDirectory()) {
