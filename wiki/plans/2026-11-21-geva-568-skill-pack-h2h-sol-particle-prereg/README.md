@@ -8,6 +8,8 @@ model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-21
 status: open
+attachments:
+  - 87b66634fa027df1fd9c5f66d6eb770e51a77a66260c19193a68d9908f86278c  prereg.json
 links:
   - 2026-11-15-geva-538-skill-pack-h2h-prereg
   - 2026-11-19-geva-540-skill-pack-h2h-results
