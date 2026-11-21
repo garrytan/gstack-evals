@@ -4139,6 +4139,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CSO_PROVIDER_DRIFT: {
+    exit: 2,
+    meaning: "A /cso eval judge or labeller call through OpenRouter (Gemini 4 Carbon or Argon) was served by a provider other than google-vertex, the route prereg.json pins.",
+    fix: "Stop the judge send and ask the Captain. Never accept a reply from another provider, and never unpin the route.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
