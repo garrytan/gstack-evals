@@ -339,6 +339,14 @@ describe("tighter parsing", () => {
     expect(has(check(prereg(swap("## Judge check", "<!-- unclosed\n## Judge check"))), 'practice 5: no "## Judge check" section')).toBe(true);
   });
 
+  test("a comment that closes and reopens on one line stays hidden, and text after a close is read", () => {
+    const reopened = swap(/## Judge check\n[\s\S]*?Errors read: per arm\n/, "<!--\nnote\n--> <!--\n## Judge check\n\nJudge: none\n-->\n");
+    expect(has(check(prereg(reopened)), 'practice 5: no "## Judge check" section')).toBe(true);
+    const after = check(prereg(swap("Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5", "<!--\n-->Judge: none")));
+    expect(after.filter((p) => p.includes('no "Judge:" line') || p.includes('no "## Judge check"'))).toEqual([]);
+    expect(has(check(prereg(swap("Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5", "<!--\n-->"))), 'practice 5: "## Judge check" has no "Judge:" line')).toBe(true);
+  });
+
   test("a fenced <!-- does not hide the real sections after it", () => {
     expect(check(prereg("```\n<!-- a template note\n```\n\n" + PASSING_PREREG))).toEqual([]);
   });

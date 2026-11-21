@@ -349,20 +349,7 @@ function bodyLines(text: string): string[] {
   const close = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
   let fence = "";
   let comment = false;
-  return lines.slice(close + 1).flatMap((l) => {
-    const f = l.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-    if (fence) {
-      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = "";
-      return [];
-    }
-    if (comment) {
-      if (l.includes("-->")) comment = false;
-      return [];
-    }
-    if (f && !(f[1][0] === "`" && f[2].includes("`"))) {
-      fence = f[1];
-      return [];
-    }
+  const visible = (l: string) => {
     const masked = l.replace(/`[^`]*`/g, (m) => " ".repeat(m.length));
     let kept = "";
     let at = 0;
@@ -371,7 +358,25 @@ function bodyLines(text: string): string[] {
       at = m.index + m[0].length;
       if (!m[1]) comment = true;
     }
-    return [kept + l.slice(at)];
+    return kept + l.slice(at);
+  };
+  return lines.slice(close + 1).flatMap((l) => {
+    const f = l.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = "";
+      return [];
+    }
+    if (comment) {
+      const end = l.indexOf("-->");
+      if (end < 0) return [];
+      comment = false;
+      return [visible(l.slice(end + 3))];
+    }
+    if (f && !(f[1][0] === "`" && f[2].includes("`"))) {
+      fence = f[1];
+      return [];
+    }
+    return [visible(l)];
   });
 }
 
