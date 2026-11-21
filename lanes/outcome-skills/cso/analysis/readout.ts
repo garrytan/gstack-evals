@@ -17,6 +17,7 @@ import { interimApplies } from "./verdicts.ts";
 
 const REPO = join(import.meta.dir, "..", "..", "..", "..");
 const SEALED = "cso-sealed.v1";
+const SEALED_ROW = "cso-sealed-row.v1";
 const STAGE1_CELLS: [CsoModel, CsoArm][] = [["opus", "none"], ["opus", "cso"], ["opus", "untold"], ["particle", "none"], ["particle", "cso"]];
 const STAGE2_CELLS: [CsoModel, CsoArm][] = [["opus", "none"], ["opus", "cso"], ["particle", "none"], ["particle", "cso"]];
 const N2 = { min: 48, max: 100, step: 4 } as const;
@@ -210,4 +211,32 @@ export function openCheck(file: string, key: Buffer): SealedCheck {
   const c = unseal<SealedCheck>(file, key, readFileSync(file + ".sha256", "utf8").trim());
   if (c.schema !== "cso-judge-check.v1") csoFail("E_CSO_READOUT_OUT", file + " is not a sealed judge check");
   return c;
+}
+
+/** Whether a stage's per-session rows (judged, scores, the judge's kept replies) are sealed to the readout key from the
+ *  start: stage 1 and the re-pilot, whose per-arm outcomes section 12 keeps sealed until stage 2's analysis. */
+export const sealedStage = (stage: string): boolean => stage === "stage1" || stage === "repilot";
+
+/** One JSON line holding a row encrypted to the readout key. */
+export function sealRow(row: unknown, key: Buffer): string {
+  const iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", key, iv);
+  c.setAAD(Buffer.from(SEALED_ROW));
+  const ciphertext = Buffer.concat([c.update(JSON.stringify(row), "utf8"), c.final()]);
+  return JSON.stringify({ schema: SEALED_ROW, alg: "aes-256-gcm", iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), ciphertext: ciphertext.toString("base64") });
+}
+
+/** Whether a parsed JSON line is a row sealRow wrote. */
+export const isSealedRow = (v: unknown): v is { iv: string; tag: string; ciphertext: string } => typeof v === "object" && v !== null && (v as { schema?: unknown }).schema === SEALED_ROW;
+
+/** Opens one sealed row (E_CSO_READOUT_KEY when the key does not open it; where names its file). */
+export function openRow<T>(v: { iv: string; tag: string; ciphertext: string }, key: Buffer, where: string): T {
+  const dc = createDecipheriv("aes-256-gcm", key, Buffer.from(v.iv, "base64"));
+  dc.setAAD(Buffer.from(SEALED_ROW));
+  dc.setAuthTag(Buffer.from(v.tag, "base64"));
+  try {
+    return JSON.parse(Buffer.concat([dc.update(Buffer.from(v.ciphertext, "base64")), dc.final()]).toString("utf8")) as T;
+  } catch (e) {
+    return csoFail("E_CSO_READOUT_KEY", where + " holds a row that does not open with this key: " + (e as Error).message);
+  }
 }

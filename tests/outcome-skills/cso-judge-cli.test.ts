@@ -2,15 +2,16 @@
 // The judging commands end to end on a temporary work dir, keyless: judge (passes A and B, --check and --probe) on a fake
 // transport, then score, stage0, analyze and readout over the files they wrote. judge --check runs through the real
 // metering proxy on a stubbed upstream and leaves no count or kappa in plain, in its output or in any file of its out dir.
+// judge, score and readout on stage 1 seal every stage 1 row and kept reply to the readout key, and stage 0's rows stay plain.
 import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { COMMANDS } from "../../lanes/outcome-skills/cso/cli.ts";
-import { judgeCmd } from "../../lanes/outcome-skills/cso/cli-judge.ts";
+import { judgeCmd, readRows } from "../../lanes/outcome-skills/cso/cli-judge.ts";
 import type { Transport } from "../../lanes/outcome-skills/cso/judge/client.ts";
 import { JUDGE_ITEM } from "../../lanes/outcome-skills/cso/judge/meter.ts";
-import { openCheck, readKey } from "../../lanes/outcome-skills/cso/analysis/readout.ts";
+import { isSealedRow, openCheck, openRow, readKey } from "../../lanes/outcome-skills/cso/analysis/readout.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import type { CsoArm, CsoModel, CsoStage, SessionRecord, UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
 
@@ -76,14 +77,31 @@ describe("cso judging commands", () => {
     expect(r.code).toBe(0);
     expect(r.out.split("\n").filter((l) => l.startsWith("PASS")).length).toBe(6);
   });
-  test("judge, then score and stage0 over what it wrote; a rerun judges nothing new", async () => {
-    const j = await capture(() => judgeCmd(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--out", join(dir, "j"), "--run", "t"], { transport: fake }));
-    expect([j.code, j.out]).toEqual([0, "judged 20 sessions into " + join(dir, "j", "judged.jsonl")]);
-    expect((await capture(() => judgeCmd(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--out", join(dir, "j"), "--run", "t"], { transport: fake }))).out).toStartWith("judged 0 sessions");
-    expect((await capture(() => COMMANDS.score!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--judged", join(dir, "j", "judged.jsonl"), "--out", join(dir, "scores.jsonl")]))).out).toBe("scored 20 sessions");
-    const scores = readFileSync(join(dir, "scores.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
-    expect(scores.filter((s) => s.named).length).toBe(12);
-    const s0 = await capture(() => COMMANDS.stage0!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "scores.jsonl")]));
+  test("judge and score seal stage 1 rows to the readout key and keep stage 0's plain; a rerun judges nothing new", async () => {
+    const j = join(dir, "j"), metered = ["--record", record, "--ledger", join(dir, "ledger.sqlite")];
+    const judge = (extra: string[]) => capture(() => judgeCmd(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--out", j, "--run", "check", ...metered, ...extra], { env: DRY_ENV, fetch: upstream }));
+    await expect(judge([])).rejects.toThrow(/^E_USAGE.*sealed to the readout key/);
+    expect(existsSync(j)).toBe(false);
+    const first = await judge(["--key", keyPath]);
+    expect([first.code, first.out]).toEqual([0, "judged 20 sessions into " + join(j, "judged.jsonl")]);
+    expect((await judge(["--key", keyPath])).out).toStartWith("judged 0 sessions");
+    const score = (extra: string[]) => capture(() => COMMANDS.score!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--judged", join(j, "judged.jsonl"), "--out", join(j, "scores.jsonl"), ...extra]));
+    await expect(score([])).rejects.toThrow(/^E_USAGE/);
+    expect((await score(["--key", keyPath])).out).toBe("scored 20 sessions");
+    const k = readKey(keyPath);
+    for (const f of ["judged.jsonl", "scores.jsonl"]) {
+      const rows = readFileSync(join(j, f), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      expect(rows.filter((r) => !isSealedRow(r)).map((r) => r.stage)).toEqual(Array(10).fill("stage0"));
+      expect(rows.filter(isSealedRow).map((r) => openRow<{ stage: string }>(r, k, f).stage)).toEqual(Array(10).fill("stage1"));
+    }
+    const plain = readFileSync(join(j, "scores.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => !isSealedRow(r));
+    expect(plain.filter((r) => r.named).length).toBe(6);
+    expect(readRows<{ named: boolean }>(join(j, "scores.jsonl"), k).filter((r) => r.named).length).toBe(12);
+    expect(() => readRows(join(j, "scores.jsonl"), Buffer.alloc(32, 1))).toThrow(/^E_CSO_READOUT_KEY/);
+    const replies = walk(join(j, "replies"));
+    expect(replies.length).toBeGreaterThan(0);
+    for (const f of replies) expect(isSealedRow(JSON.parse(readFileSync(f, "utf8")))).toBe(true);
+    const s0 = await capture(() => COMMANDS.stage0!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(j, "scores.jsonl")]));
     expect(s0.code).toBe(0);
     expect(s0.out.split("\n").filter((l) => l.startsWith("PASS")).length).toBe(5);
   });
@@ -98,6 +116,7 @@ describe("cso judging commands", () => {
     expect(sealedLine).toBe("sealed check " + join(out, "check-production.sealed") + " sha256 " + readFileSync(join(out, "check-production.sealed.sha256"), "utf8").trim());
     const files = walk(out);
     expect(files.some((f) => f.includes("replies"))).toBe(true);
+    for (const f of files.filter((x) => x.includes("replies"))) expect(isSealedRow(JSON.parse(readFileSync(f, "utf8")))).toBe(true);
     for (const f of files) {
       const t = readFileSync(f, "utf8");
       for (const k of ['"kappa_named_all"', '"kappa_validity"', '"gold_classes"', '"gold_reports"', '"gold_findings"', '"per_arm_disagreement"', '"validity_classes"', '"overcap_gold_drops"', '"production"', '"fill"']) expect(t).not.toContain(k);
@@ -111,11 +130,20 @@ describe("cso judging commands", () => {
   });
   test("readout seals stage 1 and prints the release; analyze prints rows and verdicts", async () => {
     put(join(dir, "stage1.json"), JSON.stringify(units));
-    const r = await capture(() => COMMANDS.readout!(["--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "scores.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.sealed"), "--key", keyPath, "--sealed", join(dir, "s1.sealed"), "--spent", "100", "--judging-per-session", "0.12", "--vm", "40", "--vm-stage2", "20"]));
+    const r = await capture(() => COMMANDS.readout!(["--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "j", "scores.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.sealed"), "--key", keyPath, "--sealed", join(dir, "j", "s1.sealed"), "--spent", "100", "--judging-per-session", "0.12", "--vm", "40", "--vm-stage2", "20"]));
     expect(r.code).toBe(0);
     expect(JSON.parse(r.out).items.length).toBe(6);
-    expect(existsSync(join(dir, "s1.sealed"))).toBe(true);
-    const a = await capture(() => COMMANDS.analyze!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "scores.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.sealed"), "--key", keyPath]));
+    expect(existsSync(join(dir, "j", "s1.sealed"))).toBe(true);
+    const outcome = ["named", "hits", "findings", "labels", "same_defect", "validity", "supported", "rate"];
+    for (const f of walk(join(dir, "j"))) {
+      for (const l of readFileSync(f, "utf8").split("\n").filter((x) => x.trim())) {
+        const v = JSON.parse(l);
+        if (isSealedRow(v) || v.schema === "cso-sealed.v1") continue;
+        if (typeof v === "object" && v && "stage" in v) expect([f, v.stage]).toEqual([f, "stage0"]);
+        else for (const k of outcome) expect([f, l.includes(k)]).toEqual([f, false]);
+      }
+    }
+    const a = await capture(() => COMMANDS.analyze!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "j", "scores.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.sealed"), "--key", keyPath]));
     expect(JSON.parse(a.out).verdicts.map((v: { step: number }) => v.step)).toEqual([1, 1]);
   });
 });
