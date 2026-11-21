@@ -106,5 +106,8 @@
     ],
     "prove_it_line": "- prove-it: Use when fixing a bug: prove the bug with a failing test before the fix. (gstack) (file: r0/prove-it/SKILL.md)",
     "agents_md": false
+  },
+  "start": {
+    "cx-prove-it-typed": "dbde7c22f86e5bfbe3e8ea0745344f6e5caff00afc29bfd43cb72b86f8bca301"
   }
 }

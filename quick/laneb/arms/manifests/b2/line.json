@@ -34,5 +34,8 @@
     "skill_md_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "names": []
   },
-  "inventory_sha256": "dfe96dba9893cad517244a2f427b1a9b20b518dac2c349a8e945d1a63a1dffd4"
+  "inventory_sha256": "dfe96dba9893cad517244a2f427b1a9b20b518dac2c349a8e945d1a63a1dffd4",
+  "start": {
+    "line-stop": "acefbae9ebc95ff0640724e3949303b51b5866f5382c9fa7b22f3a8eb53af219"
+  }
 }

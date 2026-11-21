@@ -147,5 +147,8 @@
       }
     ]
   },
-  "inventory_sha256": "0309d272f1c9350708ebccc34b3b94fa489444fc8dd70625e712c96f60585ad7"
+  "inventory_sha256": "0309d272f1c9350708ebccc34b3b94fa489444fc8dd70625e712c96f60585ad7",
+  "start": {
+    "gstack-stop": "3671155602a5193c3d116daf4b0de51335b9b8b6ed9ad020ab5e5ff7611fb1c9"
+  }
 }

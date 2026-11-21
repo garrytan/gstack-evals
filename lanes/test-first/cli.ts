@@ -9,14 +9,15 @@ import { join, resolve } from "node:path";
 import { l1Main } from "../../quick/laneb/l1/l1.ts";
 import { readRows, type Row } from "../../quick/laneb/runner/ledger.ts";
 import { checkRows, look, pilotReport, report, type Stage } from "./analyze.ts";
-import { armProblems, buildCodex, buildPlain, check, MANIFESTS, writeManifests, type B2Manifest } from "./arms.ts";
+import { ARMS_DIR, armProblems, buildCodex, buildPlain, check, MANIFESTS, writeManifests, type B2Manifest } from "./arms.ts";
+import { runSessions } from "./sessions.ts";
 import { buildImages, imagesRecord, readImagesRecord, writeImagesRecord } from "./images.ts";
 import { approve, dryRun, guardParts, itemTotals, launchGuard, markDone, planLines, type Order } from "./money.ts";
 import { B2, drawnTasks, isItem, ITEM_NAMES, LABELS, MODELS, PILOT_TASKS, sha256, type Item } from "./pins.ts";
 import { B2_PROFILE } from "./plans.ts";
 import { buildB2Table, type B2Row } from "./table.ts";
 
-const USAGE = "E_USAGE usage: b2 arms build|manifests <dir> [--register] | arms check [<dir>] | plan | dry-run | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> [--part <part>] --counter-usd <dollars> --counter-as-of <time> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> (host-up, launch and relaunch also --counter-usd and --counter-as-of) | images --out <dir> [--shard k/n] | images --record <file> <dir>... | table <config.json> <out.jsonl> | look <table.jsonl> --out <record> | report <table.jsonl> [--stage end|look] [--item b2-pilot] [--out <md>]";
+const USAGE = "E_USAGE usage: b2 arms build|manifests <dir> [--register] | arms check [<dir>] | sessions run --out <dir> [--arms <dir>] [--codex <vendor dir>] [--record] | plan | dry-run | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> [--part <part>] --counter-usd <dollars> --counter-as-of <time> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> (host-up, launch and relaunch also --counter-usd and --counter-as-of) | images --out <dir> [--shard k/n] | images --record <file> <dir>... | table <config.json> <out.jsonl> | look <table.jsonl> --out <record> | report <table.jsonl> [--stage end|look] [--item b2-pilot] [--out <md>]";
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "rerun", "recover", "host-down"];
 const GUARDED = ["host-up", "launch", "relaunch"];
 const COUNTER_FLAGS = ["--counter-usd", "--counter-as-of"];
@@ -90,6 +91,14 @@ export async function main(argv: string[]): Promise<number> {
         return c.pass ? 0 : 2;
       }
       throw new Error(USAGE);
+    }
+    if (cmd === "sessions" && rest[0] === "run") {
+      const out = opt("out");
+      if (!out) throw new Error(USAGE);
+      const problems = await runSessions(resolve(out), resolve(opt("arms") ?? ARMS_DIR()), resolve(opt("codex") ?? join(process.env.HOME ?? "", ".capy/work/b2/codex/c")), rest.includes("--record"));
+      for (const p of problems) console.error("E_B2_SESSIONS " + p);
+      console.log("B2 SESSIONS " + (problems.length ? "FAIL " + problems.length : "PASS") + (rest.includes("--record") && !problems.length ? ", start digests recorded in the manifests" : ""));
+      return problems.length ? 1 : 0;
     }
     if (cmd === "plan") {
       const d = drawnTasks(), p = planLines(d.run, d.pilot);

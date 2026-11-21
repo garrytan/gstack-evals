@@ -151,5 +151,9 @@
       }
     ]
   },
-  "inventory_sha256": "84c8373211fd60afeef55e7eb86920c53be0e11497aeaaa4c27ff626726a8cef"
+  "inventory_sha256": "84c8373211fd60afeef55e7eb86920c53be0e11497aeaaa4c27ff626726a8cef",
+  "start": {
+    "prove-it-typed": "4d2476cce641b6285a608cbefc1fe26ae75912264103ef36f7b292559a9ad8fa",
+    "prove-it-load": "8c5c396ca141475f62561b8d09d67c94f164edfe4bdbbff2cebe4c7d5af83f41"
+  }
 }

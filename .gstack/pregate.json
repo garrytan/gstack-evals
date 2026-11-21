@@ -360,7 +360,8 @@
       "tests/delivery-route/plan.test.ts"
     ],
     "tests/delivery-route/fixtures/sessions/**": [
-      "tests/delivery-route/sessions.test.ts"
+      "tests/delivery-route/sessions.test.ts",
+      "tests/test-first/table.test.ts"
     ],
     "wiki/plans/2026-11-18-capy-b1b-prose-route-prereg/**": [
       "tests/delivery-route/b1b.test.ts"
@@ -623,7 +624,26 @@
       "tests/delivery-route/b1d.test.ts"
     ],
     "tests/scoring/fixtures/**": [
-      "tests/scoring/codex-transcript.test.ts"
+      "tests/scoring/codex-transcript.test.ts",
+      "tests/test-first/table.test.ts"
+    ],
+    "tests/test-first/fixtures/**": [
+      "tests/test-first/sessions.test.ts",
+      "tests/test-first/analyze.test.ts",
+      "tests/test-first/money.test.ts"
+    ],
+    "quick/laneb/arms/manifests/b2/**": [
+      "tests/test-first/sessions.test.ts"
+    ],
+    "tests/test-first/agent_b2_codex_test.py": [
+      "tests/test-first/agent-b2-codex.test.ts"
+    ],
+    "quick/laneb/runner/agent/laneb_b2_codex.py": [
+      "tests/test-first/agent-b2-codex.test.ts"
+    ],
+    "wiki/plans/2026-11-21-capy-b2-test-first-prereg/**": [
+      "tests/test-first/money.test.ts",
+      "tests/test-first/cli.test.ts"
     ]
   },
   "guards": [
