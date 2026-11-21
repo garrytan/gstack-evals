@@ -34,6 +34,10 @@
      "codex-linux-sandbox",
      "apply_patch",
      "applypatch"
+    ],
+    "exec_flags": [
+     "--json",
+     "--dangerously-bypass-hook-trust"
     ]
    },
    "arms": [
@@ -91,11 +95,11 @@
     },
     "s-agent-skills": {
      "bug": [
-      "$test-driven-development "
+      "$agent-skills:test-driven-development "
      ],
      "feature": [
-      "$spec-driven-development ",
-      "$incremental-implementation Implement every task."
+      "$agent-skills:spec-driven-development ",
+      "$agent-skills:incremental-implementation Implement every task."
      ]
     },
     "s-gsd": {
@@ -121,7 +125,13 @@
     "max_turns": 300
    },
    "family": "s-gstack minus each of s-none, s-superpowers, s-agent-skills, s-gsd and s-tstack, in O and in B (10)",
-   "holm_m": 10
+   "holm_m": 10,
+   "question_reply_cap_per_turn": 20,
+   "refused_tree_names": [
+    ".codex",
+    ".agents",
+    "AGENTS.override.md"
+   ]
   },
   "P": {
    "model": "particle-ai/particle-1",
@@ -233,7 +243,7 @@
     "repo_cap": 3,
     "min_counted": 60,
     "pools": {
-     "1": "the 18 MultiLang units that passed every gate in the head-to-head's walk and never ran: its 10 reserves and the 8 that passed after stage 0 was drawn (its 12 stage 1 and 2 stage 0 units are left out)",
+     "1": "the head-to-head's 10 reserves (positions 112-119, 121, 122) and the 8 bug units that passed between stage 0's bug unit (123) and feature unit (132); 5 named in its custody log, the other 13 from the walk logs on its holding VM read before the walk, else pool 1 is the 5 named units; each rebuilt and re-gated",
      "2": "the 56 MultiLang rows the head-to-head's walk skipped only for the repository cap, walked through the same gates",
      "3": "quick/laneb/tasks/swerebench-r3a4.json tasks created 2026-03-01 to 2026-05-31 (110), converted by the state machines harness's SWE-rebench part, with the object-level history check"
     },
@@ -365,7 +375,8 @@
   "l_units": 6,
   "cap_rule": "a tenth of the arm's re-priced counted budget; the driver opens a pilot session only while the arm's settled pilot spend is under its cap; an arm whose settled spend reaches its cap before its pilot sessions all run is left out under R111",
   "ceiling": "no pack fixes 6 of 6 O pilot units where the known rate for the model is 80% or more",
-  "floor": "no pack fixes 0 of 6"
+  "floor": "no pack fixes 0 of 6",
+  "su_units": "O stage 1 feature units at positions 100 and 120, bug units at 10, 20, 30, 40; B2 stage 1 units at 6, 12, 18, 24; next by position replaces a dropped unit; smoke takes the first bug, first feature and first B2 of these"
  },
  "pilot_caps_usd": {
   "s-none": 9.6,

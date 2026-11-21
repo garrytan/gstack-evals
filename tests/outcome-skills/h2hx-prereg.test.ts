@@ -59,7 +59,7 @@ describe("arms, hosts and turns", () => {
   test("scripted turns follow each part's entries", () => {
     const T = base.texts.task.replace("{problem statement}", "Broken thing.");
     expect(extScriptedTurns("s-gstack", "feature", "Broken thing.\n", x, base)).toEqual(["$autoplan " + T]);
-    expect(extScriptedTurns("s-agent-skills", "feature", "Broken thing.", x, base)).toEqual(["$spec-driven-development " + T, "$incremental-implementation Implement every task."]);
+    expect(extScriptedTurns("s-agent-skills", "feature", "Broken thing.", x, base)).toEqual(["$agent-skills:spec-driven-development " + T, "$agent-skills:incremental-implementation Implement every task."]);
     expect(extScriptedTurns("s-gsd", "bug", "Broken thing.", x, base)).toEqual(["$gsd-debug " + T]);
     expect(extScriptedTurns("p-agent-skills", "bug", "Broken thing.", x, base)).toEqual(["/agent-skills:test " + T]);
     expect(extScriptedTurns("p-gstack-oneline", "bug", "Broken thing.", x, base)).toEqual([T + "\n\n" + x.sentence]);
