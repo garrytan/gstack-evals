@@ -364,7 +364,7 @@ const GEN404 = JSON.parse(readFileSync(join(import.meta.dir, "../fixtures/openro
 
 /** Runs h2h_turns.py's generations() over the home's session logs against a stub generation route, on a fake clock whose
  *  sleep only advances it. Returns the rows it wrote, every request the stub saw, and the clock at the end. */
-async function runGenerations(logs: Record<string, string>, answer: (id: string, asked: number) => Response): Promise<{ rows: any[]; seen: string[]; clock: number; file: string }> {
+async function runGenerations(logs: Record<string, string>, answer: (id: string, asked: number) => Response, extra: string[] = []): Promise<{ rows: any[]; seen: string[]; clock: number; file: string; out: string }> {
   const d = mkdtempSync(join(W, "gen-"));
   put(join(d, "home"), logs);
   const seen: string[] = [];
@@ -387,12 +387,16 @@ async function runGenerations(logs: Record<string, string>, answer: (id: string,
       "    def monotonic(self): return self.t",
       "    def sleep(self, s): self.t += s",
       "h2h_turns.time = Clock()",
+      ...extra,
       "t = object.__new__(h2h_turns.Turns)",
       "from pathlib import Path",
       "t.cfg = {'home': sys.argv[2] + '/home', 'exec_prefix': []}",
       "t.out = Path(sys.argv[2])",
       "t.summary = {}",
-      "t.generations({'base_url': sys.argv[3], 'token': 'slot-token'})",
+      "try:",
+      "    t.generations({'base_url': sys.argv[3], 'token': 'slot-token'})",
+      "except KeyboardInterrupt:",
+      "    print('INTERRUPTED')",
       "print('CLOCK', h2h_turns.time.t)",
     ].join("\n");
     const p = Bun.spawn([PY, "-c", script, join(import.meta.dir, "../../lanes/outcome-skills/h2h/sessions"), d, "http://127.0.0.1:" + server.port + "/slot1/openrouter"], { env: { PATH: process.env.PATH!, PYTHONDONTWRITEBYTECODE: "1" }, stdout: "pipe", stderr: "pipe" });
@@ -402,7 +406,7 @@ async function runGenerations(logs: Record<string, string>, answer: (id: string,
     server.stop(true);
   }
   const file = join(d, "generations.jsonl");
-  return { rows: readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l)), seen, clock, file };
+  return { rows: readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l)), seen, clock, file, out: d };
 }
 
 const record = (id: string) => Response.json({ data: { id: "gen-of-" + id, provider_name: "Particle AI" } }, { headers: { "x-h2h-generation-id": "gen-of-" + id } });
@@ -440,4 +444,24 @@ test.skipIf(!existsSync(PY))("a generation record that never appears is asked fo
   expect(rows).toEqual([{ id: GEN404.answer_id, status: 404, text: GEN404.body, generation_id: GEN404.generation_id }]);
   const g = fileLookup(file);
   await expect(checkServedBy(g.ids, g.lookup, particleRoute(readExtPrereg()))).rejects.toThrow(new RegExp("^E_H2HX_ROUTE_RECORD no generation record for answer " + GEN404.answer_id + " \\(generation " + GEN404.generation_id + ", status 404\\)"));
+});
+
+test.skipIf(!existsSync(PY))("the re-asks keep to the 10 s marks however long each ask takes, so a record that appears at the 180 s mark still passes", async () => {
+  const slow = ["_open = h2h_turns.urllib.request.urlopen", "def slow(*a, **k):", "    h2h_turns.time.t += 1.5", "    return _open(*a, **k)", "h2h_turns.urllib.request.urlopen = slow"];
+  const { rows, seen, clock } = await runGenerations({
+    ".claude/projects/p/s1.jsonl": [GEN404.answer_id, "msg_ready0123456789abcd"].map((id) => JSON.stringify({ type: "assistant", message: { id } })).join("\n") + "\n",
+  }, (id, asked) => (id === GEN404.answer_id && asked < 19 ? notFound() : record(id)), slow);
+  expect(seen.filter((s) => s.includes(GEN404.answer_id)).length).toBe(19);
+  expect(clock).toBe(3 + 180 + 1.5);
+  expect(rows.map((r) => [r.id, r.status])).toEqual([[GEN404.answer_id, 200], ["msg_ready0123456789abcd", 200]]);
+});
+
+test.skipIf(!existsSync(PY))("a wait cut short keeps every record already read in generations.jsonl", async () => {
+  const cut = ["def cut(s):", "    if h2h_turns.time.t >= 10: raise KeyboardInterrupt", "    h2h_turns.time.t += s", "h2h_turns.time.sleep = cut"];
+  const { rows, seen, out } = await runGenerations({
+    ".claude/projects/p/s1.jsonl": ["msg_ready0123456789abcd", GEN404.answer_id].map((id) => JSON.stringify({ type: "assistant", message: { id } })).join("\n") + "\n",
+  }, (id) => (id === GEN404.answer_id ? notFound() : record(id)), cut);
+  expect(seen.filter((s) => s.includes(GEN404.answer_id)).length).toBe(2);
+  expect(rows.map((r) => [r.id, r.status])).toEqual([["msg_ready0123456789abcd", 200], [GEN404.answer_id, 404]]);
+  expect(existsSync(join(out, "generations.jsonl.part"))).toBe(false);
 });

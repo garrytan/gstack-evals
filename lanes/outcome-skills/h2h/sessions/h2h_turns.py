@@ -310,8 +310,10 @@ class Turns(PfSession):
         generation route, and writes one line per id to generations.jsonl for ext/session.ts's served-by check, with the
         generation id the proxy named in its x-h2h-generation-id header (the answer's X-Generation-Id), or null. OpenRouter
         writes a generation record some time after its answer, so after one pass over every id the ids not yet read (any
-        answer but 200) are asked again every GEN_WAIT_S seconds until GEN_DEADLINE_S seconds after that pass ended;
-        whatever was read last is written, and nothing here stops the close
+        answer but 200) are asked again at every GEN_WAIT_S mark after that pass ended, up to and including the
+        GEN_DEADLINE_S mark, however long the asks themselves take. The file is rewritten in full after the first pass and
+        after every round, so an interrupted wait keeps what was already read; whatever was read last is written, and
+        nothing here stops the close
         (run() records any error in the summary as generations_error). A message Claude Code wrote itself (model
         "<synthetic>") has no generation record and is skipped."""
         ids = []
@@ -338,18 +340,26 @@ class Turns(PfSession):
             except Exception as e:
                 return 0, f"{type(e).__name__}: {e}"[:300], None
 
+        def write() -> None:
+            part = self.out / "generations.jsonl.part"
+            with part.open("w") as f:
+                for i in ids:
+                    status, body, gen = read[i]
+                    f.write(json.dumps({"id": i, "status": status, "text": body, "generation_id": gen}) + "\n")
+            part.replace(self.out / "generations.jsonl")
+
         read = {i: ask(i) if re.fullmatch(r"[A-Za-z0-9_-]+", i) else (0, "", None) for i in ids}
+        write()
         missing = [i for i in ids if read[i][0] != 200 and re.fullmatch(r"[A-Za-z0-9_-]+", i)]
-        deadline = time.monotonic() + GEN_DEADLINE_S
-        while missing and time.monotonic() + GEN_WAIT_S <= deadline:
-            time.sleep(GEN_WAIT_S)
+        start = time.monotonic()
+        for k in range(1, GEN_DEADLINE_S // GEN_WAIT_S + 1):
+            if not missing:
+                break
+            time.sleep(max(0.0, start + k * GEN_WAIT_S - time.monotonic()))
             for i in missing:
                 read[i] = ask(i)
+            write()
             missing = [i for i in missing if read[i][0] != 200]
-        with (self.out / "generations.jsonl").open("w") as f:
-            for i in ids:
-                status, body, gen = read[i]
-                f.write(json.dumps({"id": i, "status": status, "text": body, "generation_id": gen}) + "\n")
 
     def copy_out(self, src: str, dest: Path) -> None:
         """Copies a file the session's container wrote to the host: docker cp under Harbor, a plain copy on the host."""
