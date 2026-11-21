@@ -140,7 +140,7 @@ Secondary readings:
   | Terminal-Bench 2 round 1 | [2026-11-01-geva-93-stacks-round-1-tb2-results](../2026-11-01-geva-93-stacks-round-1-tb2-results) | 10,744 |
   | Terminal-Bench 2 and review | [2026-11-01-geva-105-gstack-null-review-and-tb2](../2026-11-01-geva-105-gstack-null-review-and-tb2) | 13,417 |
   | R3 runs | [r3a4](../2026-11-04-geva-263-r3a4-admission-results.md), [r3b](../2026-11-04-geva-283-r3b-results.md), [r3c](../2026-11-07-geva-380-r3c-results.md) | 23,732 |
-  | R3a saturation | [2026-11-03-geva-239-r3a-saturation-results](../2026-11-03-geva-239-r3a-saturation-results) | 4,756 |
+  | R3a saturation | [2026-11-03-geva-239-r3a-saturation-results](../2026-11-03-geva-239-r3a-saturation-results.md) | 4,756 |
   | Run D | [2026-11-02-geva-153-run-d-discovery-results](../2026-11-02-geva-153-run-d-discovery-results) | 5,152 |
   | R2 full review | [2026-11-02-geva-175-r2-full-review-results](../2026-11-02-geva-175-r2-full-review-results) | 1,334 |
   | Test fixtures | published in this repo | 87 |
