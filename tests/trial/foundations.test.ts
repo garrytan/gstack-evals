@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cacheStale, dirTreeSha256, envValuesHash, judgeKey, newProgress, recordSession, SESSION_KEY_PARTS, sessionKey, staleParts, writeProgress, type SessionKeyInput } from "../../src/trial/cache.ts";
+import { cacheStale, dirTreeSha256, envValuesHash, judgeKey, newProgress, recordSession, SESSION_KEY_PARTS, sessionKey, staleParts, writeProgress, type SessionKey, type SessionKeyInput } from "../../src/trial/cache.ts";
 import { removeTree } from "../../src/trial/cleanup.ts";
 import { copyToSink, receiptsSink, volatilePathProblem } from "../../src/trial/durable.ts";
 import { ONBOARDING_MARKERS, seedStateRoot } from "../../src/trial/state-root.ts";
@@ -37,9 +37,11 @@ describe("session cache key", () => {
     expect(stop.fix).toContain("--repair");
   });
 
-  // Value: protects=the judge is out of the agent session's key and has a key of its own, so a new judge model, rubric or judge code changes only the judgment's key and never an agent session's; fails_when=the session key gains a judge part again, or a judge change leaves the judgment key unchanged; why_new=the Captain's brief for GEVA-563 (a judge change forced agent reruns); seam=SESSION_KEY_PARTS, judgeKey; no_claim=the resume loop's re-judging, which tests/adapters/run-host.test.ts covers
+  // Value: protects=the judge is out of the agent session's key and has a key of its own, so a new judge model, rubric or judge code changes only the judgment's key and never an agent session's; fails_when=the session key gains a judge part again, a journal written before the change (its key still holding judge_model) reads as stale, or a judge change leaves the judgment key unchanged; why_new=the Captain's brief for GEVA-563 (a judge change forced agent reruns); seam=SESSION_KEY_PARTS, judgeKey; no_claim=the resume loop's re-judging, which tests/adapters/run-host.test.ts covers
   test("the session key has no judge part, and a judgment's key sees the judge model, the rubric and the judge's code", () => {
     expect(SESSION_KEY_PARTS.some((p) => p.includes("judge"))).toBe(false);
+    const session = sessionKey(input());
+    expect(staleParts({ sha256: "0".repeat(64), parts: { ...session.parts, judge_model: "j".repeat(64) } } as SessionKey, session)).toEqual([]);
     const judge = { model: "gpt-6.1-sol", rubric: "The answer greets the user.", code: "c".repeat(64) };
     const key = judgeKey(judge);
     expect(judgeKey({ code: judge.code, rubric: judge.rubric, model: judge.model })).toBe(key);
@@ -72,6 +74,7 @@ describe("session cache key", () => {
     writeFileSync(join(dir, "empty", "tasks.ext.json"), "{}");
     const nested = dirTreeSha256(dir, skip);
     expect(nested).not.toBe(withLink);
+    expect(dirTreeSha256(dir, new Set([...skip, "empty/tasks.ext.json"]))).toBe(withLink);
     writeFileSync(join(dir, "a.sh"), "echo b\n");
     expect(dirTreeSha256(dir, skip)).not.toBe(nested);
   });
