@@ -12,6 +12,7 @@ import { claudeEnv, QUIET } from "../h2h/sessions/run.ts";
 import { endOf, gapOf, retries, withRefusalFallback } from "../h2h/sessions/session.ts";
 import { hasDone } from "../h2h/sessions/turns.ts";
 import { events } from "../h2h/sessions/exposure.ts";
+import { expandCommand } from "./exposure.ts";
 import { csoFail, type CsoPrereg } from "./prereg.ts";
 import type { CsoArm, CsoModel, CsoStage, Exposure, HelperRecords, SessionEnd, SessionRecord } from "./types.ts";
 
@@ -127,8 +128,8 @@ function shellPaths(cmd: string): string[] {
 }
 
 /** Repository-relative paths the session opened or listed through any tool, in first-seen order: Read, Grep, Glob, LS
- *  and NotebookRead paths, the helper's read argument, and the path words of shell reads. Absolute paths outside repoDir
- *  are kept as they are. */
+ *  and NotebookRead paths, the helper's read argument (every one in a command, through shell variables as exposure.ts
+ *  expands them), and the path words of shell reads. Absolute paths outside repoDir are kept as they are. */
 export function openedPaths(records: readonly Rec[], repoDir: string): string[] {
   const seen = new Set<string>();
   const add = (raw: unknown) => {
@@ -145,8 +146,8 @@ export function openedPaths(records: readonly Rec[], repoDir: string): string[] 
     if (["Read", "NotebookRead"].includes(e.name!)) add(i.file_path ?? i.notebook_path);
     else if (["Grep", "Glob", "LS"].includes(e.name!)) add(i.path ?? ".");
     else if (e.name === "Bash" && typeof i.command === "string") {
-      const h = /gstack-cso-launcher(?:\.exe)?\s+(read|history)\s+\S+\s+(\S+)/.exec(i.command);
-      if (h) add(h[2]!.replace(QUOTED, ""));
+      const reads = [...expandCommand(i.command).matchAll(/gstack-cso-launcher(?:\.exe)?['"]?\s+(read|history)\s+\S+\s+(\S+)/g)];
+      if (reads.length) for (const h of reads) add(h[2]!.replace(QUOTED, ""));
       else for (const p of shellPaths(i.command)) add(p);
     }
   }

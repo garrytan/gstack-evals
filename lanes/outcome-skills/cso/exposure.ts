@@ -11,6 +11,7 @@
 // (`R=<run>; L=<launcher>; $L inspect $R`), and may hold several calls. Each command is read with the variables it assigns
 // expanded, its own assignments dropped, and every launcher call in it counted. A binding ends with its command, since each
 // Bash call starts a fresh shell. When one command's output holds several helper objects, the last one that starts a line is read.
+// A start whose JSON the model cut short (Opus piped it through head -100) still names its run by its "runId" line.
 import { createHash } from "node:crypto";
 import { events, type Ev } from "../h2h/sessions/exposure.ts";
 import type { Exposure, HelperRecords } from "./types.ts";
@@ -19,6 +20,7 @@ type Rec = Record<string, any>;
 export const LAUNCHER = /gstack-cso-launcher(?:\.exe)?['"]?\s+([a-z][a-z0-9-]*)((?:\s+[^\s;&|]+)*)/;
 const SHELL_VAR = /(?<=^|[\s;&|(])([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|()]*)|\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/g;
 export const RUN_ID = /\b\d{13}-[0-9a-f]{16}\b/;
+const START_RUN_ID = /"runId"\s*:\s*"(\d{13}-[0-9a-f]{16})"/;
 export const HANDLE = (pathId: string): string => "@cso-path//" + pathId;
 /** The pinned helper's path id for one tree-relative path (contracts.ts snapshotPathId): the first 32 hex of the sha256 of
  *  its canonical { kind: "cso-path-v3", path }. It hashes only the relative path, so the unit's tree resolves it. */
@@ -108,8 +110,13 @@ export function startScope(args: readonly string[], out: Rec | null): string {
 export function csoExposure(records: readonly Rec[], tree: readonly string[] = []): { exposure: Exposure; helper: HelperRecords } {
   const evs = events(records as Rec[]);
   const calls = helperCalls(evs);
-  const start = calls.find((c) => c.op === "start" && !c.error && RUN_ID.test(String(helperJson(c.out)?.runId ?? "")));
-  const run = start ? String(helperJson(start.out)!.runId) : null;
+  const runOf = (c: HelperCall): string | null => {
+    const j = helperJson(c.out);
+    const v = j ? String(j.runId ?? "") : (START_RUN_ID.exec(c.out)?.[1] ?? "");
+    return RUN_ID.test(v) ? v : null;
+  };
+  const start = calls.find((c) => c.op === "start" && !c.error && runOf(c) !== null);
+  const run = start ? runOf(start) : null;
   const after = (c: HelperCall) => start !== undefined && c.at > start.at && c.args[0] === run;
   const used = calls.some((c) => after(c) && (c.op === "inspect" || c.op === "read"));
   const finish = calls.filter((c) => after(c) && c.op === "finish" && !c.error).at(-1);
