@@ -17,12 +17,12 @@ const PROBE = 'echo "profile=${PROFILE_RAN:-no}"; echo "bun=$(command -v bun || 
 
 /** One Codex session whose model runs PROBE in its default shell, then asks for a login shell directly and from Code Mode.
  *  HOME's .profile resets PATH the way a task image's /etc/profile does; bun sits on PATH's tail as /opt/laneb/bin does. */
-async function probe(settings: CodexOptions["settings"]) {
+async function probe(settings: CodexOptions["settings"], cm = "const r = await tools.exec_command({ cmd: 'echo cm', login: true });\ntext(JSON.stringify(r));") {
   let seen = new Map<string, string>();
   const script: ResponsesScript = ({ outputs }) => {
     if (!outputs.has("call_env")) return [{ type: "shell", id: "call_env", cmd: PROBE }];
     if (!outputs.has("call_login")) return [{ type: "call", id: "call_login", name: "exec_command", args: { cmd: PROBE, login: true } }];
-    if (!outputs.has("call_cm")) return [{ type: "code", id: "call_cm", js: "const r = await tools.exec_command({ cmd: 'echo cm', login: true });\ntext(JSON.stringify(r));" }];
+    if (!outputs.has("call_cm")) return [{ type: "code", id: "call_cm", js: cm }];
     seen = new Map(outputs);
     return [{ type: "message", text: "FINAL: done." }];
   };
@@ -63,5 +63,18 @@ describe.skipIf(!HAS_CODEX_CLI)("part R's shell on Codex (pre-run change 3)", ()
     const before = await probe({ ...ARM_SETTINGS });
     expect(before.seen.get("call_env")).toContain("profile=yes\nbun=none\n");
     expect(detect(before.out).login_refused).toBe(0);
+  }, 300_000);
+
+  // Value: protects=login_refused counts refusals, not tool outputs, so a Code Mode exec that asks for a login shell twice and
+  //   prints both errors counts 2; fails_when=the table counts outputs that hold the refusal text, or one refusal's own output
+  //   holds the text twice; why_new=the review of #410, which found two refusals in one exec counted as 1.
+  test("two login-shell refusals inside one Code Mode exec count as two", async () => {
+    const twice = ["a", "b"].map((k) => `try { text(JSON.stringify(await tools.exec_command({ cmd: 'echo ${k}', login: true }))); } catch (e) { text(String(e)); }`).join("\n");
+    const r = await probe(codexOptions(true).settings, twice);
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    const count = (s: string | undefined) => (s ?? "").split(LOGIN_REFUSED).length - 1;
+    expect(count(r.seen.get("call_login"))).toBe(1);
+    expect(count(r.seen.get("call_cm"))).toBe(2);
+    expect(detect(r.out).login_refused).toBe(3);
   }, 300_000);
 });

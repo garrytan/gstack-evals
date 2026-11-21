@@ -172,7 +172,7 @@ export function detect(ev: string, skills: Record<DetectSkill, SkillLines> = rea
   }
   const steps_arrived = outputs.some((o) => o.text.includes(PROVE_IT.stepLine));
   const guard = { denies: outputs.filter((o) => o.text.includes(CAREFUL_DENY)).length, codex_rejects: outputs.filter((o) => CODEX_REJECT.test(o.text)).length };
-  return { root, threads, first_call, loads, steps_arrived, named_in_text, line_delivered, guard, login_refused: outputs.filter((o) => o.text.includes(LOGIN_REFUSED)).length, audit: { calls: auditCalls } };
+  return { root, threads, first_call, loads, steps_arrived, named_in_text, line_delivered, guard, login_refused: outputs.reduce((n, o) => n + o.text.split(LOGIN_REFUSED).length - 1, 0), audit: { calls: auditCalls } };
 }
 
 /** Where the session's own hook log put prove-it, from the first line it wrote for the root thread (the task's prompt;
