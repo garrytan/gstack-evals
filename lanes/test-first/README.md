@@ -17,6 +17,7 @@ Everything here is reachable as `gstack-evals b2 <command>` (or `bun lanes/test-
 | `guard <work> --counter-usd <usd> --counter-as-of <time>` | The launch guard: the item's cap, the $1,860 all-in stop with this thread's counter, and the run's order (pilot done, Sol's image check, the look). |
 | `prepare`, `host-up`, `launch`, `attach`, `relaunch`, `rerun`, `recover`, `host-down` | L1's host and part machinery (quick/laneb/l1) under B2's profile. host-up, launch and relaunch run the guard first. |
 | `images --out <dir>`, `images --record <file> <dir>...` | Builds every run task's image with Codex added and checks the Codex version inside, keyless; folds the rows into the record the guard reads. |
+| `smoke.sh` | `WORK=<prepared dir> PART=<part> [TASK] [ARM] lanes/test-first/smoke.sh`: one session of a prepared part end to end and keyless, in the real task image through Harbor, the metering proxy and a scratch ledger, against a fake upstream (fake-responses.ts for Sol), then B2's table. |
 | `table <config.json> <out.jsonl>` | One row per session from pulled parts, both hosts. |
 | `look <table.jsonl> --out <record>` | The interim look at half the tasks. It prints only z, the bound and the decision. |
 | `report <table.jsonl> [--stage end\|look] [--item b2-pilot]` | The reading and decision table, or the pilot's PASS and FAIL lines. |
