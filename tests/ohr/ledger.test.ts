@@ -59,6 +59,7 @@ describe("the ledger split", () => {
   });
 
   test("a part under 1.35 times central is refused, and so is a duplicate item", () => {
+    // pregate-literal: cap=38 a refused test input under ohr-audit's 1.35 times central, not the repair item's cap
     expect(splitProblems(SPLIT.map((p) => (p.item === "ohr-audit" ? { ...p, cap: 38 } : p))).join()).toContain("ohr-audit's cap $38 is under 1.35 times");
     expect(splitProblems(SPLIT.map((p) => (p.item === "ohr-audit" ? { ...p, cap: 39 } : p))).join()).toContain("ohr-audit's cap $39 does not hold 1.35 times central plus its stated allowance");
     expect(splitProblems([...SPLIT, SPLIT[0]!]).join()).toContain("item ohr-author appears twice");
@@ -88,6 +89,7 @@ describe("the ledger split", () => {
   });
 
   test("change 3's split under the two-attempt reservation stops stage 1 before its first round, and the repair cannot start one", () => {
+    // pregate-literal: cap=83 change 3's split, which this test replays on purpose
     const c3: Record<string, number> = { "ohr-s1-arms": 150, "ohr-s1-sim": 9, "ohr-s1-labels": 7, "ohr-s1-repair-arms": 48, "ohr-s1-repair-sim": 3, "ohr-s1-repair-labels": 3, "ohr-s2p-arms": 83, "ohr-s2p-sim": 32, "ohr-s2p-labels": 24 };
     const split = SPLIT.map((p) => ({ ...p, cap: c3[p.item] ?? p.cap }));
     const read = (name: string) => walkSchedule(SCHEDULES.find((s) => s.name === name)!, 1, split, 2);

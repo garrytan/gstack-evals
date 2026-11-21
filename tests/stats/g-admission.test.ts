@@ -136,8 +136,10 @@ describe("G admission, plan v3 section 6 and the prereg's section 6", () => {
   test("item 4, rig: one gap per arm passes; two, or an unexplained arm stop, fail; none's gaps fail both", () => {
     const one = edit(slice(), (t, i) => t.arm === PER && i === 23, { status: "gap", mutation: null });
     expect(admitG(input(one)).skills["plan-eng-review"].items[3]!.pass).toBe(true);
+    // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
     const two = edit(slice(), (t, i) => t.arm === PER && i >= 22, { status: "gap", mutation: null });
     expect(admitG(input(two)).skills["plan-eng-review"].route).toBe("FIX-METHOD (rig)");
+    // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
     const none2 = edit(slice(), (t, i) => t.arm === NONE && i >= 22, { status: "gap", mutation: null });
     const b = admitG(input(none2));
     expect([b.skills["plan-eng-review"].failed, b.skills.autoplan.failed]).toEqual([4, 4]);
@@ -183,9 +185,11 @@ describe("G admission, plan v3 section 6 and the prereg's section 6", () => {
     const base = admitG(input(slice()));
     const a = admitG(input(unread));
     expect(a.skills["plan-eng-review"].t1_outside_plan).toEqual({ wrote: 3, read: 24 });
+    // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
     expect(a.skills.autoplan.t1_outside_plan).toEqual({ wrote: 0, read: 22 });
     expect(base.skills["plan-eng-review"].t1_outside_plan).toEqual({ wrote: 0, read: 0 });
     expect(a.skills["plan-eng-review"].items[1]!.reading).toMatch(/^8 of 8 sampled told trials exposed .*; report only: 3 of 24 told trials wrote outside PLAN\.md in t1$/);
+    // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
     expect(a.skills.autoplan.items[1]!.reading).toMatch(/; report only: 0 of 22 told trials wrote outside PLAN\.md in t1 \(2 not read\)$/);
     for (const s of ["plan-eng-review", "autoplan"] as const) {
       expect(a.skills[s].items.map((x) => x.pass)).toEqual(base.skills[s].items.map((x) => x.pass));
@@ -211,6 +215,7 @@ describe("t1 writes outside PLAN.md, from the phase-tagged records (report only,
     const trials = slice().map((t) => (t.arm === PER && records[t.task + "/" + t.trial] ? { ...t, t1_outside_plan: t1OutsidePlan(records[t.task + "/" + t.trial]!) } : t));
     const a = admitG(input(trials));
     expect(a.skills["plan-eng-review"].t1_outside_plan).toEqual({ wrote: 1, read: 2 });
+    // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
     expect(a.skills["plan-eng-review"].items[1]!.reading).toMatch(/; report only: 1 of 2 told trials wrote outside PLAN\.md in t1 \(22 not read\)$/);
     expect(a.skills.autoplan.t1_outside_plan).toEqual({ wrote: 0, read: 0 });
   });

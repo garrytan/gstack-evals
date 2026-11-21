@@ -43,7 +43,7 @@ import { predicted, readProjection, UNPAIRED_KINDS, type Counts, type KN, type O
 import { placeSets, setRecord, type Member, type Sets } from "./sets.ts";
 
 /** More drafts than any run can make inside its cap: $409 buys about 4,400 second twins at the first attempt's $0.093. */
-export const MAX_DRAFTS = 10000;
+const MAX_DRAFTS = 10000;
 /** A slot's first-twin and unpaired drafts stay below this, so its draw numbers never reach the next slot's. */
 export const SLOT_DRAWS = 999;
 

@@ -78,6 +78,7 @@ describe("frozen values match the posts", () => {
 describe("the second attempt's frozen values (its sections 3 to 7)", () => {
   test("the prereg path moves to the second attempt and the first attempt's stays named", () => {
     expect(PREREG).toBe("wiki/plans/2026-11-18-geva-555-office-hours-rewrite-attempt-2-prereg/README.md");
+    // pregate-literal: PREREG="wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg/README.md" the first attempt's path, which the lane keeps as PREREG_1
     expect(PREREG_1).toBe("wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg/README.md");
   });
   test("section 7's item caps", () => {

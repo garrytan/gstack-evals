@@ -319,6 +319,7 @@ describe("R3 screen and admission", () => {
     expect(r.code).toBe(0);
     expect(r.out).toContain(`r3a-screen: ${N} screen trials, 10 pilot trials, settled $0.00 of $150, open reserves 0`);
     expect(r.out).toContain(`admission: 35 of ${N} graded in-band tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials`);
+    // pregate-literal: cap=47 this test's own number, not the office-hours rewrite ledger's cap
     expect(r.out).toContain("R3b start: 35 tasks; measured cost per trial none $0.50, told $0.50; projection r3b-opus $105, r3b-particle $47");
     expect(readFileSync(join(r.w, "admitted.txt"), "utf8").trim().split("\n")).toHaveLength(35);
     const rec = JSON.parse(readFileSync(join(r.w, "record.json"), "utf8"));

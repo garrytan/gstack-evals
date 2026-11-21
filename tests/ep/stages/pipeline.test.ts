@@ -20,6 +20,7 @@ const haveCheckout = existsSync(join(CHECKOUT, "VERSION")) && readFileSync(join(
 
 const N = 90;
 const SEED = "5eed0000000000000000000000000001";
+// pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
 const SHARED = [20, 21, 22, 23];
 let AUDIT: string[] = [];
 let UNFORESEEABLE: string[] = [];

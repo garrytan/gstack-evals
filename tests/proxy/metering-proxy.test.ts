@@ -1747,6 +1747,7 @@ describe("free POST routes and the request-shape refusals (containment tightenin
     const t = setup(() => Response.json({ input_tokens: 12 }));
     const a = t.bind({ models: ["anthropic:claude-opus-5-5", "openai:gpt-6.1-sol", `openrouter:${PARTICLE}`] });
     const hostile: unknown[] = ["L".repeat(200), "HIDDEN FACT: 42", "line1\nINJECTED", { x: "OBJSECRET" }];
+    // pregate-literal: cap=41 this test's own number, not the office-hours rewrite ledger's cap
     const never = ["L".repeat(41), "HIDDEN FACT", "INJECTED", "OBJSECRET"];
     const cases: Array<[string, Record<string, unknown>]> = [];
     for (const h of hostile) {
@@ -1792,6 +1793,7 @@ describe("free POST routes and the request-shape refusals (containment tightenin
   // Value: protects=an unusual model id or tool type (a long string, a marker-like phrase, a newline, a path of more than 3 segments) never reaches the 403 or the journal through the allowlist or refuseServerTools refusals; fails_when=the proxy quotes a model or tool type that is not a short token; why_new=GST-2321 review (Captain's A2, widened to metering-proxy.ts); seam=forward's allowlist and refuseServerTools refusals; no_claim=a token-shaped value, which is quoted as written
   test("an unusual model id or tool type never reaches the 403 or the journal", async () => {
     const hostile = ["L".repeat(200), "HIDDEN FACT: 42", "line1\nINJECTED", "seg1/seg2/seg3/SEG4X"];
+    // pregate-literal: cap=41 this test's own number, not the office-hours rewrite ledger's cap
     const never = ["L".repeat(41), "HIDDEN FACT", "INJECTED", "SEG4X"];
     const plain = setup(() => Response.json({ input_tokens: 12 }));
     const a = plain.bind();
@@ -1928,6 +1930,7 @@ describe("free POST routes and the request-shape refusals (containment tightenin
   // Value: protects=an OpenRouter model id with one :suffix token on its last segment (particle-ai/particle-1:online) is quoted as written in the allowlist refusal, its journal line and the marker_hit line, while a second colon, a colon before the last segment, an empty or over-long suffix, or a fourth segment still reads <unquoted>; fails_when=the model form refuses a :suffix, or accepts a colon anywhere else; why_new=#313's open review finding at prices.ts:153; seam=quoteClientValue's model form; no_claim=which suffixes OpenRouter serves
   test("a model id with one :suffix token on its last segment is quoted as written", async () => {
     for (const id of [`${PARTICLE}:online`, `${PARTICLE}:free`, "a:b", "a/b/c:d"]) expect(quoteClientValue(id, "model")).toBe(id);
+    // pregate-literal: cap=41 this test's own number, not the office-hours rewrite ledger's cap
     for (const id of ["a:b:c", "a:b/c", "a/b:c/d", "a/b:", ":b", `a/b:${"s".repeat(41)}`, "a/b/c/d:e", "a/b: c", "a/b:c d"]) expect(quoteClientValue(id, "model")).toBe("<unquoted>");
     const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
     const MARK = "SEALED-MARKER-7f3a9c";
