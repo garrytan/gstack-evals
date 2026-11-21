@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { B1E_CASES, B1E_FILES, b1eApprove, b1eCap, b1eCaseProblems, b1eGuard, b1ePlan, b1eStats, b1eTotals, checkB1eRows, committedRoutes, counts, descriptionOf, inventoryDiff, listingFacts, loadB1eCaptured, mainReport, mdd, pairPower, pilotCells, pilotCheck, powerLines, reserveList, skillFile, skillProblems, supplyCells, taskList, verdictOf, VERDICTS, type B1eRow } from "../../lanes/delivery-route/b1e.ts";
+import { B1E_CASES, B1E_FILES, b1eApprove, b1eCap, b1eCaseProblems, b1eDone, b1eGuard, b1ePlan, b1eStats, b1eTotals, checkB1eRows, committedRoutes, counts, descriptionOf, inventoryDiff, listingFacts, loadB1eCaptured, mainReport, mdd, pairPower, pilotCells, pilotCheck, powerLines, reserveList, skillFile, skillProblems, supplyCells, taskList, verdictOf, VERDICTS, type B1eRow } from "../../lanes/delivery-route/b1e.ts";
 import { B1E, B1E_ARM_NAMES, B1E_CAPS_USD, B1E_PILOT, DESCRIPTIONS, EXT_ARMS, GSTACK_ARMS, GSTACK_STABLE, RESERVE, SUPPLY, TASK_SETS } from "../../lanes/delivery-route/b1e-pins.ts";
 import { twoArmPower, routeCounts } from "../../lanes/delivery-route/b1d.ts";
 import { B1D } from "../../lanes/delivery-route/b1d-pins.ts";
@@ -158,6 +158,26 @@ describe("plan, caps and the launch guard", () => {
     expect(over.ok).toBe(false);
     expect(over.why.some((w) => w.includes("passes the $" + B1E.stopUsd + ".00 stop"))).toBe(true);
     expect(() => b1eApprove(join(dir, "x.jsonl"), "b1e-main", 300, "test")).toThrow("refused");
+  });
+  test("a relaunch past the all-in stop runs with OVERSHOOT; a fresh launch there is refused", () => {
+    const part = b1ePlan("b1e-pilot").parts[0]!.name, re = b1eGuard("b1e-pilot", {}, {}, B1E.stopUsd, part), fresh = b1eGuard("b1e-pilot", {}, {}, B1E.stopUsd);
+    expect(re.ok).toBe(true);
+    expect(re.lines[0]!.startsWith("B1E_LAUNCH OVERSHOOT b1e-pilot")).toBe(true);
+    expect(re.lines[1]).toContain("relaunch of " + part + " runs anyway");
+    expect(fresh.ok).toBe(false);
+    expect(fresh.lines[0]!.startsWith("B1E_LAUNCH REFUSE b1e-pilot")).toBe(true);
+    expect(fresh.why.some((w) => w.includes("passes the $" + B1E.stopUsd + ".00 stop"))).toBe(true);
+  });
+  test("done refuses open reservations and a second done, and otherwise writes the done note", () => {
+    const led = join(mkdtempSync(join(tmpdir(), "b1e-done-")), "pilot.jsonl");
+    b1eApprove(led, "b1e-pilot", 50, "test");
+    const add = (row: object) => writeFileSync(led, readFileSync(led, "utf8") + JSON.stringify({ ts: "t", item: "b1e-pilot", ...row }) + "\n");
+    add({ kind: "reserve", id: "s1", usd_micros: 1 });
+    expect(() => b1eDone(led, "b1e-pilot")).toThrow("still holds 1 open reservations");
+    add({ kind: "settle", id: "s1", usd_micros: 1 });
+    b1eDone(led, "b1e-pilot");
+    expect(b1eTotals(readRows(led), "b1e-pilot").done).toBe(true);
+    expect(() => b1eDone(led, "b1e-pilot")).toThrow("marked done already");
   });
 });
 
