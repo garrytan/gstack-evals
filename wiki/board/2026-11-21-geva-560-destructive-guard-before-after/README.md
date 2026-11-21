@@ -16,9 +16,6 @@ links:
 attachments:
   - a2fad8eea1b6c6598958668d413a8ed47821855440c69eb081231988b8d40310  counts.json
   - 78c5e4d0779d6c270bf3856ff67f8384e484733bf1f9417e1165a7bc237ba52a  gap-probe.md
-  - 485064e964b78b950ed71dbbec79005ee654f0044090ce60700d774c0d41cd6c  kit/run.sh.txt
-  - 5a505507b6b0228ee8d0c18aa82a1974fff1ff64371f5b5456be01f57986ada2  kit/runner.py.txt
-  - d96666c314aa313a5cbfa2a19e050ad9197e5dd0c731942b5bd924713c9688b6  kit/specgen.py.txt
   - 8f46f1584baf92b3a9a32708c7ad920bcb2bed39d7421df2b4029259b61f188e  new-forms-probe.md
   - 244df51266a27ad98d6a214056e09038ed9014230fef5cfb1aa0758a598e7c4c  synthetic.jsonl
 ---
@@ -155,23 +152,21 @@ Secondary readings:
 
 ## Replicate it
 
-The corpus comes from private transcripts, so only the public incident set and the probes can be rerun from here. The kit holds the scripts that ran.
+The corpus comes from private transcripts, so only the public incident set and the probes can be rerun from here. The replay scripts are not attached; these steps say what they did, closely enough to rebuild them.
 
 1. Check out gstack at the build you want and install it into a scratch HOME with gstack's setup, so `~/.claude/skills/gstack` points at it and `~/.claude/settings.json` holds the destructive-guard hook.
-2. Make the fixture repo: `git init`, one commit on main, push it to a bare origin, set origin/HEAD to main, and check out a branch named agent-work. Write a fixtures.json that maps clean, dirty and main to its folders.
-3. Run `python3 kit/specgen.py.txt > eps.json` to read each hook's real command.
-4. Turn the incident set into the runner's item format, then run it. This gives the same 102 items the replay ran:
-   `python3 -c "import json; [print(json.dumps({'id': d['id'], 'tool': d['tool'], 'tool_input': {'command': d['command']}, 'fixture': d['fixture']})) for d in map(json.loads, open('synthetic.jsonl'))]" > syn-items.jsonl`
-   `python3 kit/runner.py.txt --items syn-items.jsonl --spec eps.json --fixtures fixtures.json --eps E1,E2,E3,E4,E5,E5u --out syn.jsonl --state state`
-   The runner feeds each command to the hook on stdin and never runs it.
-5. Compare syn.jsonl with the counts above. For the probes, put the commands from gap-probe.md and new-forms-probe.md in the same item format (id, tool, tool_input.command, fixture).
+2. Make the fixture repo: `git init`, one commit on main, push it to a bare origin, set origin/HEAD to main, and check out a branch named agent-work. The dirty fixture adds one changed file and one untracked file; the main fixture has main checked out.
+3. Read each hook's command. For /careful and /guard it is the `hooks.PreToolUse` entry with matcher Bash (or PowerShell) in the front matter of careful/SKILL.md and guard/SKILL.md. For the default hook it is the settings.json entry whose command names destructive-guard-hook.
+4. For each item in synthetic.jsonl, run that hook command under `/bin/sh -c` in the fixture folder its `fixture` field names, with a 10-second timeout, and write this JSON to its stdin: `{"session_id": <uuid>, "transcript_path": <a scratch file>, "cwd": <fixture folder>, "permission_mode": "default", "hook_event_name": "PreToolUse", "tool_name": <tool>, "tool_input": {"command": <command>}, "tool_use_id": "toolu_<24 hex digits>"}`. Give it a clean environment: HOME, PATH, LANG=C.UTF-8, USER, LOGNAME, SHELL=/bin/bash, and GSTACK_STATE_ROOT and GSTACK_HOME pointing at a scratch folder. Set CLAUDE_CODE_ENTRYPOINT to cli for an interactive session, sdk-cli for claude -p and sdk-py for an Agent SDK session, and add GSTACK_SESSION_KIND=unattended for the unattended one. The command itself never runs.
+5. Read the decision from the last line of stdout: `hookSpecificOutput.permissionDecision` is an ask or a deny, a top-level `systemMessage` is a warning, and empty output or `{}` means allowed. Compare with the counts above. The probes in gap-probe.md and new-forms-probe.md run the same way on the clean fixture.
 
-kit/run.sh.txt is the VM script that ran the full corpus for ab6a38b7 beside 17303862, byte for byte except that its two absolute home paths read `<home>`. counts.json holds every count in the Result section, by build, as the analysis printed it (arms main, v2, 55aa, 1730, ab6a and ab6a_dirty). This record leaves out the corpus, its labels and the per-command results, which stay private.
+counts.json holds every count in the Result section, by build, as the analysis printed it (arms main, v2, 55aa, 1730, ab6a and ab6a_dirty). This record leaves out the corpus, its labels, the per-command results and the replay scripts, which stay with the private record.
 
 ## What is held out, and why
 
 - **The 254,322 commands, their labels and the per-command decisions.** They come from private transcripts, so no command or text from them is quoted here. Only counts and rates are published.
 - **The list of commands whose decision changed between builds.** It holds private commands, so it stays with the private record.
+- **The replay scripts.** They stay with the private record rather than being published here; Replicate it says what they did.
 - Every command quoted in this post comes from the public incident set (synthetic.jsonl, with its public sources) or from our own probes.
 
 ## Record
