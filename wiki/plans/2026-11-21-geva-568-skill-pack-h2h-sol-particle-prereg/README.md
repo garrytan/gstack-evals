@@ -327,7 +327,9 @@ One row per arm. Budget is the arm's counted central spend, re-priced by the pac
 
 ## Interim look
 
-Planned paid spend: $770, Part S's counted run, the only one planned above 500 dollars paid.
+Planned paid spend: $770
+
+That is Part S's counted run, the only counted run planned above the practice's threshold.
 
 At: half of Part S's units in run order (order_seed), once: the first 50 O and 30 B2 units, with all of each unit's arms. Parts P and L take no efficacy look.
 
