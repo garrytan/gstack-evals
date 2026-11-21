@@ -160,8 +160,11 @@ The corpus comes from private transcripts, so only the public incident set and t
 1. Check out gstack at the build you want and install it into a scratch HOME with gstack's setup, so `~/.claude/skills/gstack` points at it and `~/.claude/settings.json` holds the destructive-guard hook.
 2. Make the fixture repo: `git init`, one commit on main, push it to a bare origin, set origin/HEAD to main, and check out a branch named agent-work. Write a fixtures.json that maps clean, dirty and main to its folders.
 3. Run `python3 kit/specgen.py.txt > eps.json` to read each hook's real command.
-4. Run `python3 kit/runner.py.txt --items synthetic.jsonl --spec eps.json --fixtures fixtures.json --eps E1,E2,E3,E4,E5,E5u --out syn.jsonl --state state`. It feeds each command to the hook on stdin and never runs it.
-5. Compare syn.jsonl with the counts above. For the probes, put the commands from gap-probe.md and new-forms-probe.md in the same item format.
+4. Turn the incident set into the runner's item format, then run it. This gives the same 102 items the replay ran:
+   `python3 -c "import json; [print(json.dumps({'id': d['id'], 'tool': d['tool'], 'tool_input': {'command': d['command']}, 'fixture': d['fixture']})) for d in map(json.loads, open('synthetic.jsonl'))]" > syn-items.jsonl`
+   `python3 kit/runner.py.txt --items syn-items.jsonl --spec eps.json --fixtures fixtures.json --eps E1,E2,E3,E4,E5,E5u --out syn.jsonl --state state`
+   The runner feeds each command to the hook on stdin and never runs it.
+5. Compare syn.jsonl with the counts above. For the probes, put the commands from gap-probe.md and new-forms-probe.md in the same item format (id, tool, tool_input.command, fixture).
 
 kit/run.sh.txt is the VM script that ran the full corpus for ab6a38b7 beside 17303862, byte for byte except that its two absolute home paths read `<home>`. counts.json holds every count in the Result section, by build, as the analysis printed it (arms main, v2, 55aa, 1730, ab6a and ab6a_dirty). This record leaves out the corpus, its labels and the per-command results, which stay private.
 
