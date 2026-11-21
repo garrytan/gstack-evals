@@ -92,8 +92,16 @@ describe("treeRecord", () => {
       tree: TREE,
       os: "Linux",
       files: ["quick/x/s.test.ts", "tests/a.test.ts", "tests/b.test.ts", CHECK + "bun run typecheck", CHECK + "bun run errors:check"],
+      skipped_files: ["quick/x/s.test.ts"],
       tests: 2,
     });
+  });
+
+  test("lists a file as skipped only when every case in it skipped, nested describes included", () => {
+    const nested = JUNIT.replace('<testcase name="three" />', '<testcase name="three"><skipped /></testcase>');
+    expect(treeRecord(env(), { junit: nested, checks: "", tree: TREE }).skipped_files).toEqual(["quick/x/s.test.ts", "tests/a.test.ts"]);
+    const none = JUNIT.replace('<testcase name="only skipped"><skipped /></testcase>', '<testcase name="only skipped" />');
+    expect(treeRecord(env(), { junit: none, checks: "", tree: TREE }).skipped_files).toEqual([]);
   });
 
   test("takes the head from GITHUB_SHA on a dispatch", () => {
