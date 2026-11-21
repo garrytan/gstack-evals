@@ -17,7 +17,7 @@
 //   A record that the command log touched any other way is hand-edited and never counts: a Write, Edit, MultiEdit or
 //   NotebookEdit call on it, a shell redirect into it, tee, sed -i, cp, mv, install, ln, dd or truncate onto it, a
 //   recursive copy, mv or rsync onto a folder above it (unless it came before the folder's first start call in the log
-//   and its Bash call returned before the record's created_at), or an interpreter's inline code that opens it for
+//   and its Bash call returned before the record's created_at, and the record was made during that start call), or an interpreter's inline code that opens it for
 //   writing (a target the code builds at run time counts every run.json the code names). Of the records that count, the latest
 //   updated_at wins. Exposure and the live gate check (gatePending) read this one record. The scan never follows a
 //   symlink, as the copy-out does not.
@@ -598,7 +598,7 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
             ? "no gstack-autoplan next or run call with --out " + folder + " and --plan " + PLAN + " in the session's command log"
             : start.plan !== PLAN
               ? "the first gstack-autoplan next or run call with --out " + folder + " and a --plan names " + start.plan + ", not " + PLAN
-              : log.writes.has(s) || log.trees.some((t) => s.startsWith(t.path + "/") && !(t.seq < start.seq && created > (log.spans.get(t.use)?.to ?? Infinity)))
+              : log.writes.has(s) || log.trees.some((t) => s.startsWith(t.path + "/") && !(t.seq < start.seq && created > (log.spans.get(t.use)?.to ?? Infinity) && within(start, created)))
                 ? "edited by hand in the session's command log"
                 : null;
     if (why) passed.push(s + ": " + why);

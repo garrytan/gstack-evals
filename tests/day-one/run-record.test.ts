@@ -552,6 +552,8 @@ describe("the shell forms the results review left open", () => {
       expect(findRun(roots, copiedIn).run).toBeNull();
       const after = txt([{ command: start, at: AT, done: DONE }, { command: copy, at: "2026-11-18T05:48:10.000Z", done: "2026-11-18T05:48:10.200Z" }]);
       expect(findRun(roots, after).run).toBeNull();
+      put(work, WORK, MAIN, pending(MAIN, { created_at: "2026-11-18T05:48:30.000Z" }));
+      expect(findRun(roots, sameCall).run).toBeNull();
       put(work, WORK, MAIN, pending(MAIN, { created_at: "2026-11-17T23:00:00.000Z" }));
       expect(findRun(roots, before).run).toBeNull();
       expect(findRun(roots, tx([{ command: copy }, { command: start }])).run).toBeNull();
