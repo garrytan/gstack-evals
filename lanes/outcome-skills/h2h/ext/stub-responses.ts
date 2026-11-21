@@ -58,6 +58,7 @@ export function next(body: any): Item | Item[] | "fail" | "bound" | null {
   if (script === "fail") return reply ? message("Fixed.\nDONE") : "fail";
   if (script === "bound") return reply ? message("Fixed.\nDONE") : "bound";
   if (script === "boundlate") return steps === 0 ? cell("true") : "bound";
+  if (script === "loop") return steps < Number(m?.[2] ?? 8) ? cell("sleep 1") : message("Fixed it.\n\nDONE");
   const arg = (m?.[2] ?? "").trim();
   if (script === "tdd" && !reply && steps < 3) {
     const [test, src] = arg.split("|");

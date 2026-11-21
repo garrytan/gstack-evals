@@ -106,7 +106,10 @@ describe("parts P and L on the Claude Code path", () => {
     expect(extHome("p-none", { homes, installs })).toMatchObject({ dir: null, home_rule: "none", base_arm: "none" });
     const l = join(W, "lhomes");
     put(join(l, "l-gstack"), { ".claude/CLAUDE.md": "md\n" });
-    writeFileSync(recordPath(join(l, "l-gstack")), JSON.stringify({ schema: "h2hx-arm-install.v1", home: "l-gstack", exit: 0, home_tree_sha256: homeTreeSha256(join(l, "l-gstack")) }));
+    const lrec = (sha: string) => JSON.stringify({ schema: "h2hx-arm-install.v1", home: "l-gstack", exit: 0, home_tree_sha256: homeTreeSha256(join(l, "l-gstack")), sources: [{ name: "gstack", repo: X.gstack.L.repo, sha, kind: "clone" }] });
+    writeFileSync(recordPath(join(l, "l-gstack")), lrec("0".repeat(40)));
+    expect(() => extHome("l-gstack-task", { lHomes: l })).toThrow(/^E_H2H_SESSION_INPUT .* installed gstack 0{40}, not the plan's pin /);
+    writeFileSync(recordPath(join(l, "l-gstack")), lrec(X.gstack.L.sha));
     expect(extHome("l-gstack-task", { lHomes: l })).toMatchObject({ dir: join(l, "l-gstack"), home_rule: "gstack", pin: "l-gstack" });
     expect(extHome("l-none", {})).toMatchObject({ dir: null, home_rule: "none" });
     expect(() => extHome("l-gstack-md", { lHomes: l })).toThrow(/^E_H2H_SESSION_INPUT arm l-gstack-md's home .* has no install record/);
@@ -239,7 +242,7 @@ describe("x-run's stage runner", () => {
   const lHomes = join(W, "runner-lhomes");
   for (const h of ["l-gstack", "l-gstack-md"]) {
     put(join(lHomes, h), { ".claude/CLAUDE.md": h + "\n" });
-    writeFileSync(recordPath(join(lHomes, h)), JSON.stringify({ schema: "h2hx-arm-install.v1", home: h, exit: 0, home_tree_sha256: homeTreeSha256(join(lHomes, h)) }));
+    writeFileSync(recordPath(join(lHomes, h)), JSON.stringify({ schema: "h2hx-arm-install.v1", home: h, exit: 0, home_tree_sha256: homeTreeSha256(join(lHomes, h)), sources: [{ name: "gstack", repo: X.gstack.L.repo, sha: X.gstack.L.sha, kind: "clone" }] }));
   }
   const env = { H2H_CONTROL: "http://127.0.0.1:9", H2H_PROXY: "http://127.0.0.1:9", H2H_UNITS: W, H2HX_L_HOMES: lHomes };
   type Plant = { cost?: (arm: string) => number; gap?: (arm: string) => string | null; stop?: LookStop; looks?: number[] };

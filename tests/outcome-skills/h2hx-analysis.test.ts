@@ -9,7 +9,7 @@ import { analyze } from "../../lanes/outcome-skills/h2h/analysis/analyze.ts";
 import { readRecords } from "../../lanes/outcome-skills/h2h/analysis/commands.ts";
 import type { PairedTest } from "../../lanes/outcome-skills/h2h/analysis/stats.ts";
 import { analyzeExt, crossRows, noHarm, reportExt, testsRecord, type ExtInput, type ExtScore, type ExtSession, type ExtTests } from "../../lanes/outcome-skills/h2h/ext/analysis.ts";
-import { absZ, boundAt, holmCrossings, interimLook, lookLines, obfBounds } from "../../lanes/outcome-skills/h2h/ext/look.ts";
+import { absZ, boundAt, holmCrossings, interimLook, lookHalf, lookLines, obfBounds } from "../../lanes/outcome-skills/h2h/ext/look.ts";
 import { EXT_PREREG_PATH, extArmsFor, readExtPrereg, type ExtArm, type Part } from "../../lanes/outcome-skills/h2h/ext/prereg.ts";
 import { readPrereg } from "../../lanes/outcome-skills/h2h/prereg.ts";
 import type { H2hArm, H2hScore, H2hSession, H2hUnit, UnitKind } from "../../lanes/outcome-skills/h2h/types.ts";
@@ -307,5 +307,35 @@ describe("h2hx part S interim look (section 11)", () => {
   test("a cell past 10% gaps at the look stops part S with no verdict, and a cap stop does too", () => {
     expect(interimLook(sData({ gaps: true }), { x, base }).stop).toBe("gaps");
     expect(interimLook(sData(), { x, base, capStop: true }).stop).toBe("cap");
+    const capped = sData();
+    const inHalf = lookHalf(capped.units, x);
+    const k = capped.scores.findIndex((s) => inHalf.has(s.unit));
+    capped.scores[k] = { ...capped.scores[k]!, gap: "CAP_STOP", outcome: null, verified: false };
+    expect(interimLook(capped, { x, base }).stop).toBe("cap");
+  });
+});
+
+describe("h2hx cap stop (section 14)", () => {
+  test("one CAP_STOP session anywhere in a part makes the whole part incomplete: no verdict, no section 10 row", () => {
+    const us = [...units("O", 100), ...units("B2", 60)];
+    const rand = seededRandom(7);
+    const plan: Plan = (u, arm, k) => ({ v: arm === "s-none" && u.class === "O" ? (rand() < 0.2 ? 1 : 0) : arm === "s-gstack" || arm === "s-gstack-line" ? (k % 10 ? 1 : 0) : (rand() < 0.88 ? 1 : 0), lines: arm === "s-gstack-line" ? 10 : 20 });
+    const clean = analyzeExt("S", records("S", us, plan), { x, base, withMdd: false });
+    expect(clean.cap_stop).toBe(false);
+    expect(clean.family.find((r) => r.class === "O" && r.other === "s-none")!.state).toBe("ahead");
+    const i = records("S", us, plan);
+    const hit = i.scores.findIndex((s) => s.unit === "B2-59" && s.arm === "s-tstack");
+    i.scores[hit] = { ...i.scores[hit]!, gap: "CAP_STOP", outcome: null, verified: false };
+    const a = analyzeExt("S", i, { x, base, withMdd: false });
+    expect(a.cap_stop).toBe(true);
+    expect(a.family.every((r) => r.state === "incomplete")).toBe(true);
+    expect(a.sentence.every((s) => s.reading === "incomplete")).toBe(true);
+    expect(a.rows).toEqual(["Part S incomplete: a session stopped at the cap, and the part is not retried"]);
+    const L = analyzeExt("L", records("L", units("O", 100), (_u, arm, k) => ({ v: gv(k), lines: arm === "l-gstack-md" ? 10 : 20 })), { x, base });
+    const li = records("L", units("O", 100), (_u, arm, k) => ({ v: gv(k), lines: arm === "l-gstack-md" ? 10 : 20 }));
+    li.scores[0] = { ...li.scores[0]!, gap: "CAP_STOP", outcome: null, verified: false };
+    const lc = analyzeExt("L", li, { x, base });
+    expect(crossRows({ L, S: clean }, x)).not.toEqual([]);
+    expect(crossRows({ L: lc, S: clean }, x)).toEqual([]);
   });
 });

@@ -21,10 +21,11 @@ const shuffle = <T>(a: T[], rand: () => number): T[] => {
   return a;
 };
 
-/** One part's stage: the units shuffled into run order, then each unit's arms shuffled, all from one
+/** One part's stage: the units, first put in their frozen draw order (kind, then draw position, then id) so the order a
+ *  units file lists them in never matters, shuffled into run order, then each unit's arms shuffled, all from one
  *  seededRandom(order_seed + 10 * part index + stage number) stream. A listed-twice unit, a B1 unit or a non-O unit in
  *  part L is refused. */
-export function planExtStage(part: Part, units: Pick<H2hUnit, "id" | "kind" | "entry">[], stage: Stage, x: ExtPrereg = readExtPrereg()): ExtPlan {
+export function planExtStage(part: Part, units: Pick<H2hUnit, "id" | "kind" | "entry" | "position">[], stage: Stage, x: ExtPrereg = readExtPrereg()): ExtPlan {
   if (!PARTS.includes(part)) h2hFail("E_H2HX_INPUT", "part " + part + " is not S, P or L");
   if (!Object.hasOwn(STAGE_N, stage)) h2hFail("E_H2HX_INPUT", "stage " + stage + " is not stage0, stage1 or stage2");
   const seen = new Set<string>();
@@ -33,7 +34,7 @@ export function planExtStage(part: Part, units: Pick<H2hUnit, "id" | "kind" | "e
     seen.add(u.id);
   }
   const rand = seededRandom(x.order_seed + 10 * PARTS.indexOf(part) + STAGE_N[stage]);
-  const order = shuffle([...units], rand);
+  const order = shuffle([...units].sort((a, b) => a.kind.localeCompare(b.kind) || a.position - b.position || a.id.localeCompare(b.id)), rand);
   const sessions: ExtPlanned[] = [];
   for (const u of order) {
     for (const arm of shuffle(extArmsFor(part, u.kind, x), rand)) {
