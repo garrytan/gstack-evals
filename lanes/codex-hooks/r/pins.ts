@@ -110,10 +110,12 @@ export const AGENT = { name: "laneb-codex", import_path: "laneb_codex:LanebCodex
 // The pilot (section 9 and change 1 section 4): B1's two smoke tasks and the first four covered candidates.
 export const PILOT_TASKS = [...SMOKE_TASKS, "BerriAI__litellm-16997", "narwhals-dev__narwhals-3480", "delgan__loguru-1425", "koxudaxi__datamodel-code-generator-2996"] as const;
 
-// Items (section 11): central and cap in USD, and the sessions each pays for.
+// Items (section 11): central and cap in USD, the sessions each pays for, and the VM share its central leaves out. r-main's
+// central includes its VM share; r-pilot's pays for sessions only, so its host and part VM ($7.20) go on top, and pre-run
+// change 2 (decision A, 2026-11-21) records its cap at $50.
 export const ITEMS_USD = {
-  "r-pilot": { central: 9, cap: 45, sessions: 18 },
-  "r-main": { central: 99, cap: 165, sessions: 180 },
+  "r-pilot": { central: 9, cap: 50, sessions: 18, vmOutside: 7.2 },
+  "r-main": { central: 99, cap: 165, sessions: 180, vmOutside: 0 },
 } as const;
 export type Item = keyof typeof ITEMS_USD;
 // The all-in stop the launch guard reads: the Captain's recorded point to come back, $1,200 (2026-11-21), against every

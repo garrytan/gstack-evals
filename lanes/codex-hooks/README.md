@@ -101,7 +101,7 @@ WORK=<dir r prepare made> [TASK=<task>] [ARM=r-on] lanes/codex-hooks/r/smoke.sh 
 Paid, on L1's host and part machinery, each after the Captain records the item's cap:
 
 ```
-bun lanes/codex-hooks/cli.ts r approve --ledger <jsonl> --item r-pilot --usd 45 --approved-by <who>
+bun lanes/codex-hooks/cli.ts r approve --ledger <jsonl> --item r-pilot --usd 50 --approved-by <who>
 LEDGER=<jsonl> ARMS=<tar dir> SWEREBENCH=<export> bun lanes/codex-hooks/cli.ts r prepare <work> --item r-pilot
 R_LEDGERS=<dir> R_CREW=<crew.json> bun lanes/codex-hooks/cli.ts r host-up <work>
 R_LEDGERS=<dir> R_CREW=<crew.json> bun lanes/codex-hooks/cli.ts r launch <work> --part r-pilot

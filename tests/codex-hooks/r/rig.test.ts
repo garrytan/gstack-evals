@@ -20,11 +20,11 @@ describe("part R plan and money", () => {
     expect(itemPlan("r-pilot", run).parts.map((p) => p.name)).toEqual(["r-pilot"]);
     expect(new Set(itemPlan("r-pilot", run).parts[0]!.rects.flatMap((r) => r.tasks))).toEqual(new Set(PILOT_TASKS));
     expect(itemPlan("r-main", run).parts.map((p) => p.name)).toEqual(["r-1", "r-2", "r-3"]);
-    expect([capRule("r-pilot"), capRule("r-main")]).toEqual([45, 165]);
+    expect([capRule("r-pilot"), capRule("r-main")]).toEqual([50, 165]);
     expect(ITEMS["r-main"]).toMatchObject({ capUsd: 165, allowanceUsd: 5, model: "gpt-6.1-sol", cells: "cells.codex-hooks-r.json", taskSet: "swerebench-r3a4" });
   });
   test("the dry run opens and settles one lease per item on a temporary ledger", () => {
-    expect(dryRun()).toEqual(["dry run r-pilot: approval $45, one lease of $5 opened and settled, done", "dry run r-main: approval $165, one lease of $5 opened and settled, done"]);
+    expect(dryRun()).toEqual(["dry run r-pilot: approval $50, one lease of $5 opened and settled, done", "dry run r-main: approval $165, one lease of $5 opened and settled, done"]);
   });
   test("an approval at any amount but the recorded cap is refused", () => {
     const d = mkdtempSync(join(tmpdir(), "r-approve-"));
@@ -38,9 +38,10 @@ describe("part R plan and money", () => {
     expect(main.ok).toBe(false);
     expect(main.why.join()).toContain("r-pilot is not marked done");
     // The pilot's projection: $9.30 planned, the $30 parallel reserve and a $7.20 VM share (host TTL and one part VM block)
-    // come to $46.50, over its recorded $45 cap; that is a decision for the Captain, not a bug in the guard.
+    // come to $46.50, inside the $50 cap pre-run change 2 records (decision A); the VM share is the one its cap rule adds.
     const pilot = launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 0 });
-    expect(pilot.lines[0]).toContain("r-pilot $46.50 of cap $45.00");
+    expect(pilot.lines[0]).toContain("r-pilot $46.50 of cap $50.00");
+    expect(pilot.ok).toBe(true);
     expect(pilot.lines[0]).toContain("all-in $184.38 of $1200.00");
     expect(launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 1016 }).why.join()).toContain("passes the $1200.00 stop");
     expect(launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 1015 }).why.join()).not.toContain("stop");

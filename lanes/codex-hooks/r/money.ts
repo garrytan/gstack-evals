@@ -21,8 +21,8 @@ const VM_ID = /(^|\/)vm(-\d+)?$|^host-\d+$/;
 const blockUsd = Number(L1.vm.usdPerHour) * Number(L1.vm.reserveHours);
 const anyRun = () => Array.from({ length: R.tasks }, (_, i) => "t" + i);
 
-/** Section 11's cap rule: 1.35 x central plus the parallel sessions' reserve, rounded up to $5. */
-export const capRule = (i: Item) => Math.ceil((1.35 * ITEMS_USD[i].central + R.concurrent * R.allowanceUsd) / 5) * 5;
+/** Section 11's cap rule: 1.35 x central plus the parallel sessions' reserve plus any VM share the central leaves out, rounded up to $5. */
+export const capRule = (i: Item) => Math.ceil((1.35 * ITEMS_USD[i].central + R.concurrent * R.allowanceUsd + ITEMS_USD[i].vmOutside) / 5) * 5;
 
 /** The approval row an item's ledger starts with, at the item's recorded cap and no other amount. */
 export function approve(path: string, item: string, capUsd: number, by: string) {
