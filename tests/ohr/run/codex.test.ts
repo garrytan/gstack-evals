@@ -46,7 +46,7 @@ describe("2. install", () => {
     const p = codexTreeProblems(h, "current");
     expect(p.join("\n")).toContain(".codex/skills/gstack-office-hours/SKILL.md hashes to");
     expect(p.join("\n")).toContain(".codex/skills/gstack/office-hours/SKILL.md is missing");
-    expect(p.join("\n")).toContain("VERSION is not the pin's 1.100.0.0");
+    expect(p.join("\n")).toContain("VERSION is not the pin's 1.102.0.0");
     const lines = Array.from({ length: 100 }, (_, i) => "line " + i);
     const changed = lines.map((l, i) => (i % 3 === 0 && i < 93 ? l + " changed" : l));
     expect(renderGap(lines.join("\n") + "\n", changed.join("\n") + "\n")).toBe(RENDER_GAP);

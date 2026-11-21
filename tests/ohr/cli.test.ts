@@ -31,7 +31,7 @@ describe("gstack-evals ohr", () => {
   test("the help lists every command the build mounts", async () => {
     const t = io();
     expect(await main(["--help"], t.io, {})).toBe(0);
-    const names = ["author", "audit", "run", "rows", "score", "judge-check", "read", "dryrun", "e2e", "preflight"];
+    const names = ["author", "audit", "rescreen", "run", "rows", "score", "judge-check", "read", "dryrun", "e2e", "preflight"];
     expect(Object.keys(SUBCOMMANDS).sort()).toEqual(names.sort());
     for (const n of names) expect(t.out.join("\n")).toContain("  " + n + " ");
   });

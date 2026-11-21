@@ -13,12 +13,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { CODES, docAnchor, isReasonCode, type ReasonCode } from "../../src/errors/codes.ts";
-import { writeSealed } from "../office-hours-founder/author/files.ts";
+import { sha256, writeSealed } from "../office-hours-founder/author/files.ts";
 import { insideRepo } from "../review-noloss/suite.ts";
 import { AuthorError } from "../office-hours-founder/author/files.ts";
 import { ageDecrypter, ageSealer, inShm, lockCheckpoints, openCustody, plaintextSha256, readJournal, readReuse, sealCustody, sealedJournal, SHM, writeAuthoring } from "./author/custody.ts";
 import { authorRun, checkAnswers, haltOf, type Checkpoint, type Reuse } from "./author/run.ts";
-import { gitReader, loadScreen } from "./author/screens.ts";
+import { gitReader, loadScreen, rescreen, SCREEN_SOURCES } from "./author/screens.ts";
 import { GOLD_EFFORT, JUDGE_EFFORT, REUSE_PLAINTEXT_SHA256, SEED } from "./frozen.ts";
 import { admission, admissionState, type AdmissionReading } from "./read/admission.ts";
 import { skillLoads } from "./read/load.ts";
@@ -172,6 +172,28 @@ async function author(argv: string[], io: Io, env: Env): Promise<number> {
     if (halt) io.err(halt.message);
     return halt ? 2 : 0;
   });
+}
+
+const RESCREEN_USAGE = "gstack-evals ohr rescreen --briefs-dir <dir> --gstack <gstack clone holding both pins>";
+
+/**
+ * ohr rescreen: authoring's vocabulary check (author/brief.ts checkBrief's first step) over every brief in a briefs
+ * directory, with the screen loadScreen builds from the pins (pre-run change 5). Keyless. It prints the screen's size and
+ * digest, then each brief's id and pass, or fail with the check's name, its counts and the files that hold a hit; it
+ * never prints brief text or a barred sequence. Exit 0 when every brief passes, 2 when any fails.
+ */
+async function rescreenCommand(argv: string[], io: Io): Promise<number> {
+  const f = flags(argv, { one: ["--briefs-dir", "--gstack"] });
+  need(f, "ohr rescreen", ["--briefs-dir", "--gstack"]);
+  const dir = outside("--briefs-dir", one(f, "--briefs-dir")!);
+  const screen = loadScreen(gitReader(resolve(one(f, "--gstack")!)));
+  const results = rescreen(screen, dir);
+  if (!results.length) usage("--briefs-dir " + dir + " holds no briefs. Usage: " + RESCREEN_USAGE);
+  io.out("ohr rescreen: the screen holds " + screen.grams.size + " five-word sequences, sha256 " + sha256(JSON.stringify([...screen.grams].sort())) + ", from " + SCREEN_SOURCES.map((s) => s.commit.slice(0, 8) + ":" + s.path).join(", "));
+  for (const r of results) io.out(r.id + " " + (r.pass ? "pass" : "fail vocabulary: barred sequences " + r.sequences + ", named terms " + r.terms + ", in " + r.files.join(", ")));
+  const failed = results.filter((r) => !r.pass).length;
+  io.out("ohr rescreen: " + results.length + " briefs, " + (results.length - failed) + " pass, " + failed + " fail");
+  return failed ? 2 : 0;
 }
 
 const AUDIT_USAGE = "gstack-evals ohr audit --briefs-dir <dir> --item <ledger item> --spend-cap <usd> --out <new record.json> [--parallel <n>] [--record <dir>] [--ledger <path>]";
@@ -389,6 +411,7 @@ function read(argv: string[], io: Io): number {
 export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
   author: { summary: "authoring under custody: the pilot, the draws and the sets, sealed with age", run: author },
   audit: { summary: "the fixed-script simulator audit over every sheet, GPT-6.2 Astra and Opus 5.5 at max", run: audit },
+  rescreen: { summary: "authoring's vocabulary check over a briefs directory, its screen read from the pins (keyless)", run: (argv, io) => rescreenCommand(argv, io) },
   run: { summary: "one launch (stage1, stage2 or stage2-particle) on the Docker rig with the simulated person", run: (argv, io, env) => runCommand(argv, io, env) },
   rows: { summary: "a launch's rows against its frozen manifest, with the end-state counts", run: (argv, io) => rowsCommand(argv, io) },
   score: { summary: "packets, check-packets, judges (production labels) and sessions (scored rows)", run: score },

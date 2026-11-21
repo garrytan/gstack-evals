@@ -16,6 +16,8 @@ export const PREREG_1 = "wiki/plans/2026-11-17-geva-552-office-hours-rewrite-pre
 export const PREREG = "wiki/plans/2026-11-18-geva-555-office-hours-rewrite-attempt-2-prereg/README.md";
 export const CHANGE_1 = "wiki/plans/2026-11-18-geva-553-office-hours-rewrite-pre-run-change-1/README.md";
 export const CHANGE_2 = "wiki/plans/2026-11-18-geva-553-office-hours-rewrite-pre-run-change-2/README.md";
+/** The second attempt's pre-run change 5, which moves both pins (PINS) and the Codex and Claude Code figures that follow from them. */
+export const PIN_MOVE = "wiki/plans/2026-11-21-geva-555-office-hours-rewrite-attempt-2-pre-run-change-5/README.md";
 
 /** Every seeded draw, order and sample in the eval (pre-run change 1, item 5). */
 export const SEED = 20261117;
@@ -84,8 +86,8 @@ export const CODEX_LAYOUT_FIX = ["skills/gstack/office-hours/SKILL.md", "skills/
 /** The rendered office-hours SKILL.md each pin's Codex install serves, under HOME at both entries; the Sol arms' install check. */
 export const CODEX_SKILL_FILES = [".codex/skills/gstack-office-hours/SKILL.md", ".codex/" + CODEX_LAYOUT_FIX[0]] as const;
 export const CODEX_RENDERED: Readonly<Record<SkillArm, { sha256: string; bytes: number }>> = {
-  current: { sha256: "ba7f2e3cd426f871deb5bb5c65c6dbca3a3c676d71eae9ac307133a02b696f9a", bytes: 48_068 },
-  new: { sha256: "c8b25fa81d3143c908b824955898e564702d9585858705cc0a9984137e9dbb26", bytes: 48_058 },
+  current: { sha256: "9aabb2d1949aab7be03eb09814d56279cf1eba3a39f86e362739d48a263b1f72", bytes: 48_068 },
+  new: { sha256: "7b927e4de37d5a2ca3db4d8691ec6926a1cc807d460b6a262454edaa9f22cdd7", bytes: 48_058 },
 };
 /**
  * A8's body on Claude Code (the second attempt's pre-run change 3): each pin's office-hours/SKILL.md less its frontmatter
@@ -95,8 +97,8 @@ export const CODEX_RENDERED: Readonly<Record<SkillArm, { sha256: string; bytes: 
  * capture on that binary showed the body arrives byte for byte, with no substitution. chars counts UTF-16 code units.
  */
 export const CLAUDE_BODY: Readonly<Record<SkillArm, { sha256: string; chars: number }>> = {
-  current: { sha256: "ff57c98d797dbf55ded81fe8f591bc7a6348ba383504c534836b0f216681b3e9", chars: 42_600 },
-  new: { sha256: "5e0e5b6a7889418836171dc2d33f85b4c9ddb5f80ab901ca4cfeb7f2ad85af49", chars: 42_526 },
+  current: { sha256: "59f9c4c1f2ce21e27440d114ec0aba5a5b85af755a06a080c0a9d10f39231d9c", chars: 42_936 },
+  new: { sha256: "ba035a7b7201c0217a7ece0059ca5c2e242aea22fe78b864200c2de6ffc9c93b", chars: 42_862 },
 };
 /** Changed lines in the unified diff from current to new, the same for the pins' office-hours/SKILL.md and for Codex's render of it. */
 export const RENDER_GAP = 62;
@@ -122,11 +124,11 @@ export const ARM_ENV: Readonly<Record<string, string>> = { CLAUDE_CODE_DISABLE_B
 export const SESSION_KIND_LINE = "SESSION_KIND: interactive";
 
 /**
- * Section 2's pins. current is the commit the content change is built on, its merge base with gstack main (pre-run
- * change 1, item 1, confirmed by pre-run change 2). new is the content change's ready head (pre-run change 2). Both
- * check the same helper paths; bin/gstack-design-doc-find at the current pin comes from change 2, section 1. VERSION is
- * 1.100.0.0 at both commits, so only the file hashes tell the pins apart; each container checks every one. VERSION's
- * own sha256 is the one pin-current.tsv and pin-new.tsv list, and it is checked beside the trimmed text (pre-run change 4).
+ * Section 2's pins, as the second attempt's pre-run change 5 (PIN_MOVE) sets them. new is the content change's final
+ * head, after it merged gstack main in, and current is that head's merge base with gstack main. Both check the same
+ * helper paths. VERSION is 1.102.0.0 at both commits, so only the file hashes tell the pins apart; each container checks
+ * every one. VERSION's own sha256 is the one pin-current.tsv and pin-new.tsv list, and it is checked beside the trimmed
+ * text (pre-run change 4).
  */
 export interface Pin {
   sha: string;
@@ -138,12 +140,12 @@ export interface Pin {
 export const GSTACK_REPO = "garrytan/gstack";
 export const PINS: Readonly<Record<SkillArm, Pin | null>> = {
   current: {
-    sha: "fc5c285035b58ce0552d25cf7cb71749795b6d30",
-    version: "1.100.0.0",
-    version_sha256: "5ba97c87510c945bd4cfe74f8a55254eeaa620c837062653bc12f23042b7a3a4",
+    sha: "858679423cc4778f9961d4aaf3c061a9368985ec",
+    version: "1.102.0.0",
+    version_sha256: "2ff194b6ed856895a2fcd37b3e7c2bb60b623f3e594c839f481932e22f37f393",
     files: {
-    "office-hours/SKILL.md": "0e898ac8d2eb8bf022ef9b344a29c93d1fb0139f2e93afd7ff7fd34ddfc27963",
-    "office-hours/SKILL.md.tmpl": "7779f7336ae38965380545c3c973a06cee176ae5ce3f17d53ebe1548ecbf4d51",
+    "office-hours/SKILL.md": "6cfa24bd67d8ea29563ae9c4d0e35ed1a96fa46b36c68f11582400aebe32d12d",
+    "office-hours/SKILL.md.tmpl": "44ea3f4830cf5c24ae83a51c9c519ef9e37e59820974d2bfea149258f59e4fe8",
     "office-hours/sections/design-and-handoff.md": "b861eeaf809c9350b217cf1f5db9b9752631ef83a5f211f163ad1eaeac318dce",
     "office-hours/sections/design-and-handoff.md.tmpl": "ca552fffff409e5cd17da2029b2e5b8e88e6b40c08ea0290cb7c00e8419bb2a0",
     "office-hours/sections/manifest.json": "91f8b0520d105f44de04f348392c96cafaf53947c5d8b07f8bac2b5855a709c5",
@@ -160,29 +162,29 @@ export const PINS: Readonly<Record<SkillArm, Pin | null>> = {
     "bin/gstack-design-doc-find": "78823ce7660281ed57e20f91bf9b84bf8bb7365d00eb02bc09ba964758358f7b",
     "bin/gstack-developer-profile": "d7a3d1dd787658f0c018075d40b41c3830e7b44622c019beaa61b4ceee43f4f8",
     "bin/gstack-founder-resources": "ba9d03881e6edf087b84b4c45868a2bd9b3cdc6b1483f7917fdede5ed8ef97cb",
-    "bin/gstack-session-kind": "408a168892c0f088accfc580c08b294724edd826db31436d655e76dacec8ce90",
-    "bin/gstack-skill-start": "22ddd3eac3aa605a928551664b4c96c1215debefbd57097b2580db275f1ff7a0",
+    "bin/gstack-session-kind": "455e02bbe35e50a92a6650b9c2690358091ca090b7a33aa6f09d3b3662dbbc67",
+    "bin/gstack-skill-start": "5468478202f4e5331a4a06b9e14c89595f3425928214e5dbd53015eba1a92ded",
     "lib/founder-resources.ts": "788aa18d9ae400d6ab81ad51126030be8869ffb66001f28ccb68d906aadb37ad",
     },
   },
   new: {
-    sha: "4afa7f2b3e291758f6a7842dd066cde22606fca1",
-    version: "1.100.0.0",
-    version_sha256: "5ba97c87510c945bd4cfe74f8a55254eeaa620c837062653bc12f23042b7a3a4",
+    sha: "8fcca8a5a0491ca6077b28103d85a47938fa6264",
+    version: "1.102.0.0",
+    version_sha256: "2ff194b6ed856895a2fcd37b3e7c2bb60b623f3e594c839f481932e22f37f393",
     files: {
-      "office-hours/SKILL.md": "8ff8e76098282f8a526aeb78640b975241db8fe0c0c557ac149075ed6c8f78ff",
-      "office-hours/SKILL.md.tmpl": "791e0793abae78ce2c7e847e85b32b60f22cd0b5d4b0d42edaece4375489fc03",
-      "office-hours/sections/design-and-handoff.md": "445b87a9cc6b949c37ed2517dc0e2ed321035486a1e01dd8e1c63eab9e8951a8",
-      "office-hours/sections/design-and-handoff.md.tmpl": "573730dcbbb4b8af473d4972657a300335644d450919cf469fa124d9417d4468",
+      "office-hours/SKILL.md": "30ff20bce6b13af39a61ff92fd1c6c968490512f3a207ca4e915041816ee2f2d",
+      "office-hours/SKILL.md.tmpl": "d5aed1eabf1adcd0b0a040db5b8d6649222d99ad485073dd42840e0b6ee61efe",
+      "office-hours/sections/design-and-handoff.md": "dedaede7e5e83ff8e8ccb75d5a9c610174c228f2501475abe15cef5d8433a144",
+      "office-hours/sections/design-and-handoff.md.tmpl": "79350fd2a4ee877414860279bd2a971e5d7e758ae55634960b4b35369289a076",
       "office-hours/sections/landscape.md": "6c70b6eaac271fc27951268dd8062b6ec3b1d502b4ef6b9ddb690c3d24419c61",
       "office-hours/sections/landscape.md.tmpl": "b051290a583a1f8e5545f00beec57126b22120e869186615ead83abe8750ed09",
       "office-hours/sections/manifest.json": "17b6d1a986189272b5f7715d4d603952d8170f79ee4cf6679a62b4f5de591fcb",
-      "office-hours/sections/phase-2a-startup-diagnostic.md": "003fe35de1cef3e984ef3bb63250d35c3b1c806968adebf1ab502577fdca20db",
-      "office-hours/sections/phase-2a-startup-diagnostic.md.tmpl": "fd07f7d132f4905824097b4954c1f3eecf89bf7f85ea258f44e9cd16fd9c1c13",
+      "office-hours/sections/phase-2a-startup-diagnostic.md": "f62e3fbd1dc864f99ab9d7ee25930534d2ea5c22786ce5d67d0b0aa72290ba05",
+      "office-hours/sections/phase-2a-startup-diagnostic.md.tmpl": "00ac8ff5e4a59aa37c737599806436c16ba5f34863bc203062f42dd25670f0ba",
       "office-hours/sections/phase-2b-builder-brainstorm.md": "05251d190b32f1da63165e8339211404963556ef5b9cf4c3e46361cbc51027e2",
       "office-hours/sections/phase-2b-builder-brainstorm.md.tmpl": "604794b75cb79230ce728a70cab9bf02747cb2deafbcd6899ade0c39bc550f3e",
-      "office-hours/sections/phase-2c-pivot-discovery.md": "58dde49ca9f8bc81d23dd36213a4f782c783cc71ef6885f2c5f1ff7824a2e32f",
-      "office-hours/sections/phase-2c-pivot-discovery.md.tmpl": "c7326044be0065f77ba6a51b9a2c9737bf03e1e725a0b556abc8cefb0a5d4891",
+      "office-hours/sections/phase-2c-pivot-discovery.md": "559b4ebf91bb1e7fd8b80ce7df09d5b85c77f7f7ca671f6ba434a621f1e26dc6",
+      "office-hours/sections/phase-2c-pivot-discovery.md.tmpl": "5b7aae97025f0b6049bfd01334b48b6418cadd8156cbf8f44a4899ed3864ae9a",
       "office-hours/sections/preamble.md": "188d404f839d5abb390dd96f716fa965a0d8b2d2a40619fd2ff75f4d6ba7f001",
       "office-hours/sections/second-opinion.md": "0ef8cc1c5ce9e614b1ea7d0fadce66128c43855c48d50104898900fb7590aa62",
       "office-hours/sections/second-opinion.md.tmpl": "c5714e290efb8b2a117f79c180d01595e6c2445860dbff70beaad0d3359070a4",
@@ -192,8 +194,8 @@ export const PINS: Readonly<Record<SkillArm, Pin | null>> = {
       "bin/gstack-design-doc-find": "e7e2fc8cca965453303f7c3a9104d20ec4c1c9fbcf6672dd86a7c141c7e39951",
       "bin/gstack-developer-profile": "0320009508bae043a9d5dce5082a26e294698257f89cc63bbcf5a103ebf5f905",
       "bin/gstack-founder-resources": "ba9d03881e6edf087b84b4c45868a2bd9b3cdc6b1483f7917fdede5ed8ef97cb",
-      "bin/gstack-session-kind": "408a168892c0f088accfc580c08b294724edd826db31436d655e76dacec8ce90",
-      "bin/gstack-skill-start": "22ddd3eac3aa605a928551664b4c96c1215debefbd57097b2580db275f1ff7a0",
+      "bin/gstack-session-kind": "455e02bbe35e50a92a6650b9c2690358091ca090b7a33aa6f09d3b3662dbbc67",
+      "bin/gstack-skill-start": "5468478202f4e5331a4a06b9e14c89595f3425928214e5dbd53015eba1a92ded",
       "lib/founder-resources.ts": "788aa18d9ae400d6ab81ad51126030be8869ffb66001f28ccb68d906aadb37ad",
     },
   },

@@ -12,6 +12,7 @@ links:
   - wiki/plans/2026-11-18-geva-555-office-hours-rewrite-attempt-2-prereg/README.md
   - wiki/plans/2026-11-18-geva-555-office-hours-rewrite-attempt-2-pre-run-change-1/README.md
   - wiki/plans/2026-11-19-geva-555-office-hours-rewrite-attempt-2-pre-run-change-3/README.md
+  - wiki/plans/2026-11-21-geva-555-office-hours-rewrite-attempt-2-pre-run-change-5/README.md
   - wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg/README.md
   - wiki/board/2026-11-18-geva-553-office-hours-rewrite-results/README.md
   - lanes/office-hours-rewrite/
@@ -61,10 +62,12 @@ Each skill arm runs gstack's own `./setup --host codex` from its pin's tree. Set
 
 | Pin | office-hours/SKILL.md in the pin | Rendered for Codex |
 |---|---|---|
-| current, fc5c285035b58ce0552d25cf7cb71749795b6d30 | 43,932 bytes, sha256 0e898ac8d2eb8bf022ef9b344a29c93d1fb0139f2e93afd7ff7fd34ddfc27963 | 48,068 bytes, sha256 ba7f2e3cd426f871deb5bb5c65c6dbca3a3c676d71eae9ac307133a02b696f9a |
-| new, 4afa7f2b3e291758f6a7842dd066cde22606fca1 | 43,862 bytes, sha256 8ff8e76098282f8a526aeb78640b975241db8fe0c0c557ac149075ed6c8f78ff | 48,058 bytes, sha256 c8b25fa81d3143c908b824955898e564702d9585858705cc0a9984137e9dbb26 |
+| current, 858679423cc4778f9961d4aaf3c061a9368985ec | 44,326 bytes, sha256 6cfa24bd67d8ea29563ae9c4d0e35ed1a96fa46b36c68f11582400aebe32d12d | 48,068 bytes, sha256 9aabb2d1949aab7be03eb09814d56279cf1eba3a39f86e362739d48a263b1f72 |
+| new, 8fcca8a5a0491ca6077b28103d85a47938fa6264 | 44,256 bytes, sha256 30ff20bce6b13af39a61ff92fd1c6c968490512f3a207ca4e915041816ee2f2d | 48,058 bytes, sha256 7b927e4de37d5a2ca3db4d8691ec6926a1cc807d460b6a262454edaa9f22cdd7 |
 
 The gap between current and new is 62 changed diff lines both before and after rendering.
+
+Pre-run change 5 (2026-11-21) moved both pins, and this table gives the moved pins' figures. Change 5 gives the earlier ones: fc5c285 and 4afa7f2b, rendered at ba7f2e3c and c8b25fa8. At the moved pins gstack's install lists office-hours once, and change 5, sections 4 and 5, says what that means for the layout fix below and for the session kind.
 
 ## 3. The layout fix
 
@@ -145,6 +148,8 @@ Keyless, on the Codex 0.170.0 binary above, against a stub Responses server on 1
 | current | the whole rendered file, once, as a user item `<skill><name>office-hours</name><path>...</path>` + file + `</skill>` | 48,068 | ba7f2e3c..., matches | 63 | 30,995 |
 | new | the same | 48,058 | c8b25fa8..., matches | 63 | 31,025 |
 
+These captures ran at the pins before pre-run change 5, fc5c285 and 4afa7f2b, whose renders were ba7f2e3c and c8b25fa8.
+
 Of the current arm's 30,995 tokens: the tools item 6,113, Codex's base instructions 4,143, the skill list with the permissions text about 7,390, the agent role and mode 582, the environment 127, the first message 61 and the skill item 12,578 (12,533 for the file). The none arm has the same tools, base instructions, role and environment, the permissions text alone (242) and no skill list.
 
 **Five-request sessions** (the first message, then 4 resumed turns, the last being the closing message):
@@ -222,10 +227,10 @@ Each is dated 2026-11-19 and lands before any arm session.
 2. **Questions on Codex** go to the simulated founder, and E_INTERACTIVE_HOST no longer stops a Codex session (section 6).
 3. **The session clock.** A Sol session's clock counts only Codex's own time, with the simulated founder's turns off the clock, as on Claude Code. Before, one wall clock spanned every exec. The shared driver (src/adapters/codex/driver.ts) subtracts each exec's own CLI time from the session's limit, and the founder's next message is drawn after that subtraction. The lane passes the session limit through at lanes/office-hours-rewrite/run/codex.ts:167.
 4. **Sol's central and stage 1's split.** Sol's skill-session central is $2.04, and $1 moves from ohr-s1-repair-arms to ohr-s1-arms (section 9).
-5. **The shared Codex driver.** Its general changes land on main through pull request 379: questions through the simulated user, explicit effort, the session kind, and a count of unanswered questions. Its merged commit is MERGED_379.
-6. **Main into the results branch.** The eval merges main into its results branch, never a rebase. The merge commit is MAIN_MERGE.
+5. **The shared Codex driver.** Its general changes land on main through pull request 379: questions through the simulated user, explicit effort, the session kind, and a count of unanswered questions. Its merged commit is b5f80f0699d28189cd4a957748a88b215acae250.
+6. **Main into the results branch.** The eval merges main into its results branch, never a rebase. The merge commit is aaedd499778f9eac59933137ab5806ae71d1c757.
 7. **A8 is built** (lanes/office-hours-rewrite/read/load.ts and read/admission.ts). A8, the full-load check defined in pre-run change 3, reads every stage 1 skill session.
-   - On Claude Code arms it reads the user message in host/claude-session.jsonl that opens "Base directory for this skill: ". The body after its first blank line must match the frozen length and sha256, followed by nothing or by "\n\nARGUMENTS: ". Claude Code strips the skill file's frontmatter and changes nothing else, so the frozen hashes are of the body as it arrives: ff57c98d797dbf55ded81fe8f591bc7a6348ba383504c534836b0f216681b3e9 (42,600 characters) at the current pin and 5e0e5b6a7889418836171dc2d33f85b4c9ddb5f80ab901ca4cfeb7f2ad85af49 (42,526 characters) at the new pin. A keyless Claude Code 2.1.314 capture and the keyless end to end's four Opus skill sessions confirmed both.
+   - On Claude Code arms it reads the user message in host/claude-session.jsonl that opens "Base directory for this skill: ". The body after its first blank line must match the frozen length and sha256, followed by nothing or by "\n\nARGUMENTS: ". Claude Code strips the skill file's frontmatter and changes nothing else, so the frozen hashes are of the body as it arrives: ff57c98d797dbf55ded81fe8f591bc7a6348ba383504c534836b0f216681b3e9 (42,600 characters) at fc5c285 and 5e0e5b6a7889418836171dc2d33f85b4c9ddb5f80ab901ca4cfeb7f2ad85af49 (42,526 characters) at 4afa7f2b. A keyless Claude Code 2.1.314 capture and the keyless end to end's four Opus skill sessions confirmed both. At the pins pre-run change 5 moved to, the file less its frontmatter hashes to 59f9c4c1f2ce21e27440d114ec0aba5a5b85af755a06a080c0a9d10f39231d9c (42,936 characters) at the current pin and ba035a7b7201c0217a7ece0059ca5c2e242aea22fe78b864200c2de6ffc9c93b (42,862 characters) at the new pin, but Claude Code no longer delivers it unchanged; change 5, section 3, leaves how A8 reads it open.
    - On Codex arms it checks the transcript's `<skill>` item, between `</path>` and `</skill>`, against the rendered hashes in section 2.
    - A missing, empty, cut or changed body fails. A failure on Opus or Sol takes the one admission repair, and a second failure ends the eval with FIX-METHOD. A failing particle-1 arm is left out of particle-1's stage 2 and reported as left out.
    - A skill session that ended missing before it reached the model is listed as never started, as A7 treats it, and is not failed.
@@ -233,11 +238,11 @@ Each is dated 2026-11-19 and lands before any arm session.
 
 ## 11. Commits
 
-Authoring ran entirely at 15202b99012476eb48ca5f9fc1e6695c2a5b862c, before this change; no arm session ran there. Every paid run after authoring runs at the commit on the results branch that last changes the newest pre-run change. When this post lands it is that change, and its code is the final code commit FINAL_CODE. This statement of the rule supersedes pre-run change 3's.
+Authoring ran entirely at 15202b99012476eb48ca5f9fc1e6695c2a5b862c, before this change; no arm session ran there. Every paid run after authoring runs at the commit on the results branch that last changes the newest pre-run change. When this post lands it is that change, and its code is the final code commit 5ce8fedb17d6bfac689e53565d14d298b49227a3. This statement of the rule supersedes pre-run change 3's. Pre-run change 5 moves both pins after that commit, so from it on the newest pre-run change is change 5 or a later one.
 
 ## 12. Limits for the results
 
-- An out-of-the-box Codex user who names office-hours today gets none of its body, because of the duplicate names in section 3. The Sol rows measure gstack on Codex with the three-entry fix, not as shipped. gstack fixed the duplicate listing upstream in commit ed4086e, after which Codex lists each gstack skill once and `$office-hours` injects the body. Both pins under test predate that commit, so the three-entry fix stays and no pin moves.
+- An out-of-the-box Codex user who names office-hours today gets none of its body, because of the duplicate names in section 3. The Sol rows measure gstack on Codex with the three-entry fix, not as shipped. gstack fixed the duplicate listing upstream in commit ed4086e, after which Codex lists each gstack skill once and `$office-hours` injects the body. The pins this change was written for predate that commit. The pins pre-run change 5 moved to include it, and that change, section 4, shows the three-entry fix hiding office-hours there.
 - The Sol arms run at Codex's default effort for Sol, low, while Opus runs at Claude Code's default. A difference between Sol and Opus mixes model, harness and effort; each model's arm comparisons share one harness and one effort.
 - Codex is a different host for gstack: /review runs without its specialist reviewers, there is no cross-family second-model review, and gstack's Claude Code hooks aren't ported to Codex.
 - The captures are keyless. The stub's replies carry no reasoning and no tool calls, so they size the prefix and the growth per turn only. The money holds turn count, reply length, reasoning and tool use at the planning figure, which has no measured basis for Sol.

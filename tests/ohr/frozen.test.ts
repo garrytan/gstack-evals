@@ -4,12 +4,14 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { BRIEF_ALLOWANCE, CAPS, CHANGE_1, CHANGE_2, CLOSING, DROPPED_SLOTS, LENS_LINE, PILOT, PINS, PREREG, PREREG_1, PROJECTION, QUOTA, REUSE_PLAINTEXT_SHA256, REUSED_SLOTS, REVEAL_NOTE, SEED, SIM_ADDED_RULES, SIM_RULES_FILES, SIM_RULES_SHA256, SKILL_PREFIX, TOP_UP_BOUND, attemptLine, firstMessage } from "../../lanes/office-hours-rewrite/frozen.ts";
+import { BRIEF_ALLOWANCE, CAPS, CHANGE_1, CHANGE_2, CLAUDE_BODY, CLOSING, CODEX_RENDERED, DROPPED_SLOTS, LENS_LINE, PILOT, PIN_MOVE, PINS, PREREG, PREREG_1, PROJECTION, QUOTA, RENDER_GAP, REUSE_PLAINTEXT_SHA256, REUSED_SLOTS, REVEAL_NOTE, SEED, SIM_ADDED_RULES, SIM_RULES_FILES, SIM_RULES_SHA256, SKILL_PREFIX, TOP_UP_BOUND, attemptLine, firstMessage } from "../../lanes/office-hours-rewrite/frozen.ts";
 
 const root = join(import.meta.dir, "..", "..");
 const prereg = readFileSync(join(root, PREREG_1), "utf8");
 const change1 = readFileSync(join(root, CHANGE_1), "utf8");
 const change2 = readFileSync(join(root, CHANGE_2), "utf8");
+const pinMove = readFileSync(join(root, PIN_MOVE), "utf8");
+const MOVE_DIR = PIN_MOVE.split("/").at(-2)!;
 const pinTable = (file: string): Record<string, { bytes: number; sha256: string }> => Object.fromEntries(readFileSync(join(root, CHANGE_2, "..", "..", file), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t")).map((r) => [r[0], { bytes: Number(r[1]), sha256: r[2] }]));
 
 describe("frozen values match the posts", () => {
@@ -39,29 +41,31 @@ describe("frozen values match the posts", () => {
     expect(change1).toContain('"' + REVEAL_NOTE + '"');
     expect(change1).toContain('"' + attemptLine(0).replace("0", "N") + '"');
   });
-  test("the current pin and its file hashes", () => {
+  test("the current pin and its file hashes (the second attempt's pre-run change 5)", () => {
     const pin = PINS.current!;
-    expect(change1).toContain("garrytan/gstack " + pin.sha);
-    const tsv = readFileSync(join(root, CHANGE_1, "..", "pin-current.tsv"), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t"));
-    const rows = Object.fromEntries(tsv.map((r) => [r[0], r[2]]));
-    const { VERSION: _v, ...files } = rows;
-    const added = /bin\/gstack-design-doc-find at the current pin: 2648 bytes, sha256 ([0-9a-f]{64})/.exec(change2);
-    expect(added).not.toBeNull();
-    expect({ ...files, "bin/gstack-design-doc-find": added![1] } as Record<string, string>).toEqual({ ...pin.files });
-    expect(change1).toContain("| VERSION | " + pin.version + " |");
-    expect(pin.version_sha256).toBe(rows.VERSION!);
+    expect(pinMove).toContain("garrytan/gstack " + pin.sha);
+    expect(pinMove).toContain("returns " + pin.sha + ", the current pin");
+    const { VERSION: version, ...files } = pinTable(MOVE_DIR + "/pin-current.tsv");
+    expect(pinMove).toContain("| VERSION | " + pin.version + " |");
+    expect(pin.version_sha256).toBe(version!.sha256);
+    expect(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v.sha256]))).toEqual({ ...pin.files });
   });
-  test("the new pin, its file hashes and its byte counts", () => {
+  test("the new pin, its file hashes and its byte counts (the second attempt's pre-run change 5)", () => {
     const pin = PINS.new!;
-    expect(change2).toContain("garrytan/gstack " + pin.sha);
-    expect(change2).toContain("| VERSION | " + pin.version + " |");
-    const table = pinTable("2026-11-18-geva-553-office-hours-rewrite-pre-run-change-2/pin-new.tsv");
-    const { VERSION: version, ...files } = table;
-    expect(pin.version_sha256).toBe((version as { sha256: string }).sha256);
-    expect(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, (v as { sha256: string }).sha256]))).toEqual({ ...pin.files });
+    expect(pinMove).toContain("garrytan/gstack " + pin.sha);
+    const { VERSION: version, ...files } = pinTable(MOVE_DIR + "/pin-new.tsv");
+    expect(pin.version).toBe(PINS.current!.version);
+    expect(pin.version_sha256).toBe(version!.sha256);
+    expect(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v.sha256]))).toEqual({ ...pin.files });
     expect(Object.keys(pin.files).sort()).toEqual([...Object.keys(PINS.current!.files), "office-hours/sections/landscape.md", "office-hours/sections/landscape.md.tmpl", "office-hours/sections/phase-2c-pivot-discovery.md", "office-hours/sections/phase-2c-pivot-discovery.md.tmpl"].sort());
-    for (const [path, v] of Object.entries(files)) if (path.startsWith("office-hours/") && !path.endsWith(".json")) expect(change2).toContain("| " + path + " | " + v.bytes + " |");
-    expect(change2).toContain("returns " + PINS.current!.sha + ", the current pin");
+  });
+  test("the Codex render, A8's Claude Code body and the gap are pre-run change 5's", () => {
+    const n = (x: number) => x.toLocaleString("en-US");
+    for (const arm of ["current", "new"] as const) {
+      expect(pinMove).toContain(n(CODEX_RENDERED[arm].bytes) + " bytes, sha256 " + CODEX_RENDERED[arm].sha256);
+      expect(pinMove).toContain(CLAUDE_BODY[arm].sha256 + " (" + n(CLAUDE_BODY[arm].chars) + " characters)");
+    }
+    expect(pinMove).toContain("The gap is " + RENDER_GAP + " changed diff lines");
   });
   test("seed", () => {
     expect(change1).toContain("seed " + SEED);

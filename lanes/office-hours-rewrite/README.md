@@ -37,8 +37,10 @@ start with E_OHR_.
 
 ## Commands
 
-`gstack-evals ohr --help` lists them: author, audit, run, rows, score (packets, check-packets, judges, sessions),
-judge-check, read (admission, decision, report), dryrun, e2e and preflight. Every model call goes through wire.ts: one
+`gstack-evals ohr --help` lists them: author, audit, rescreen, run, rows, score (packets, check-packets, judges,
+sessions), judge-check, read (admission, decision, report), dryrun, e2e and preflight. rescreen is keyless: it runs
+authoring's vocabulary check over a briefs directory with the screen read from the pins, and prints pass or fail per
+brief with counts and file names, never text. Every model call goes through wire.ts: one
 lease on one ledger item, the product-value meter and its metering proxy. The preregistration names GPT-6.2 Astra for
 the Opus judge, the gold pass, the unanimous key and the simulator auditor, so wire.ts sends every "astra" request to the
 meter's "astra-6.2" key (openai/gpt-6.2-astra); the meter's "astra" key stays GPT-6 Astra for other lanes.
