@@ -34,9 +34,12 @@
 //   and heredocs are read as commands too. A relative path resolves against the folder the last cd left in that
 //   agent's shell (/work/app at first). A subshell, a pipeline member, a statement an & ends, a substitution and a
 //   child shell each get a copy of the shell, so a cd, a variable or a function they set does not leave them; a child
-//   shell starts with no functions. A Bash call the parser refuses (after splitting an EOF) line in two, as bash 5
-//   reads it), or one that runs more than 10,000 commands or nests more than 16 deep, is unreadable, and a session
-//   with an unreadable Bash call has no record that counts: the reader refuses rather than guesses.
+//   shell starts with no functions. When the parser refuses a Bash call, a bash -c string or an eval string (after
+//   splitting an EOF) line in two, as bash 5 reads it) at a line with no command before it, bash refused it too before
+//   running anything, since bash reads each command whole before it runs it, so it ran nothing. When the refusal comes
+//   after an earlier command, whether those earlier lines ran depends on how the call was run, so that call is
+//   unreadable, and so is one that runs more than 10,000 commands or nests more than 16 deep. A session with an
+//   unreadable Bash call has no record that counts: the reader refuses rather than guesses.
 // - Exposed (dated change of 2026-11-18, pin change 1, section 11): the run is complete (the gate was answered and
 //   applied) or waits at its final gate: status gate_pending, with the gate written at or after the close of every phase
 //   in the run's phase order, each closed or skipped. A run waiting for an amendment (amend_pending), back in review
@@ -166,6 +169,15 @@ const splitHeredocParens = (s: string): string => {
   return out;
 };
 
+/** Whether the lines before a command bash refused hold no command, so bash ran nothing: it reads each command whole before it runs it. */
+const ranNothing = (before: string): boolean => {
+  try {
+    return parse(before).stmts.length === 0;
+  } catch {
+    return false;
+  }
+};
+
 /** The files an interpreter's inline code opens for writing, as written in the code; every run.json it names when a target is not a literal. */
 function writeTargets(code: string): string[] {
   const lits = new Map<string, string>();
@@ -248,7 +260,9 @@ export function commandLog(transcript: string): CommandLog {
       src = splitHeredocParens(input);
       try {
         file = parse(src);
-      } catch {
+      } catch (e: any) {
+        const before = src.split("\n").slice(0, Math.max(Number(e?.pos?.line ?? 0) - 1, 0)).join("\n");
+        if (Number(e?.pos?.line) >= 1 && ranNothing(before)) return;
         throw new Unreadable();
       }
     }
@@ -570,7 +584,7 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
         regularFile(roots, input) !== null;
       const start = log.calls.find((c) => isStart(c) && isFor(c, folder));
       const why = log.unreadable.length
-        ? "the session's command log holds Bash calls the reader cannot read (" + log.unreadable.join(", ") + "): bash's grammar refuses them, or they repeat or nest past " + STEPS + " commands or " + DEPTH + " levels, so no record can be shown untouched"
+        ? "the session's command log holds Bash calls the reader cannot read (" + log.unreadable.join(", ") + "): bash's grammar refuses them after an earlier command, or they repeat or nest past " + STEPS + " commands or " + DEPTH + " levels, so no record can be shown untouched"
         : input !== PLAN && !revised
           ? "plan_input " + JSON.stringify(input ?? null) + ", not " + PLAN + " or a regular file inside " + folder + " or " + WORK + " that the session's own gstack-autoplan revise --out " + folder + " --plan named"
           : start === undefined

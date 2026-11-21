@@ -809,14 +809,22 @@ describe("the shell forms the full review of the hand lexer left open", () => {
       refused(work, tx([{ command: C }, { command: "python3 -c \"import sys; [open(p, 'w') for p in sys.argv[1].split(':')]\" /tmp/a/run.json:" + RUN + "/run.json" }]), "a colon-joined token");
     }));
 
-  test("a Bash call bash's grammar cannot read refuses every record, and an EOF) line bash accepts is read", () =>
+  test("a Bash call bash refuses in its first command ran nothing; one it refuses after an earlier command refuses every record; an EOF) line bash accepts is read", () =>
     withDir((dir) => {
       const work = join(dir, "work");
       put(work, WORK, RUN, body({ status: "gate_pending" }));
       for (const [name, command] of [
-        ["an unclosed quote", 'echo "' + RUN],
-        ["a stray }", "if true; then :; fi }"],
-        ["a child shell's unclosed quote", "bash -c 'echo \"x'"],
+        ["an unclosed quote on the only line", ": > " + RUN + '/run.json; echo "x'],
+        ["a stray } on the only line", "if true; then : > " + RUN + "/run.json; fi }"],
+        ["a child shell refusing its first line", "bash -c ': > " + RUN + "/run.json; echo \"x'"],
+        ["an eval refusing its first line", "eval ': > " + RUN + "/run.json; echo \"x'"],
+        ["a refusal after comment lines", "# first\n\n: > " + RUN + '/run.json; echo "x'],
+      ] as const) found(work, tx([{ command: C }, { command }]), name);
+      for (const [name, command] of [
+        ["an unclosed quote after a command", "echo first\necho \"" + RUN],
+        ["a stray } after a command", "echo first\nif true; then :; fi }"],
+        ["a child shell's refusal after a command", "bash -c 'echo first\necho \"x'"],
+        ["a command list split across the refused line", "echo first &&\n echo \"x"],
       ] as const) {
         const t = tx([{ command: C }, { command }]);
         refused(work, t, name);
