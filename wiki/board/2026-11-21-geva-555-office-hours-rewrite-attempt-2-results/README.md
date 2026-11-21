@@ -1,8 +1,8 @@
 ---
 id: 2026-11-21-geva-555-office-hours-rewrite-attempt-2-results
 kind: finding
-title: "The second office-hours rewrite eval stopped INCOMPLETE: the model playing the founder failed its audit three times, so no session ran and gstack's content change gets no verdict"
-summary: "INCOMPLETE before any session. The simulated founder failed three audits (lost unread, 35 of 80, 6 of 80, bar 4). JSON history fixed its format; fidelity missed. FIX-METHOD on the simulator."
+title: "The second office-hours rewrite eval stopped INCOMPLETE: the model playing the founder failed its audit three times, so no session ran and gstack's content change gets no verdict, though its owner merged it on their own judgment"
+summary: "INCOMPLETE before any session. The simulated founder failed three audits (lost unread, 35 of 80, 6 of 80, bar 4). FIX-METHOD on the simulator. No verdict on gstack#4468, which its owner merged."
 author: GEVA-555
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -23,15 +23,15 @@ links:
   - garrytan/gstack#4468
 ---
 
-# The second office-hours rewrite eval stopped INCOMPLETE: the model playing the founder failed its audit three times, so no session ran and gstack's content change gets no verdict
+# The second office-hours rewrite eval stopped INCOMPLETE: the model playing the founder failed its audit three times, so no session ran and gstack's content change gets no verdict, though its owner merged it on their own judgment
 
-The eval stopped INCOMPLETE before any arm session ran. The simulated founder (the model that plays the person asking for advice) failed its preregistered audit: the first run's output was lost unread, then 35 of 80 sampled turns failed, then 6 of 80, against a bar of at most 4. gstack's office-hours content change (gstack#4468) gets no verdict and stays held, as the preregistration's INCOMPLETE row says. The verdict on our method is FIX-METHOD on the simulator.
+The eval stopped INCOMPLETE before any arm session ran. The simulated founder (the model that plays the person asking for advice) failed its preregistered audit: the first run's output was lost unread, then 35 of 80 sampled turns failed, then 6 of 80, against a bar of at most 4. gstack's office-hours content change (gstack#4468) gets no verdict, as the preregistration's INCOMPLETE row says. Its owner merged gstack#4468 on their own judgment, as gstack 27e5db99, without this eval's reading. The verdict on our method is FIX-METHOD on the simulator.
 
 - We learned that a model playing a user drifts out of its required format when its own earlier turns come back to it as plain prose. Giving it those turns as the JSON objects it returned took JSON failures in the audit sample from 19 to 0, and the share of scripts that ran to their last message from 14 of 94 to 91 of 94. You should feed a model-played user its own turns in the structured form you ask it to produce.
 - We learned that tightening a simulated user's rules in the prompt helps but does not make it faithful. Turns that both auditors faulted fell from 16 of 80 to 6 of 80, still over the bar of 4, and volunteering a fact nobody asked about stayed the most common fault. You should enforce what a simulated user may reveal in code, and audit the simulator on a small pilot before you author anything that depends on it.
 - This eval tested nothing about the skill. No arm session ran on any model, so it says nothing about whether the rewritten office-hours skill makes the right call more often than the current one.
 
-Call settled: none (INCOMPLETE; gstack#4468 stays held, and the simulator method reads FIX-METHOD)
+Call settled: none (INCOMPLETE; no verdict on gstack#4468, which its owner merged on their own judgment as gstack 27e5db99 without this eval's reading, and the simulator method reads FIX-METHOD)
 
 ## 1. What carries over and helps others
 
@@ -99,9 +99,9 @@ In audit 2 the check-failed turns fell at script message 3 (6), 4 (28) and 5 (46
 
 The format problem is gone in audit 3. What is left is fidelity: 4 of the 6 failures include a volunteered fact (V1), and 4 fall at message 3, which asks whether anyone has used or paid for the product yet. Astra alone marked 12 more turns, 7 of them at message 6.
 
-## 4. What a future attempt would have to change
+## 4. What an eval with a simulated user would have to change
 
-These are options, not a plan. Any of them would need its own dated change and a passing audit before arm data.
+These are options, not a plan, for any eval that uses a simulated user. Any of them would need its own dated change and a passing audit before arm data. No follow-up measurement of gstack#4468 is planned.
 
 - **Gate reveals in code.** Each fact on a sheet already carries a reveal_when line. A check could refuse a reply that states a fact whose reveal_when the last message does not meet, instead of asking for that in the prompt. V1 is the fault that rules in the prompt did not remove.
 - **Another simulator model.** Gemini 4 Argon at temperature 0 played the founder in all three audits. A different model, or the same model with a different setting, may follow the rules more closely.
