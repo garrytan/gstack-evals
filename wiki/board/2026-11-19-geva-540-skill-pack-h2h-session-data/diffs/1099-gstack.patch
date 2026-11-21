@@ -1,0 +1,135 @@
+diff --git a/api/projects/project.go b/api/projects/project.go
+index 749ff17..8aaa641 100644
+--- a/api/projects/project.go
++++ b/api/projects/project.go
+@@ -46,14 +46,18 @@ func ProjectMiddleware(next http.Handler) http.Handler {
+ 
+ 		permissions := roleSlug.GetPermissions()
+ 
+-		role, err := helpers.Store(r).GetProjectOrGlobalRoleBySlug(projectID, string(projectUser.Role))
+-
+-		if err == nil {
+-			roleSlug = db.ProjectUserRole(role.Slug)
+-			permissions = role.Permissions
+-		} else if !errors.Is(err, db.ErrNotFound) {
+-			helpers.WriteError(w, err)
+-			return
++		// Built-in roles have fixed permissions and must never be overridden
++		// by a (possibly user-created) role row with the same slug.
++		if !roleSlug.IsValid() && roleSlug != db.ProjectNone {
++			role, err := helpers.Store(r).GetProjectOrGlobalRoleBySlug(projectID, string(projectUser.Role))
++
++			if err == nil {
++				roleSlug = db.ProjectUserRole(role.Slug)
++				permissions = role.Permissions
++			} else if !errors.Is(err, db.ErrNotFound) {
++				helpers.WriteError(w, err)
++				return
++			}
+ 		}
+ 
+ 		if helpers.HasParam("template_id", r) {
+diff --git a/db/Role.go b/db/Role.go
+index a322acc..2979b4e 100644
+--- a/db/Role.go
++++ b/db/Role.go
+@@ -7,10 +7,31 @@ type Role struct {
+ 	ProjectID   *int                  `db:"project_id" json:"project_id"`
+ }
+ 
++// AllProjectPermissions is the bitmask of all known project permissions.
++const AllProjectPermissions = CanRunProjectTasks | CanUpdateProject | CanManageProjectResources | CanManageProjectUsers
++
+ func ValidateRole(role Role) error {
+ 	if role.Name == "" {
+ 		return &ValidationError{Message: "Role name cannot be empty"}
+ 	}
++	if role.Slug == "" {
++		return &ValidationError{Message: "Role slug cannot be empty"}
++	}
++	if ProjectUserRole(role.Slug).IsValid() {
++		return &ValidationError{Message: "Role slug is reserved for a built-in role"}
++	}
++	if role.Permissions < 0 || role.Permissions&^AllProjectPermissions != 0 {
++		return &ValidationError{Message: "Role contains unknown permissions"}
++	}
++	return nil
++}
++
++// ValidateRolePermissionsCeiling ensures that a role does not grant permissions
++// the caller does not hold.
++func ValidateRolePermissionsCeiling(role Role, callerPermissions ProjectUserPermission) error {
++	if role.Permissions&^callerPermissions != 0 {
++		return &ValidationError{Message: "Role cannot grant permissions the caller does not have"}
++	}
+ 	return nil
+ }
+ 
+diff --git a/db/Role_test.go b/db/Role_test.go
+new file mode 100644
+index 0000000..965a0f8
+--- /dev/null
++++ b/db/Role_test.go
+@@ -0,0 +1,20 @@
++package db
++
++import "testing"
++
++func TestValidateRoleRejectsBuiltinSlugs(t *testing.T) {
++	for _, slug := range []string{"owner", "manager", "task_runner", "guest"} {
++		if ValidateRole(Role{Slug: slug, Name: "x", Permissions: 1}) == nil {
++			t.Fatalf("expected slug %q to be rejected", slug)
++		}
++	}
++	if ValidateRole(Role{Slug: "custom", Name: "x", Permissions: 1 << 10}) == nil {
++		t.Fatal("expected unknown permission bits to be rejected")
++	}
++	if err := ValidateRole(Role{Slug: "custom", Name: "x", Permissions: CanRunProjectTasks}); err != nil {
++		t.Fatal(err)
++	}
++	if ValidateRolePermissionsCeiling(Role{Permissions: AllProjectPermissions}, ProjectManager.GetPermissions()) == nil {
++		t.Fatal("expected ceiling violation")
++	}
++}
+diff --git a/db/bolt/role.go b/db/bolt/role.go
+index 87e9942..d5f7fd8 100644
+--- a/db/bolt/role.go
++++ b/db/bolt/role.go
+@@ -81,7 +81,7 @@ func (d *BoltDb) GetProjectOrGlobalRoleBySlug(projectID int, slug string) (db.Ro
+ 
+ 	err := d.getObjects(0, db.RoleProps, db.RetrieveQueryParams{}, func(i any) bool {
+ 		role := i.(db.Role)
+-		return role.Slug == slug
++		return role.Slug == slug && (role.ProjectID == nil || *role.ProjectID == projectID)
+ 	}, &roles)
+ 
+ 	if err != nil {
+@@ -92,5 +92,12 @@ func (d *BoltDb) GetProjectOrGlobalRoleBySlug(projectID int, slug string) (db.Ro
+ 		return db.Role{}, db.ErrNotFound
+ 	}
+ 
++	// Prefer the project-scoped role over the global one.
++	for _, role := range roles {
++		if role.ProjectID != nil {
++			return role, nil
++		}
++	}
++
+ 	return roles[0], nil
+ }
+diff --git a/db/sql/role.go b/db/sql/role.go
+index cefe760..b2fbe86 100644
+--- a/db/sql/role.go
++++ b/db/sql/role.go
+@@ -58,6 +58,10 @@ func (d *SqlDb) GetProjectRole(projectID int, slug string) (db.Role, error) {
+ 
+ func (d *SqlDb) GetProjectOrGlobalRoleBySlug(projectID int, slug string) (db.Role, error) {
+ 	var role db.Role
+-	err := d.selectOne(&role, "select * from `role` where slug=?", slug)
++	err := d.selectOne(
++		&role,
++		"select * from `role` where slug=? and (project_id=? or project_id is null) order by case when project_id is null then 1 else 0 end limit 1",
++		slug,
++		projectID)
+ 	return role, err
+ }

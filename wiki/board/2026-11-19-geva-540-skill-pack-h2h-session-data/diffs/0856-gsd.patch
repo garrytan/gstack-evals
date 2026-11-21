@@ -1,0 +1,38 @@
+diff --git a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+index 29a21da..9a07cea 100644
+--- a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
++++ b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+@@ -46,6 +46,6 @@ public final class YamlEscaper extends AbstractCharEscaper {
+     //noinspection UnnecessaryUnicodeEscape
+     return ch <= '\u0022'
+         ? REPLACEMENTS[ch]
+-        : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
++        : ch == '\\' ? "\\\\" : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
+   }
+ }
+diff --git a/pkl-core/src/test/kotlin/org/pkl/core/YamlRendererTest.kt b/pkl-core/src/test/kotlin/org/pkl/core/YamlRendererTest.kt
+index 964bf04..e7776b6 100644
+--- a/pkl-core/src/test/kotlin/org/pkl/core/YamlRendererTest.kt
++++ b/pkl-core/src/test/kotlin/org/pkl/core/YamlRendererTest.kt
+@@ -24,6 +24,21 @@ import org.snakeyaml.engine.v2.api.Load
+ import org.snakeyaml.engine.v2.api.LoadSettings
+ 
+ class YamlRendererTest {
++  @Test
++  fun `escapes backslashes in double-quoted strings`() {
++    val evaluator = Evaluator.preconfigured()
++    val module = evaluator.evaluate(ModuleSource.text("foo = \"\\t\\\\d\""))
++    val writer = StringWriter()
++    val renderer = ValueRenderers.yaml(writer, 2, true, false)
++
++    renderer.renderDocument(module)
++    val output = writer.toString()
++
++    assertThat(output.trim()).isEqualTo("foo: \"\\t\\\\d\"")
++    val loaded = Load(LoadSettings.builder().build()).loadFromString(output) as Map<*, *>
++    assertThat(loaded["foo"]).isEqualTo("\t\\d")
++  }
++
+   @Test
+   fun `render document`() {
+     val evaluator = Evaluator.preconfigured()

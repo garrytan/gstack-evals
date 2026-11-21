@@ -1,0 +1,138 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+index d9e438d..7bbfe46 100644
+--- a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -255,7 +255,14 @@ public class BeanDeserializerFactory
+          *   probably won't work and needs to be added elsewhere.
+          */
+         try {
+-            valueInstantiator = findValueInstantiator(ctxt, beanDescRef);
++            // Local/anonymous classes cannot be instantiated by Jackson, but
++            // existing instances may still be updated: so use a "no-op"
++            // instantiator that does not allow creation of new instances
++            if (ClassUtil.isLocalType(type.getRawClass(), true) != null) {
++                valueInstantiator = new ValueInstantiator.Base(type);
++            } else {
++                valueInstantiator = findValueInstantiator(ctxt, beanDescRef);
++            }
+         } catch (NoClassDefFoundError error) {
+             return new ErrorThrowingDeserializer(error);
+         } catch (IllegalArgumentException e0) {
+@@ -1048,12 +1055,10 @@ ClassUtil.name(name), ((AnnotatedParameter) m).getIndex());
+         if (ClassUtil.isProxyType(type)) {
+             throw new IllegalArgumentException("Cannot deserialize Proxy class "+type.getName()+" as a Bean");
+         }
+-        // also: can't deserialize some local classes: static are ok; in-method not;
+-        // other non-static inner classes are ok
+-        typeStr = ClassUtil.isLocalType(type, true);
+-        if (typeStr != null) {
+-            throw new IllegalArgumentException("Cannot deserialize Class "+type.getName()+" (of type "+typeStr+") as a Bean");
+-        }
++        // 13-Nov-2025: local/anonymous classes are NOT rejected here any more:
++        //   while we cannot construct instances of them, existing instances can
++        //   still be updated (see `ObjectMapper.readerForUpdating()`).
++        //   Instead, see `buildBeanDeserializer()` which will prevent instantiation.
+         return true;
+     }
+ 
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+index 98a4aad..c44f043 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+@@ -1608,6 +1608,12 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+         //   inner classes -- with one and only one exception; that of default constructor!
+         //   -- so let's indicate it
+         Class<?> raw = _beanType.getRawClass();
++        // Local/anonymous classes cannot be instantiated, only updated
++        final String localType = ClassUtil.isLocalType(raw, true);
++        if (localType != null) {
++            return ctxt.handleMissingInstantiator(raw, null, p,
++"cannot deserialize Class "+raw.getName()+" (of type "+localType+") as a Bean: only existing instances can be updated");
++        }
+         if (ClassUtil.isNonStaticInnerClass(raw)) {
+             return ctxt.handleMissingInstantiator(raw, null, p,
+ "non-static inner classes like this can only by instantiated using default, no-argument constructor");
+diff --git a/src/test/java/tools/jackson/databind/convert/UpdateLocalAnonymousClassTest.java b/src/test/java/tools/jackson/databind/convert/UpdateLocalAnonymousClassTest.java
+new file mode 100644
+index 0000000..710a161
+--- /dev/null
++++ b/src/test/java/tools/jackson/databind/convert/UpdateLocalAnonymousClassTest.java
+@@ -0,0 +1,78 @@
++package tools.jackson.databind.convert;
++
++import org.junit.jupiter.api.Test;
++
++import tools.jackson.databind.ObjectMapper;
++import tools.jackson.databind.exc.InvalidDefinitionException;
++import tools.jackson.databind.testutil.DatabindTestUtil;
++
++import static org.junit.jupiter.api.Assertions.*;
++
++/**
++ * Tests for verifying that existing instances of local and anonymous
++ * classes can be updated (even though they cannot be constructed).
++ */
++public class UpdateLocalAnonymousClassTest extends DatabindTestUtil
++{
++    private final ObjectMapper MAPPER = newJsonMapper();
++
++    @Test
++    public void testUpdateAnonymousInstance() throws Exception
++    {
++        Object resultObject = new Object() {
++            public int value;
++
++            @Override
++            public String toString() { return String.valueOf(value); }
++        };
++        Object result = MAPPER.readerForUpdating(resultObject)
++                .readValue(a2q("{'value': 2}"));
++        assertSame(resultObject, result);
++        assertEquals("2", result.toString());
++    }
++
++    @Test
++    public void testUpdateLocalInstance() throws Exception
++    {
++        class Local {
++            public int x;
++            public String name;
++        }
++        Local local = new Local();
++        Local result = MAPPER.readerForUpdating(local)
++                .readValue(a2q("{'x': 3, 'name':'foo'}"));
++        assertSame(local, result);
++        assertEquals(3, local.x);
++        assertEquals("foo", local.name);
++    }
++
++    @Test
++    public void testCannotCreateLocalInstance() throws Exception
++    {
++        class Local {
++            public int x;
++        }
++        InvalidDefinitionException e = assertThrows(InvalidDefinitionException.class,
++                () -> MAPPER.readValue(a2q("{'x': 3}"), Local.class));
++        verifyException(e, "local/anonymous");
++    }
++
++    @Test
++    public void testCannotCreateLocalInstanceInStaticContext() throws Exception
++    {
++        _testStaticLocal(MAPPER);
++    }
++
++    private static void _testStaticLocal(ObjectMapper mapper) {
++        class StaticLocal {
++            public int x;
++        }
++        InvalidDefinitionException e = assertThrows(InvalidDefinitionException.class,
++                () -> mapper.readValue(a2q("{'x': 3}"), StaticLocal.class));
++        verifyException(e, "local/anonymous");
++        // but updating works
++        StaticLocal local = new StaticLocal();
++        mapper.readerForUpdating(local).readValue(a2q("{'x': 5}"));
++        assertEquals(5, local.x);
++    }
++}

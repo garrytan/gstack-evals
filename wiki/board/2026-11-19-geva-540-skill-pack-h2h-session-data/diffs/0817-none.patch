@@ -1,0 +1,82 @@
+diff --git a/lib/dispatcher/client-h2.js b/lib/dispatcher/client-h2.js
+index 3fc6384..ccfab6c 100644
+--- a/lib/dispatcher/client-h2.js
++++ b/lib/dispatcher/client-h2.js
+@@ -289,19 +289,25 @@ function writeH2 (client, request) {
+ 
+   const headers = {}
+   for (let n = 0; n < reqHeaders.length; n += 2) {
+-    const key = reqHeaders[n + 0]
++    let key = reqHeaders[n + 0]
+     const val = reqHeaders[n + 1]
++    // RFC 9113 §8.2.3: cookie-pairs are delimited by "; " rather than ", "
++    let sep = ', '
++    if (typeof key === 'string' && key.toLowerCase() === 'cookie') {
++      key = 'cookie'
++      sep = '; '
++    }
+ 
+     if (Array.isArray(val)) {
+       for (let i = 0; i < val.length; i++) {
+         if (headers[key]) {
+-          headers[key] += `, ${val[i]}`
++          headers[key] += `${sep}${val[i]}`
+         } else {
+           headers[key] = val[i]
+         }
+       }
+     } else if (headers[key]) {
+-      headers[key] += `, ${val}`
++      headers[key] += `${sep}${val}`
+     } else {
+       headers[key] = val
+     }
+diff --git a/test/http2.js b/test/http2.js
+index 83e1422..1fd7e0a 100644
+--- a/test/http2.js
++++ b/test/http2.js
+@@ -173,6 +173,44 @@ test('Should support H2 connection (headers as array)', async t => {
+   t.strictEqual(Buffer.concat(body).toString('utf8'), 'hello h2!')
+ })
+ 
++test('Should join multiple cookie values with "; " (RFC 9113 8.2.3)', async t => {
++  const server = createSecureServer(await pem.generate({ opts: { keySize: 2048 } }))
++
++  server.on('stream', (stream, headers) => {
++    t.strictEqual(headers.cookie, 'a=b; c=d; e=f; g=h')
++    stream.respond({ ':status': 200 })
++    stream.end()
++  })
++
++  server.listen(0)
++  await once(server, 'listening')
++
++  const client = new Client(`https://localhost:${server.address().port}`, {
++    connect: {
++      rejectUnauthorized: false
++    },
++    allowH2: true
++  })
++
++  t = tspl(t, { plan: 2 })
++  after(() => server.close())
++  after(() => client.close())
++
++  const response = await client.request({
++    path: '/',
++    method: 'GET',
++    headers: [
++      'cookie', ['a=b', 'c=d'],
++      'Cookie', 'e=f',
++      'cookie', 'g=h'
++    ]
++  })
++
++  await response.body.dump()
++  t.strictEqual(response.statusCode, 200)
++  await t.completed
++})
++
+ test('Should support H2 connection(POST Buffer)', async t => {
+   const server = createSecureServer({ ...await pem.generate({ opts: { keySize: 2048 } }), allowHTTP1: false })
+ 

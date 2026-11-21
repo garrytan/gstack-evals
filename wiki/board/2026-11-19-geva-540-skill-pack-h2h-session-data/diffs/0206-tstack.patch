@@ -1,0 +1,539 @@
+diff --git a/docs/docs/configuration/reusing-mapping-configurations.mdx b/docs/docs/configuration/reusing-mapping-configurations.mdx
+index 3605e80..f54b8e3 100644
+--- a/docs/docs/configuration/reusing-mapping-configurations.mdx
++++ b/docs/docs/configuration/reusing-mapping-configurations.mdx
+@@ -55,6 +55,25 @@ The following configurations will be included:
+ - `MapValue`
+ - `MapDerivedType`
+ 
++### Including multiple mapping configurations
++
++Multiple `IncludeMappingConfigurationAttribute`s can be applied to the same mapping method,
++for example to reuse configurations defined for different interfaces implemented by the source and target types:
++
++```csharp
++[MapProperty(nameof(IAudit.CreatedBy), nameof(IAuditDto.CreatedByUser))]
++public static partial void MapAudit(IAudit audit, IAuditDto auditDto);
++
++[MapProperty(nameof(IOwnable.Owner), nameof(IOwnableDto.OwnerName))]
++public static partial void MapOwnable(IOwnable ownable, IOwnableDto ownableDto);
++
++// highlight-start
++[IncludeMappingConfiguration(nameof(MapAudit))]
++[IncludeMappingConfiguration(nameof(MapOwnable))]
++// highlight-end
++public static partial HouseDto ToDto(House house);
++```
++
+ ### Including a mapping configuration from a base class
+ 
+ This attribute also supports including configurations from a base class. For example, suppose you want to map
+diff --git a/src/Riok.Mapperly.Abstractions/IncludeMappingConfigurationAttribute.cs b/src/Riok.Mapperly.Abstractions/IncludeMappingConfigurationAttribute.cs
+index 7456ba6..44b5e09 100644
+--- a/src/Riok.Mapperly.Abstractions/IncludeMappingConfigurationAttribute.cs
++++ b/src/Riok.Mapperly.Abstractions/IncludeMappingConfigurationAttribute.cs
+@@ -6,7 +6,7 @@ namespace Riok.Mapperly.Abstractions;
+ /// An attribute used to include the mapping configuration of another mapping method in the attributed method.
+ /// Use the other mapping's method name to identify the configuration.
+ /// </summary>
+-[AttributeUsage(AttributeTargets.Method)]
++[AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
+ [Conditional("MAPPERLY_ABSTRACTIONS_SCOPE_RUNTIME")]
+ public sealed class IncludeMappingConfigurationAttribute : Attribute
+ {
+diff --git a/src/Riok.Mapperly/Configuration/ConfigurationCollectionExtensions.cs b/src/Riok.Mapperly/Configuration/ConfigurationCollectionExtensions.cs
+new file mode 100644
+index 0000000..3143c2d
+--- /dev/null
++++ b/src/Riok.Mapperly/Configuration/ConfigurationCollectionExtensions.cs
+@@ -0,0 +1,18 @@
++namespace Riok.Mapperly.Configuration;
++
++internal static class ConfigurationCollectionExtensions
++{
++    /// <summary>
++    /// Appends all items of <paramref name="other"/> which are not yet contained in <paramref name="items"/>.
++    /// This prevents duplicated configurations if the same configuration is included multiple times
++    /// (e.g. multiple included configurations which include the same base configuration).
++    /// </summary>
++    public static IReadOnlyCollection<T> IncludeDistinct<T>(this IReadOnlyCollection<T> items, IReadOnlyCollection<T>? other)
++    {
++        if (other == null || other.Count == 0)
++            return items;
++
++        var existing = new HashSet<T>(items);
++        return items.Concat(other.Where(x => !existing.Contains(x))).ToList();
++    }
++}
+diff --git a/src/Riok.Mapperly/Configuration/EnumMappingConfiguration.cs b/src/Riok.Mapperly/Configuration/EnumMappingConfiguration.cs
+index 55525fe..d8ebdd1 100644
+--- a/src/Riok.Mapperly/Configuration/EnumMappingConfiguration.cs
++++ b/src/Riok.Mapperly/Configuration/EnumMappingConfiguration.cs
+@@ -21,9 +21,9 @@ public record EnumMappingConfiguration(
+         return this with
+         {
+             FallbackValue = FallbackValue ?? otherConfiguration?.FallbackValue,
+-            IgnoredSourceMembers = IgnoredSourceMembers.Concat(otherConfiguration?.IgnoredSourceMembers ?? []).ToList(),
+-            IgnoredTargetMembers = IgnoredTargetMembers.Concat(otherConfiguration?.IgnoredTargetMembers ?? []).ToList(),
+-            ExplicitMappings = ExplicitMappings.Concat(otherConfiguration?.ExplicitMappings ?? []).ToList(),
++            IgnoredSourceMembers = IgnoredSourceMembers.IncludeDistinct(otherConfiguration?.IgnoredSourceMembers),
++            IgnoredTargetMembers = IgnoredTargetMembers.IncludeDistinct(otherConfiguration?.IgnoredTargetMembers),
++            ExplicitMappings = ExplicitMappings.IncludeDistinct(otherConfiguration?.ExplicitMappings),
+         };
+     }
+ }
+diff --git a/src/Riok.Mapperly/Configuration/MapperConfigurationReader.cs b/src/Riok.Mapperly/Configuration/MapperConfigurationReader.cs
+index 3968e59..c55fc22 100644
+--- a/src/Riok.Mapperly/Configuration/MapperConfigurationReader.cs
++++ b/src/Riok.Mapperly/Configuration/MapperConfigurationReader.cs
+@@ -110,7 +110,9 @@ public class MapperConfigurationReader
+         );
+         foreach (var includedCfg in includedMappingConfigs)
+         {
+-            var cfgToInclude = BuildConfigToInclude(includedCfg.Name, reference, visitedMethods, supportsDeepCloning);
++            // each included configuration gets its own copy of the visited methods,
++            // to allow multiple included configurations to share a common included configuration.
++            var cfgToInclude = BuildConfigToInclude(includedCfg.Name, reference, [.. visitedMethods], supportsDeepCloning);
+             if (cfgToInclude == null)
+             {
+                 continue;
+diff --git a/src/Riok.Mapperly/Configuration/MappingConfiguration.cs b/src/Riok.Mapperly/Configuration/MappingConfiguration.cs
+index 0c9b06a..7df992a 100644
+--- a/src/Riok.Mapperly/Configuration/MappingConfiguration.cs
++++ b/src/Riok.Mapperly/Configuration/MappingConfiguration.cs
+@@ -19,7 +19,7 @@ public record MappingConfiguration(
+         {
+             Enum = Enum.Include(otherConfiguration?.Enum),
+             Members = Members.Include(otherConfiguration?.Members),
+-            DerivedTypes = DerivedTypes.Concat(otherConfiguration?.DerivedTypes ?? []).ToList(),
++            DerivedTypes = DerivedTypes.IncludeDistinct(otherConfiguration?.DerivedTypes),
+         };
+     }
+ 
+diff --git a/src/Riok.Mapperly/Configuration/MembersMappingConfiguration.cs b/src/Riok.Mapperly/Configuration/MembersMappingConfiguration.cs
+index 0185798..b9b276c 100644
+--- a/src/Riok.Mapperly/Configuration/MembersMappingConfiguration.cs
++++ b/src/Riok.Mapperly/Configuration/MembersMappingConfiguration.cs
+@@ -29,11 +29,11 @@ public record MembersMappingConfiguration(
+     public MembersMappingConfiguration Include(MembersMappingConfiguration? otherConfiguration)
+     {
+         return new MembersMappingConfiguration(
+-            IgnoredSources.Concat(otherConfiguration?.IgnoredSources ?? []).ToList(),
+-            IgnoredTargets.Concat(otherConfiguration?.IgnoredTargets ?? []).ToList(),
+-            ValueMappings.Concat(otherConfiguration?.ValueMappings ?? []).ToList(),
+-            ExplicitMappings.Concat(otherConfiguration?.ExplicitMappings ?? []).ToList(),
+-            NestedMappings.Concat(otherConfiguration?.NestedMappings ?? []).ToList(),
++            IgnoredSources.IncludeDistinct(otherConfiguration?.IgnoredSources),
++            IgnoredTargets.IncludeDistinct(otherConfiguration?.IgnoredTargets),
++            ValueMappings.IncludeDistinct(otherConfiguration?.ValueMappings),
++            ExplicitMappings.IncludeDistinct(otherConfiguration?.ExplicitMappings),
++            NestedMappings.IncludeDistinct(otherConfiguration?.NestedMappings),
+             IgnoreObsoleteMembersStrategy ?? otherConfiguration?.IgnoreObsoleteMembersStrategy,
+             RequiredMappingStrategy ?? otherConfiguration?.RequiredMappingStrategy
+         );
+diff --git a/test/Riok.Mapperly.IntegrationTests/IncludeMultipleConfigurationsMapperTest.cs b/test/Riok.Mapperly.IntegrationTests/IncludeMultipleConfigurationsMapperTest.cs
+new file mode 100644
+index 0000000..e82a3c6
+--- /dev/null
++++ b/test/Riok.Mapperly.IntegrationTests/IncludeMultipleConfigurationsMapperTest.cs
+@@ -0,0 +1,24 @@
++using Riok.Mapperly.IntegrationTests.Mapper;
++using Shouldly;
++using Xunit;
++
++namespace Riok.Mapperly.IntegrationTests
++{
++    public class IncludeMultipleConfigurationsMapperTest
++    {
++        [Fact]
++        public void RunMappingShouldApplyAllIncludedConfigurations()
++        {
++            var house = new House
++            {
++                CreatedBy = "creator",
++                Owner = "owner",
++                Rooms = 3,
++            };
++            var dto = IncludeMultipleConfigurationsMapper.ToDto(house);
++            dto.CreatedByUser.ShouldBe("creator");
++            dto.OwnerName.ShouldBe("owner");
++            dto.Rooms.ShouldBe(3);
++        }
++    }
++}
+diff --git a/test/Riok.Mapperly.IntegrationTests/Mapper/IncludeMultipleConfigurationsMapper.cs b/test/Riok.Mapperly.IntegrationTests/Mapper/IncludeMultipleConfigurationsMapper.cs
+new file mode 100644
+index 0000000..0651acf
+--- /dev/null
++++ b/test/Riok.Mapperly.IntegrationTests/Mapper/IncludeMultipleConfigurationsMapper.cs
+@@ -0,0 +1,61 @@
++using Riok.Mapperly.Abstractions;
++
++namespace Riok.Mapperly.IntegrationTests.Mapper
++{
++    public interface IAudit
++    {
++        string CreatedBy { get; set; }
++    }
++
++    public interface IOwnable
++    {
++        string? Owner { get; set; }
++    }
++
++    public interface IAuditDto
++    {
++        string CreatedByUser { get; set; }
++    }
++
++    public interface IOwnableDto
++    {
++        string? OwnerName { get; set; }
++    }
++
++    public class House : IAudit, IOwnable
++    {
++        public string CreatedBy { get; set; } = string.Empty;
++
++        public string? Owner { get; set; }
++
++        public int Rooms { get; set; }
++    }
++
++    public class HouseDto : IAuditDto, IOwnableDto
++    {
++        public string CreatedByUser { get; set; } = string.Empty;
++
++        public string? OwnerName { get; set; }
++
++        public int Rooms { get; set; }
++    }
++
++    [Mapper]
++    public static partial class BaseConfigurationMapper
++    {
++        [MapProperty(nameof(IAudit.CreatedBy), nameof(IAuditDto.CreatedByUser))]
++        public static partial void MapAudit(IAudit audit, IAuditDto auditDto);
++
++        [MapProperty(nameof(IOwnable.Owner), nameof(IOwnableDto.OwnerName))]
++        public static partial void MapOwnable(IOwnable ownable, IOwnableDto ownableDto);
++    }
++
++    [Mapper]
++    [UseStaticMapper(typeof(BaseConfigurationMapper))]
++    public static partial class IncludeMultipleConfigurationsMapper
++    {
++        [IncludeMappingConfiguration(nameof(@BaseConfigurationMapper.MapAudit))]
++        [IncludeMappingConfiguration(nameof(@BaseConfigurationMapper.MapOwnable))]
++        public static partial HouseDto ToDto(House house);
++    }
++}
+diff --git a/test/Riok.Mapperly.Tests/Mapping/IncludeMappingConfigurationTest.cs b/test/Riok.Mapperly.Tests/Mapping/IncludeMappingConfigurationTest.cs
+index efce47f..13b21a7 100644
+--- a/test/Riok.Mapperly.Tests/Mapping/IncludeMappingConfigurationTest.cs
++++ b/test/Riok.Mapperly.Tests/Mapping/IncludeMappingConfigurationTest.cs
+@@ -1,3 +1,5 @@
++using Riok.Mapperly.Abstractions;
++
+ namespace Riok.Mapperly.Tests.Mapping;
+ 
+ public class IncludeMappingConfigurationTest
+@@ -42,6 +44,43 @@ public class IncludeMappingConfigurationTest
+         return TestHelper.VerifyGenerator(source);
+     }
+ 
++    [Fact]
++    public Task IncludesMultipleConfigsWithSharedIncludedConfig()
++    {
++        var source = TestSourceBuilder.MapperWithBodyAndTypes(
++            """
++            [MapProperty(nameof(A.BaseValue), nameof(B.BaseValueTarget))]
++            partial B MapBase(A a);
++
++            [MapProperty(nameof(A.Value), nameof(B.ValueTarget))]
++            [IncludeMappingConfiguration(nameof(MapBase))]
++            partial B MapOther(A a);
++
++            [MapProperty(nameof(A.Value2), nameof(B.Value2Target))]
++            [IncludeMappingConfiguration(nameof(MapBase))]
++            partial B MapOther2(A a);
++
++            [IncludeMappingConfiguration(nameof(MapOther))]
++            [IncludeMappingConfiguration(nameof(MapOther2))]
++            partial B Map(A a);
++            """,
++            "class A { public int BaseValue { get; set; } public int Value { get; set; } public int Value2 { get; set; } }",
++            "class B { public int BaseValueTarget { get; set; } public int ValueTarget { get; set; } public int Value2Target { get; set; } }"
++        );
++
++        return TestHelper.VerifyGenerator(source);
++    }
++
++    [Fact]
++    public void IncludeMappingConfigurationAttributeAllowsMultiple()
++    {
++        var usage = typeof(IncludeMappingConfigurationAttribute)
++            .GetCustomAttributes(typeof(AttributeUsageAttribute), false)
++            .Cast<AttributeUsageAttribute>()
++            .Single();
++        usage.AllowMultiple.ShouldBeTrue();
++    }
++
+     [Fact]
+     public Task UsesMapperIgnoreSourceFromTargetMapper()
+     {
+diff --git a/test/Riok.Mapperly.Tests/_snapshots/IncludeMappingConfigurationTest.IncludesMultipleConfigsWithSharedIncludedConfig#Mapper.g.verified.cs b/test/Riok.Mapperly.Tests/_snapshots/IncludeMappingConfigurationTest.IncludesMultipleConfigsWithSharedIncludedConfig#Mapper.g.verified.cs
+new file mode 100644
+index 0000000..8e07408
+--- /dev/null
++++ b/test/Riok.Mapperly.Tests/_snapshots/IncludeMappingConfigurationTest.IncludesMultipleConfigsWithSharedIncludedConfig#Mapper.g.verified.cs
+@@ -0,0 +1,41 @@
++﻿//HintName: Mapper.g.cs
++// <auto-generated />
++#nullable enable
++public partial class Mapper
++{
++    [global::System.CodeDom.Compiler.GeneratedCode("Riok.Mapperly", "0.0.1.0")]
++    partial global::B MapBase(global::A a)
++    {
++        var target = new global::B();
++        target.BaseValueTarget = a.BaseValue;
++        return target;
++    }
++
++    [global::System.CodeDom.Compiler.GeneratedCode("Riok.Mapperly", "0.0.1.0")]
++    partial global::B MapOther(global::A a)
++    {
++        var target = new global::B();
++        target.BaseValueTarget = a.BaseValue;
++        target.ValueTarget = a.Value;
++        return target;
++    }
++
++    [global::System.CodeDom.Compiler.GeneratedCode("Riok.Mapperly", "0.0.1.0")]
++    partial global::B MapOther2(global::A a)
++    {
++        var target = new global::B();
++        target.BaseValueTarget = a.BaseValue;
++        target.Value2Target = a.Value2;
++        return target;
++    }
++
++    [global::System.CodeDom.Compiler.GeneratedCode("Riok.Mapperly", "0.0.1.0")]
++    partial global::B Map(global::A a)
++    {
++        var target = new global::B();
++        target.BaseValueTarget = a.BaseValue;
++        target.ValueTarget = a.Value;
++        target.Value2Target = a.Value2;
++        return target;
++    }
++}
+\ No newline at end of file
+diff --git a/test/Riok.Mapperly.Tests/_snapshots/IncludeMappingConfigurationTest.IncludesMultipleConfigsWithSharedIncludedConfig.verified.txt b/test/Riok.Mapperly.Tests/_snapshots/IncludeMappingConfigurationTest.IncludesMultipleConfigsWithSharedIncludedConfig.verified.txt
+new file mode 100644
+index 0000000..de6d947
+--- /dev/null
++++ b/test/Riok.Mapperly.Tests/_snapshots/IncludeMappingConfigurationTest.IncludesMultipleConfigsWithSharedIncludedConfig.verified.txt
+@@ -0,0 +1,188 @@
++﻿{
++  Diagnostics: [
++    {
++      Location: /*
++{
++    [MapProperty(nameof(A.BaseValue), nameof(B.BaseValueTarget))]
++    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++partial B MapBase(A a);
++^^^^^^^^^^^^^^^^^^^^^^^
++
++*/
++ : (11,4)-(12,23),
++      Message: The member Value on the mapping source type A is not mapped to any member on the mapping target type B,
++      Severity: Warning,
++      WarningLevel: 1,
++      Descriptor: {
++        Id: RMG020,
++        Title: Source member is not mapped to any target member,
++        MessageFormat: The member {0} on the mapping source type {1} is not mapped to any member on the mapping target type {2},
++        Category: Mapper,
++        DefaultSeverity: Warning,
++        IsEnabledByDefault: true
++      }
++    },
++    {
++      Location: /*
++{
++    [MapProperty(nameof(A.BaseValue), nameof(B.BaseValueTarget))]
++    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++partial B MapBase(A a);
++^^^^^^^^^^^^^^^^^^^^^^^
++
++*/
++ : (11,4)-(12,23),
++      Message: The member Value2 on the mapping source type A is not mapped to any member on the mapping target type B,
++      Severity: Warning,
++      WarningLevel: 1,
++      Descriptor: {
++        Id: RMG020,
++        Title: Source member is not mapped to any target member,
++        MessageFormat: The member {0} on the mapping source type {1} is not mapped to any member on the mapping target type {2},
++        Category: Mapper,
++        DefaultSeverity: Warning,
++        IsEnabledByDefault: true
++      }
++    },
++    {
++      Location: /*
++{
++    [MapProperty(nameof(A.BaseValue), nameof(B.BaseValueTarget))]
++    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++partial B MapBase(A a);
++^^^^^^^^^^^^^^^^^^^^^^^
++
++*/
++ : (11,4)-(12,23),
++      Message: The member ValueTarget on the mapping target type B was not found on the mapping source type A,
++      Severity: Warning,
++      WarningLevel: 1,
++      Descriptor: {
++        Id: RMG012,
++        Title: Source member was not found for target member,
++        MessageFormat: The member {0} on the mapping target type {1} was not found on the mapping source type {2},
++        Category: Mapper,
++        DefaultSeverity: Warning,
++        IsEnabledByDefault: true
++      }
++    },
++    {
++      Location: /*
++{
++    [MapProperty(nameof(A.BaseValue), nameof(B.BaseValueTarget))]
++    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++partial B MapBase(A a);
++^^^^^^^^^^^^^^^^^^^^^^^
++
++*/
++ : (11,4)-(12,23),
++      Message: The member Value2Target on the mapping target type B was not found on the mapping source type A,
++      Severity: Warning,
++      WarningLevel: 1,
++      Descriptor: {
++        Id: RMG012,
++        Title: Source member was not found for target member,
++        MessageFormat: The member {0} on the mapping target type {1} was not found on the mapping source type {2},
++        Category: Mapper,
++        DefaultSeverity: Warning,
++        IsEnabledByDefault: true
++      }
++    },
++    {
++      Location: /*
++
++[MapProperty(nameof(A.Value), nameof(B.ValueTarget))]
++^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++[IncludeMappingConfiguration(nameof(MapBase))]
++^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++partial B MapOther(A a);
++^^^^^^^^^^^^^^^^^^^^^^^^
++
++*/
++ : (14,0)-(16,24),
++      Message: The member Value2 on the mapping source type A is not mapped to any member on the mapping target type B,
++      Severity: Warning,
++      WarningLevel: 1,
++      Descriptor: {
++        Id: RMG020,
++        Title: Source member is not mapped to any target member,
++        MessageFormat: The member {0} on the mapping source type {1} is not mapped to any member on the mapping target type {2},
++        Category: Mapper,
++        DefaultSeverity: Warning,
++        IsEnabledByDefault: true
++      }
++    },
++    {
++      Location: /*
++
++[MapProperty(nameof(A.Value), nameof(B.ValueTarget))]
++^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++[IncludeMappingConfiguration(nameof(MapBase))]
++^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++partial B MapOther(A a);
++^^^^^^^^^^^^^^^^^^^^^^^^
++
++*/
++ : (14,0)-(16,24),
++      Message: The member Value2Target on the mapping target type B was not found on the mapping source type A,
++      Severity: Warning,
++      WarningLevel: 1,
++      Descriptor: {
++        Id: RMG012,
++        Title: Source member was not found for target member,
++        MessageFormat: The member {0} on the mapping target type {1} was not found on the mapping source type {2},
++        Category: Mapper,
++        DefaultSeverity: Warning,
++        IsEnabledByDefault: true
++      }
++    },
++    {
++      Location: /*
++
++[MapProperty(nameof(A.Value2), nameof(B.Value2Target))]
++^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++[IncludeMappingConfiguration(nameof(MapBase))]
++^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++partial B MapOther2(A a);
++^^^^^^^^^^^^^^^^^^^^^^^^^
++
++*/
++ : (18,0)-(20,25),
++      Message: The member Value on the mapping source type A is not mapped to any member on the mapping target type B,
++      Severity: Warning,
++      WarningLevel: 1,
++      Descriptor: {
++        Id: RMG020,
++        Title: Source member is not mapped to any target member,
++        MessageFormat: The member {0} on the mapping source type {1} is not mapped to any member on the mapping target type {2},
++        Category: Mapper,
++        DefaultSeverity: Warning,
++        IsEnabledByDefault: true
++      }
++    },
++    {
++      Location: /*
++
++[MapProperty(nameof(A.Value2), nameof(B.Value2Target))]
++^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++[IncludeMappingConfiguration(nameof(MapBase))]
++^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++partial B MapOther2(A a);
++^^^^^^^^^^^^^^^^^^^^^^^^^
++
++*/
++ : (18,0)-(20,25),
++      Message: The member ValueTarget on the mapping target type B was not found on the mapping source type A,
++      Severity: Warning,
++      WarningLevel: 1,
++      Descriptor: {
++        Id: RMG012,
++        Title: Source member was not found for target member,
++        MessageFormat: The member {0} on the mapping target type {1} was not found on the mapping source type {2},
++        Category: Mapper,
++        DefaultSeverity: Warning,
++        IsEnabledByDefault: true
++      }
++    }
++  ]
++}
+\ No newline at end of file
+diff --git a/test/Riok.Mapperly.Tests/_snapshots/IncludeMappingConfigurationTest.ReportsCircularReferences#Mapper.g.verified.cs b/test/Riok.Mapperly.Tests/_snapshots/IncludeMappingConfigurationTest.ReportsCircularReferences#Mapper.g.verified.cs
+index 797639a..227ee76 100644
+--- a/test/Riok.Mapperly.Tests/_snapshots/IncludeMappingConfigurationTest.ReportsCircularReferences#Mapper.g.verified.cs
++++ b/test/Riok.Mapperly.Tests/_snapshots/IncludeMappingConfigurationTest.ReportsCircularReferences#Mapper.g.verified.cs
+@@ -8,7 +8,6 @@ public partial class Mapper
+     {
+         var target = new global::B();
+         target.DestinationName = a.SourceName;
+-        target.DestinationName = a.SourceName;
+         return target;
+     }
+ 

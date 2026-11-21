@@ -1,0 +1,105 @@
+diff --git a/index.js b/index.js
+index f7058ef..0f66d3c 100644
+--- a/index.js
++++ b/index.js
+@@ -481,6 +481,11 @@ RedirectableRequest.prototype._processResponse = function (response) {
+   this._isRedirect = true;
+   spreadUrlObject(redirectUrl, this._options);
+ 
++  // Node does not add a Host header for array-form headers, so set it
++  if (isArray(this._options.headers)) {
++    this._options.headers.push("Host", redirectUrl.host);
++  }
++
+   // Drop confidential headers when redirecting to a less secure protocol
+   // or to a different domain that is not a superdomain
+   if (redirectUrl.protocol !== currentUrlParts.protocol &&
+@@ -629,10 +634,24 @@ function spreadUrlObject(urlObject, target) {
+ 
+ function removeMatchingHeaders(regex, headers) {
+   var lastValue;
+-  for (var header in headers) {
+-    if (regex.test(header)) {
+-      lastValue = headers[header];
+-      delete headers[header];
++  // Node also accepts headers as a flat array of alternating names and values
++  if (isArray(headers)) {
++    for (var i = 0; i < headers.length;) {
++      if (regex.test(headers[i])) {
++        lastValue = headers[i + 1];
++        headers.splice(i, 2);
++      }
++      else {
++        i += 2;
++      }
++    }
++  }
++  else {
++    for (var header in headers) {
++      if (regex.test(header)) {
++        lastValue = headers[header];
++        delete headers[header];
++      }
+     }
+   }
+   return (lastValue === null || typeof lastValue === "undefined") ?
+diff --git a/test/test.js b/test/test.js
+index 474110e..766fd85 100644
+--- a/test/test.js
++++ b/test/test.js
+@@ -1677,6 +1677,55 @@ describe("follow-redirects", function () {
+           });
+       });
+ 
++      it("drops the header from array-form headers when redirected to a different host", function () {
++        app.get("/a", redirectsTo(302, "http://localhost:3600/b"));
++        app.get("/b", function (req, res) {
++          res.end(JSON.stringify(req.headers));
++        });
++
++        var opts = url.parse("http://127.0.0.1:3600/a");
++        opts.headers = ["Host", "localhost", header, "the header value", "X-Other", "kept"];
++        opts.sensitiveHeaders = sensitiveHeaders;
++
++        return server.start(app)
++          .then(asPromise(function (resolve, reject) {
++            http.get(opts, resolve).on("error", reject);
++          }))
++          .then(asPromise(function (resolve, reject, res) {
++            res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
++          }))
++          .then(function (str) {
++            var body = JSON.parse(str);
++            assert.equal(body.host, "localhost:3600");
++            assert.equal(body[header.toLowerCase()], undefined);
++            assert.equal(body["x-other"], "kept");
++          });
++      });
++
++      it("keeps the header from array-form headers when redirected to the same host", function () {
++        app.get("/a", redirectsTo(302, "/b"));
++        app.get("/b", function (req, res) {
++          res.end(JSON.stringify(req.headers));
++        });
++
++        var opts = url.parse("http://localhost:3600/a");
++        opts.headers = ["Host", "localhost:3600", header, "the header value"];
++        opts.sensitiveHeaders = sensitiveHeaders;
++
++        return server.start(app)
++          .then(asPromise(function (resolve, reject) {
++            http.get(opts, resolve).on("error", reject);
++          }))
++          .then(asPromise(function (resolve, reject, res) {
++            res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
++          }))
++          .then(function (str) {
++            var body = JSON.parse(str);
++            assert.equal(body.host, "localhost:3600");
++            assert.equal(body[header.toLowerCase()], "the header value");
++          });
++      });
++
+       it("drops the header when redirected to a different host (same hostname and different port)", function () {
+         app.get("/a", redirectsTo(302, "http://localhost:3600/b"));
+         app.get("/b", function (req, res) {

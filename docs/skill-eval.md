@@ -50,7 +50,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 |---|---|---|
 | `--arms` | required | The arms, in the grammar above. |
 | `--tasks` | required | The contract tasks file, usually `test/fixtures/skill-evals/<skill>/tasks.json`. |
-| `--host` | required | claude or codex runs every task, interactive ones included. On claude, an evaluator, machine or SDK-link failure leaves a missing cell (E_INFRA_FAILURE), scored under the prereg's missing-cell rule, not a harness_crash fail against the arm. |
+| `--host` | required | claude or codex. claude runs every task, interactive ones included. codex runs interactive tasks only on the models the pinned Codex offers `request_user_input_async`: gpt-6-astra, gpt-6-luna, gpt-6-sol, gpt-6.1-sol and gpt-6.1-terra, matched on the part after the last slash, so `openai/gpt-6.1-sol` counts. With any other model in the call, a run with interactive tasks is refused whole at preflight (E_INTERACTIVE_HOST). On claude, an evaluator, machine or SDK-link failure leaves a missing cell (E_INFRA_FAILURE), scored under the prereg's missing-cell rule, not a harness_crash fail against the arm. |
 | `--model` | required | Models under test, comma-separated, one verdict each. The policy must allow each as a subject. |
 | `--trials` | 3 | Trials per task in each arm. |
 | `--spend-cap` | required to spend | The run's dollar limit. It must be at most the line item's approved cap and at least one arm-balanced round. |
@@ -85,7 +85,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 `gstack-evals preflight <call>` and every `skill-eval` call run these steps before any spend, in order. Every step that can run does, so one call reports every stop.
 
 1. **Contract.** The tasks file and sidecar follow the contract's rules (E_TASKS_INVALID); `--tasks-only` names real ids.
-2. **Host.** Each model's provider runs on the host.
+2. **Host.** Each model's provider runs on the host. On `--host codex`, a call with interactive tasks stops if any model is outside the five that get `request_user_input_async` (the `--host` row above), and the whole run is refused, not just that model (E_INTERACTIVE_HOST).
 3. **Policy.** Each model is allowed for its role: subjects, the judge (always from another family than the subjects) and the user simulator (E_MODEL_POLICY).
 4. **Keys.** Checked by name only; values are never printed (E_KEY_MISSING).
 5. **Vacuity.** Each task's predicate must fail on its no-op control, and a safety task's on its mutant (VACUOUS_CHECK, or E_TASKS_INVALID when a control cannot run). A check that exits 2, ends with no exit code, or exits 126 or 127 for a command outside the work dir is an error, never a fail. A safety task without a mutant gets NEGATIVE_UNVALIDATED.

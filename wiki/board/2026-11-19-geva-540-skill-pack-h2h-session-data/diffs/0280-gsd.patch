@@ -1,0 +1,117 @@
+diff --git a/packages/core/src/utils/EntityComparator.ts b/packages/core/src/utils/EntityComparator.ts
+index 7b81203..fae816b 100644
+--- a/packages/core/src/utils/EntityComparator.ts
++++ b/packages/core/src/utils/EntityComparator.ts
+@@ -635,20 +635,26 @@ export class EntityComparator {
+       ret += `${padding}if (${nullCond}) ret${dataKey} = null;\n`;
+     } else {
+       ret += `${padding}if (${nullCond}) {\n`;
+-      ret +=
+-        meta.props
++      const nullifyChildren = (parent: EntityProperty<T>): string[] => {
++        return meta.props
+           .filter(
+             p =>
+-              p.embedded?.[0] === prop.name &&
++              p.embedded?.[0] === parent.name &&
+               // object for JSON embeddable
+               (p.object || p.persist !== false),
+           )
+-          .map(childProp => {
++          .flatMap(childProp => {
++            // nested inline embeddable, nullify its leaf columns instead of the (non-existent) embedded column
++            if (childProp.kind === ReferenceKind.EMBEDDED && !childProp.object && !meta.embeddable && !prop.object) {
++              return nullifyChildren(childProp);
++            }
++
+             const childDataKey =
+               meta.embeddable || prop.object ? dataKey + this.wrap(childProp.embedded![1]) : this.wrap(childProp.name);
+-            return `${padding}  ret${childDataKey} = null;`;
+-          })
+-          .join('\n') + `\n`;
++            return [`${padding}  ret${childDataKey} = null;`];
++          });
++      };
++      ret += nullifyChildren(prop).join('\n') + `\n`;
+       ret += `${padding}}\n`;
+     }
+ 
+diff --git a/tests/features/embeddables/nested-inline-null.test.ts b/tests/features/embeddables/nested-inline-null.test.ts
+new file mode 100644
+index 0000000..50eea00
+--- /dev/null
++++ b/tests/features/embeddables/nested-inline-null.test.ts
+@@ -0,0 +1,73 @@
++import { MikroORM } from '@mikro-orm/sqlite';
++import { Embeddable, Embedded, Entity, PrimaryKey, Property, ReflectMetadataProvider } from '@mikro-orm/decorators/legacy';
++import { mockLogger } from '../../helpers.js';
++
++@Embeddable()
++class Deep {
++  @Property({ nullable: true })
++  flag?: string;
++}
++
++@Embeddable()
++class Inner {
++  @Property({ nullable: true })
++  value?: string;
++
++  @Embedded(() => Deep, { nullable: true })
++  deep?: Deep | null;
++}
++
++@Embeddable()
++class Outer {
++  @Property({ nullable: true })
++  name?: string;
++
++  @Embedded(() => Inner, { nullable: true })
++  inner?: Inner | null;
++}
++
++@Entity()
++class Thing {
++  @PrimaryKey()
++  id!: number;
++
++  @Embedded(() => Outer, { nullable: true })
++  outer?: Outer | null;
++}
++
++let orm: MikroORM;
++
++beforeAll(async () => {
++  orm = await MikroORM.init({
++    entities: [Thing],
++    dbName: ':memory:',
++    metadataProvider: ReflectMetadataProvider,
++  });
++  await orm.schema.create();
++});
++
++afterAll(() => orm.close(true));
++
++test('nested inline embeddables with null parent use leaf column names', async () => {
++  const mock = mockLogger(orm);
++  const t1 = orm.em.create(Thing, { outer: null });
++  await orm.em.flush();
++  expect(mock.mock.calls[1][0]).toMatch(
++    'insert into `thing` (`outer_name`, `outer_inner_value`, `outer_inner_deep_flag`) values (null, null, null) returning `id`',
++  );
++
++  const t2 = orm.em.create(Thing, { outer: { name: 'a', inner: { value: 'b', deep: { flag: 'c' } } } });
++  await orm.em.flush();
++  mock.mockReset();
++  t2.outer = null;
++  await orm.em.flush();
++  expect(mock.mock.calls[1][0]).toMatch(
++    'update `thing` set `outer_name` = null, `outer_inner_value` = null, `outer_inner_deep_flag` = null where `id` = 2',
++  );
++
++  orm.em.clear();
++  const [r1, r2] = await orm.em.find(Thing, {}, { orderBy: { id: 1 } });
++  expect(r1.id).toBe(t1.id);
++  expect(r1.outer).toBeNull();
++  expect(r2.outer).toBeNull();
++});

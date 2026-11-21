@@ -1,0 +1,113 @@
+diff --git a/src/rules_core/smartquotes.ts b/src/rules_core/smartquotes.ts
+index 61979cb..1a78892 100644
+--- a/src/rules_core/smartquotes.ts
++++ b/src/rules_core/smartquotes.ts
+@@ -16,6 +16,16 @@ interface Replacement {
+ 
+ type ReplacementMap = Record<string, Replacement[]>
+ 
++interface Opener {
++  token: number
++  pos: number
++  single: boolean
++  level: number
++  // stack index of the nearest single / double opener at or below this one, -1 if none
++  lastSingle: number
++  lastDouble: number
++}
++
+ function addReplacement (
+   replacements: ReplacementMap,
+   tokenIdx: number,
+@@ -48,7 +58,7 @@ function applyReplacements (str: string, replacements: Replacement[]) {
+ function process_inlines (tokens: Token[], state: StateCore) {
+   let j
+ 
+-  const stack = []
++  const stack: Opener[] = []
+   // token index -> list of replacements in the original token content
+   const replacements: ReplacementMap = {}
+ 
+@@ -163,39 +173,43 @@ function process_inlines (tokens: Token[], state: StateCore) {
+         continue
+       }
+ 
+-      if (canClose) {
+-        // this could be a closing quote, rewind the stack to get a match
+-        for (j = stack.length - 1; j >= 0; j--) {
+-          let item = stack[j]
+-          if (stack[j].level < thisLevel) { break }
+-          if (item.single === isSingle && stack[j].level === thisLevel) {
+-            item = stack[j]
+-
+-            let openQuote
+-            let closeQuote
+-            if (isSingle) {
+-              openQuote = state.md.options.quotes[2]
+-              closeQuote = state.md.options.quotes[3]
+-            } else {
+-              openQuote = state.md.options.quotes[0]
+-              closeQuote = state.md.options.quotes[1]
+-            }
+-
+-            addReplacement(replacements, i, t.index, closeQuote)
+-            addReplacement(replacements, item.token, item.pos, openQuote)
+-
+-            stack.length = j
+-            continue OUTER
++      if (canClose && stack.length > 0) {
++        // Stack levels never decrease upwards and never exceed thisLevel, so
++        // the only candidate is the topmost opener of the same quote type.
++        const top = stack[stack.length - 1]
++        j = isSingle ? top.lastSingle : top.lastDouble
++
++        if (j >= 0 && stack[j].level === thisLevel) {
++          const item = stack[j]
++
++          let openQuote
++          let closeQuote
++          if (isSingle) {
++            openQuote = state.md.options.quotes[2]
++            closeQuote = state.md.options.quotes[3]
++          } else {
++            openQuote = state.md.options.quotes[0]
++            closeQuote = state.md.options.quotes[1]
+           }
++
++          addReplacement(replacements, i, t.index, closeQuote)
++          addReplacement(replacements, item.token, item.pos, openQuote)
++
++          stack.length = j
++          continue OUTER
+         }
+       }
+ 
+       if (canOpen) {
++        const idx = stack.length
++        const below = idx > 0 ? stack[idx - 1] : null
+         stack.push({
+           token: i,
+           pos: t.index,
+           single: isSingle,
+-          level: thisLevel
++          level: thisLevel,
++          lastSingle: isSingle ? idx : (below ? below.lastSingle : -1),
++          lastDouble: isSingle ? (below ? below.lastDouble : -1) : idx
+         })
+       } else if (canClose && isSingle) {
+         addReplacement(replacements, i, t.index, APOSTROPHE)
+diff --git a/test/markdown-it/pathological.test.mjs b/test/markdown-it/pathological.test.mjs
+index 2aac22c..5c1afa9 100644
+--- a/test/markdown-it/pathological.test.mjs
++++ b/test/markdown-it/pathological.test.mjs
+@@ -164,5 +164,10 @@ describe('Pathological sequences speed', () => {
+     it('a lot of smartquotes', async () => {
+       await test_pattern('"'.repeat(160000), { typographer: true })
+     })
++
++    it('smartquotes openers with unmatched closers of the other type', async () => {
++      await test_pattern('"a '.repeat(100000) + "b' ".repeat(100000), { typographer: true })
++      await test_pattern("'a ".repeat(100000) + 'b" '.repeat(100000), { typographer: true })
++    })
+   })
+ })

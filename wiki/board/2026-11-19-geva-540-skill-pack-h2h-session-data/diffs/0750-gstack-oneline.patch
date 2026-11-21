@@ -1,0 +1,16 @@
+diff --git a/internal/fsext/ls.go b/internal/fsext/ls.go
+index e691c14..df51194 100644
+--- a/internal/fsext/ls.go
++++ b/internal/fsext/ls.go
+@@ -130,6 +130,11 @@ func (dl *directoryLister) shouldIgnore(path string, ignorePatterns []string) bo
+ 		relPath = path
+ 	}
+ 
++	// Never ignore the root directory itself (e.g. ".*" would match ".").
++	if relPath == "." {
++		return false
++	}
++
+ 	if commonIgnorePatterns().MatchesPath(relPath) {
+ 		slog.Debug("ingoring common pattern", "path", relPath)
+ 		return true

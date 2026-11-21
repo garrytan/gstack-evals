@@ -1,0 +1,101 @@
+diff --git a/packages/happy-dom/src/module/ECMAScriptModuleCompiler.ts b/packages/happy-dom/src/module/ECMAScriptModuleCompiler.ts
+index 147f53f..19db8d5 100644
+--- a/packages/happy-dom/src/module/ECMAScriptModuleCompiler.ts
++++ b/packages/happy-dom/src/module/ECMAScriptModuleCompiler.ts
+@@ -275,7 +275,8 @@ export default class ECMAScriptModuleCompiler {
+ 							const nameParts = part.trim().split(/\s+as\s+/);
+ 							const alias = (nameParts[1] || nameParts[0]).replace(/["']/g, '');
+ 							const name = nameParts[0].replace(/["']/g, '');
+-							if (alias && name) {
++							// The alias is the local binding and is interpolated as code, so it must be a valid identifier.
++							if (alias && name && VALID_VARIABLE_NAME_REGEXP.test(alias)) {
+ 								if (name === alias) {
+ 									properties.push({ name });
+ 								} else {
+@@ -286,7 +287,7 @@ export default class ECMAScriptModuleCompiler {
+ 						if (!match[7] || match[7] === 'esm') {
+ 							resolvableCircularImports.push({ url, properties });
+ 						}
+-						newCodeStart += `let {${properties.map((property) => (property.alias ? `"${property.name}": ${property.alias}` : property.name)).join(', ')}} = $happy_dom.imports.get('${url}')${match[8]}`;
++						newCodeStart += `let {${properties.map((property) => (property.alias ? `${JSON.stringify(property.name)}: ${property.alias}` : property.name)).join(', ')}} = $happy_dom.imports.get('${url}')${match[8]}`;
+ 					} else if (importMatch[2]) {
+ 						// Import all as
+ 						newCodeStart += `const ${importMatch[2]} = $happy_dom.imports.get('${url}')${match[8]}`;
+@@ -474,9 +475,9 @@ export default class ECMAScriptModuleCompiler {
+ 			for (const circularImport of resolvableCircularImports) {
+ 				for (const property of circularImport.properties) {
+ 					if (property.alias) {
+-						newCode += `${property.alias} = $happy_dom.imports.get('${circularImport.url}')['${property.name}'];\n`;
++						newCode += `${property.alias} = $happy_dom.imports.get('${circularImport.url}')['${this.escapeSingleQuotedString(property.name)}'];\n`;
+ 					} else {
+-						newCode += `${property.name} = $happy_dom.imports.get('${circularImport.url}')['${property.name}'];\n`;
++						newCode += `${property.name} = $happy_dom.imports.get('${circularImport.url}')['${this.escapeSingleQuotedString(property.name)}'];\n`;
+ 					}
+ 				}
+ 			}
+@@ -896,6 +897,16 @@ export default class ECMAScriptModuleCompiler {
+ 		return nonSpacePrecedingToken || ';';
+ 	}
+ 
++	/**
++	 * Escapes a value so it can safely be placed inside a single quoted string literal.
++	 *
++	 * @param value Value.
++	 * @returns Escaped value.
++	 */
++	private escapeSingleQuotedString(value: string): string {
++		return JSON.stringify(value).slice(1, -1).replace(/'/g, "\\'");
++	}
++
+ 	/**
+ 	 * Remove multiline comments.
+ 	 *
+diff --git a/packages/happy-dom/test/module/ECMAScriptModuleCompiler.test.ts b/packages/happy-dom/test/module/ECMAScriptModuleCompiler.test.ts
+index d0694ca..9345643 100644
+--- a/packages/happy-dom/test/module/ECMAScriptModuleCompiler.test.ts
++++ b/packages/happy-dom/test/module/ECMAScriptModuleCompiler.test.ts
+@@ -785,6 +785,44 @@ $happy_dom.exports['string6'] = string6;
+ }`);
+ 		});
+ 
++		it('Unsanitized import aliases are not interpolated as executable code (GHSA-834v-8h66-3h79)', async () => {
++			const code = `import { missing as injected = globalThis.__HAPPY_DOM_PWNED__ = 1337 } from './dep.json' with { type: 'json' };`;
++
++			const compiler = new ECMAScriptModuleCompiler(window);
++			const result = compiler.compile('http://localhost:8080/js/app/main.js', code);
++
++			expect(result.execute.toString()).not.toContain('__HAPPY_DOM_PWNED__');
++
++			const imports = new Map([['http://localhost:8080/js/app/dep.json', {}]]);
++			await result.execute({
++				dispatchError: () => {},
++				dynamicImport: async () => ({}),
++				imports,
++				exports: {}
++			});
++
++			expect((<any>globalThis).__HAPPY_DOM_PWNED__).toBeUndefined();
++			expect((<any>window).__HAPPY_DOM_PWNED__).toBeUndefined();
++		});
++
++		it('Unsanitized import names without alias are not interpolated as executable code (GHSA-834v-8h66-3h79)', () => {
++			const code = `import { missing = globalThis.__HAPPY_DOM_PWNED__ = 1337 } from './dep.json' with { type: 'json' };`;
++
++			const compiler = new ECMAScriptModuleCompiler(window);
++			const result = compiler.compile('http://localhost:8080/js/app/main.js', code);
++
++			expect(result.execute.toString()).not.toContain('__HAPPY_DOM_PWNED__');
++		});
++
++		it('Import names are escaped as string literals.', () => {
++			const code = `import { a\\ as b } from './dep.js';`;
++
++			const compiler = new ECMAScriptModuleCompiler(window);
++			const result = compiler.compile('http://localhost:8080/js/app/main.js', code);
++
++			expect(result.execute.toString()).toContain(`let {"a\\\\": b} = `);
++		});
++
+ 		it('Handles tabs as whitespace.', () => {
+ 			const code = `
+                 function warn(...args) {

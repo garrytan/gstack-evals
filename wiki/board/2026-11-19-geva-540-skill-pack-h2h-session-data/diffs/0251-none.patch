@@ -1,0 +1,91 @@
+diff --git a/pkg/util/overridemanager/overridemanager.go b/pkg/util/overridemanager/overridemanager.go
+index 7fb4e3d..7990ca4 100644
+--- a/pkg/util/overridemanager/overridemanager.go
++++ b/pkg/util/overridemanager/overridemanager.go
+@@ -433,15 +433,19 @@ func applyFieldOverriders(rawObj *unstructured.Unstructured, FieldOverriders []p
+ 		if len(FieldOverriders[index].YAML) > 0 {
+ 			appliedRawData, err = applyRawYAMLPatch(dataBytes, parseYAMLPatchesByField(FieldOverriders[index].YAML))
+ 			if err != nil {
+-				klog.Errorf("Error applying raw JSON patch: %v", err)
++				klog.Errorf("Error applying raw YAML patch: %v", err)
+ 				return err
+ 			}
+ 		} else if len(FieldOverriders[index].JSON) > 0 {
+ 			appliedRawData, err = applyRawJSONPatch(dataBytes, parseJSONPatchesByField(FieldOverriders[index].JSON))
+ 			if err != nil {
+-				klog.Errorf("Error applying raw YAML patch: %v", err)
++				klog.Errorf("Error applying raw JSON patch: %v", err)
+ 				return err
+ 			}
++		} else {
++			errMsg := fmt.Sprintf("FieldOverriders[%d] with path(%s) has neither YAML nor JSON patch set", index, FieldOverriders[index].FieldPath)
++			klog.Error(errMsg)
++			return errors.New(errMsg)
+ 		}
+ 		_, err = pointer.Set(rawObj.Object, string(appliedRawData))
+ 		if err != nil {
+diff --git a/pkg/util/overridemanager/overridemanager_test.go b/pkg/util/overridemanager/overridemanager_test.go
+index 84a17fb..a856b62 100644
+--- a/pkg/util/overridemanager/overridemanager_test.go
++++ b/pkg/util/overridemanager/overridemanager_test.go
+@@ -681,3 +681,20 @@ func Test_overrideManagerImpl_ApplyJSONOverridePolicies_JSON(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func Test_applyFieldOverriders_EmptyPatches(t *testing.T) {
++	obj := &unstructured.Unstructured{Object: map[string]interface{}{
++		"apiVersion": "v1",
++		"kind":       "ConfigMap",
++		"data": map[string]interface{}{
++			"config": "foo: bar\n",
++		},
++	}}
++	err := applyFieldOverriders(obj, []policyv1alpha1.FieldOverrider{{FieldPath: "/data/config"}})
++	if err == nil {
++		t.Fatalf("expected an error when neither YAML nor JSON is set")
++	}
++	if got := obj.Object["data"].(map[string]interface{})["config"]; got != "foo: bar\n" {
++		t.Fatalf("expected field to be untouched, got %q", got)
++	}
++}
+diff --git a/pkg/util/validation/validation.go b/pkg/util/validation/validation.go
+index 9e47448..f7b7c2b 100644
+--- a/pkg/util/validation/validation.go
++++ b/pkg/util/validation/validation.go
+@@ -435,6 +435,9 @@ func ValidateOverrideRules(overrideRules []policyv1alpha1.RuleWithCluster, fldPa
+ 			if len(fieldOverrider.YAML) > 0 && len(fieldOverrider.JSON) > 0 {
+ 				allErrs = append(allErrs, field.Invalid(fieldPath, fieldOverrider, "FieldOverrider has both YAML and JSON set. Only one is allowed"))
+ 			}
++			if len(fieldOverrider.YAML) == 0 && len(fieldOverrider.JSON) == 0 {
++				allErrs = append(allErrs, field.Invalid(fieldPath, fieldOverrider, "FieldOverrider must have either YAML or JSON set"))
++			}
+ 			// validates the field path.
+ 			if _, err := jsonpointer.New(fieldOverrider.FieldPath); err != nil {
+ 				allErrs = append(allErrs, field.Invalid(fieldPath.Child("fieldPath"), fieldOverrider.FieldPath, err.Error()))
+diff --git a/pkg/util/validation/validation_test.go b/pkg/util/validation/validation_test.go
+index fe2da92..6c2653a 100644
+--- a/pkg/util/validation/validation_test.go
++++ b/pkg/util/validation/validation_test.go
+@@ -234,6 +234,21 @@ func TestValidateOverrideSpec(t *testing.T) {
+ 			},
+ 			expectError: true,
+ 		},
++		{
++			name: "fieldOverrider has neither yaml nor json set",
++			overrideSpec: policyv1alpha1.OverrideSpec{
++				OverrideRules: []policyv1alpha1.RuleWithCluster{
++					{
++						Overriders: policyv1alpha1.Overriders{
++							FieldOverrider: []policyv1alpha1.FieldOverrider{
++								{FieldPath: "/data/config"},
++							},
++						},
++					},
++				},
++			},
++			expectError: true,
++		},
+ 	}
+ 
+ 	for _, test := range tests {

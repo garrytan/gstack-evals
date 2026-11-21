@@ -1,0 +1,104 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 5d740cb..60d9ca6 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -11,6 +11,8 @@
+ 
+ ## Changes since v7.15.0
+ 
++- fix: do not log "Error obtaining real IP for trusted IP list" for every request when listening on a unix socket
++
+ # V7.15.0
+ 
+ - [#3382](https://github.com/oauth2-proxy/oauth2-proxy/pull/3382) chore(deps): update gomod and golangci/golangci-lint to v2.11.4 (@tuunit)
+diff --git a/oauthproxy.go b/oauthproxy.go
+index dc3f8b5..2974b0c 100644
+--- a/oauthproxy.go
++++ b/oauthproxy.go
+@@ -183,7 +183,10 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
+ 
+ 	logger.Printf("Cookie settings: name:%s secure(https):%v httponly:%v expiry:%s domains:%s path:%s samesite:%s refresh:%s", opts.Cookie.Name, opts.Cookie.Secure, opts.Cookie.HTTPOnly, opts.Cookie.Expire, strings.Join(opts.Cookie.Domains, ","), opts.Cookie.Path, opts.Cookie.SameSite, refresh)
+ 
+-	trustedIPs := ip.NewNetSet()
++	var trustedIPs *ip.NetSet
++	if len(opts.TrustedIPs) > 0 {
++		trustedIPs = ip.NewNetSet()
++	}
+ 	for _, ipStr := range opts.TrustedIPs {
+ 		if ipNet := ip.ParseIPNet(ipStr); ipNet != nil {
+ 			trustedIPs.AddIPNet(*ipNet)
+@@ -613,9 +616,14 @@ func (p *OAuthProxy) isAPIPath(req *http.Request) bool {
+ 
+ // isTrustedIP is used to check if a request comes from a trusted client IP address.
+ func (p *OAuthProxy) isTrustedIP(req *http.Request) bool {
+-	// RemoteAddr @ means unix socket
++	if p.trustedIPs == nil {
++		return false
++	}
++
++	// RemoteAddr @ means unix socket, which has no client IP to check.
++	// Only a real client IP header (reverse proxy mode) can be used in that case.
+ 	// https://github.com/golang/go/blob/0fa53e41f122b1661d0678a6d36d71b7b5ad031d/src/syscall/syscall_linux.go#L506-L511
+-	if p.trustedIPs == nil && req.RemoteAddr != "@" {
++	if p.realClientIPParser == nil && req.RemoteAddr == "@" {
+ 		return false
+ 	}
+ 
+diff --git a/oauthproxy_test.go b/oauthproxy_test.go
+index 38cdcca..651e7dd 100644
+--- a/oauthproxy_test.go
++++ b/oauthproxy_test.go
+@@ -1,6 +1,7 @@
+ package main
+ 
+ import (
++	"bytes"
+ 	"context"
+ 	"crypto"
+ 	"encoding/base64"
+@@ -9,6 +10,7 @@ import (
+ 	"net/http"
+ 	"net/http/httptest"
+ 	"net/url"
++	"os"
+ 	"regexp"
+ 	"strings"
+ 	"testing"
+@@ -3630,3 +3632,37 @@ func TestIdTokenPlaceholderInSignOut(t *testing.T) {
+ 
+ 	assert.Equal(t, "https://my-oidc-provider.example.com/sign_out_page?id_token_hint=eYjjjjjj.vvvv.ddd&post_logout_redirect_uri=https://my-app.example.com/", newLocation)
+ }
++
++func TestIsTrustedIPUnixSocketDoesNotLogError(t *testing.T) {
++	tests := []struct {
++		name         string
++		trustedIPs   []string
++		reverseProxy bool
++	}{
++		{name: "NoTrustedIPs", trustedIPs: nil, reverseProxy: false},
++		{name: "TrustedIPsWithoutReverseProxy", trustedIPs: []string{"127.0.0.1"}, reverseProxy: false},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			opts := baseTestOptions()
++			opts.TrustedIPs = tt.trustedIPs
++			opts.ReverseProxy = tt.reverseProxy
++			assert.NoError(t, validation.Validate(opts))
++
++			proxy, err := NewOAuthProxy(opts, func(string) bool { return true })
++			assert.NoError(t, err)
++
++			var errBuf bytes.Buffer
++			logger.SetErrOutput(&errBuf)
++			defer logger.SetErrOutput(os.Stderr)
++
++			req := httptest.NewRequest("GET", "/", nil)
++			// RemoteAddr for requests received over a unix socket
++			req.RemoteAddr = "@"
++
++			assert.False(t, proxy.isTrustedIP(req))
++			assert.Empty(t, errBuf.String())
++		})
++	}
++}

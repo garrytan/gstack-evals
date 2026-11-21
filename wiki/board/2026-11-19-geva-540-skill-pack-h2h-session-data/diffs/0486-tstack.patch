@@ -1,0 +1,97 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+index d9e438d..d0f6142 100644
+--- a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -255,7 +255,14 @@ public class BeanDeserializerFactory
+          *   probably won't work and needs to be added elsewhere.
+          */
+         try {
+-            valueInstantiator = findValueInstantiator(ctxt, beanDescRef);
++            // [databind#2683]-related: local/anonymous classes cannot be instantiated
++            //   by Jackson, but existing instances may still be updated
++            //   (via `readerForUpdating()`), so use instantiator with no creators
++            if (ClassUtil.isLocalType(type.getRawClass(), true) != null) {
++                valueInstantiator = new ValueInstantiator.Base(type);
++            } else {
++                valueInstantiator = findValueInstantiator(ctxt, beanDescRef);
++            }
+         } catch (NoClassDefFoundError error) {
+             return new ErrorThrowingDeserializer(error);
+         } catch (IllegalArgumentException e0) {
+@@ -1048,12 +1055,8 @@ ClassUtil.name(name), ((AnnotatedParameter) m).getIndex());
+         if (ClassUtil.isProxyType(type)) {
+             throw new IllegalArgumentException("Cannot deserialize Proxy class "+type.getName()+" as a Bean");
+         }
+-        // also: can't deserialize some local classes: static are ok; in-method not;
+-        // other non-static inner classes are ok
+-        typeStr = ClassUtil.isLocalType(type, true);
+-        if (typeStr != null) {
+-            throw new IllegalArgumentException("Cannot deserialize Class "+type.getName()+" (of type "+typeStr+") as a Bean");
+-        }
++        // NOTE: local/anonymous classes are allowed here: although they cannot be
++        // instantiated, existing instances may be updated (see `buildBeanDeserializer()`)
+         return true;
+     }
+ 
+diff --git a/src/test/java/tools/jackson/databind/deser/bean/UpdateLocalAnonymousClassTest.java b/src/test/java/tools/jackson/databind/deser/bean/UpdateLocalAnonymousClassTest.java
+new file mode 100644
+index 0000000..2c3c1c9
+--- /dev/null
++++ b/src/test/java/tools/jackson/databind/deser/bean/UpdateLocalAnonymousClassTest.java
+@@ -0,0 +1,56 @@
++package tools.jackson.databind.deser.bean;
++
++import org.junit.jupiter.api.Test;
++
++import tools.jackson.databind.DatabindException;
++import tools.jackson.databind.ObjectMapper;
++import tools.jackson.databind.testutil.DatabindTestUtil;
++
++import static org.junit.jupiter.api.Assertions.*;
++
++// Existing instances of local/anonymous classes should be updatable
++// via `readerForUpdating()`, even though they cannot be instantiated
++public class UpdateLocalAnonymousClassTest extends DatabindTestUtil
++{
++    private final ObjectMapper MAPPER = newJsonMapper();
++
++    @Test
++    public void testUpdateAnonymousClassInstance() throws Exception
++    {
++        final Object anon = new Object() {
++            public int value;
++
++            @Override
++            public String toString() { return String.valueOf(value); }
++        };
++        Object result = MAPPER.readerForUpdating(anon)
++                .readValue(a2q("{'value':2}"));
++        assertSame(anon, result);
++        assertEquals("2", anon.toString());
++    }
++
++    @Test
++    public void testUpdateLocalClassInstance() throws Exception
++    {
++        class Local {
++            public int x;
++            public String name;
++        }
++        Local local = new Local();
++        Local result = MAPPER.readerForUpdating(local)
++                .readValue(a2q("{'x':3,'name':'abc'}"));
++        assertSame(local, result);
++        assertEquals(3, local.x);
++        assertEquals("abc", local.name);
++    }
++
++    @Test
++    public void testCannotCreateLocalClassInstance() throws Exception
++    {
++        class Local {
++            public int x;
++        }
++        assertThrows(DatabindException.class,
++                () -> MAPPER.readValue(a2q("{'x':3}"), Local.class));
++    }
++}

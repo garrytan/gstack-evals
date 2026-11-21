@@ -1,0 +1,150 @@
+diff --git a/pusher/http.go b/pusher/http.go
+index 0b0304f..6c948ac 100644
+--- a/pusher/http.go
++++ b/pusher/http.go
+@@ -2,6 +2,9 @@ package pusher
+ 
+ import (
+ 	"context"
++	"crypto/md5" // #nosec G501
++	"crypto/subtle"
++	"encoding/hex"
+ 	"encoding/json"
+ 	"fmt"
+ 	"io"
+@@ -11,6 +14,7 @@ import (
+ 	"strconv"
+ 	"strings"
+ 	"sync"
++	"time"
+ 
+ 	"github.com/anycable/anycable-go/broadcast"
+ 	"github.com/anycable/anycable-go/broker"
+@@ -112,6 +116,9 @@ type RestAPI struct {
+ 	allowedHosts []string
+ }
+ 
++// maxAuthTimestampSkew is the maximum allowed difference (in seconds) between auth_timestamp and the server time
++const maxAuthTimestampSkew = 600
++
+ var channelUsersPathPattern = regexp.MustCompile(`/channels/([^/]+)/users$`)
+ 
+ type PusherEvent struct {
+@@ -163,10 +170,11 @@ func (api *RestAPI) Handler(w http.ResponseWriter, r *http.Request) {
+ 	signature := queryParams.Get("auth_signature")
+ 
+ 	var stringToSign string
++	var bodyMD5 string
+ 
+ 	switch r.Method {
+ 	case http.MethodPost:
+-		bodyMD5 := queryParams.Get("body_md5")
++		bodyMD5 = queryParams.Get("body_md5")
+ 		stringToSign = "POST\n" +
+ 			path + "\n" +
+ 			"auth_key=" + key +
+@@ -190,26 +198,47 @@ func (api *RestAPI) Handler(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 
++	ts, err := strconv.ParseInt(authTimestamp, 10, 64)
++	if err != nil {
++		api.log.Debug("invalid auth_timestamp", "auth_timestamp", authTimestamp)
++		w.WriteHeader(http.StatusUnauthorized)
++		return
++	}
++
++	if diff := time.Now().Unix() - ts; diff > maxAuthTimestampSkew || diff < -maxAuthTimestampSkew {
++		api.log.Debug("auth_timestamp expired", "auth_timestamp", authTimestamp)
++		w.WriteHeader(http.StatusUnauthorized)
++		return
++	}
++
+ 	switch r.Method {
+ 	case http.MethodPost:
+-		api.handleEvents(w, r)
++		body, err := io.ReadAll(r.Body)
++		if err != nil {
++			api.log.Error("failed to read request body")
++			w.WriteHeader(http.StatusUnprocessableEntity)
++			return
++		}
++
++		sum := md5.Sum(body) // #nosec G401
++		actualMD5 := hex.EncodeToString(sum[:])
++
++		if subtle.ConstantTimeCompare([]byte(actualMD5), []byte(strings.ToLower(bodyMD5))) != 1 {
++			api.log.Debug("body_md5 mismatch")
++			w.WriteHeader(http.StatusUnauthorized)
++			return
++		}
++
++		api.handleEvents(w, body)
+ 	case http.MethodGet:
+ 		api.handleGetUsers(w, r)
+ 	}
+ }
+ 
+-func (api *RestAPI) handleEvents(w http.ResponseWriter, r *http.Request) {
+-	body, err := io.ReadAll(r.Body)
+-
+-	if err != nil {
+-		api.log.Error("failed to read request body")
+-		w.WriteHeader(http.StatusUnprocessableEntity)
+-		return
+-	}
+-
++func (api *RestAPI) handleEvents(w http.ResponseWriter, body []byte) {
+ 	var pusherEvent *PusherEvent
+ 
+-	err = json.Unmarshal(body, &pusherEvent)
++	err := json.Unmarshal(body, &pusherEvent)
+ 
+ 	if err != nil {
+ 		api.log.Error("failed to parse Pusher event")
+diff --git a/pusher/http_test.go b/pusher/http_test.go
+index 4794cb3..41ef495 100644
+--- a/pusher/http_test.go
++++ b/pusher/http_test.go
+@@ -86,6 +86,41 @@ func TestHttpHandler(t *testing.T) {
+ 
+ 		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+ 	})
++
++	t.Run("Rejects when body does not match signed body_md5", func(t *testing.T) {
++		authParams := "auth_key=" + config.AppKey +
++			"&auth_timestamp=" + strconv.FormatInt(time.Now().Unix(), 10) +
++			"&auth_version=1.0" +
++			"&body_md5=" + fmt.Sprintf("%x", payloadMD5)
++
++		authSignature := verifier.Sign("POST\n/events\n" + authParams)
++		tampered := `{"name":"injected-event","channel":"admin","data":"malicious"}`
++
++		req, err := http.NewRequest("POST", "/events?"+authParams+"&auth_signature="+authSignature, strings.NewReader(tampered))
++		require.NoError(t, err)
++
++		rr := httptest.NewRecorder()
++		http.HandlerFunc(restAPI.Handler).ServeHTTP(rr, req)
++
++		assert.Equal(t, http.StatusUnauthorized, rr.Code)
++	})
++
++	t.Run("Rejects stale auth_timestamp", func(t *testing.T) {
++		authParams := "auth_key=" + config.AppKey +
++			"&auth_timestamp=" + strconv.FormatInt(time.Now().Unix()-601, 10) +
++			"&auth_version=1.0" +
++			"&body_md5=" + fmt.Sprintf("%x", payloadMD5)
++
++		authSignature := verifier.Sign("POST\n/events\n" + authParams)
++
++		req, err := http.NewRequest("POST", "/events?"+authParams+"&auth_signature="+authSignature, strings.NewReader(string(payload)))
++		require.NoError(t, err)
++
++		rr := httptest.NewRecorder()
++		http.HandlerFunc(restAPI.Handler).ServeHTTP(rr, req)
++
++		assert.Equal(t, http.StatusUnauthorized, rr.Code)
++	})
+ }
+ 
+ func TestGetUsersIntegration(t *testing.T) {

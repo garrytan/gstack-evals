@@ -1,0 +1,106 @@
+diff --git a/Terminal.Gui/Views/Selectors/SelectorBase.cs b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+index 04f4315..47cd44e 100644
+--- a/Terminal.Gui/Views/Selectors/SelectorBase.cs
++++ b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+@@ -155,8 +155,7 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+ 
+             field = value;
+ 
+-            CreateSubViews ();
+-            UpdateChecked ();
++            RebuildSubViews ();
+         }
+     }
+ 
+@@ -315,8 +314,7 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+                 Value = field.First ();
+             }
+ 
+-            CreateSubViews ();
+-            UpdateChecked ();
++            RebuildSubViews ();
+         }
+     }
+ 
+@@ -330,8 +328,7 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+         {
+             field = value;
+ 
+-            CreateSubViews ();
+-            UpdateChecked ();
++            RebuildSubViews ();
+         }
+     }
+ 
+@@ -378,12 +375,18 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+                 return;
+             }
+             field = value;
+-            CreateSubViews ();
++            RebuildSubViews ();
+         }
+     }
+ 
+     private TextField? _valueField;
+ 
++    private void RebuildSubViews ()
++    {
++        CreateSubViews ();
++        UpdateChecked ();
++    }
++
+     /// <summary>
+     ///     Creates the subviews for this selector.
+     /// </summary>
+@@ -535,7 +538,7 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+         // total width via PosAlign.CalculateMinDimension, which reads Frame.Width.
+         // Without this, newly-created subviews have Frame.Width == 0 on the first
+         // layout pass, causing the selector to be sized too narrow.
+-        if (Orientation != Orientation.Horizontal || SubViews.Count <= 0)
++        if (Orientation != Orientation.Horizontal || SubViews.Count == 0)
+         {
+             return;
+         }
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index d22b41f..04fa674 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -29,6 +29,38 @@ public class OptionSelectorTests
+         Assert.Equal (CheckState.Checked, checkBox.Value);
+     }
+ 
++    [Fact]
++    public void Generic_Initialization_Checks_CheckBox_For_Value ()
++    {
++        OptionSelector<Orientation> optionSelector = new ();
++
++        Assert.Equal (Orientation.Horizontal, optionSelector.Value);
++
++        CheckBox checkBox = optionSelector.SubViews.OfType<CheckBox> ().Single (cb => cb.Value == CheckState.Checked);
++        Assert.Equal (nameof (Orientation.Horizontal), checkBox.Title);
++    }
++
++    [Fact]
++    public void Generic_Initialization_Checks_CheckBox_After_Layout ()
++    {
++        OptionSelector<Orientation> optionSelector = new ();
++        optionSelector.Layout ();
++
++        CheckBox checkBox = optionSelector.SubViews.OfType<CheckBox> ().Single (cb => cb.Value == CheckState.Checked);
++        Assert.Equal (nameof (Orientation.Horizontal), checkBox.Title);
++    }
++
++    [Fact]
++    public void TabBehavior_Set_Keeps_CheckBox_For_Value_Checked ()
++    {
++        OptionSelector optionSelector = new () { Labels = ["Option1", "Option2"], Value = 1 };
++
++        optionSelector.TabBehavior = TabBehavior.NoStop;
++
++        CheckBox checkBox = optionSelector.SubViews.OfType<CheckBox> ().Single (cb => cb.Value == CheckState.Checked);
++        Assert.Equal ("Option2", checkBox.Title);
++    }
++
+     [Fact]
+     public void SetOptions_ShouldCreateCheckBoxes ()
+     {

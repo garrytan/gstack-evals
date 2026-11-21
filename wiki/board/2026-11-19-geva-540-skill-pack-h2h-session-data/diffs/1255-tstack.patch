@@ -1,0 +1,200 @@
+diff --git a/httpserver/bulk_acl_test.go b/httpserver/bulk_acl_test.go
+new file mode 100644
+index 0000000..6caec1b
+--- /dev/null
++++ b/httpserver/bulk_acl_test.go
+@@ -0,0 +1,80 @@
++package httpserver
++
++import (
++	"archive/zip"
++	"bytes"
++	"fmt"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"golang.org/x/crypto/bcrypt"
++)
++
++func setupBulkACL(t *testing.T) (*FileServer, func()) {
++	dir := t.TempDir()
++	prot := filepath.Join(dir, "protected")
++	require.NoError(t, os.Mkdir(prot, 0755))
++	require.NoError(t, os.WriteFile(filepath.Join(prot, "secret.txt"), []byte("topsecret"), 0644))
++	require.NoError(t, os.WriteFile(filepath.Join(prot, "blocked.txt"), []byte("blocked"), 0644))
++	require.NoError(t, os.WriteFile(filepath.Join(dir, "public.txt"), []byte("public"), 0644))
++	hash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.MinCost)
++	require.NoError(t, err)
++	acl := fmt.Sprintf(`{"auth":"admin:%s","block":["blocked.txt"]}`, string(hash))
++	require.NoError(t, os.WriteFile(filepath.Join(prot, ".goshs"), []byte(acl), 0644))
++	return newTestFileServer(t, dir)
++}
++
++func zipNames(t *testing.T, body []byte) map[string]string {
++	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
++	require.NoError(t, err)
++	out := map[string]string{}
++	for _, f := range zr.File {
++		rc, err := f.Open()
++		require.NoError(t, err)
++		b, _ := io.ReadAll(rc)
++		rc.Close()
++		out[f.Name] = string(b)
++	}
++	return out
++}
++
++func TestBulkDownload_EnforcesACLAuth(t *testing.T) {
++	fs, cleanup := setupBulkACL(t)
++	defer cleanup()
++
++	for _, q := range []string{"/?bulk&file=/protected/secret.txt", "/?bulk&file=/protected/blocked.txt", "/?bulk&file=/protected"} {
++		w := httptest.NewRecorder()
++		fs.handler(w, httptest.NewRequest(http.MethodGet, q, nil))
++		require.Equal(t, http.StatusUnauthorized, w.Code, q)
++		require.NotContains(t, w.Body.String(), "topsecret")
++	}
++}
++
++func TestBulkDownload_ACLAuthorizedHonorsBlock(t *testing.T) {
++	fs, cleanup := setupBulkACL(t)
++	defer cleanup()
++
++	r := httptest.NewRequest(http.MethodGet, "/?bulk&file=/protected&file=/protected/blocked.txt", nil)
++	r.SetBasicAuth("admin", "admin")
++	w := httptest.NewRecorder()
++	fs.handler(w, r)
++	require.Equal(t, http.StatusOK, w.Code)
++	files := zipNames(t, w.Body.Bytes())
++	require.Equal(t, map[string]string{"protected/secret.txt": "topsecret"}, files)
++}
++
++func TestBulkDownload_RecursiveSkipsProtectedSubdir(t *testing.T) {
++	fs, cleanup := setupBulkACL(t)
++	defer cleanup()
++
++	w := httptest.NewRecorder()
++	fs.handler(w, httptest.NewRequest(http.MethodGet, "/?bulk&file=/", nil))
++	require.Equal(t, http.StatusOK, w.Code)
++	files := zipNames(t, w.Body.Bytes())
++	require.Equal(t, map[string]string{"public.txt": "public"}, files)
++}
+diff --git a/httpserver/updown.go b/httpserver/updown.go
+index 59e4adb..6bed9f9 100644
+--- a/httpserver/updown.go
++++ b/httpserver/updown.go
+@@ -8,6 +8,7 @@ import (
+ 	"net/http"
+ 	"os"
+ 	"path/filepath"
++	"slices"
+ 	"strings"
+ 	"time"
+ 
+@@ -235,6 +236,26 @@ func (fs *FileServer) bulkDownload(w http.ResponseWriter, req *http.Request) {
+ 		if err != nil {
+ 			continue
+ 		}
++		info, err := os.Stat(absPath)
++		if err != nil {
++			continue
++		}
++		// Enforce the effective .goshs ACL exactly as the normal read path does
++		// (directories use their own ACL, files the one of their parent).
++		aclDir := filepath.Dir(absPath)
++		if info.IsDir() {
++			aclDir = absPath
++		}
++		acl, aclErr := fs.findEffectiveACL(aclDir)
++		if aclErr != nil {
++			logger.Errorf("error reading file based access config: %+v", aclErr)
++		}
++		if ok := fs.applyCustomAuth(w, req, acl); !ok {
++			return
++		}
++		if fs.isBlockedForBulk(absPath, info.IsDir()) {
++			continue
++		}
+ 		filesCleaned = append(filesCleaned, absPath)
+ 	}
+ 
+@@ -257,6 +278,15 @@ func (fs *FileServer) bulkDownload(w http.ResponseWriter, req *http.Request) {
+ 		if err != nil {
+ 			return err
+ 		}
++		// Re-check ACLs for every nested entry: a nested .goshs may require
++		// different credentials or block entries. Headers are already sent,
++		// so unauthorized or blocked entries are silently skipped.
++		if !fs.bulkEntryAllowed(req, filepath, info.IsDir()) {
++			if info.IsDir() {
++				return fsSkipDir
++			}
++			return nil
++		}
+ 		if info.IsDir() {
+ 			return nil
+ 		}
+@@ -310,3 +340,58 @@ func (fs *FileServer) bulkDownload(w http.ResponseWriter, req *http.Request) {
+ 		logger.LogRequest(req, http.StatusOK, fs.Verbose, fs.Webhook, body)
+ 	}
+ }
++
++// fsSkipDir is filepath.SkipDir (aliased because the walker shadows filepath)
++var fsSkipDir = filepath.SkipDir
++
++// isBlockedForBulk reports whether path is hidden by the block list of the
++// effective ACL of its parent directory, or is a .goshs ACL file.
++func (fs *FileServer) isBlockedForBulk(path string, isDir bool) bool {
++	name := filepath.Base(path)
++	if !isDir && name == ".goshs" {
++		return true
++	}
++	parentACL, err := fs.findEffectiveACL(filepath.Dir(path))
++	if err != nil {
++		logger.Errorf("error reading file based access config: %+v", err)
++	}
++	if isDir {
++		return slices.Contains(parentACL.Block, name+"/")
++	}
++	return slices.Contains(parentACL.Block, name)
++}
++
++// bulkEntryAllowed reports whether the request may read path inside a bulk
++// download, honoring the effective .goshs ACL (auth and block list).
++func (fs *FileServer) bulkEntryAllowed(req *http.Request, path string, isDir bool) bool {
++	if filepath.Clean(path) != filepath.Clean(fs.Webroot) && fs.isBlockedForBulk(path, isDir) {
++		return false
++	}
++	aclDir := filepath.Dir(path)
++	if isDir {
++		aclDir = path
++	}
++	acl, err := fs.findEffectiveACL(aclDir)
++	if err != nil {
++		logger.Errorf("error reading file based access config: %+v", err)
++		return false
++	}
++	return checkACLCredentials(req, acl)
++}
++
++// checkACLCredentials validates the request's basic auth against acl without
++// writing a response.
++func checkACLCredentials(req *http.Request, acl configFile) bool {
++	if acl.Auth == "" {
++		return true
++	}
++	username, password, ok := req.BasicAuth()
++	if !ok {
++		return false
++	}
++	user, passwordHash, ok := strings.Cut(acl.Auth, ":")
++	if !ok {
++		return false
++	}
++	return username == user && checkPasswordHash(password, passwordHash)
++}

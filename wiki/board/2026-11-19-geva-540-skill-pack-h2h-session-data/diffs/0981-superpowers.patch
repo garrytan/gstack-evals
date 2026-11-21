@@ -1,0 +1,103 @@
+diff --git a/src/rules_core/smartquotes.ts b/src/rules_core/smartquotes.ts
+index 61979cb..53fffd9 100644
+--- a/src/rules_core/smartquotes.ts
++++ b/src/rules_core/smartquotes.ts
+@@ -14,6 +14,16 @@ interface Replacement {
+   ch: string
+ }
+ 
++interface StackItem {
++  token: number
++  pos: number
++  single: boolean
++  level: number
++  // index of the topmost single/double quote opener at or below this item
++  lastSingle: number
++  lastDouble: number
++}
++
+ type ReplacementMap = Record<string, Replacement[]>
+ 
+ function addReplacement (
+@@ -48,7 +58,7 @@ function applyReplacements (str: string, replacements: Replacement[]) {
+ function process_inlines (tokens: Token[], state: StateCore) {
+   let j
+ 
+-  const stack = []
++  const stack: StackItem[] = []
+   // token index -> list of replacements in the original token content
+   const replacements: ReplacementMap = {}
+ 
+@@ -163,39 +173,48 @@ function process_inlines (tokens: Token[], state: StateCore) {
+         continue
+       }
+ 
+-      if (canClose) {
+-        // this could be a closing quote, rewind the stack to get a match
+-        for (j = stack.length - 1; j >= 0; j--) {
+-          let item = stack[j]
+-          if (stack[j].level < thisLevel) { break }
+-          if (item.single === isSingle && stack[j].level === thisLevel) {
+-            item = stack[j]
+-
+-            let openQuote
+-            let closeQuote
+-            if (isSingle) {
+-              openQuote = state.md.options.quotes[2]
+-              closeQuote = state.md.options.quotes[3]
+-            } else {
+-              openQuote = state.md.options.quotes[0]
+-              closeQuote = state.md.options.quotes[1]
+-            }
+-
+-            addReplacement(replacements, i, t.index, closeQuote)
+-            addReplacement(replacements, item.token, item.pos, openQuote)
+-
+-            stack.length = j
+-            continue OUTER
++      if (canClose && stack.length > 0) {
++        // this could be a closing quote, find the closest matching opener.
++        //
++        // Stack levels are non-decreasing and never exceed `thisLevel`, so
++        // only the topmost opener of the same quote type can match (and only
++        // if it is on the current level). Each stack item keeps the index of
++        // the topmost single/double opener at or below it, so the lookup is
++        // O(1) instead of scanning the whole stack (which was quadratic).
++        const top = stack[stack.length - 1]
++        j = isSingle ? top.lastSingle : top.lastDouble
++
++        if (j >= 0 && stack[j].level === thisLevel) {
++          const item = stack[j]
++
++          let openQuote
++          let closeQuote
++          if (isSingle) {
++            openQuote = state.md.options.quotes[2]
++            closeQuote = state.md.options.quotes[3]
++          } else {
++            openQuote = state.md.options.quotes[0]
++            closeQuote = state.md.options.quotes[1]
+           }
++
++          addReplacement(replacements, i, t.index, closeQuote)
++          addReplacement(replacements, item.token, item.pos, openQuote)
++
++          stack.length = j
++          continue OUTER
+         }
+       }
+ 
+       if (canOpen) {
++        const idx = stack.length
++        const prev = idx > 0 ? stack[idx - 1] : null
+         stack.push({
+           token: i,
+           pos: t.index,
+           single: isSingle,
+-          level: thisLevel
++          level: thisLevel,
++          lastSingle: isSingle ? idx : (prev ? prev.lastSingle : -1),
++          lastDouble: isSingle ? (prev ? prev.lastDouble : -1) : idx
+         })
+       } else if (canClose && isSingle) {
+         addReplacement(replacements, i, t.index, APOSTROPHE)

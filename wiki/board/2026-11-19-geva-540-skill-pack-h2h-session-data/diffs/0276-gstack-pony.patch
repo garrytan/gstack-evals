@@ -1,0 +1,101 @@
+diff --git a/main/HSSF/UserModel/HSSFRow.cs b/main/HSSF/UserModel/HSSFRow.cs
+index e3ad221..b3ee343 100644
+--- a/main/HSSF/UserModel/HSSFRow.cs
++++ b/main/HSSF/UserModel/HSSFRow.cs
+@@ -130,9 +130,14 @@ namespace NPOI.HSSF.UserModel
+                 shortCellNum = (short)(0xffff - columnIndex);
+             }
+ 
+-            ICell cell = new HSSFCell(book, sheet, RowNum, (short)columnIndex, type);
++            HSSFCell cell = new HSSFCell(book, sheet, RowNum, (short)columnIndex, type);
++            ICellStyle style = IsFormatted ? RowStyle : sheet.GetColumnStyle(columnIndex);
++            if (style != null)
++            {
++                cell.CellStyle = style;
++            }
+             AddCell(cell);
+-            sheet.Sheet.AddValueRecord(RowNum, ((HSSFCell)cell).CellValueRecord);
++            sheet.Sheet.AddValueRecord(RowNum, cell.CellValueRecord);
+             return cell;
+         }
+         public IRow CopyRowTo(int targetIndex)
+diff --git a/ooxml/XSSF/Streaming/SXSSFRow.cs b/ooxml/XSSF/Streaming/SXSSFRow.cs
+index d020cee..fa40f10 100644
+--- a/ooxml/XSSF/Streaming/SXSSFRow.cs
++++ b/ooxml/XSSF/Streaming/SXSSFRow.cs
+@@ -235,6 +235,11 @@ namespace NPOI.XSSF.Streaming
+         {
+             CheckBounds(column);
+             SXSSFCell cell = new SXSSFCell(this, type);
++            ICellStyle style = IsFormatted ? RowStyle : _sheet?.GetColumnStyle(column);
++            if (style != null && style.Index != 0)
++            {
++                cell.CellStyle = style;
++            }
+             _cells[column] = cell;
+             _sortedCellCache = null;
+             UpdateIndexWhenAdd(column);
+diff --git a/ooxml/XSSF/UserModel/XSSFRow.cs b/ooxml/XSSF/UserModel/XSSFRow.cs
+index c196e1b..0b3c87b 100644
+--- a/ooxml/XSSF/UserModel/XSSFRow.cs
++++ b/ooxml/XSSF/UserModel/XSSFRow.cs
+@@ -381,6 +381,14 @@ namespace NPOI.XSSF.UserModel
+             {
+                 xcell.CellStyle = RowStyle;
+             }
++            else
++            {
++                ICellStyle colStyle = _sheet.GetColumnStyle(columnIndex);
++                if (colStyle != null && colStyle.Index != 0)
++                {
++                    xcell.CellStyle = colStyle;
++                }
++            }
+ 
+             _cells[columnIndex] = xcell;
+             UpdateCacheOnAdd(columnIndex);
+diff --git a/testcases/main/SS/UserModel/BaseTestSheet.cs b/testcases/main/SS/UserModel/BaseTestSheet.cs
+index 1f09e27..22a2cbe 100644
+--- a/testcases/main/SS/UserModel/BaseTestSheet.cs
++++ b/testcases/main/SS/UserModel/BaseTestSheet.cs
+@@ -722,7 +722,7 @@ namespace TestCases.SS.UserModel
+ 
+             wb.Close();
+         }
+-        [Ignore("not sure why style not match")]
++        [Test]
+         /** Test that new default column styles Get applied */
+         public virtual void DefaultColumnStyle()
+         {
+diff --git a/testcases/ooxml/XSSF/Streaming/TestSXSSFSheet.cs b/testcases/ooxml/XSSF/Streaming/TestSXSSFSheet.cs
+index f4a6562..09530b9 100644
+--- a/testcases/ooxml/XSSF/Streaming/TestSXSSFSheet.cs
++++ b/testcases/ooxml/XSSF/Streaming/TestSXSSFSheet.cs
+@@ -111,10 +111,6 @@ namespace TestCases.XSSF.Streaming
+             // properties on Cells...
+         }
+ 
+-        public override void DefaultColumnStyle() {
+-            //TODO column styles are not yet supported by XSSF
+-        }
+-
+         [Test]
+         public void OverrideFlushedRows() {
+             IWorkbook wb = new SXSSFWorkbook(3);
+diff --git a/testcases/ooxml/XSSF/UserModel/TestXSSFSheet.cs b/testcases/ooxml/XSSF/UserModel/TestXSSFSheet.cs
+index 75e1be8..84848d9 100644
+--- a/testcases/ooxml/XSSF/UserModel/TestXSSFSheet.cs
++++ b/testcases/ooxml/XSSF/UserModel/TestXSSFSheet.cs
+@@ -51,12 +51,6 @@ namespace TestCases.XSSF.UserModel
+ 
+         }
+ 
+-        //[Test]
+-        //TODO column styles are not yet supported by XSSF
+-        public override void DefaultColumnStyle()
+-        {
+-            base.DefaultColumnStyle();
+-        }
+         [Test]
+         public void TestTestGetSetMargin()
+         {

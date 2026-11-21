@@ -1,0 +1,88 @@
+diff --git a/changelogs/unreleased/9600-healthchecknodeport-null b/changelogs/unreleased/9600-healthchecknodeport-null
+new file mode 100644
+index 0000000..acb0ddb
+--- /dev/null
++++ b/changelogs/unreleased/9600-healthchecknodeport-null
+@@ -0,0 +1 @@
++Fix Service restore failure when last-applied-configuration has "healthCheckNodePort": null
+diff --git a/pkg/restore/actions/service_action.go b/pkg/restore/actions/service_action.go
+index 9de7522..911bc81 100644
+--- a/pkg/restore/actions/service_action.go
++++ b/pkg/restore/actions/service_action.go
+@@ -101,15 +101,32 @@ func deleteHealthCheckNodePort(service *corev1api.Service) error {
+ 			return errors.WithStack(err)
+ 		}
+ 
+-		healthCheckNodePort, exist, err := unstructured.NestedFloat64(*appliedServiceUnstructured, "spec", "healthCheckNodePort")
++		healthCheckNodePort, exist, err := unstructured.NestedFieldNoCopy(*appliedServiceUnstructured, "spec", "healthCheckNodePort")
+ 		if err != nil {
+ 			return errors.WithStack(err)
+ 		}
+ 
+ 		// Found healthCheckNodePort in lastAppliedConfig annotation,
+ 		// and the value is not 0. No need to delete, return.
+-		if exist && healthCheckNodePort != 0 {
+-			return nil
++		// A missing or null value means the user didn't specify an
++		// explicit port, so fall through.
++		if exist && healthCheckNodePort != nil {
++			portInt := 0
++			switch port := healthCheckNodePort.(type) {
++			case int32:
++				portInt = int(port)
++			case int64:
++				portInt = int(port)
++			case float64:
++				portInt = int(port)
++			case int:
++				portInt = port
++			default:
++				return errors.Errorf(".spec.healthCheckNodePort has unexpected type %T in last-applied-configuration", healthCheckNodePort)
++			}
++			if portInt != 0 {
++				return nil
++			}
+ 		}
+ 	}
+ 
+diff --git a/pkg/restore/actions/service_action_test.go b/pkg/restore/actions/service_action_test.go
+index 42c0d29..b593076 100644
+--- a/pkg/restore/actions/service_action_test.go
++++ b/pkg/restore/actions/service_action_test.go
+@@ -556,6 +556,36 @@ func TestServiceActionExecute(t *testing.T) {
+ 				},
+ 			},
+ 		},
++		{
++			name: "If PreserveNodePorts is false and HealthCheckNodePort is null in last-applied-configuration, then HealthCheckNodePort should be cleaned.",
++			obj: corev1api.Service{
++				ObjectMeta: metav1.ObjectMeta{
++					Name: "svc-1",
++					Annotations: map[string]string{
++						annotationLastAppliedConfig: `{"apiVersion":"v1","kind":"Service","spec":{"externalTrafficPolicy":"Local","healthCheckNodePort":null,"type":"LoadBalancer"}}`,
++					},
++				},
++				Spec: corev1api.ServiceSpec{
++					HealthCheckNodePort:   8080,
++					ExternalTrafficPolicy: corev1api.ServiceExternalTrafficPolicyTypeLocal,
++					Type:                  corev1api.ServiceTypeLoadBalancer,
++				},
++			},
++			restore: builder.ForRestore(api.DefaultNamespace, "").PreserveNodePorts(false).Result(),
++			expectedRes: corev1api.Service{
++				ObjectMeta: metav1.ObjectMeta{
++					Name: "svc-1",
++					Annotations: map[string]string{
++						annotationLastAppliedConfig: `{"apiVersion":"v1","kind":"Service","spec":{"externalTrafficPolicy":"Local","healthCheckNodePort":null,"type":"LoadBalancer"}}`,
++					},
++				},
++				Spec: corev1api.ServiceSpec{
++					HealthCheckNodePort:   0,
++					ExternalTrafficPolicy: corev1api.ServiceExternalTrafficPolicyTypeLocal,
++					Type:                  corev1api.ServiceTypeLoadBalancer,
++				},
++			},
++		},
+ 		{
+ 			name: "If PreserveNodePorts is false in restore spec, but service is not expected, then HealthCheckNodePort should be kept.",
+ 			obj: corev1api.Service{

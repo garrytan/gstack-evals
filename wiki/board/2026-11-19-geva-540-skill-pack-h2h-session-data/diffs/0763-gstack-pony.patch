@@ -1,0 +1,39 @@
+diff --git a/packages/agents-realtime/src/realtimeSession.ts b/packages/agents-realtime/src/realtimeSession.ts
+index 3c4f22e..773c3a1 100644
+--- a/packages/agents-realtime/src/realtimeSession.ts
++++ b/packages/agents-realtime/src/realtimeSession.ts
+@@ -314,6 +314,8 @@ export class RealtimeSession<
+     }
+ 
+     return {
++      // Preserve user-provided session settings (e.g. audio formats) across agent updates
++      ...(this.options.config ?? {}),
+       instructions,
+       voice: this.#currentAgent.voice,
+       model: this.options.model,
+diff --git a/packages/agents-realtime/test/realtimeSession.test.ts b/packages/agents-realtime/test/realtimeSession.test.ts
+index e39df37..129e147 100644
+--- a/packages/agents-realtime/test/realtimeSession.test.ts
++++ b/packages/agents-realtime/test/realtimeSession.test.ts
+@@ -33,6 +33,21 @@ describe('RealtimeSession', () => {
+     await session.connect({ apiKey: 'test' });
+   });
+ 
++  it('preserves session config (e.g. audio formats) on updateAgent', async () => {
++    const t = new FakeTransport();
++    const agent = new RealtimeAgent({ name: 'A', handoffs: [] });
++    const s = new RealtimeSession(agent, {
++      transport: t,
++      config: { inputAudioFormat: 'g711_ulaw', outputAudioFormat: 'g711_ulaw' },
++    });
++    await s.connect({ apiKey: 'test' });
++    await s.updateAgent(new RealtimeAgent({ name: 'B', instructions: 'Bob' }));
++    const last = t.updateSessionConfigCalls.at(-1)!;
++    expect(last.inputAudioFormat).toBe('g711_ulaw');
++    expect(last.outputAudioFormat).toBe('g711_ulaw');
++    expect(last.instructions).toBe('Bob');
++  });
++
+   it('calls transport.resetHistory with correct arguments', () => {
+     const item = createMessage('1', 'hi');
+     session.updateHistory([item]);

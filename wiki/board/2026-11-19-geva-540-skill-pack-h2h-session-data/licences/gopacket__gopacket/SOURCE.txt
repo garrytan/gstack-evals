@@ -1,0 +1,3 @@
+https://github.com/gopacket/gopacket at 8f521c85801d7c593249a358dbd8aad2bdc67087
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): BSD-3-Clause
+Root licence and notice files at that commit: LICENSE

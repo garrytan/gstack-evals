@@ -1,0 +1,112 @@
+diff --git a/SPEC.md b/SPEC.md
+new file mode 100644
+index 0000000..289f47e
+--- /dev/null
++++ b/SPEC.md
+@@ -0,0 +1,24 @@
++# SPEC: Elevate RMG068 default severity to Warning
++
++## Objective
++When Mapperly cannot inline a user-implemented mapping method into a queryable
++projection (`IQueryable` / `Expression<Func<..>>`), EF Core falls back to
++client-side evaluation. Today this is only reported as `Info` (RMG068), which is
++easy to miss. Raise the default severity to `Warning` so it is visible and can
++be promoted to an error (`TreatWarningsAsErrors` / `.editorconfig`).
++
++## Acceptance criteria
++- `DiagnosticDescriptors.QueryableProjectionMappingCannotInline` (RMG068) has
++  `DefaultSeverity = Warning`.
++- `AnalyzerReleases.Unshipped.md` records the change under "Changed Rules".
++- Docs (`docs/docs/configuration/queryable-projections.mdx`) mention that it is
++  a warning and how to change its severity.
++- Snapshot tests updated; full test suite passes.
++
++## Commands
++- Build: `dotnet build`
++- Test: `dotnet test test/Riok.Mapperly.Tests`
++
++## Boundaries
++- Always: keep diagnostic id/title/message unchanged.
++- Never: change inlining behaviour itself.
+diff --git a/docs/docs/configuration/queryable-projections.mdx b/docs/docs/configuration/queryable-projections.mdx
+index 55874bd..4cdb5e2 100644
+--- a/docs/docs/configuration/queryable-projections.mdx
++++ b/docs/docs/configuration/queryable-projections.mdx
+@@ -98,7 +98,9 @@ public static partial class CarMapper
+ }
+ ```
+ 
+-If Mapperly is unable to inline a user-implemented method, `RMG068` is reported.
++If Mapperly is unable to inline a user-implemented method, the warning `RMG068` is reported.
++To prevent unintended client-side evaluation, this warning can be promoted to an error
++(e.g. via `dotnet_diagnostic.RMG068.severity = error` in the `.editorconfig`).
+ Non-inlined method invocations can lead to more data being loaded than necessary.
+ 
+ Ordering and aggregating collections can also be implemented with user-implemented mapping methods:
+diff --git a/src/Riok.Mapperly/AnalyzerReleases.Unshipped.md b/src/Riok.Mapperly/AnalyzerReleases.Unshipped.md
+index 17d4678..ded9d7b 100644
+--- a/src/Riok.Mapperly/AnalyzerReleases.Unshipped.md
++++ b/src/Riok.Mapperly/AnalyzerReleases.Unshipped.md
+@@ -1,2 +1,8 @@
+ ; Unshipped analyzer release
+ ; https://github.com/dotnet/roslyn-analyzers/blob/master/src/Microsoft.CodeAnalysis.Analyzers/ReleaseTrackingAnalyzers.Help.md
++
++### Changed Rules
++
++Rule ID | New Category | New Severity | Old Category | Old Severity | Notes
++--------|--------------|--------------|--------------|--------------|-------
++RMG068  | Mapper       | Warning      | Mapper       | Info         | Cannot inline user implemented queryable expression mapping
+diff --git a/src/Riok.Mapperly/Diagnostics/DiagnosticDescriptors.cs b/src/Riok.Mapperly/Diagnostics/DiagnosticDescriptors.cs
+index b59eb32..60ebaee 100644
+--- a/src/Riok.Mapperly/Diagnostics/DiagnosticDescriptors.cs
++++ b/src/Riok.Mapperly/Diagnostics/DiagnosticDescriptors.cs
+@@ -561,7 +561,7 @@ public static class DiagnosticDescriptors
+         "Cannot inline user implemented queryable expression mapping",
+         "Cannot inline user implemented queryable expression mapping",
+         DiagnosticCategories.Mapper,
+-        DiagnosticSeverity.Info,
++        DiagnosticSeverity.Warning,
+         true
+     );
+ 
+diff --git a/tasks/plan.md b/tasks/plan.md
+new file mode 100644
+index 0000000..0a331a4
+--- /dev/null
++++ b/tasks/plan.md
+@@ -0,0 +1,14 @@
++Source spec: SPEC.md
++
++# Plan: Elevate RMG068 default severity to Warning
++
++## Task 1: Raise RMG068 default severity to Warning
++- Depends on: none
++- Files: `src/Riok.Mapperly/Diagnostics/DiagnosticDescriptors.cs`,
++  `src/Riok.Mapperly/AnalyzerReleases.Unshipped.md`,
++  `docs/docs/configuration/queryable-projections.mdx`,
++  `test/Riok.Mapperly.Tests/_snapshots/QueryableProjectionUserImplementedTest.ClassToClassNonInlinedMethod.verified.txt`
++- Acceptance: snapshot test `ClassToClassNonInlinedMethod` expects `Severity: Warning`;
++  release tracking lists the change under "Changed Rules"; docs updated; full suite passes.
++- Verify: `HUSKY=0 dotnet test test/Riok.Mapperly.Tests --no-restore`
++- Status: [x] done
+diff --git a/test/Riok.Mapperly.Tests/_snapshots/QueryableProjectionUserImplementedTest.ClassToClassNonInlinedMethod.verified.txt b/test/Riok.Mapperly.Tests/_snapshots/QueryableProjectionUserImplementedTest.ClassToClassNonInlinedMethod.verified.txt
+index da49383..a38a0d7 100644
+--- a/test/Riok.Mapperly.Tests/_snapshots/QueryableProjectionUserImplementedTest.ClassToClassNonInlinedMethod.verified.txt
++++ b/test/Riok.Mapperly.Tests/_snapshots/QueryableProjectionUserImplementedTest.ClassToClassNonInlinedMethod.verified.txt
+@@ -9,14 +9,14 @@
+ */
+  : (11,4)-(11,84),
+       Message: Cannot inline user implemented queryable expression mapping,
+-      Severity: Info,
++      Severity: Warning,
+       WarningLevel: 1,
+       Descriptor: {
+         Id: RMG068,
+         Title: Cannot inline user implemented queryable expression mapping,
+         MessageFormat: Cannot inline user implemented queryable expression mapping,
+         Category: Mapper,
+-        DefaultSeverity: Info,
++        DefaultSeverity: Warning,
+         IsEnabledByDefault: true
+       }
+     }

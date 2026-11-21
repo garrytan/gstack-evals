@@ -1,0 +1,56 @@
+diff --git a/registry/remote/utils.go b/registry/remote/utils.go
+index 797169f..93dd87d 100644
+--- a/registry/remote/utils.go
++++ b/registry/remote/utils.go
+@@ -55,6 +55,9 @@ func parseLink(resp *http.Response) (string, error) {
+ 	if err != nil {
+ 		return "", err
+ 	}
++	if linkURL.Scheme != resp.Request.URL.Scheme || linkURL.Host != resp.Request.URL.Host {
++		return "", fmt.Errorf("invalid next link %q: scheme and host must match the request URL %q", link, resp.Request.URL.Redacted())
++	}
+ 	return linkURL.String(), nil
+ }
+ 
+diff --git a/registry/remote/utils_test.go b/registry/remote/utils_test.go
+index ef36434..a6f295d 100644
+--- a/registry/remote/utils_test.go
++++ b/registry/remote/utils_test.go
+@@ -46,10 +46,34 @@ func Test_parseLink(t *testing.T) {
+ 			want:   "https://localhost:5000/v2/hello-world/tags/list?last=latest&n=1",
+ 		},
+ 		{
+-			name:   "other domain",
++			name:    "other domain",
++			url:     "https://localhost:5000/v2/_catalog",
++			header:  `<https://localhost:5001/v2/_catalog?last=alpine&n=1>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:   "same host absolute URL",
+ 			url:    "https://localhost:5000/v2/_catalog",
+-			header: `<https://localhost:5001/v2/_catalog?last=alpine&n=1>; rel="next"`,
+-			want:   "https://localhost:5001/v2/_catalog?last=alpine&n=1",
++			header: `<https://localhost:5000/v2/_catalog?last=alpine&n=1>; rel="next"`,
++			want:   "https://localhost:5000/v2/_catalog?last=alpine&n=1",
++		},
++		{
++			name:    "scheme downgrade",
++			url:     "https://localhost:5000/v2/_catalog",
++			header:  `<http://localhost:5000/v2/_catalog?last=alpine&n=1>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:    "internal endpoint",
++			url:     "https://registry.example.com/v2/repo/tags/list",
++			header:  `<http://169.254.169.254/latest/meta-data/>; rel="next"`,
++			wantErr: true,
++		},
++		{
++			name:    "protocol-relative URL to other host",
++			url:     "https://registry.example.com/v2/repo/tags/list",
++			header:  `<//internal-service:8080/admin>; rel="next"`,
++			wantErr: true,
+ 		},
+ 		{
+ 			name:    "invalid header, missing <",

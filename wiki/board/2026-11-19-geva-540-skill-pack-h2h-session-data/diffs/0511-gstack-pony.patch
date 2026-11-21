@@ -1,0 +1,140 @@
+diff --git a/Terminal.Gui/Views/DialogTResult.cs b/Terminal.Gui/Views/DialogTResult.cs
+index 94f4d99..ebe8bdb 100644
+--- a/Terminal.Gui/Views/DialogTResult.cs
++++ b/Terminal.Gui/Views/DialogTResult.cs
+@@ -91,8 +91,6 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         BorderStyle = Dialog.DefaultBorderStyle;
+         base.ShadowStyle = Dialog.DefaultShadow;
+ 
+-        SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Dialog);
+-
+         CommandsToBubbleUp = [Command.Accept];
+ 
+         _buttonContainer = new View
+@@ -350,15 +348,24 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         }
+     }
+ 
++    // The SchemeName last assigned by SetStyle, used to tell it apart from one set by the developer.
++    private string? _styleSchemeName;
++
+     private void SetStyle ()
+     {
+         if (IsRunning)
+         {
++            // Only replace the scheme name we assigned; preserve one the developer set (e.g. MessageBox.ErrorQuery's "Error").
++            if (SchemeName == _styleSchemeName)
++            {
++                SchemeName = _styleSchemeName = SchemeManager.SchemesToSchemeName (Schemes.Dialog);
++            }
++
+             Arrangement |= ViewArrangement.Movable | ViewArrangement.Resizable | ViewArrangement.Overlapped;
+         }
+         else
+         {
+-            SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base);
++            SchemeName = _styleSchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base);
+ 
+             // strip out movable and resizable
+             Arrangement &= ~(ViewArrangement.Movable | ViewArrangement.Resizable);
+diff --git a/Tests/UnitTestsParallelizable/Views/DialogTests.cs b/Tests/UnitTestsParallelizable/Views/DialogTests.cs
+index 5c64f21..d2193f6 100644
+--- a/Tests/UnitTestsParallelizable/Views/DialogTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/DialogTests.cs
+@@ -272,6 +272,96 @@ public class DialogTests (ITestOutputHelper output) : TestDriverBase
+         dialog.Dispose ();
+     }
+ 
++    #region Scheme Tests
++
++    // Runs dialog for one iteration and captures what it looked like while running.
++    private static (string? schemeName, Scheme scheme, Attribute interior) RunAndCapture (Dialog dialog)
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++        app.Driver!.SetScreenSize (40, 12);
++
++        string? schemeName = null;
++        Scheme? scheme = null;
++        Attribute? interior = null;
++
++        app.Iteration += OnIteration;
++        app.Run (dialog);
++        app.Iteration -= OnIteration;
++
++        return (schemeName, scheme!, interior!.Value);
++
++        void OnIteration (object? sender, EventArgs<IApplication?> e)
++        {
++            schemeName = dialog.SchemeName;
++            scheme = dialog.GetScheme ();
++
++            // A cell inside the dialog's Viewport (empty, so cleared with the Normal attribute)
++            Point p = dialog.ViewportToScreen (new Point (1, 1));
++            interior = app.Driver.Contents! [p.Y, p.X].Attribute;
++            app.RequestStop ();
++        }
++    }
++
++    // Claude - Opus 5.5
++    [Fact]
++    public void Running_Dialog_Uses_Dialog_SchemeName ()
++    {
++        using Dialog dialog = new () { Width = 20, Height = 6 };
++
++        (string? schemeName, Scheme scheme, _) = RunAndCapture (dialog);
++
++        Assert.Equal ("Dialog", schemeName);
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog), scheme);
++    }
++
++    // Claude - Opus 5.5
++    [Fact]
++    public void Running_Dialog_Draws_With_Dialog_Scheme ()
++    {
++        using Dialog dialog = new () { Width = 20, Height = 6 };
++
++        (_, _, Attribute interior) = RunAndCapture (dialog);
++
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog).Normal, interior);
++    }
++
++    // Claude - Opus 5.5
++    [Fact]
++    public void Running_Dialog_SubView_Inherits_Dialog_Scheme ()
++    {
++        using Dialog dialog = new () { Width = 20, Height = 6 };
++        Label label = new () { Text = "Hi" };
++        dialog.Add (label);
++
++        RunAndCapture (dialog);
++
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog).Normal, label.GetAttributeForRole (VisualRole.Normal));
++    }
++
++    // Claude - Opus 5.5
++    [Fact]
++    public void Running_Dialog_Preserves_Explicit_SchemeName ()
++    {
++        using Dialog dialog = new () { Width = 20, Height = 6, SchemeName = "Error" };
++
++        (string? schemeName, _, Attribute interior) = RunAndCapture (dialog);
++
++        Assert.Equal ("Error", schemeName);
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Error).Normal, interior);
++    }
++
++    // Claude - Opus 5.5
++    [Fact]
++    public void NotRunning_Dialog_Uses_Base_SchemeName ()
++    {
++        using Dialog dialog = new ();
++
++        Assert.Equal ("Base", dialog.SchemeName);
++    }
++
++    #endregion Scheme Tests
++
+     [Fact]
+     public void Modal_DialogButton_Accept_BubblesUp ()
+     {

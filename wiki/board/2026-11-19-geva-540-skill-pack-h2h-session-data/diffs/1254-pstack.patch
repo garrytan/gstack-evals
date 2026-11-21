@@ -1,0 +1,280 @@
+diff --git a/httpserver/bulk_acl_test.go b/httpserver/bulk_acl_test.go
+new file mode 100644
+index 0000000..a030d01
+--- /dev/null
++++ b/httpserver/bulk_acl_test.go
+@@ -0,0 +1,97 @@
++package httpserver
++
++import (
++	"archive/zip"
++	"bytes"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"sort"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"golang.org/x/crypto/bcrypt"
++)
++
++func setupBulkACL(t *testing.T) *FileServer {
++	dir := t.TempDir()
++	protected := filepath.Join(dir, "protected")
++	require.NoError(t, os.MkdirAll(filepath.Join(protected, "hidden"), 0755))
++	require.NoError(t, os.WriteFile(filepath.Join(protected, "secret.txt"), []byte("top secret"), 0644))
++	require.NoError(t, os.WriteFile(filepath.Join(protected, "blocked.txt"), []byte("blocked"), 0644))
++	require.NoError(t, os.WriteFile(filepath.Join(protected, "hidden", "x.txt"), []byte("hidden"), 0644))
++	require.NoError(t, os.WriteFile(filepath.Join(dir, "public.txt"), []byte("public"), 0644))
++
++	hash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.MinCost)
++	require.NoError(t, err)
++	acl := `{"auth":"admin:` + string(hash) + `","block":["blocked.txt","hidden/"]}`
++	require.NoError(t, os.WriteFile(filepath.Join(protected, ".goshs"), []byte(acl), 0644))
++
++	fs, cleanup := newTestFileServer(t, dir)
++	t.Cleanup(cleanup)
++	return fs
++}
++
++func bulkZipNames(t *testing.T, body []byte) []string {
++	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
++	require.NoError(t, err)
++	var names []string
++	for _, f := range zr.File {
++		names = append(names, f.Name)
++	}
++	sort.Strings(names)
++	return names
++}
++
++func TestBulkDownload_ACLRequiresAuth(t *testing.T) {
++	fs := setupBulkACL(t)
++	for _, target := range []string{"/protected/secret.txt", "/protected/blocked.txt", "/protected", "/"} {
++		r := httptest.NewRequest(http.MethodGet, "/?bulk&file="+target, nil)
++		w := httptest.NewRecorder()
++		fs.handler(w, r)
++		require.Equal(t, http.StatusUnauthorized, w.Code, target)
++		require.NotContains(t, w.Body.String(), "top secret", target)
++	}
++}
++
++func TestBulkDownload_ACLAuthorizedHonorsBlock(t *testing.T) {
++	fs := setupBulkACL(t)
++	r := httptest.NewRequest(http.MethodGet, "/?bulk&file=/", nil)
++	r.SetBasicAuth("admin", "admin")
++	w := httptest.NewRecorder()
++	fs.handler(w, r)
++	require.Equal(t, http.StatusOK, w.Code)
++	require.Equal(t, []string{"protected/secret.txt", "public.txt"}, bulkZipNames(t, w.Body.Bytes()))
++
++	zr, err := zip.NewReader(bytes.NewReader(w.Body.Bytes()), int64(w.Body.Len()))
++	require.NoError(t, err)
++	for _, f := range zr.File {
++		if f.Name == "protected/secret.txt" {
++			rc, err := f.Open()
++			require.NoError(t, err)
++			content, _ := io.ReadAll(rc)
++			rc.Close()
++			require.Equal(t, "top secret", string(content))
++		}
++	}
++}
++
++func TestBulkDownload_ACLWrongPassword(t *testing.T) {
++	fs := setupBulkACL(t)
++	r := httptest.NewRequest(http.MethodGet, "/?bulk&file=/protected/secret.txt", nil)
++	r.SetBasicAuth("admin", "wrong")
++	w := httptest.NewRecorder()
++	fs.handler(w, r)
++	require.Equal(t, http.StatusUnauthorized, w.Code)
++}
++
++func TestBulkDownload_PublicFileUnaffected(t *testing.T) {
++	fs := setupBulkACL(t)
++	r := httptest.NewRequest(http.MethodGet, "/?bulk&file=/public.txt", nil)
++	w := httptest.NewRecorder()
++	fs.handler(w, r)
++	require.Equal(t, http.StatusOK, w.Code)
++	require.Equal(t, []string{"public.txt"}, bulkZipNames(t, w.Body.Bytes()))
++}
+diff --git a/httpserver/updown.go b/httpserver/updown.go
+index 59e4adb..7e4d40d 100644
+--- a/httpserver/updown.go
++++ b/httpserver/updown.go
+@@ -8,6 +8,7 @@ import (
+ 	"net/http"
+ 	"os"
+ 	"path/filepath"
++	"slices"
+ 	"strings"
+ 	"time"
+ 
+@@ -238,6 +239,11 @@ func (fs *FileServer) bulkDownload(w http.ResponseWriter, req *http.Request) {
+ 		filesCleaned = append(filesCleaned, absPath)
+ 	}
+ 
++	entries, ok := fs.collectBulkEntries(w, req, filesCleaned)
++	if !ok {
++		return
++	}
++
+ 	// Construct filename to download
+ 	filename := fmt.Sprintf("%d_goshs_download.zip", time.Now().Unix())
+ 
+@@ -252,52 +258,8 @@ func (fs *FileServer) bulkDownload(w http.ResponseWriter, req *http.Request) {
+ 	resultZip := zip.NewWriter(w)
+ 	defer resultZip.Close()
+ 
+-	// Path walker for recursion
+-	walker := func(filepath string, info os.FileInfo, err error) error {
+-		if err != nil {
+-			return err
+-		}
+-		if info.IsDir() {
+-			return nil
+-		}
+-
+-		// disable G304 (CWE-22): Potential file inclusion via variable
+-		// #nosec G304
+-		file, err := os.Open(filepath)
+-		if err != nil {
+-			return err
+-		}
+-		// disable G307 (CWE-703): Deferring unsafe method "Close" on type "*os.File"
+-		// #nosec G307
+-		defer file.Close()
+-
+-		// filepath is fs.Webroot + file relative path
+-		// this would result in a lot of nested folders
+-		// so we are stripping fs.Webroot again from the structure of the zip file
+-		// Leaving us with the relative path of the file
+-		zippath := strings.ReplaceAll(filepath, fs.Webroot, "")
+-		header := &zip.FileHeader{
+-			Name:     zippath[1:],
+-			Method:   zip.Deflate,
+-			Modified: info.ModTime(),
+-		}
+-		f, err := resultZip.CreateHeader(header)
+-		if err != nil {
+-			return err
+-		}
+-
+-		_, err = io.Copy(f, file)
+-		if err != nil {
+-			return err
+-		}
+-
+-		return nil
+-	}
+-
+-	// Loop over files and add to zip (filesCleaned contains validated absolute paths)
+-	for _, file := range filesCleaned {
+-		err := filepath.Walk(file, walker)
+-		if err != nil {
++	for _, entry := range entries {
++		if err := fs.addToZip(resultZip, entry); err != nil {
+ 			logger.Errorf("creating zip file: %+v", err)
+ 		}
+ 	}
+@@ -310,3 +272,97 @@ func (fs *FileServer) bulkDownload(w http.ResponseWriter, req *http.Request) {
+ 		logger.LogRequest(req, http.StatusOK, fs.Verbose, fs.Webhook, body)
+ 	}
+ }
++
++type bulkEntry struct {
++	path string
++	info os.FileInfo
++}
++
++// collectBulkEntries walks the requested paths and returns every file the
++// requester may read under the effective .goshs ACLs, mirroring doDir and
++// sendFile. Authorization must complete before the zip stream starts, since a
++// 401 cannot be sent once the body is being written.
++func (fs *FileServer) collectBulkEntries(w http.ResponseWriter, req *http.Request, roots []string) ([]bulkEntry, bool) {
++	var entries []bulkEntry
++	authorized := make(map[string]bool)
++	webroot := filepath.Clean(fs.Webroot)
++
++	for _, root := range roots {
++		denied := false
++		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
++			if err != nil {
++				return err
++			}
++			if info.IsDir() {
++				if path == webroot {
++					return nil
++				}
++				parentConfig, err := fs.findSpecialFile(filepath.Dir(path))
++				if err != nil {
++					logger.Errorf("error reading file based access config: %+v", err)
++				}
++				if slices.Contains(parentConfig.Block, info.Name()+"/") {
++					return filepath.SkipDir
++				}
++				return nil
++			}
++
++			if info.Name() == ".goshs" {
++				return nil
++			}
++
++			acl, err := fs.findEffectiveACL(filepath.Dir(path))
++			if err != nil {
++				logger.Errorf("error reading file based access config: %+v", err)
++			}
++			if !authorized[acl.Auth] {
++				if !fs.applyCustomAuth(w, req, acl) {
++					denied = true
++					return filepath.SkipAll
++				}
++				authorized[acl.Auth] = true
++			}
++			if slices.Contains(acl.Block, info.Name()) {
++				return nil
++			}
++
++			entries = append(entries, bulkEntry{path: path, info: info})
++			return nil
++		})
++		if denied {
++			return nil, false
++		}
++		if err != nil {
++			logger.Errorf("creating zip file: %+v", err)
++		}
++	}
++
++	return entries, true
++}
++
++func (fs *FileServer) addToZip(resultZip *zip.Writer, entry bulkEntry) error {
++	// disable G304 (CWE-22): Potential file inclusion via variable
++	// #nosec G304
++	file, err := os.Open(entry.path)
++	if err != nil {
++		return err
++	}
++	// disable G307 (CWE-703): Deferring unsafe method "Close" on type "*os.File"
++	// #nosec G307
++	defer file.Close()
++
++	// Strip the webroot so the zip holds paths relative to it
++	zippath := strings.ReplaceAll(entry.path, fs.Webroot, "")
++	header := &zip.FileHeader{
++		Name:     zippath[1:],
++		Method:   zip.Deflate,
++		Modified: entry.info.ModTime(),
++	}
++	f, err := resultZip.CreateHeader(header)
++	if err != nil {
++		return err
++	}
++
++	_, err = io.Copy(f, file)
++	return err
++}

@@ -1,0 +1,61 @@
+diff --git a/libcaf_net/caf/net/abstract_actor_shell.cpp b/libcaf_net/caf/net/abstract_actor_shell.cpp
+index 22cbf81..b6db4e1 100644
+--- a/libcaf_net/caf/net/abstract_actor_shell.cpp
++++ b/libcaf_net/caf/net/abstract_actor_shell.cpp
+@@ -27,6 +27,9 @@ abstract_actor_shell::abstract_actor_shell(actor_config& cfg,
+   mailbox_.try_block();
+   resume_ = make_action([this] {
+     for (;;) {
++      // Stop if a handler called `quit()`, since the mailbox is closed now.
++      if (terminated())
++        return;
+       if (!consume_message() && try_block_mailbox())
+         return;
+     }
+@@ -52,7 +55,7 @@ void abstract_actor_shell::quit(error reason) {
+ // -- mailbox access -----------------------------------------------------------
+ 
+ mailbox_element_ptr abstract_actor_shell::next_message() {
+-  if (!mailbox_.blocked())
++  if (!mailbox_.closed() && !mailbox_.blocked())
+     return mailbox_.pop_front();
+   return nullptr;
+ }
+diff --git a/libcaf_net/caf/net/actor_shell.test.cpp b/libcaf_net/caf/net/actor_shell.test.cpp
+index 6270752..db6238e 100644
+--- a/libcaf_net/caf/net/actor_shell.test.cpp
++++ b/libcaf_net/caf/net/actor_shell.test.cpp
+@@ -235,4 +235,33 @@ TEST("actor shells can use flows") {
+   check_eq(to_string_view(buf), msg);
+ }
+ 
++TEST("actor shells may call quit in an error handler") {
++  scoped_actor self{sys};
++  auto self_hdl = actor_cast<actor>(self);
++  auto cb = [self_hdl](app_t* app) {
++    app->self->mail(get_atom_v)
++      .request(self_hdl, 10ms)
++      .then([](const std::string&) {},
++            [app](const error& err) { app->self->quit(err); });
++  };
++  auto& mpx = sys.network_manager().mpx();
++  auto app = app_t::make(actor{self}, cb);
++  auto transport = net::octet_stream::transport::make(fd1, std::move(app));
++  auto mgr = net::socket_manager::make(&mpx, std::move(transport));
++  require(mpx.start(mgr));
++  fd1.id = net::invalid_socket_id;
++  actor hdl;
++  self->receive([&hdl](actor& x) { hdl = x; },
++                after(1s) >> [this] { fail("shell did not send its handle"); });
++  // Do not respond to the request to trigger the timeout.
++  self->receive([](get_atom) {},
++                after(1s) >> [this] { fail("shell did not send a request"); });
++  // Flood the shell with messages to make sure its mailbox is non-empty when
++  // it calls quit.
++  for (int i = 0; i < 100; ++i)
++    anon_mail("ignored\n"s).send(hdl);
++  self->wait_for(hdl);
++  check(true);
++}
++
+ } // WITH_FIXTURE(fixture)

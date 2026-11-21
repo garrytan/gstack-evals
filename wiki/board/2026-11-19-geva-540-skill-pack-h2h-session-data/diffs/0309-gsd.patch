@@ -1,0 +1,97 @@
+diff --git a/internal/plugins/ai/codex/codex.go b/internal/plugins/ai/codex/codex.go
+index b1b531f..2a5c096 100644
+--- a/internal/plugins/ai/codex/codex.go
++++ b/internal/plugins/ai/codex/codex.go
+@@ -227,12 +227,15 @@ func (c *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, o
+ 	var (
+ 		builder       strings.Builder
+ 		completedResp *responses.Response
++		doneItems     []responses.ResponseOutputItemUnion
+ 	)
+ 	for stream.Next() {
+ 		event := stream.Current()
+ 		switch event.Type {
+ 		case string(constant.ResponseOutputTextDelta("").Default()):
+ 			builder.WriteString(event.AsResponseOutputTextDelta().Delta)
++		case "response.output_item.done":
++			doneItems = append(doneItems, event.AsResponseOutputItemDone().Item)
+ 		case "response.completed":
+ 			resp := event.AsResponseCompleted().Response
+ 			completedResp = &resp
+@@ -243,7 +246,14 @@ func (c *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, o
+ 		return "", err
+ 	}
+ 	if completedResp != nil {
+-		return c.ExtractText(completedResp), nil
++		// The Codex backend (store=false) may send response.completed with an
++		// empty output array; rebuild it from the streamed output items.
++		if len(completedResp.Output) == 0 && len(doneItems) > 0 {
++			completedResp.Output = doneItems
++		}
++		if text := c.ExtractText(completedResp); strings.TrimSpace(text) != "" {
++			return text, nil
++		}
+ 	}
+ 
+ 	return builder.String(), nil
+diff --git a/internal/plugins/ai/codex/codex_test.go b/internal/plugins/ai/codex/codex_test.go
+index 5989956..3e29704 100644
+--- a/internal/plugins/ai/codex/codex_test.go
++++ b/internal/plugins/ai/codex/codex_test.go
+@@ -429,6 +429,56 @@ func TestSendIncludesSourcesFromAnnotatedResponse(t *testing.T) {
+ 	}
+ }
+ 
++func TestSendFallsBackWhenCompletedOutputEmpty(t *testing.T) {
++	for _, tc := range []struct {
++		name     string
++		emitItem bool
++	}{
++		{name: "deltas only", emitItem: false},
++		{name: "output item done", emitItem: true},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++				w.Header().Set("Content-Type", "text/event-stream")
++				flusher := w.(http.Flusher)
++				fmt.Fprintf(w, "data: %s\n\n", marshalJSON(t, map[string]any{
++					"type":  string(constant.ResponseOutputTextDelta("").Default()),
++					"delta": "hello from codex",
++				}))
++				if tc.emitItem {
++					fmt.Fprintf(w, "data: %s\n\n", marshalJSON(t, map[string]any{
++						"type": "response.output_item.done",
++						"item": map[string]any{
++							"type": "message",
++							"content": []any{
++								map[string]any{"type": "output_text", "text": "hello from codex", "annotations": []any{}},
++							},
++						},
++					}))
++				}
++				fmt.Fprintf(w, "data: %s\n\n", marshalJSON(t, map[string]any{
++					"type":     "response.completed",
++					"response": map[string]any{"output": []any{}},
++				}))
++				flusher.Flush()
++				fmt.Fprint(w, "data: [DONE]\n\n")
++			}))
++			defer apiServer.Close()
++
++			client := newConfiguredTestClient(t, apiServer.URL, "acct_empty", testJWT("acct_empty", time.Now().Add(time.Hour)))
++			message, err := client.Send(context.Background(), []*chat.ChatCompletionMessage{
++				{Role: chat.ChatMessageRoleUser, Content: "Hello"},
++			}, &domain.ChatOptions{Model: "gpt-5.4"})
++			if err != nil {
++				t.Fatalf("Send() error = %v", err)
++			}
++			if message != "hello from codex" {
++				t.Fatalf("Send() = %q, want %q", message, "hello from codex")
++			}
++		})
++	}
++}
++
+ func TestSendStreamReadsCodexSSE(t *testing.T) {
+ 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		if r.URL.Path != "/responses" {

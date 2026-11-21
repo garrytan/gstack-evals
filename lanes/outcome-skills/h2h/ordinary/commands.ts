@@ -9,7 +9,7 @@ import { readUnit } from "../../statemachines/unit.ts";
 import { parseFlags } from "../cli.ts";
 import { h2hFail, POST_ID, PREREG_PATH, readPrereg } from "../prereg.ts";
 import type { UnitKind } from "../types.ts";
-import { drawB, planFor, replaceDropped, seededOrder, walk, type DrawUnit, type Gate, type GateResult } from "./draw.ts";
+import { b1Futility, drawB, planFor, replaceDropped, seededOrder, walk, type DrawUnit, type Gate, type GateResult } from "./draw.ts";
 import { finishFrame, licenceVerdict, needsSecondRead, readLicences, screenFrame, type RowText } from "./frame.ts";
 import { fetchTemplates, loadTemplates, readHfHead, readLicenceFilesGraphQl, readLicencesGraphQl } from "./licences.ts";
 import { readFrameFile, type FrameUnit } from "../frames.ts";
@@ -132,20 +132,22 @@ export const oracleGate = (unitsDir: string): Gate => ({
 
 const DRAW_HELP = `Usage: gstack-evals h2h draw --class O --frame <o-frame.json> --order-out <file>
        gstack-evals h2h draw --class O --frame <o-frame.json> --gates <h2h-gates.v1 file> [--units-dir <sm unit dirs>] [--n <n>] [--full-size <n>] [--dropped <ids>] --out <file>
-       gstack-evals h2h draw --class B --b1-frame <file> --b2-frame <file> --b1-gates <file> --b2-gates <file> [--n <n>] [--full-size <n>] [--b1-fallbacks-done] [--b2-widened] [--dropped <ids>] --out <file>
+       gstack-evals h2h draw --class B --b1-frame <file> --b2-frame <file> --b1-gates <file> --b2-gates <file> [--n <n>] [--full-size <n>] [--b1-fallbacks-done] [--b1-futility] [--b2-widened] [--dropped <ids>] --out <file>
 --order-out writes the frame's seeded order (draw_seed) and touches no gate. Otherwise the gate walk runs over the seeded
 order with the gate results (and, for O, the oracle gate read from --units-dir first) and writes the drawn units with
 their positions and stages. The B1 and B2 frames are drawn over their primary rows. B1 walks its whole frame, then takes
 its positions from its usable count; when its stage 2 gets fewer than 20 units the draw stops before B2
 (E_H2H_DRAW_SHORT) until it is drawn again with --b1-fallbacks-done, which adds the B1 frame's widened rows, after
-which B1 is infeasible and B is B2 alone. --b2-widened adds the B2 frame's widened rows, the fallback when B2 runs
-short. --full-size is an approved full n (O 150, B 80):
+which B1 is infeasible and B is B2 alone. --b1-futility applies B1's futility stop (Captain ruling, 2026-11-15) over the
+B1 frame's primary then widened rows plus the 8 pinned MultiLang rows: once it fires, B1 is infeasible without walking
+the rest. When B1 is infeasible, B2 takes every B stage 1 slot (6, 12, ..., 72). --b2-widened adds the B2 frame's widened
+rows, the fallback when B2 runs short. --full-size is an approved full n (O 150, B 80):
 the added units take the next positions after stage 0's units. --dropped lists units that dropped after the draw, which
 reserves replace. A pending gate exits 2 with E_H2H_DRAW_PENDING naming the unit; a frame that runs out exits 2 with
 E_H2H_DRAW_SHORT after writing.`;
 
 async function draw(argv: string[]): Promise<number> {
-  const f = parseFlags(argv, ["--class", "--frame", "--order-out", "--gates", "--units-dir", "--n", "--full-size", "--dropped", "--out", "--b1-frame", "--b2-frame", "--b1-gates", "--b2-gates"], ["--b1-fallbacks-done", "--b2-widened"], DRAW_HELP);
+  const f = parseFlags(argv, ["--class", "--frame", "--order-out", "--gates", "--units-dir", "--n", "--full-size", "--dropped", "--out", "--b1-frame", "--b2-frame", "--b1-gates", "--b2-gates"], ["--b1-fallbacks-done", "--b1-futility", "--b2-widened"], DRAW_HELP);
   if (!f) return 0;
   const p = readPrereg();
   const cls = f.need("--class");
@@ -174,7 +176,9 @@ async function draw(argv: string[]): Promise<number> {
   const fallbacksDone = f.has("--b1-fallbacks-done");
   const b1 = readFrame(f.need("--b1-frame"), "B1").filter((u) => fallbacksDone || u.window === "primary");
   const b2 = readFrame(f.need("--b2-frame"), "B2").filter((u) => f.has("--b2-widened") || u.window === "primary");
-  const d = drawB(p, p.draw_seed, seededOrder(b1, p.draw_seed), seededOrder(b2, p.draw_seed), readGates(f.need("--b1-gates")), readGates(f.need("--b2-gates")), { n, fallbacksDone, fullSize: full });
+  const futility = f.has("--b1-futility") ? b1Futility(p, seededOrder(readFrame(f.need("--b1-frame"), "B1"), p.draw_seed), readGates(f.need("--b1-gates"))) : undefined;
+  if (futility) console.log("B1 futility: " + futility.u + " usable of " + futility.k + " answered, " + futility.left + " rows left and " + futility.multilang + " MultiLang rows, U95 " + futility.u95.toFixed(4) + ", projected " + futility.projected.toFixed(2) + " against " + futility.floor + ": " + (futility.fired ? "fired" : "not fired"));
+  const d = drawB(p, p.draw_seed, seededOrder(b1, p.draw_seed), seededOrder(b2, p.draw_seed), readGates(f.need("--b1-gates")), readGates(f.need("--b2-gates")), { n, fallbacksDone, fullSize: full, futility });
   const out = { ...d, b1: { ...d.b1, ...replaceDropped(d.b1, dropped) }, b2: d.b2 ? { ...d.b2, ...replaceDropped(d.b2, dropped) } : null };
   writeFileSync(f.need("--out"), json(out));
   const code = report(d.b1);

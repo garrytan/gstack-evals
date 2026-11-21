@@ -1,0 +1,96 @@
+diff --git a/.changeset/safe-phone-number-regex.md b/.changeset/safe-phone-number-regex.md
+new file mode 100644
+index 0000000..a163612
+--- /dev/null
++++ b/.changeset/safe-phone-number-regex.md
+@@ -0,0 +1,5 @@
++---
++'graphql-scalars': patch
++---
++
++PhoneNumber: guard against regular expression denial of service (GHSA-x8rm-f576-gq67) by bounding the input length before matching and keeping the pattern free of ambiguous nested quantifiers.
+diff --git a/src/scalars/PhoneNumber.ts b/src/scalars/PhoneNumber.ts
+index 7111608..9eaf8e5 100644
+--- a/src/scalars/PhoneNumber.ts
++++ b/src/scalars/PhoneNumber.ts
+@@ -1,8 +1,17 @@
+ import { GraphQLScalarType, Kind } from 'graphql';
+ import { createGraphQLError } from '../error.js';
+ 
++// NOTE: keep this pattern free of nested/ambiguous quantifiers. Patterns such as
++// /^\+?\d{1,3}(\-|\x20)?\(?\d+\)?((\-|\x20)?\d+)+$/ backtrack exponentially on
++// inputs like '1'.repeat(30) + 'x' (ReDoS, GHSA-x8rm-f576-gq67).
+ const PHONE_NUMBER_REGEX = /^\+[1-9]\d{6,14}$/;
+ 
++// E.164 allows at most 15 digits plus the leading '+'.
++const PHONE_NUMBER_MAX_LENGTH = 16;
++
++const isValidPhoneNumber = (value: string): boolean =>
++  value.length <= PHONE_NUMBER_MAX_LENGTH && PHONE_NUMBER_REGEX.test(value);
++
+ export const GraphQLPhoneNumber = /*#__PURE__*/ new GraphQLScalarType({
+   name: 'PhoneNumber',
+ 
+@@ -14,7 +23,7 @@ export const GraphQLPhoneNumber = /*#__PURE__*/ new GraphQLScalarType({
+       throw createGraphQLError(`Value is not string: ${value}`);
+     }
+ 
+-    if (!PHONE_NUMBER_REGEX.test(value)) {
++    if (!isValidPhoneNumber(value)) {
+       throw createGraphQLError(
+         `Value is not a valid phone number of the form +17895551234 (7-15 digits): ${value}`,
+       );
+@@ -28,7 +37,7 @@ export const GraphQLPhoneNumber = /*#__PURE__*/ new GraphQLScalarType({
+       throw createGraphQLError(`Value is not string: ${value}`);
+     }
+ 
+-    if (!PHONE_NUMBER_REGEX.test(value)) {
++    if (!isValidPhoneNumber(value)) {
+       throw createGraphQLError(
+         `Value is not a valid phone number of the form +17895551234 (7-15 digits): ${value}`,
+       );
+@@ -45,7 +54,7 @@ export const GraphQLPhoneNumber = /*#__PURE__*/ new GraphQLScalarType({
+       );
+     }
+ 
+-    if (!PHONE_NUMBER_REGEX.test(ast.value)) {
++    if (!isValidPhoneNumber(ast.value)) {
+       throw createGraphQLError(
+         `Value is not a valid phone number of the form +17895551234 (7-15 digits): ${ast.value}`,
+         { nodes: ast },
+diff --git a/tests/PhoneNumber.test.ts b/tests/PhoneNumber.test.ts
+index e26c8e7..4d415f2 100644
+--- a/tests/PhoneNumber.test.ts
++++ b/tests/PhoneNumber.test.ts
+@@ -136,5 +136,31 @@ describe('PhoneNumber', () => {
+         }).not.toThrow();
+       });
+     });
++    describe('regular expression denial of service', () => {
++      const payloads = [
++        '1'.repeat(40) + 'x',
++        '+' + '1'.repeat(40) + 'x',
++        '1 '.repeat(40) + 'x',
++        '1-'.repeat(40) + 'x',
++        '+1 (' + '1'.repeat(40) + 'x',
++        '1'.repeat(100_000) + 'x',
++      ];
++
++      for (const payload of payloads) {
++        test(`rejects ${JSON.stringify(payload.slice(0, 20))}... (length ${payload.length}) quickly`, () => {
++          const start = Date.now();
++          expect(() => GraphQLPhoneNumber.parseValue(payload)).toThrow(
++            /^Value is not a valid phone number/,
++          );
++          expect(() => GraphQLPhoneNumber.serialize(payload)).toThrow(
++            /^Value is not a valid phone number/,
++          );
++          expect(() =>
++            GraphQLPhoneNumber.parseLiteral({ value: payload, kind: Kind.STRING }, {}),
++          ).toThrow(/^Value is not a valid phone number/);
++          expect(Date.now() - start).toBeLessThan(100);
++        });
++      }
++    });
+   });
+ });

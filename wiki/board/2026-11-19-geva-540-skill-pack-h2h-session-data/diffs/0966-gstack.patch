@@ -1,0 +1,83 @@
+diff --git a/index.js b/index.js
+index f7058ef..376a69f 100644
+--- a/index.js
++++ b/index.js
+@@ -302,6 +302,12 @@ RedirectableRequest.prototype._sanitizeOptions = function (options) {
+   if (!options.headers) {
+     options.headers = {};
+   }
++  // Normalize Node's array-form headers ([name, value, name, value, ...])
++  // into an object, so header filtering (e.g., dropping credentials
++  // on cross-origin redirects) works reliably
++  else if (isArray(options.headers)) {
++    options.headers = headersArrayToObject(options.headers);
++  }
+   if (!isArray(options.sensitiveHeaders)) {
+     options.sensitiveHeaders = [];
+   }
+@@ -627,6 +633,28 @@ function spreadUrlObject(urlObject, target) {
+   return spread;
+ }
+ 
++function headersArrayToObject(headersArray) {
++  var headers = {};
++  var names = {};
++  for (var i = 0; i + 1 < headersArray.length; i += 2) {
++    var name = String(headersArray[i]);
++    var value = headersArray[i + 1];
++    var key = name.toLowerCase();
++    // Merge duplicate header names (case-insensitively) into an array value
++    if (Object.prototype.hasOwnProperty.call(names, key)) {
++      var existingName = names[key];
++      var existing = headers[existingName];
++      headers[existingName] = (isArray(existing) ? existing : [existing])
++        .concat(isArray(value) ? value : [value]);
++    }
++    else {
++      names[key] = name;
++      headers[name] = value;
++    }
++  }
++  return headers;
++}
++
+ function removeMatchingHeaders(regex, headers) {
+   var lastValue;
+   for (var header in headers) {
+diff --git a/test/test.js b/test/test.js
+index 474110e..8217569 100644
+--- a/test/test.js
++++ b/test/test.js
+@@ -1571,6 +1571,32 @@ describe("follow-redirects", function () {
+           });
+       });
+ 
++      it("drops the header when passed in array form across hosts", function () {
++        app.get("/a", redirectsTo(302, "http://localhost:3600/b"));
++        app.get("/b", function (req, res) {
++          res.end(JSON.stringify(req.headers));
++        });
++
++        var opts = url.parse("http://127.0.0.1:3600/a");
++        opts.headers = [header, "the header value", "X-Other", "a",
++          header.toUpperCase(), "dup", "x-other", "b"];
++        opts.sensitiveHeaders = sensitiveHeaders;
++
++        return server.start(app)
++          .then(asPromise(function (resolve, reject) {
++            http.get(opts, resolve).on("error", reject);
++          }))
++          .then(asPromise(function (resolve, reject, res) {
++            res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
++          }))
++          .then(function (str) {
++            var body = JSON.parse(str);
++            assert.equal(body.host, "localhost:3600");
++            assert.equal(body[header.toLowerCase()], undefined);
++            assert.equal(body["x-other"], "a, b");
++          });
++      });
++
+       it("keeps the header when redirected to the same host", function () {
+         app.get("/a", redirectsTo(302, "/b"));
+         app.get("/b", function (req, res) {

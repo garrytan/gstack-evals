@@ -1,0 +1,58 @@
+diff --git a/crates/hir-def/src/macro_expansion_tests/mbe/tt_conversion.rs b/crates/hir-def/src/macro_expansion_tests/mbe/tt_conversion.rs
+index 138db1b..60215c2 100644
+--- a/crates/hir-def/src/macro_expansion_tests/mbe/tt_conversion.rs
++++ b/crates/hir-def/src/macro_expansion_tests/mbe/tt_conversion.rs
+@@ -201,3 +201,24 @@ const _: () = 0e0;
+ "#]],
+     );
+ }
++
++#[test]
++fn float_literal_without_dot_in_field_access() {
++    check(
++        r#"
++macro_rules! field {
++    ($a:tt) => { s.$a };
++}
++
++fn main() { field!/*+errors*/(00E+10); }
++"#,
++        expect![[r#"
++macro_rules! field {
++    ($a:tt) => { s.$a };
++}
++
++fn main() { /* parse error: illegal float literal */
++s.00E+10; }
++"#]],
++    );
++}
+diff --git a/crates/syntax-bridge/src/lib.rs b/crates/syntax-bridge/src/lib.rs
+index 0dcf18a..d30d94d 100644
+--- a/crates/syntax-bridge/src/lib.rs
++++ b/crates/syntax-bridge/src/lib.rs
+@@ -903,7 +903,23 @@ impl TtTreeSink<'_> {
+                 }
+                 self.text_pos += TextSize::of(text);
+             }
+-            None => unreachable!(),
++            None => {
++                // illegal float literal which doesn't have dot in form (like 1e0)
++                // mirror `parser::shortcuts::do_float_split` and emit an error node
++                self.inner.error("illegal float literal".to_owned(), self.text_pos);
++                self.inner.start_node(SyntaxKind::ERROR);
++                self.inner.token(SyntaxKind::FLOAT_NUMBER, text);
++                self.token_map.push(self.text_pos + TextSize::of(text), span);
++                self.inner.finish_node();
++
++                // move up
++                self.inner.finish_node();
++                if !has_pseudo_dot {
++                    // the parser creates an unbalanced start node, we are required to close it here
++                    self.inner.finish_node();
++                }
++                self.text_pos += TextSize::of(text);
++            }
+         }
+         self.cursor.bump();
+     }

@@ -1,0 +1,113 @@
+diff --git a/col.go b/col.go
+index ee7f6e6..a25c6bc 100644
+--- a/col.go
++++ b/col.go
+@@ -546,29 +546,38 @@ func (ws *xlsxWorksheet) setColWidth(minVal, maxVal int, width float64) {
+ // and check the worksheet columns.
+ func flatCols(col xlsxCol, cols []xlsxCol, replacer func(fc, c xlsxCol) xlsxCol) []xlsxCol {
+ 	var fc []xlsxCol
+-	for i := col.Min; i <= col.Max; i++ {
++	clamp := func(c xlsxCol) (int, int) {
++		lo, hi := c.Min, c.Max
++		if lo < MinColumns {
++			lo = MinColumns
++		}
++		if hi > MaxColumns {
++			hi = MaxColumns
++		}
++		return lo, hi
++	}
++	lo, hi := clamp(col)
++	for i := lo; i <= hi; i++ {
+ 		var c xlsxCol
+ 		_ = deepcopy.Copy(&c, col)
+ 		c.Min, c.Max = i, i
+ 		fc = append(fc, c)
+ 	}
+-	inFlat := func(colID int, cols []xlsxCol) (int, bool) {
+-		for idx, c := range cols {
+-			if c.Max == colID && c.Min == colID {
+-				return idx, true
+-			}
+-		}
+-		return -1, false
++	idxMap := make(map[int]int, len(fc))
++	for idx, c := range fc {
++		idxMap[c.Min] = idx
+ 	}
+ 	for _, column := range cols {
+-		for i := column.Min; i <= column.Max; i++ {
+-			if idx, ok := inFlat(i, fc); ok {
++		lo, hi := clamp(column)
++		for i := lo; i <= hi; i++ {
++			if idx, ok := idxMap[i]; ok {
+ 				fc[idx] = replacer(fc[idx], column)
+ 				continue
+ 			}
+ 			var c xlsxCol
+ 			_ = deepcopy.Copy(&c, column)
+ 			c.Min, c.Max = i, i
++			idxMap[i] = len(fc)
+ 			fc = append(fc, c)
+ 		}
+ 	}
+diff --git a/col_test.go b/col_test.go
+index fcea60f..5dc951c 100644
+--- a/col_test.go
++++ b/col_test.go
+@@ -585,3 +585,19 @@ func TestAutoFitColWidth(t *testing.T) {
+ 	_, err = f.autoFitColWidth("Sheet1", 1, 1, &Font{})
+ 	assert.Equal(t, err, newInvalidStyleID(1))
+ }
++
++func TestColMaxAttributeOutOfRange(t *testing.T) {
++	for _, cols := range []string{
++		`<cols><col min="1" max="2147483647" width="9"/></cols>`,
++		`<cols><col min="0" max="1" width="9"/></cols>`,
++	} {
++		f := NewFile()
++		f.Sheet.Delete("xl/worksheets/sheet1.xml")
++		f.Pkg.Store("xl/worksheets/sheet1.xml", []byte(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`+cols+`<sheetData/></worksheet>`))
++		f.checked = sync.Map{}
++		assert.Equal(t, ErrColumnNumber, f.SetColWidth("Sheet1", "A", "A", 12))
++	}
++	// flatCols must never expand beyond MaxColumns
++	fc := flatCols(xlsxCol{Min: 1, Max: 1}, []xlsxCol{{Min: 1, Max: 2147483647}}, func(fc, c xlsxCol) xlsxCol { return fc })
++	assert.Len(t, fc, MaxColumns)
++}
+diff --git a/excelize.go b/excelize.go
+index c2fcf21..ab749ad 100644
+--- a/excelize.go
++++ b/excelize.go
+@@ -326,6 +326,9 @@ func (f *File) workSheetReader(sheet string) (ws *xlsxWorksheet, err error) {
+ 	}
+ 	err = nil
+ 	if _, ok = f.checked.Load(name); !ok {
++		if err = ws.checkCols(); err != nil {
++			return
++		}
+ 		if err = ws.checkSheet(); err != nil {
+ 			return
+ 		}
+@@ -349,6 +352,21 @@ func checkRowNum(r int) error {
+ 	return nil
+ }
+ 
++// checkCols provides a function to check the column range of the col
++// elements in the worksheet are valid or not.
++func (ws *xlsxWorksheet) checkCols() error {
++	if ws.Cols == nil {
++		return nil
++	}
++	for _, col := range ws.Cols.Col {
++		if col.Min < MinColumns || col.Min > MaxColumns ||
++			col.Max < MinColumns || col.Max > MaxColumns {
++			return ErrColumnNumber
++		}
++	}
++	return nil
++}
++
+ // lastRowNum provides a function to get the last row number of the row element.
+ func lastRowNum(r xlsxRow) int {
+ 	var num int

@@ -1,0 +1,73 @@
+diff --git a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+index 29a21da..9a07cea 100644
+--- a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
++++ b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+@@ -46,6 +46,6 @@ public final class YamlEscaper extends AbstractCharEscaper {
+     //noinspection UnnecessaryUnicodeEscape
+     return ch <= '\u0022'
+         ? REPLACEMENTS[ch]
+-        : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
++        : ch == '\\' ? "\\\\" : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
+   }
+ }
+diff --git a/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererBackslash.pkl b/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererBackslash.pkl
+new file mode 100644
+index 0000000..485bd32
+--- /dev/null
++++ b/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererBackslash.pkl
+@@ -0,0 +1,27 @@
++amends ".../snippetTest.pkl"
++
++import "pkl:yaml"
++
++local strings = new Listing<String> {
++  "\t\\d"
++  "\\"
++  "a\\b"
++  "\\\""
++  "\n\\n"
++}
++
++facts {
++  ["round-trip"] {
++    for (s in strings) {
++      new yaml.Parser {}.parse(new YamlRenderer {}.renderValue(s)) == s
++    }
++  }
++}
++
++examples {
++  ["rendered"] {
++    for (s in strings) {
++      new YamlRenderer {}.renderValue(s)
++    }
++  }
++}
+diff --git a/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererBackslash.pcf b/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererBackslash.pcf
+new file mode 100644
+index 0000000..0238e30
+--- /dev/null
++++ b/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererBackslash.pcf
+@@ -0,0 +1,22 @@
++facts {
++  ["round-trip"] {
++    true
++    true
++    true
++    true
++    true
++  }
++}
++examples {
++  ["rendered"] {
++    "\"\\t\\\\d\""
++    "\\"
++    "a\\b"
++    "\\\""
++    """
++    |-
++    
++      \\n
++    """
++  }
++}

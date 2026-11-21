@@ -1,0 +1,112 @@
+diff --git a/src/execution/physical_plan/plan_window.cpp b/src/execution/physical_plan/plan_window.cpp
+index a85dbcb..b6a4c81 100644
+--- a/src/execution/physical_plan/plan_window.cpp
++++ b/src/execution/physical_plan/plan_window.cpp
+@@ -117,7 +117,8 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
+ 			for (idx_t i = 0; i < matching.size(); ++i) {
+ 				const auto match_idx = matching[i];
+ 				auto &match_expr = op.expressions[match_idx]->Cast<BoundWindowExpression>();
+-				if (wexpr.Equals(match_expr)) {
++				// volatile window expressions must be evaluated independently
++				if (!wexpr.IsVolatile() && wexpr.Equals(match_expr)) {
+ 					projection_map[input_width + expr_idx] = output_pos + i;
+ 					cse = true;
+ 					break;
+diff --git a/src/optimizer/common_aggregate_optimizer.cpp b/src/optimizer/common_aggregate_optimizer.cpp
+index d351ccb..add3004 100644
+--- a/src/optimizer/common_aggregate_optimizer.cpp
++++ b/src/optimizer/common_aggregate_optimizer.cpp
+@@ -50,10 +50,14 @@ void CommonAggregateOptimizer::ExtractCommonAggregates(LogicalAggregate &aggr) {
+ 	for (idx_t i = 0; i < aggr.expressions.size(); i++) {
+ 		ProjectionIndex original_index(i + total_erased);
+ 		ProjectionIndex new_index(i);
+-		auto entry = aggregate_remap.find(*aggr.expressions[i]);
++		// volatile aggregates must not be deduplicated: each occurrence is evaluated independently
++		const bool is_volatile = aggr.expressions[i]->IsVolatile();
++		auto entry = is_volatile ? aggregate_remap.end() : aggregate_remap.find(*aggr.expressions[i]);
+ 		if (entry == aggregate_remap.end()) {
+ 			// aggregate does not exist yet: add it to the map
+-			aggregate_remap[*aggr.expressions[i]] = new_index;
++			if (!is_volatile) {
++				aggregate_remap[*aggr.expressions[i]] = new_index;
++			}
+ 			if (new_index != original_index) {
+ 				// this aggregate is not erased, however an aggregate BEFORE it has been erased
+ 				// so we need to remap this aggregate
+diff --git a/src/planner/binder/expression/bind_aggregate_expression.cpp b/src/planner/binder/expression/bind_aggregate_expression.cpp
+index 55c92b7..93a92a2 100644
+--- a/src/planner/binder/expression/bind_aggregate_expression.cpp
++++ b/src/planner/binder/expression/bind_aggregate_expression.cpp
+@@ -331,12 +331,16 @@ BindResult BaseSelectBinder::BindAggregate(FunctionExpression &aggr, AggregateFu
+ 
+ 	// check for all the aggregates if this aggregate already exists
+ 	ProjectionIndex aggr_index;
+-	auto entry = node.aggregate_map.find(*aggregate);
++	// volatile aggregates (e.g. any_value(uuid())) must never be deduplicated: each occurrence is evaluated separately
++	const bool is_volatile = aggregate->IsVolatile();
++	auto entry = is_volatile ? node.aggregate_map.end() : node.aggregate_map.find(*aggregate);
+ 	if (entry == node.aggregate_map.end()) {
+ 		// new aggregate: insert into aggregate list
+ 		auto &aggr_ref = *aggregate;
+ 		aggr_index = ColumnBinding::PushExpression(node.aggregates, std::move(aggregate));
+-		node.aggregate_map[aggr_ref] = aggr_index;
++		if (!is_volatile) {
++			node.aggregate_map[aggr_ref] = aggr_index;
++		}
+ 	} else {
+ 		// duplicate aggregate: simplify refer to this aggregate
+ 		aggr_index = entry->second;
+diff --git a/test/sql/function/generic/test_volatile_aggregate_dedup.test b/test/sql/function/generic/test_volatile_aggregate_dedup.test
+new file mode 100644
+index 0000000..e4b2cea
+--- /dev/null
++++ b/test/sql/function/generic/test_volatile_aggregate_dedup.test
+@@ -0,0 +1,48 @@
++# name: test/sql/function/generic/test_volatile_aggregate_dedup.test
++# description: Identical aggregates/window functions over volatile expressions must not be deduplicated
++# group: [generic]
++
++statement ok
++PRAGMA enable_verification
++
++statement ok
++CREATE TABLE t AS SELECT range % 10 AS g FROM range(1000)
++
++# window aggregate (rewritten to aggregate + self join)
++query I
++SELECT count(*) FROM (
++	SELECT any_value(uuid()::varchar) OVER (PARTITION BY g) AS a,
++	       any_value(uuid()::varchar) OVER (PARTITION BY g) AS b
++	FROM t) WHERE a = b
++----
++0
++
++# window aggregate with framing (not rewritten)
++query I
++SELECT count(*) FROM (
++	SELECT first(uuid()::varchar) OVER (PARTITION BY g ORDER BY random() ROWS BETWEEN CURRENT ROW AND CURRENT ROW) AS a,
++	       first(uuid()::varchar) OVER (PARTITION BY g ORDER BY random() ROWS BETWEEN CURRENT ROW AND CURRENT ROW) AS b
++	FROM t) WHERE a = b
++----
++0
++
++# grouped aggregate
++query I
++SELECT count(*) FROM (
++	SELECT any_value(uuid()::varchar) AS a, any_value(uuid()::varchar) AS b
++	FROM t GROUP BY g) WHERE a = b
++----
++0
++
++query I
++SELECT count(*) FROM (
++	SELECT sum(random()) AS a, sum(random()) AS b
++	FROM t GROUP BY g) WHERE a = b
++----
++0
++
++# non-volatile duplicates are still fine
++query II
++SELECT sum(g), sum(g) FROM t
++----
++4500	4500

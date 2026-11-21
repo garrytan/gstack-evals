@@ -1,0 +1,65 @@
+diff --git a/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs b/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs
+index df7465d..a727782 100644
+--- a/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs
++++ b/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs
+@@ -18,6 +18,15 @@ namespace NAudio.Wave;
+ /// byte[]/float[]/short[]/int[]. Prefer <see cref="System.Runtime.InteropServices.MemoryMarshal.Cast{TFrom,TTo}(System.Span{TFrom})"/>
+ /// (or the <see cref="System.ReadOnlySpan{T}"/> overload) on a byte[] / byte span, which reinterprets
+ /// the memory at zero runtime cost without needing a wrapper object.
++/// <para>
++/// On .NET (Core) the aliased <see cref="FloatBuffer"/>/<see cref="ShortBuffer"/>/<see cref="IntBuffer"/>
++/// arrays are still a <c>byte[]</c> at runtime. Indexing them works, but any API that consults the
++/// runtime array type — <see cref="Array.Copy(Array, Array, int)"/>, <c>Clone</c>, <c>AsSpan()</c>,
++/// <c>Length</c>, P/Invoke marshalling — treats them as byte arrays. For example,
++/// <c>Array.Copy(waveBuffer.FloatBuffer, floats, n)</c> converts <c>n</c> <em>bytes</em> into floats,
++/// so only a quarter of the audio is copied. This silently truncates audio (the "WAV to MP3 is
++/// a quarter of the length on .NET Core" problem) and is why this type is obsolete.
++/// </para>
+ /// </remarks>
+ [Obsolete("Use MemoryMarshal.Cast<byte, T>(span) on a byte[]/Span<byte> instead. WaveBuffer is kept only for backward compatibility.")]
+ [StructLayout(LayoutKind.Explicit, Pack = 2)]
+diff --git a/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs b/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
+index 9eb350e..61abc63 100644
+--- a/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
++++ b/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
+@@ -47,6 +47,40 @@ public class AudioFileReaderTests
+         }
+     }
+ 
++    [TestCase(8000, 16, 1)]
++    [TestCase(44100, 16, 1)]
++    [TestCase(44100, 16, 2)]
++    [TestCase(8000, 8, 1)]
++    [TestCase(22050, 24, 1)]
++    public void AudioFileReader_CopyTo_ProducesFullDuration(int sampleRate, int bits, int channels)
++    {
++        // Regression: converting a mono WAV via reader.CopyTo(writer) on .NET Core was reported
++        // to yield a quarter of the original duration.
++        var format = new WaveFormat(sampleRate, bits, channels);
++        var tmp = Path.Combine(Path.GetTempPath(), "naudio-copyto-test-" + Guid.NewGuid() + ".wav");
++        var seconds = 16;
++        using (var writer = new WaveFileWriter(tmp, format))
++        {
++            var data = new byte[format.AverageBytesPerSecond * seconds];
++            new Random(1).NextBytes(data);
++            writer.Write(data, 0, data.Length);
++        }
++        try
++        {
++            using var reader = new AudioFileReader(tmp);
++            var output = new MemoryStream();
++            reader.CopyTo(output);
++            var expectedBytes = (long)sampleRate * channels * 4 * seconds;
++            Assert.That(reader.Length, Is.EqualTo(expectedBytes));
++            Assert.That(output.Length, Is.EqualTo(expectedBytes));
++            Assert.That(reader.TotalTime, Is.EqualTo(TimeSpan.FromSeconds(seconds)));
++        }
++        finally
++        {
++            File.Delete(tmp);
++        }
++    }
++
+     /// <summary>
+     /// Build a 1kHz sine-in-WAV byte array we can feed to the reader.
+     /// </summary>

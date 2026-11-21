@@ -1,0 +1,88 @@
+diff --git a/Terminal.Gui/Views/Selectors/SelectorBase.cs b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+index 04f4315..418f3b7 100644
+--- a/Terminal.Gui/Views/Selectors/SelectorBase.cs
++++ b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+@@ -379,6 +379,7 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+             }
+             field = value;
+             CreateSubViews ();
++            UpdateChecked ();
+         }
+     }
+ 
+@@ -535,7 +536,7 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+         // total width via PosAlign.CalculateMinDimension, which reads Frame.Width.
+         // Without this, newly-created subviews have Frame.Width == 0 on the first
+         // layout pass, causing the selector to be sized too narrow.
+-        if (Orientation != Orientation.Horizontal || SubViews.Count <= 0)
++        if (Orientation != Orientation.Horizontal || SubViews.Count == 0)
+         {
+             return;
+         }
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index d22b41f..21c44dd 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -1071,4 +1071,62 @@ public class OptionSelectorTests
+     }
+ 
+     #endregion
++
++    private enum Fruit
++    {
++        Apple,
++        Banana,
++        Cherry
++    }
++
++    [Fact]
++    public void Generic_Fresh_Instance_Checks_Default_Value_Without_UpdateChecked ()
++    {
++        OptionSelector<Fruit> selector = new ();
++
++        Assert.Equal (Fruit.Apple, selector.Value);
++
++        CheckBox [] checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (3, checkBoxes.Length);
++        Assert.Equal (CheckState.Checked, checkBoxes [0].Value);
++        Assert.Equal (CheckState.UnChecked, checkBoxes [1].Value);
++        Assert.Equal (CheckState.UnChecked, checkBoxes [2].Value);
++
++        selector.Dispose ();
++    }
++
++    [Fact]
++    public void Fresh_Instance_With_Labels_Checks_Default_Value ()
++    {
++        OptionSelector selector = new () { Labels = ["One", "Two"] };
++
++        CheckBox [] checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (CheckState.Checked, checkBoxes [0].Value);
++        Assert.Equal (CheckState.UnChecked, checkBoxes [1].Value);
++
++        selector.Dispose ();
++    }
++
++    [Theory]
++    [InlineData (TabBehavior.NoStop)]
++    [InlineData (TabBehavior.TabGroup)]
++    public void Generic_Setting_TabBehavior_Keeps_Value_Checked (TabBehavior tabBehavior)
++    {
++        OptionSelector<Fruit> selector = new () { TabBehavior = tabBehavior };
++
++        Assert.Equal (Fruit.Apple, selector.Value);
++
++        CheckBox [] checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (CheckState.Checked, checkBoxes [0].Value);
++        Assert.Equal (CheckState.UnChecked, checkBoxes [1].Value);
++        Assert.Equal (CheckState.UnChecked, checkBoxes [2].Value);
++
++        selector.Value = Fruit.Cherry;
++        selector.TabBehavior = TabBehavior.TabStop;
++        checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (CheckState.UnChecked, checkBoxes [0].Value);
++        Assert.Equal (CheckState.Checked, checkBoxes [2].Value);
++
++        selector.Dispose ();
++    }
+ }

@@ -1,0 +1,114 @@
+diff --git a/echo.go b/echo.go
+index f22d2dd..0aa2b07 100644
+--- a/echo.go
++++ b/echo.go
+@@ -588,6 +588,12 @@ func (e *Echo) StaticFS(pathPrefix string, filesystem fs.FS, middleware ...Middl
+ func StaticDirectoryHandler(fileSystem fs.FS, disablePathUnescaping bool) HandlerFunc {
+ 	return func(c *Context) error {
+ 		p := c.Param("*")
++		// Security: reject encoded path separators. The router matches routes on the escaped path, so `%2F` is not
++		// considered a separator during routing. Unescaping it here would allow bypassing route-level protection
++		// (e.g. `/admin%2Fsecret.txt` would not match `/admin/*` route but would resolve to `admin/secret.txt` file).
++		if containsEncodedPathSeparator(p) || containsEncodedPathSeparator(c.Request().URL.RawPath) {
++			return ErrNotFound
++		}
+ 		if !disablePathUnescaping { // when router is already unescaping we do not want to do is twice
+ 			tmpPath, err := url.PathUnescape(p)
+ 			if err != nil {
+@@ -613,6 +619,22 @@ func StaticDirectoryHandler(fileSystem fs.FS, disablePathUnescaping bool) Handle
+ 	}
+ }
+ 
++// containsEncodedPathSeparator checks if the path contains percent-encoded slash (`%2F`) or backslash (`%5C`).
++func containsEncodedPathSeparator(p string) bool {
++	for i := 0; i+2 < len(p); i++ {
++		if p[i] != '%' {
++			continue
++		}
++		if p[i+1] == '2' && (p[i+2] == 'f' || p[i+2] == 'F') {
++			return true
++		}
++		if p[i+1] == '5' && (p[i+2] == 'c' || p[i+2] == 'C') {
++			return true
++		}
++	}
++	return false
++}
++
+ // FileFS registers a new route with path to serve file from the provided file system.
+ //
+ // Avoid using the leading `/` slash as most of the Go standard library fs.FS implementations require relative paths for
+diff --git a/echo_test.go b/echo_test.go
+index 17d9b4a..60d666f 100644
+--- a/echo_test.go
++++ b/echo_test.go
+@@ -263,9 +263,8 @@ func TestEcho_StaticFS(t *testing.T) {
+ 			givenPrefix:          "/",
+ 			givenFs:              os.DirFS("_fixture/"),
+ 			whenURL:              "/open.redirect.hackercom%2f..",
+-			expectStatus:         http.StatusMovedPermanently,
+-			expectHeaderLocation: "/open.redirect.hackercom/../", // location starting with `//open` would be very bad
+-			expectBodyStartsWith: "",
++			expectStatus:         http.StatusNotFound, // encoded slashes are rejected
++			expectBodyStartsWith: "{\"message\":\"Not Found\"}\n",
+ 		},
+ 	}
+ 
+@@ -1278,3 +1277,19 @@ func BenchmarkEchoGitHubAPIMisses(b *testing.B) {
+ func BenchmarkEchoParseAPI(b *testing.B) {
+ 	benchmarkEchoRoutes(b, parseAPI)
+ }
++
++func TestEcho_StaticFS_encodedSlashDoesNotBypassRouteProtection(t *testing.T) {
++	e := New()
++	g := e.Group("/folder", func(next HandlerFunc) HandlerFunc {
++		return func(c *Context) error { return ErrForbidden }
++	})
++	g.StaticFS("/", os.DirFS("_fixture/folder"))
++	e.StaticFS("/", os.DirFS("_fixture"))
++
++	for _, u := range []string{"/folder/index.html", "/folder%2Findex.html", "/folder%2findex.html", "/folder%5Cindex.html"} {
++		req := httptest.NewRequest(http.MethodGet, u, nil)
++		rec := httptest.NewRecorder()
++		e.ServeHTTP(rec, req)
++		assert.NotEqual(t, http.StatusOK, rec.Code, u)
++	}
++}
+diff --git a/middleware/static.go b/middleware/static.go
+index 152dded..60f5fcb 100644
+--- a/middleware/static.go
++++ b/middleware/static.go
+@@ -195,6 +195,13 @@ func (config StaticConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
+ 				return next(c)
+ 			}
+ 
++			// Security: reject encoded path separators (`%2F`, `%5C`). The router matches routes on the escaped path
++			// so these are not treated as separators during routing, but they would be after unescaping. This would
++			// allow bypassing route-level protection (e.g. `/admin%2Fsecret.txt` vs `/admin/*` route).
++			if containsEncodedPathSeparator(c.Request().URL.RawPath) || containsEncodedPathSeparator(c.Param("*")) {
++				return next(c)
++			}
++
+ 			p := c.Request().URL.Path
+ 			// URL.Path is already decoded by net/http, so it must not be unescaped
+ 			// again (doing so breaks file names containing '%', see #2599). Only the
+@@ -372,3 +379,19 @@ func format(b int64) string {
+ 
+ 	return fmt.Sprintf("%.2f%s", value, multiple)
+ }
++
++// containsEncodedPathSeparator checks if the path contains percent-encoded slash (`%2F`) or backslash (`%5C`).
++func containsEncodedPathSeparator(p string) bool {
++	for i := 0; i+2 < len(p); i++ {
++		if p[i] != '%' {
++			continue
++		}
++		if p[i+1] == '2' && (p[i+2] == 'f' || p[i+2] == 'F') {
++			return true
++		}
++		if p[i+1] == '5' && (p[i+2] == 'c' || p[i+2] == 'C') {
++			return true
++		}
++	}
++	return false
++}

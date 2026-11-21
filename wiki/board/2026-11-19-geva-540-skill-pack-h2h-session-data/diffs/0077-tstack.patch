@@ -1,0 +1,72 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java b/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
+index 891cf2c..13eec70 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
++++ b/src/main/java/io/github/hectorvent/floci/services/s3/S3Controller.java
+@@ -314,6 +314,11 @@ public class S3Controller {
+                 s3Service.deleteBucketOwnershipControls(bucket);
+                 return Response.noContent().build();
+             }
++            if (hasQueryParam(uriInfo, "replication")) {
++                // Replication configuration is not modeled; never fall through to DeleteBucket.
++                s3Service.headBucket(bucket);
++                return Response.noContent().build();
++            }
+             s3Service.deleteBucket(bucket);
+             return Response.noContent().build();
+         } catch (AwsException e) {
+diff --git a/src/test/java/io/github/hectorvent/floci/services/s3/S3ReplicationIntegrationTest.java b/src/test/java/io/github/hectorvent/floci/services/s3/S3ReplicationIntegrationTest.java
+new file mode 100644
+index 0000000..218f2b1
+--- /dev/null
++++ b/src/test/java/io/github/hectorvent/floci/services/s3/S3ReplicationIntegrationTest.java
+@@ -0,0 +1,50 @@
++package io.github.hectorvent.floci.services.s3;
++
++import io.quarkus.test.junit.QuarkusTest;
++import org.junit.jupiter.api.MethodOrderer;
++import org.junit.jupiter.api.Order;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.TestMethodOrder;
++
++import static io.restassured.RestAssured.given;
++import static org.hamcrest.Matchers.containsString;
++
++@QuarkusTest
++@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
++class S3ReplicationIntegrationTest {
++
++    private static final String BUCKET = "replication-int-test";
++
++    @Test
++    @Order(1)
++    void createBucket() {
++        given().when().put("/" + BUCKET).then().statusCode(200);
++    }
++
++    @Test
++    @Order(2)
++    void deleteBucketReplicationReturns204() {
++        given().when().delete("/" + BUCKET + "?replication").then().statusCode(204);
++    }
++
++    @Test
++    @Order(3)
++    void bucketStillExistsAfterDeleteBucketReplication() {
++        given().when().head("/" + BUCKET).then().statusCode(200);
++    }
++
++    @Test
++    @Order(4)
++    void deleteBucketReplicationOnMissingBucketReturns404() {
++        given().when().delete("/replication-int-test-missing?replication")
++        .then()
++            .statusCode(404)
++            .body(containsString("NoSuchBucket"));
++    }
++
++    @Test
++    @Order(5)
++    void cleanup() {
++        given().when().delete("/" + BUCKET).then().statusCode(204);
++    }
++}

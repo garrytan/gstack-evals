@@ -1,0 +1,110 @@
+diff --git a/go.mod b/go.mod
+index 0f02efc..733316c 100644
+--- a/go.mod
++++ b/go.mod
+@@ -10,6 +10,7 @@ require (
+ 	github.com/fsnotify/fsnotify v1.9.0
+ 	github.com/getsentry/sentry-go v0.34.1
+ 	github.com/go-test/deep v1.1.1
++	github.com/go-viper/mapstructure/v2 v2.4.0
+ 	github.com/google/go-cmp v0.7.0
+ 	github.com/google/uuid v1.6.0
+ 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
+@@ -37,7 +38,6 @@ require (
+ 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+ 	github.com/davecgh/go-spew v1.1.1 // indirect
+ 	github.com/eapache/queue v1.1.0 // indirect
+-	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
+ 	github.com/golang/protobuf v1.5.4 // indirect
+ 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+ 	github.com/kr/text v0.2.0 // indirect
+diff --git a/pkg/packet/bgp/bgp.go b/pkg/packet/bgp/bgp.go
+index 336bb0c..43e257b 100644
+--- a/pkg/packet/bgp/bgp.go
++++ b/pkg/packet/bgp/bgp.go
+@@ -15703,10 +15703,13 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 		if err != nil {
+ 			return err
+ 		}
+-		routelen -= uint16(w.Len(options...) + addpathLen)
+ 		if len(data) < w.Len(options...) {
+ 			return NewMessageError(eCode, eSubCode, nil, "Withdrawn route length is short")
+ 		}
++		if int(routelen) < w.Len(options...)+addpathLen {
++			return NewMessageError(eCode, eSubCode, nil, "withdrawn route exceeds withdrawn routes length")
++		}
++		routelen -= uint16(w.Len(options...) + addpathLen)
+ 		data = data[w.Len(options...):]
+ 		msg.WithdrawnRoutes = append(msg.WithdrawnRoutes, PathNLRI{NLRI: w, ID: id})
+ 	}
+@@ -15758,6 +15761,14 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 				strongestError = e
+ 			}
+ 		}
++		if int(pathlen) < p.Len(options...) {
++			e = NewMessageErrorWithErrorHandling(
++				eCode, BGP_ERROR_SUB_ATTRIBUTE_LENGTH_ERROR, data, ERROR_HANDLING_TREAT_AS_WITHDRAW, nil, "attribute length exceeds total path attribute length")
++			if e.(*MessageError).Stronger(strongestError) {
++				strongestError = e
++			}
++			return strongestError
++		}
+ 		pathlen -= uint16(p.Len(options...))
+ 		if len(data) < p.Len(options...) {
+ 			e = NewMessageErrorWithErrorHandling(
+diff --git a/pkg/packet/bgp/bgp_update_underflow_test.go b/pkg/packet/bgp/bgp_update_underflow_test.go
+new file mode 100644
+index 0000000..7560ce2
+--- /dev/null
++++ b/pkg/packet/bgp/bgp_update_underflow_test.go
+@@ -0,0 +1,50 @@
++package bgp
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++)
++
++// Crafted UPDATE where an attribute is longer than the remaining total path
++// attribute length, which used to underflow the uint16 counter.
++func Test_UpdatePathAttrLenUnderflow(t *testing.T) {
++	buf := []byte{
++		0x00, 0x00, // Withdrawn len 0
++		0x00, 0x03, // Total path attr len 3
++		0x50, 0xff, 0x00, 0x00, // ext-len unknown attr, length 0 => 4 bytes (> 3)
++	}
++	// second attribute with Len 65534 (4 header + 65530 value) drives the
++	// wrapped counter down to 1 with no data left.
++	buf = append(buf, 0x50, 0xfe, 0xff, 0xfa)
++	buf = append(buf, make([]byte, 65530)...)
++
++	u := &BGPUpdate{}
++	var err error
++	assert.NotPanics(t, func() { err = u.DecodeFromBytes(buf) })
++	assert.Error(t, err)
++
++	// Simple case: attribute overruns attr length into NLRI.
++	buf = []byte{
++		0x00, 0x00,
++		0x00, 0x03,
++		0x40, 0x01, 0x01, 0x00, // ORIGIN (4 bytes > 3)
++		0x08, 0x0a,
++	}
++	u = &BGPUpdate{}
++	assert.NotPanics(t, func() { err = u.DecodeFromBytes(buf) })
++	assert.Error(t, err)
++}
++
++// Withdrawn prefix overrunning the withdrawn routes length.
++func Test_UpdateWithdrawnLenUnderflow(t *testing.T) {
++	buf := []byte{
++		0x00, 0x01, // Withdrawn len 1
++		0x18, 0x0a, 0x00, 0x00, // /24 prefix: 4 bytes (> 1)
++		0x00, 0x00, // attr len 0
++	}
++	u := &BGPUpdate{}
++	var err error
++	assert.NotPanics(t, func() { err = u.DecodeFromBytes(buf) })
++	assert.Error(t, err)
++}

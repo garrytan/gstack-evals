@@ -1,0 +1,3 @@
+https://github.com/contentful/contentful-mcp-server at fa8ff9cf2374e169b4747d00b28a0404eddc7c04
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: AUTOMATION-FOR-LICENSES.md, LICENSE, NOTICE, licenses

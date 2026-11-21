@@ -1,0 +1,63 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 34e6c10..fc97bd2 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -12,6 +12,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
+ 
+ - Add `ByteSlice` and `ByteSliceValue` functions for new `BYTESLICE` attribute type in `go.opentelemetry.io/otel/attribute`. (#7948)
+ 
++### Changed
++
++- `ErrorType` in `go.opentelemetry.io/otel/semconv/v1.40.0` now unwraps errors created by `fmt.Errorf` with a single `%w` verb and reports the type of the first non-wrapping error. (#8000)
++
+ <!-- Released section -->
+ <!-- Don't change this section unless doing release -->
+ 
+diff --git a/semconv/v1.40.0/error_type.go b/semconv/v1.40.0/error_type.go
+index 6d26e52..8205967 100644
+--- a/semconv/v1.40.0/error_type.go
++++ b/semconv/v1.40.0/error_type.go
+@@ -5,6 +5,7 @@ package semconv // import "go.opentelemetry.io/otel/semconv/v1.40.0"
+ 
+ import (
+ 	"errors"
++	"fmt"
+ 	"reflect"
+ 
+ 	"go.opentelemetry.io/otel/attribute"
+@@ -22,7 +23,9 @@ import (
+ // the returned attribute has that method's return value. If multiple errors in
+ // the chain implement this method, the value from the first match found by
+ // [errors.As] is used. Otherwise, the returned attribute has a value derived
+-// from the concrete type of err.
++// from the concrete type of err. Errors created by [fmt.Errorf] wrapping a
++// single error with the %w verb are unwrapped and the type of the first
++// non-wrapping error is used instead.
+ //
+ // The key of the returned attribute is [ErrorTypeKey].
+ func ErrorType(err error) attribute.KeyValue {
+@@ -33,6 +36,10 @@ func ErrorType(err error) attribute.KeyValue {
+ 	return ErrorTypeKey.String(errorType(err))
+ }
+ 
++// fmtWrapErrorType is the type of errors returned by [fmt.Errorf] when it is
++// passed a single %w verb.
++var fmtWrapErrorType = reflect.TypeOf(fmt.Errorf("%w", errors.New("")))
++
+ func errorType(err error) string {
+ 	var s string
+ 	if et, ok := err.(interface{ ErrorType() string }); ok {
+@@ -51,6 +58,13 @@ func errorType(err error) string {
+ 		// returns an empty value.
+ 
+ 		t := reflect.TypeOf(err)
++		for t == fmtWrapErrorType {
++			inner := errors.Unwrap(err)
++			if inner == nil {
++				break
++			}
++			err, t = inner, reflect.TypeOf(inner)
++		}
+ 		pkg, name := t.PkgPath(), t.Name()
+ 		if pkg != "" && name != "" {
+ 			s = pkg + "." + name

@@ -1,0 +1,106 @@
+diff --git a/src/NAudio.Core/Wave/WaveOutputs/AiffFileWriter.cs b/src/NAudio.Core/Wave/WaveOutputs/AiffFileWriter.cs
+index c8a9e63..dfc3112 100644
+--- a/src/NAudio.Core/Wave/WaveOutputs/AiffFileWriter.cs
++++ b/src/NAudio.Core/Wave/WaveOutputs/AiffFileWriter.cs
+@@ -209,7 +209,13 @@ public class AiffFileWriter : Stream
+ 
+         if (bytesPerSample <= 1)
+         {
+-            outStream.Write(data, offset, count);
++            // NAudio (WAV) 8-bit PCM is unsigned; AIFF 8-bit PCM is signed
++            byte[] signedData = new byte[count];
++            for (int i = 0; i < count; i++)
++            {
++                signedData[i] = (byte)(data[offset + i] ^ 0x80);
++            }
++            outStream.Write(signedData, 0, count);
+         }
+         else
+         {
+diff --git a/src/NAudio.Core/Wave/WaveStreams/AiffFileReader.cs b/src/NAudio.Core/Wave/WaveStreams/AiffFileReader.cs
+index 0fa542b..0b7150f 100644
+--- a/src/NAudio.Core/Wave/WaveStreams/AiffFileReader.cs
++++ b/src/NAudio.Core/Wave/WaveStreams/AiffFileReader.cs
+@@ -245,7 +245,11 @@ public class AiffFileReader : WaveStream
+             switch (WaveFormat.BitsPerSample)
+             {
+                 case 8:
+-                    // no swap required
++                    // AIFF 8-bit PCM is signed; NAudio (WAV) 8-bit PCM is unsigned
++                    for (int i = 0; i < read.Length; i++)
++                    {
++                        read[i] ^= 0x80;
++                    }
+                     break;
+                 case 16:
+                     for (int i = 0; i < read.Length; i += bytesPerSample)
+diff --git a/tests/NAudio.Core.Tests/Aiff/AiffReaderTests.cs b/tests/NAudio.Core.Tests/Aiff/AiffReaderTests.cs
+index ab24f0b..d6cd502 100644
+--- a/tests/NAudio.Core.Tests/Aiff/AiffReaderTests.cs
++++ b/tests/NAudio.Core.Tests/Aiff/AiffReaderTests.cs
+@@ -31,14 +31,14 @@ public class AiffReaderTests
+ 
+     private static void ConvertAiffToWav(string aiffFile, string wavFile)
+     {
+-        using var reader = new AiffFileReader(aiffFile);
+-        using var writer = new WaveFileWriter(wavFile, reader.WaveFormat);
+-        byte[] buffer = new byte[4096];
+-        int bytesRead = 0;
+-        do
+-        {
+-            bytesRead = reader.Read(buffer, 0, buffer.Length);
+-            writer.Write(buffer, 0, bytesRead);
++        using var reader = new AiffFileReader(aiffFile);
++        using var writer = new WaveFileWriter(wavFile, reader.WaveFormat);
++        byte[] buffer = new byte[4096];
++        int bytesRead = 0;
++        do
++        {
++            bytesRead = reader.Read(buffer, 0, buffer.Length);
++            writer.Write(buffer, 0, bytesRead);
+         } while (bytesRead > 0);
+     }
+ 
+@@ -89,4 +89,42 @@ public class AiffReaderTests
+             while (reader.Read(buffer, 0, buffer.Length) > 0) { }
+         });
+     }
++
++    // AIFF 8-bit PCM is signed (unlike WAV, which is unsigned).
++    [Test]
++    [Category("UnitTest")]
++    public void EightBitAiffSamplesAreReadAsSigned()
++    {
++        byte[] payload = new byte[]
++        {
++            0x46,0x4f,0x52,0x4d, 0x00,0x00,0x00,0x32, 0x41,0x49,0x46,0x46, // FORM size=50 AIFF
++            0x43,0x4f,0x4d,0x4d, 0x00,0x00,0x00,0x12, // COMM size=18
++            0x00,0x01, 0x00,0x00,0x00,0x04, 0x00,0x08, // 1 channel, 4 frames, 8 bits
++            0x40,0x0e,0xac,0x44,0x00,0x00,0x00,0x00,0x00,0x00, // 44100 Hz
++            0x53,0x53,0x4e,0x44, 0x00,0x00,0x00,0x0c, 0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, // SSND
++            0x0a, 0x80, 0x83, 0x7f
++        };
++
++        using var reader = new AiffFileReader(new MemoryStream(payload));
++        var samples = new float[4];
++        Assert.That(reader.ToSampleProvider().Read(samples), Is.EqualTo(4));
++        Assert.That(samples, Is.EqualTo(new[] { 10 / 128f, -1f, -125 / 128f, 127 / 128f }));
++    }
++
++    [Test]
++    [Category("UnitTest")]
++    public void EightBitAiffRoundTripsThroughWriter()
++    {
++        byte[] unsignedPcm = { 0x00, 0x7f, 0x80, 0xff };
++        var ms = new MemoryStream();
++        using (var writer = new AiffFileWriter(new NAudio.Utils.IgnoreDisposeStream(ms), new WaveFormat(44100, 8, 1)))
++        {
++            writer.Write(unsignedPcm, 0, unsignedPcm.Length);
++        }
++        ms.Position = 0;
++        using var reader = new AiffFileReader(ms);
++        var read = new byte[4];
++        Assert.That(reader.Read(read, 0, 4), Is.EqualTo(4));
++        Assert.That(read, Is.EqualTo(unsignedPcm));
++    }
+ }

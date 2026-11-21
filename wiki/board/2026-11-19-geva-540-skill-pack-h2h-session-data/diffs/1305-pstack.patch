@@ -1,0 +1,74 @@
+diff --git a/pkg/packet/bgp/bgp.go b/pkg/packet/bgp/bgp.go
+index 336bb0c..2ac3aeb 100644
+--- a/pkg/packet/bgp/bgp.go
++++ b/pkg/packet/bgp/bgp.go
+@@ -15703,6 +15703,9 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 		if err != nil {
+ 			return err
+ 		}
++		if int(routelen) < w.Len(options...)+addpathLen {
++			return NewMessageError(eCode, eSubCode, nil, "withdrawn route length exceeds withdrawn routes length")
++		}
+ 		routelen -= uint16(w.Len(options...) + addpathLen)
+ 		if len(data) < w.Len(options...) {
+ 			return NewMessageError(eCode, eSubCode, nil, "Withdrawn route length is short")
+@@ -15758,8 +15761,7 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 				strongestError = e
+ 			}
+ 		}
+-		pathlen -= uint16(p.Len(options...))
+-		if len(data) < p.Len(options...) {
++		if len(data) < p.Len(options...) || int(pathlen) < p.Len(options...) {
+ 			e = NewMessageErrorWithErrorHandling(
+ 				eCode, BGP_ERROR_SUB_ATTRIBUTE_LENGTH_ERROR, data, ERROR_HANDLING_TREAT_AS_WITHDRAW, nil, "attribute length is short")
+ 			if e.(*MessageError).Stronger(strongestError) {
+@@ -15767,6 +15769,7 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 			}
+ 			return strongestError
+ 		}
++		pathlen -= uint16(p.Len(options...))
+ 		data = data[p.Len(options...):]
+ 		if e == nil || e.(*MessageError).ErrorHandling != ERROR_HANDLING_ATTRIBUTE_DISCARD {
+ 			msg.PathAttributes = append(msg.PathAttributes, p)
+diff --git a/pkg/packet/bgp/bgp_update_underflow_test.go b/pkg/packet/bgp/bgp_update_underflow_test.go
+new file mode 100644
+index 0000000..e592c43
+--- /dev/null
++++ b/pkg/packet/bgp/bgp_update_underflow_test.go
+@@ -0,0 +1,36 @@
++package bgp
++
++import (
++	"encoding/binary"
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++)
++
++func unknownExtendedAttr(valueLen int) []byte {
++	b := make([]byte, 4+valueLen)
++	b[0] = byte(BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_EXTENDED_LENGTH)
++	b[1] = 0xfe
++	binary.BigEndian.PutUint16(b[2:4], uint16(valueLen))
++	return b
++}
++
++func TestBGPUpdateDecodeAttributeLongerThanTotalPathAttributeLen(t *testing.T) {
++	data := []byte{0x00, 0x00, 0x00, 0x03}
++	data = append(data, unknownExtendedAttr(10)...)
++	data = append(data, unknownExtendedAttr(65520)...)
++	msg := &BGPUpdate{}
++	assert.NotPanics(t, func() {
++		assert.Error(t, msg.DecodeFromBytes(data))
++	})
++}
++
++func TestBGPUpdateDecodeWithdrawnRouteLongerThanWithdrawnRoutesLen(t *testing.T) {
++	data := []byte{
++		0x00, 0x01,
++		0x18, 0x0a, 0x00, 0x00,
++		0x00, 0x00,
++	}
++	msg := &BGPUpdate{}
++	assert.Error(t, msg.DecodeFromBytes(data))
++}

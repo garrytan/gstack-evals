@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NextUser } from "../../src/adapters/claude-code/driver.ts";
-import { catalogEffort, codexArgs, codexConfig, codexDriver, codexEnv, type CodexOptions } from "../../src/adapters/codex/driver.ts";
+import { catalogEffort, codexArgs, codexConfig, codexDriver, codexEnv, readRollout, type CodexOptions } from "../../src/adapters/codex/driver.ts";
 import { hostDriver } from "../../src/adapters/host.ts";
 import type { SidecarTask } from "../../src/skill-eval/contract/sidecar.ts";
+import type { AgentSession } from "../../src/trial/sandbox.ts";
 import { trialEnv } from "../../src/trial/env.ts";
 import { seedStateRoot } from "../../src/trial/state-root.ts";
 import type { PersonaAnswer } from "../../src/usersim/persona.ts";
@@ -112,6 +115,26 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     expect(events.filter((e) => e.kind === "ask").map((e) => [e.question, e.reply, e.source])).toEqual([["Which approach should we take?", "Approach B", "scripted"]]);
   }, 180_000);
 
+  // Value: protects=on a gpt-6 model the pinned CLI runs Code Mode, and a question still reaches the user simulator: request_user_input_async is offered as a top-level tool beside exec, not inside exec's JavaScript, so a question asked from exec fails in the script and only the direct call asks, which the rollout records as a function_call the adapter reads; fails_when=the pinned CLI starts offering the question tool inside Code Mode, where the adapter's rollout filter would miss it, or a direct call after a Code Mode call is missed; why_new=a review finding on Code Mode question capture, checked keyless on codex 0.166.0 and 0.170.0; seam=codexDriver's question loop, codexQuestions, the CLI's Code Mode tool layout; no_claim=which form a real model picks
+  test("under Code Mode the question tool sits beside exec, a call from exec's JavaScript fails, and the direct call gets the simulated answer", async () => {
+    let nested = "";
+    const viaCode: ResponsesScript = (turn) => {
+      if (turn.users.length === 1 && !turn.outputs.has("call_cm")) return [{ type: "code", id: "call_cm", js: "const r = await tools.request_user_input_async(" + JSON.stringify({ questions: [QUESTION] }) + ");\ntext(JSON.stringify(r));" }];
+      nested ||= turn.outputs.get("call_cm") ?? "";
+      return asking(turn);
+    };
+    const r = await run(viaCode, { entry: { user: { replies: { approach: "Approach B" } } } });
+    expect(nested).toContain("tools.request_user_input_async is not a function");
+    const offered = (r.responses()[0]!.body.input ?? []).find((it: any) => it.type === "additional_tools")?.tools ?? [];
+    const top = offered.find((ns: any) => ns.name === "functions")?.tools.map((t: any) => t.name);
+    expect(top).toEqual(expect.arrayContaining(["exec", "request_user_input_async"]));
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.outcome.asked).toEqual(["approach"]);
+    expect(r.outcome.turns.at(-1)).toBe("FINAL: going with Approach B");
+    expect(r.read("questions.json")).toEqual([{ call_id: "call_q", turn: 1, questions: [QUESTION], answer: "Approach B", unanswered: false }]);
+    expect(r.outcome.unanswered).toBe(0);
+  }, 180_000);
+
   // Value: protects=a session whose model asks nothing runs one exec, ends completed and asks nothing, with an empty questions.json; fails_when=the driver resumes a session with nothing to answer or records a question; why_new=interactive tasks on Codex (the other direction); seam=codexDriver's question loop; no_claim=none beyond protects
   test("a session with no question ends after one exec, completed, asking nothing", async () => {
     const r = await run(final, { entry: { user: { replies: { approach: "Approach B" } } } });
@@ -123,6 +146,20 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
     expect(r.outcome.unanswered).toBe(0);
     expect(r.responses().length).toBe(1);
   }, 180_000);
+
+  // Value: protects=a sync request_user_input call, which Codex answers itself ("unavailable in Default mode") on every model, is recorded as an unanswered question in asked, questions.json and the outcome's count, with no resume; fails_when=the adapter reads only request_user_input_async, so the question disappears and the trial reports nothing unanswered; why_new=the read-only final review's red-team finding on sync questions; seam=codexQuestions, codexDriver's question loop; no_claim=which models are offered the async tool (preflight's allowlist test covers that)
+  test("a sync request_user_input question is recorded unanswered, with no resume", async () => {
+    const script: ResponsesScript = ({ outputs, users }) => {
+      if (users.length === 1 && !outputs.has("call_s")) return [{ type: "call", id: "call_s", name: "request_user_input", args: { questions: [{ id: "q1", header: "Approach", question: QUESTION.title, options: [{ label: "Approach A", description: "a" }, { label: "Approach B", description: "b" }] }] } }];
+      return [{ type: "message", text: "FINAL: picked Approach A myself." }];
+    };
+    const r = await run(script, { entry: { user: { replies: { approach: "Approach B" } } } });
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.outcome.asked).toEqual(["approach"]);
+    expect(r.outcome.unanswered).toBe(1);
+    expect(r.read("questions.json")).toEqual([{ call_id: "call_s", turn: 1, questions: [QUESTION], answer: null, unanswered: true }]);
+    expect(r.read("init.json").resume_argv).toEqual([]);
+  }, 60_000);
 
   // Value: protects=a question in a task that declared no user replies gets no answer: it lands in asked and in questions.json marked unanswered, the outcome counts it, nothing resumes and the session ends completed and is graded as before (the eval owner's ruling 1B: Codex keeps its behaviour, and the count reports the host difference from Claude Code's E_USER_TURNS_MISSING); fails_when=the question is answered, the session resumes or becomes a missing cell, or the question goes uncounted; why_new=1B; seam=codexDriver's question loop; no_claim=none beyond protects
   test("a question in a task with no user replies is recorded unanswered, and the session ends completed with no resume", async () => {
@@ -235,6 +272,70 @@ describe.skipIf(!HAS_CODEX_CLI)("Codex adapter on codex exec --json, against a f
       expect(u.body.provider).toEqual({ only: ["particle-ai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 0.1, completion: 1, request: 0, image: 0 } });
     }
   }, 180_000);
+});
+
+describe.skipIf(!HAS_CODEX_CLI)("Codex adapter across exec resume, on the real CLI", () => {
+  // Value: protects=a tool call in a resumed exec never replaces one from an earlier exec, so a skill read before a question still counts after the answer; fails_when=calls are keyed by Codex's item ids, which restart at item_0 in every exec, so a command after the reply overwrites the skill read and opened, files_read and loaded_bytes go wrong; why_new=a review finding (second-model voice) on multi-exec sessions; seam=codexDriver's event loop, parseCodex, skillUse; no_claim=how a real model behaves
+  test("a skill read in the first exec and a command after the reply both stay in calls, and the skill counts as opened", async () => {
+    let root = "";
+    const script: ResponsesScript = ({ outputs, users }) => {
+      if (users.length === 1 && !outputs.has("call_read")) return [{ type: "shell", id: "call_read", cmd: "cat " + join(root, "SKILL.md") }];
+      if (users.length === 1 && !outputs.has("call_q")) return [{ type: "call", id: "call_q", name: "request_user_input_async", args: { questions: [QUESTION] } }];
+      if (users.length === 1) return [{ type: "message", text: "Waiting for your answer." }];
+      if (!outputs.has("call_after")) return [{ type: "shell", id: "call_after", cmd: "echo after-the-reply" }];
+      return [{ type: "message", text: "FINAL: read it and went with " + users.at(-1) }];
+    };
+    const install = (home: string) => {
+      root = join(home, ".codex", "skills", "demo");
+      mkdirSync(root, { recursive: true });
+      writeFileSync(join(root, "SKILL.md"), "---\nname: demo\ndescription: A demo skill for the adapter test.\n---\n# Demo\n");
+    };
+    const r = await run(script, { setupHome: install, skill: (home) => ({ name: "demo", roots: [join(home, ".codex", "skills", "demo")], dir: join(home, ".codex", "skills", "demo") }), entry: { user: { replies: { approach: "Approach B" } } } });
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.read("init.json").resume_argv.length).toBe(1);
+    expect(r.calls().calls.map((c: { tool: string; input: { command?: string }; ok: boolean }) => [c.tool, c.ok, String(c.input.command ?? "").includes("SKILL.md")])).toEqual([["shell", true, true], ["shell", true, false]]);
+    expect([r.outcome.opened, r.outcome.files_read, r.outcome.loaded_bytes]).toEqual([true, ["SKILL.md"], statSync(join(root, "SKILL.md")).size]);
+  }, 180_000);
+
+  // Value: protects=the evaluator reads only a regular rollout file, so a FIFO the agent leaves under a rollout's name cannot stall the read and the session runs on with its question answered; fails_when=the read opens the FIFO and blocks forever (no timer covers it, so the trial and its run hang); why_new=a review finding (second-model voice) on the unbounded rollout read; seam=readRollout; no_claim=a hung docker exec (the next test covers the timer)
+  test("a FIFO named like the session's rollout is skipped, and the question still gets its answer", async () => {
+    const fifo = 'd="${CODEX_HOME:-$HOME/.codex}/sessions"; f=$(ls "$d"/*/*/*/rollout-*.jsonl | head -1); t=$(basename "$f" | sed -E "s/.*-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[.]jsonl)$/\\1/"); mkdir -p "$d/2000/01/01" && mkfifo "$d/2000/01/01/rollout-x-$t" && echo made';
+    const script: ResponsesScript = ({ outputs, users }) => {
+      if (users.length === 1 && !outputs.has("call_fifo")) return [{ type: "shell", id: "call_fifo", cmd: fifo }];
+      return asking({ outputs, users, body: {} });
+    };
+    const r = await run(script, { entry: { user: { replies: { approach: "Approach B" } } } });
+    expect(r.calls().calls.map((c: { tool: string; ok: boolean }) => [c.tool, c.ok])[0]).toEqual(["shell", true]);
+    expect(r.outcome.termination).toEqual({ kind: "completed" });
+    expect(r.read("questions.json")).toEqual([{ call_id: "call_q", turn: 1, questions: [QUESTION], answer: "Approach B", unanswered: false }]);
+  }, 60_000);
+});
+
+describe("Codex rollout read", () => {
+  // Value: protects=a rollout read that never ends (a wedged docker exec) gives up at its timer and returns null, which the driver maps to a missing cell (E_INFRA_FAILURE) instead of hanging the run; fails_when=the read has no timer; why_new=review findings (red team, native adversarial, second-model voice) on the unbounded read; seam=readRollout; no_claim=docker's own behaviour when its client is killed
+  test("a read that never finishes returns null at its timer", async () => {
+    const session = { spawn: () => spawn("sleep", ["30"], { stdio: ["pipe", "pipe", "pipe"] }), exec: () => { throw new Error("unused"); }, stop: () => {} } as unknown as AgentSession;
+    const t0 = performance.now();
+    expect(await readRollout(session, "thread", 300)).toBeNull();
+    expect(performance.now() - t0).toBeLessThan(5_000);
+  });
+
+  // Value: protects=a regular rollout file too large to hold (a sparse file the agent leaves under a rollout's name) ends the read at its byte cap and returns null, which the driver maps to a missing cell (E_INFRA_FAILURE) instead of exhausting the evaluator's memory; fails_when=the read keeps every byte it is sent; why_new=the decision-trail read's finding on the rollout read's missing byte limit; seam=readRollout; no_claim=the 60-second timer (the test above covers it)
+  test("a rollout larger than 256 MiB returns null instead of being read whole", async () => {
+    const home = mkdtempSync(join(tmpdir(), "codex-rollout-"));
+    try {
+      const dir = join(home, "sessions", "2000", "01", "01");
+      mkdirSync(dir, { recursive: true });
+      const file = join(dir, "rollout-x-thread.jsonl");
+      writeFileSync(file, "");
+      truncateSync(file, 256 * 1024 * 1024 + 1024 * 1024);
+      const session = { spawn: (argv: string[]) => spawn(argv[0]!, argv.slice(1), { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, CODEX_HOME: home } }), exec: () => { throw new Error("unused"); }, stop: () => {} } as unknown as AgentSession;
+      const text = await readRollout(session, "thread");
+      expect(text === null ? null : text.length).toBeNull();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
 
 describe("Codex adapter pieces", () => {

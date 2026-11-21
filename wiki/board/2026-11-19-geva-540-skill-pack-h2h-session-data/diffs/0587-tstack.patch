@@ -1,0 +1,179 @@
+diff --git a/caddyconfig/httpcaddyfile/tlsapp.go b/caddyconfig/httpcaddyfile/tlsapp.go
+index ddec0b9..c6d2136 100644
+--- a/caddyconfig/httpcaddyfile/tlsapp.go
++++ b/caddyconfig/httpcaddyfile/tlsapp.go
+@@ -94,6 +94,25 @@ func (st ServerType) buildTLSApp(
+ 
+ 	forcedAutomatedNames := make(map[string]struct{}) // explicitly configured to be automated, even if covered by a wildcard
+ 
++	// collect wildcard hosts from site blocks that get certificates from
++	// certificate managers (e.g. get_certificate), so we can avoid creating
++	// automation policies for names covered by such a wildcard; otherwise
++	// those policies would shadow the wildcard's policy at handshake time
++	// and the managers would never be consulted for those names
++	var wildcardHosts []string
++	for _, p := range pairings {
++		for _, sblock := range p.serverBlocks {
++			if _, ok := sblock.pile["tls.cert_manager"]; !ok {
++				continue
++			}
++			for _, h := range sblock.hostsFromKeysNotHTTP(httpPort) {
++				if strings.HasPrefix(h, "*.") {
++					wildcardHosts = append(wildcardHosts, h)
++				}
++			}
++		}
++	}
++
+ 	for _, p := range pairings {
+ 		// avoid setting up TLS automation policies for a server that is HTTP-only
+ 		var addresses []string
+@@ -235,6 +254,22 @@ func (st ServerType) buildTLSApp(
+ 			hostsNotHTTP := sblock.hostsFromKeysNotHTTP(httpPort)
+ 			sort.Strings(hostsNotHTTP) // solely for deterministic test results
+ 
++			// if this block's AP has no customizations and all its hosts are
++			// covered by a wildcard whose policy uses certificate managers,
++			// skip it, so that the wildcard's policy (and its managers) is
++			// used for these names at handshake time; names covered by a
++			// wildcard are not managed separately unless forced to be
++			if _, forced := sblock.pile["tls.force_automate"]; !forced && ap != catchAllAP &&
++				hostsCoveredByWildcard(hostsNotHTTP, wildcardHosts) {
++				baseAP, err := newBaseAutomationPolicy(options, warnings, true)
++				if err != nil {
++					return nil, warnings, err
++				}
++				if reflect.DeepEqual(ap, baseAP) {
++					continue
++				}
++			}
++
+ 			// associate our new automation policy with this server block's hosts
+ 			ap.SubjectsRaw = hostsNotHTTP
+ 
+@@ -774,6 +809,26 @@ outer:
+ 	return aps
+ }
+ 
++// hostsCoveredByWildcard returns true if every host in hosts is
++// matched by one of the wildcard hosts (excluding exact equality).
++// It returns false if hosts is empty.
++func hostsCoveredByWildcard(hosts []string, wildcards []string) bool {
++	if len(hosts) == 0 || len(wildcards) == 0 {
++		return false
++	}
++	for _, host := range hosts {
++		if strings.HasPrefix(host, "*.") || certmagic.SubjectIsIP(host) {
++			return false
++		}
++		if !slices.ContainsFunc(wildcards, func(wc string) bool {
++			return certmagic.MatchWildcard(host, wc)
++		}) {
++			return false
++		}
++	}
++	return true
++}
++
+ // automationPolicyIsSubset returns true if a's subjects are a subset
+ // of b's subjects.
+ func automationPolicyIsSubset(a, b *caddytls.AutomationPolicy) bool {
+diff --git a/caddytest/integration/caddyfile_adapt/tls_automation_wildcard_get_certificate.caddyfiletest b/caddytest/integration/caddyfile_adapt/tls_automation_wildcard_get_certificate.caddyfiletest
+new file mode 100644
+index 0000000..9ba425c
+--- /dev/null
++++ b/caddytest/integration/caddyfile_adapt/tls_automation_wildcard_get_certificate.caddyfiletest
+@@ -0,0 +1,93 @@
++*.example.com {
++	tls {
++		get_certificate http http://localhost:9000/certs
++	}
++	abort
++}
++
++wiki.example.com {
++	respond "wiki"
++}
++----------
++{
++	"apps": {
++		"http": {
++			"servers": {
++				"srv0": {
++					"listen": [
++						":443"
++					],
++					"routes": [
++						{
++							"match": [
++								{
++									"host": [
++										"wiki.example.com"
++									]
++								}
++							],
++							"handle": [
++								{
++									"handler": "subroute",
++									"routes": [
++										{
++											"handle": [
++												{
++													"body": "wiki",
++													"handler": "static_response"
++												}
++											]
++										}
++									]
++								}
++							],
++							"terminal": true
++						},
++						{
++							"match": [
++								{
++									"host": [
++										"*.example.com"
++									]
++								}
++							],
++							"handle": [
++								{
++									"handler": "subroute",
++									"routes": [
++										{
++											"handle": [
++												{
++													"abort": true,
++													"handler": "static_response"
++												}
++											]
++										}
++									]
++								}
++							],
++							"terminal": true
++						}
++					]
++				}
++			}
++		},
++		"tls": {
++			"automation": {
++				"policies": [
++					{
++						"subjects": [
++							"*.example.com"
++						],
++						"get_certificate": [
++							{
++								"url": "http://localhost:9000/certs",
++								"via": "http"
++							}
++						]
++					}
++				]
++			}
++		}
++	}
++}

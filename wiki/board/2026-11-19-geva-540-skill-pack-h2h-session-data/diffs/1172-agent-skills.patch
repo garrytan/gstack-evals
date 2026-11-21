@@ -1,0 +1,102 @@
+diff --git a/js/node_helper.js b/js/node_helper.js
+index 833c90a..f249b9a 100644
+--- a/js/node_helper.js
++++ b/js/node_helper.js
+@@ -1,6 +1,5 @@
+ const express = require("express");
+ const Log = require("logger");
+-const { replaceSecretPlaceholder } = require("#server_functions");
+ 
+ class NodeHelper {
+ 	init () {
+@@ -86,19 +85,15 @@ class NodeHelper {
+ 		Log.log(`Connecting socket for: ${this.name}`);
+ 
+ 		io.of(this.name).on("connection", (socket) => {
+-			// register catch all.
++
++			/*
++			 * register catch all.
++			 * Inbound payloads are untrusted client input: SECRET_* placeholders
++			 * must never be expanded here, otherwise any socket client could
++			 * turn `**SECRET_NAME**` into the real environment value.
++			 */
+ 			socket.onAny((notification, payload) => {
+-				if (config?.hideConfigSecrets && payload && typeof payload === "object") {
+-					try {
+-						const payloadStr = replaceSecretPlaceholder(JSON.stringify(payload));
+-						this.socketNotificationReceived(notification, JSON.parse(payloadStr));
+-					} catch (e) {
+-						Log.error("Error substituting variables in payload: ", e);
+-						this.socketNotificationReceived(notification, payload);
+-					}
+-				} else {
+-					this.socketNotificationReceived(notification, payload);
+-				}
++				this.socketNotificationReceived(notification, payload);
+ 			});
+ 		});
+ 	}
+diff --git a/tests/unit/classes/node_helper_spec.js b/tests/unit/classes/node_helper_spec.js
+new file mode 100644
+index 0000000..86262f9
+--- /dev/null
++++ b/tests/unit/classes/node_helper_spec.js
+@@ -0,0 +1,57 @@
++const NodeHelper = require("../../../js/node_helper");
++
++/**
++ * Creates a fake socket.io server that captures the catch-all handler.
++ * @returns {{io: object, emit: (notification: string, payload: object) => void}} fake io and a function to dispatch inbound notifications
++ */
++function createFakeIo () {
++	let onAnyHandler;
++	const io = {
++		of () {
++			return {
++				on (_event, cb) {
++					cb({ onAny (fn) { onAnyHandler = fn; } });
++				},
++				emit () {}
++			};
++		}
++	};
++	return { io, emit: (notification, payload) => onAnyHandler(notification, payload) };
++}
++
++describe("NodeHelper socket dispatcher", () => {
++	let savedConfig;
++
++	beforeEach(() => {
++		savedConfig = global.config;
++		process.env.SECRET_NODE_HELPER_TEST = "super-secret-value";
++	});
++
++	afterEach(() => {
++		global.config = savedConfig;
++		delete process.env.SECRET_NODE_HELPER_TEST;
++	});
++
++	for (const cors of ["disabled", "allowWhitelist", "allowAll"]) {
++		it(`does not expand SECRET_* placeholders in inbound payloads (cors=${cors})`, () => {
++			global.config = { hideConfigSecrets: true, cors };
++			const helper = new NodeHelper();
++			helper.setName("test_helper");
++			const received = [];
++			helper.socketNotificationReceived = (notification, payload) => received.push({ notification, payload });
++
++			const { io, emit } = createFakeIo();
++			helper.setSocketIO(io);
++
++			const payload = { instanceId: "**SECRET_NODE_HELPER_TEST**", nested: { url: "https://x/?k=**SECRET_NODE_HELPER_TEST**" } };
++			emit("INIT", payload);
++
++			expect(received).toHaveLength(1);
++			expect(received[0].payload).toEqual({
++				instanceId: "**SECRET_NODE_HELPER_TEST**",
++				nested: { url: "https://x/?k=**SECRET_NODE_HELPER_TEST**" }
++			});
++			expect(JSON.stringify(received[0].payload)).not.toContain("super-secret-value");
++		});
++	}
++});

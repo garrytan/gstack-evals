@@ -1,0 +1,68 @@
+diff --git a/src/graph.cc b/src/graph.cc
+index 8e6ff69..2a95b1d 100644
+--- a/src/graph.cc
++++ b/src/graph.cc
+@@ -168,14 +168,19 @@ bool DependencyScan::RecomputeNodeDirty(Node* node, std::vector<Node*>* stack,
+   validation_nodes->insert(validation_nodes->end(),
+       edge->validations_.begin(), edge->validations_.end());
+ 
+-  // Visit all inputs; we're dirty if any of the inputs are dirty.
+-  Node* most_recent_input = NULL;
++  // Visit all inputs before inspecting any of them: visiting a later input
++  // may load a dyndep file that gives an earlier input (e.g. one discovered
++  // from a depfile) an in-edge and changes its dirty state.
+   for (vector<Node*>::iterator i = edge->inputs_.begin();
+        i != edge->inputs_.end(); ++i) {
+-    // Visit this input.
+     if (!RecomputeNodeDirty(*i, stack, validation_nodes, err))
+       return false;
++  }
+ 
++  // We're dirty if any of the inputs are dirty.
++  Node* most_recent_input = NULL;
++  for (vector<Node*>::iterator i = edge->inputs_.begin();
++       i != edge->inputs_.end(); ++i) {
+     // If an input is not ready, neither are our outputs.
+     if (Edge* in_edge = (*i)->in_edge()) {
+       if (!in_edge->outputs_ready_)
+diff --git a/src/graph_test.cc b/src/graph_test.cc
+index afd4d0e..b8ee95a 100644
+--- a/src/graph_test.cc
++++ b/src/graph_test.cc
+@@ -1034,6 +1034,36 @@ TEST_F(GraphTest, DyndepFileCircular) {
+   EXPECT_EQ(1, edge->order_only_deps_);
+ }
+ 
++TEST_F(GraphTest, DyndepLoadedAfterDepfileDiscoversDirtyInput) {
++  AssertParse(&state_,
++"rule r\n"
++"  command = unused\n"
++"rule d\n"
++"  command = unused\n"
++"  depfile = $out.d\n"
++"build stamp: r || stamp.dd\n"
++"  dyndep = stamp.dd\n"
++"build stamp.dd: r\n"
++"build copy: d || stamp\n"
++  );
++  fs_.Create("stamp.dd",
++"ninja_dyndep_version = 1\n"
++"build stamp | other: dyndep\n"
++  );
++  fs_.Create("other", "");
++  fs_.Create("copy.d", "copy: other\n");
++  fs_.Create("copy", "");
++
++  string err;
++  EXPECT_TRUE(scan_.RecomputeDirty(GetNode("copy"), NULL, &err));
++  ASSERT_EQ("", err);
++
++  EXPECT_EQ(GetNode("stamp")->in_edge(), GetNode("other")->in_edge());
++  EXPECT_TRUE(GetNode("stamp")->dirty());
++  EXPECT_TRUE(GetNode("other")->dirty());
++  EXPECT_TRUE(GetNode("copy")->dirty());
++}
++
+ TEST_F(GraphTest, Validation) {
+   ASSERT_NO_FATAL_FAILURE(AssertParse(&state_,
+ "build out: cat in |@ validate\n"

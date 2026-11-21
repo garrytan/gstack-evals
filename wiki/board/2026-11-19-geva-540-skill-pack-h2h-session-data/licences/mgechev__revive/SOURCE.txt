@@ -1,0 +1,3 @@
+https://github.com/mgechev/revive at af0aba9e398b1aa6c54bdeea2ff0f0e04b2c3015
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

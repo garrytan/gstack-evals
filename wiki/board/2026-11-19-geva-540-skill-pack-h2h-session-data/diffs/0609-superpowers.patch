@@ -1,0 +1,135 @@
+diff --git a/src/Quartz.Tests.Unit/Impl/Triggers/DailyTimeIntervalTriggerImplTest.cs b/src/Quartz.Tests.Unit/Impl/Triggers/DailyTimeIntervalTriggerImplTest.cs
+index 6454bda..00973a0 100644
+--- a/src/Quartz.Tests.Unit/Impl/Triggers/DailyTimeIntervalTriggerImplTest.cs
++++ b/src/Quartz.Tests.Unit/Impl/Triggers/DailyTimeIntervalTriggerImplTest.cs
+@@ -1087,6 +1087,67 @@ public class DailyTimeIntervalTriggerImplTest
+         Assert.That(first, Is.EqualTo(new DateTimeOffset(2019, 11, 4, 22, 0, 0, TimeSpan.Zero)));
+     }
+ 
++    [Test]
++    public void TestDayLightSavingEndWithHourIntervalShouldNotFireTwiceOnSameDay()
++    {
++        var timeZoneInfo = TZConvert.GetTimeZoneInfo("W. Europe Standard Time");
++
++        var trigger = (IOperableTrigger) TriggerBuilder.Create()
++            .WithIdentity("id")
++            .ForJob("job")
++            .StartAt(new DateTimeOffset(2020, 10, 25, 0, 1, 5, TimeSpan.FromHours(2)))
++            .WithDailyTimeIntervalSchedule(x => x
++                .OnEveryDay()
++                .WithIntervalInHours(24)
++                .InTimeZone(timeZoneInfo)
++                .StartingDailyAt(new TimeOfDay(0, 1, 5))
++                .EndingDailyAt(new TimeOfDay(23, 59, 59))
++                .WithMisfireHandlingInstructionDoNothing())
++            .Build();
++
++        var from = new DateTimeOffset(2020, 10, 25, 0, 0, 0, TimeSpan.FromHours(2));
++        var fireTimes = TriggerUtils.ComputeFireTimesBetween(trigger, null, from, from.AddDays(3));
++
++        Assert.That(fireTimes, Is.EqualTo(new[]
++        {
++            new DateTimeOffset(2020, 10, 25, 0, 1, 5, TimeSpan.FromHours(2)),
++            new DateTimeOffset(2020, 10, 26, 0, 1, 5, TimeSpan.FromHours(1)),
++            new DateTimeOffset(2020, 10, 27, 0, 1, 5, TimeSpan.FromHours(1)),
++        }).AsCollection);
++    }
++
++    [Test]
++    public void TestDayLightSavingStartWithHourIntervalShouldFireDaily()
++    {
++        var timeZoneInfo = TZConvert.GetTimeZoneInfo("W. Europe Standard Time");
++
++        var trigger = (IOperableTrigger) TriggerBuilder.Create()
++            .WithIdentity("id")
++            .ForJob("job")
++            .StartAt(new DateTimeOffset(2020, 3, 28, 0, 1, 5, TimeSpan.FromHours(1)))
++            .WithDailyTimeIntervalSchedule(x => x
++                .OnEveryDay()
++                .WithIntervalInHours(12)
++                .InTimeZone(timeZoneInfo)
++                .StartingDailyAt(new TimeOfDay(0, 1, 5))
++                .EndingDailyAt(new TimeOfDay(23, 59, 59)))
++            .Build();
++
++        var from = new DateTimeOffset(2020, 3, 28, 0, 0, 0, TimeSpan.FromHours(1));
++        var fireTimes = TriggerUtils.ComputeFireTimesBetween(trigger, null, from, from.AddDays(3));
++
++        Assert.That(fireTimes, Is.EqualTo(new[]
++        {
++            new DateTimeOffset(2020, 3, 28, 0, 1, 5, TimeSpan.FromHours(1)),
++            new DateTimeOffset(2020, 3, 28, 12, 1, 5, TimeSpan.FromHours(1)),
++            new DateTimeOffset(2020, 3, 29, 0, 1, 5, TimeSpan.FromHours(1)),
++            new DateTimeOffset(2020, 3, 29, 12, 1, 5, TimeSpan.FromHours(2)),
++            new DateTimeOffset(2020, 3, 30, 0, 1, 5, TimeSpan.FromHours(2)),
++            new DateTimeOffset(2020, 3, 30, 12, 1, 5, TimeSpan.FromHours(2)),
++            new DateTimeOffset(2020, 3, 31, 0, 1, 5, TimeSpan.FromHours(2)),
++        }).AsCollection);
++    }
++
+     [Test]
+     [Explicit]
+     public void TestPassingMidnight()
+diff --git a/src/Quartz/Impl/Triggers/DailyTimeIntervalTriggerImpl.cs b/src/Quartz/Impl/Triggers/DailyTimeIntervalTriggerImpl.cs
+index 7627b0a..e6c7d34 100644
+--- a/src/Quartz/Impl/Triggers/DailyTimeIntervalTriggerImpl.cs
++++ b/src/Quartz/Impl/Triggers/DailyTimeIntervalTriggerImpl.cs
+@@ -764,13 +764,21 @@ public sealed class DailyTimeIntervalTriggerImpl : AbstractTrigger, IDailyTimeIn
+         }
+         else if (repeatUnit == IntervalUnit.Hour)
+         {
+-            jumpCount = secondsAfterStart / (repeatLong * 60L * 60L);
+-            if (secondsAfterStart % (repeatLong * 60L * 60L) != 0)
++            // Hour based intervals are calculated using wall clock (local) time, so that
++            // e.g. an interval of 24 hours keeps firing at the same time of day and does not
++            // fire twice (or drift) on days where daylight saving time starts or ends.
++            DateTimeOffset afterTimeLocal = fireTime.Value;
++            DateTime localStartOfDay = fireTimeStartDate.DateTime;
++            long wallClockSecondsAfterStart = (long) (afterTimeLocal.DateTime - localStartOfDay).TotalSeconds;
++
++            jumpCount = wallClockSecondsAfterStart / (repeatLong * 60L * 60L);
++            if (wallClockSecondsAfterStart % (repeatLong * 60L * 60L) != 0)
+             {
+                 jumpCount++;
+             }
+-            sTime = sTime.AddHours(RepeatInterval * (int) jumpCount);
+-            fireTime = TimeZoneUtil.ConvertTime(sTime, TimeZone);
++
++            DateTime localFireTime = localStartOfDay.AddHours(RepeatInterval * (int) jumpCount);
++            fireTime = TimeZoneUtil.ConvertTime(ToDateTimeOffsetNotBefore(localFireTime, afterTimeLocal), TimeZone);
+         }
+ 
+         // g. Check if we've exceeded the per-day repeat count.
+@@ -797,6 +805,32 @@ public sealed class DailyTimeIntervalTriggerImpl : AbstractTrigger, IDailyTimeIn
+         return fireTime?.ToUniversalTime();
+     }
+ 
++    /// <summary>
++    /// Converts a wall clock time in the trigger's time zone into a <see cref="DateTimeOffset"/>.
++    /// For ambiguous times (DST end) the earliest instance that is not before <paramref name="notBefore"/> is chosen.
++    /// Invalid times (DST start) are effectively moved forward by the DST gap.
++    /// </summary>
++    private DateTimeOffset ToDateTimeOffsetNotBefore(DateTime localTime, DateTimeOffset notBefore)
++    {
++        localTime = DateTime.SpecifyKind(localTime, DateTimeKind.Unspecified);
++        if (TimeZone.IsAmbiguousTime(localTime))
++        {
++            DateTimeOffset? candidate = null;
++            foreach (TimeSpan offset in TimeZone.GetAmbiguousTimeOffsets(localTime).OrderByDescending(x => x))
++            {
++                candidate = new DateTimeOffset(localTime, offset);
++                if (candidate.Value >= notBefore)
++                {
++                    break;
++                }
++            }
++            return candidate!.Value;
++        }
++
++        // for invalid times this returns the offset in effect before the transition, moving time forward
++        return new DateTimeOffset(localTime, TimeZone.GetUtcOffset(localTime));
++    }
++
+     private bool IsSameDay(DateTimeOffset d1, DateTimeOffset d2)
+     {
+         DateTimeOffset c1 = CreateCalendarTime(d1);

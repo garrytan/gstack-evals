@@ -1,0 +1,3 @@
+https://github.com/influxdata/telegraf at 90d7a096d391d0cca0a9ffa27efa295396a01b15
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

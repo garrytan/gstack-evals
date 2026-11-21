@@ -1,0 +1,91 @@
+diff --git a/Core/Relationships/RelationshipResolver.cs b/Core/Relationships/RelationshipResolver.cs
+index 0c1314a..5b7ed6c 100644
+--- a/Core/Relationships/RelationshipResolver.cs
++++ b/Core/Relationships/RelationshipResolver.cs
+@@ -281,8 +281,10 @@ namespace CKAN
+                 IReadOnlyList<CkanModule>? candidates = null;
+                 try
+                 {
++                    // Conflicting optional mods are kept and reported as conflicts below
+                     candidates = resolved.Candidates(descriptor, modlist.Values,
+-                                                     registry, game);
++                                                     registry, game,
++                                                     soft_resolve && options.proceed_with_inconsistencies);
+                     log.DebugFormat("Got {0} candidates for {1}",
+                                     candidates.Count, descriptor);
+                 }
+diff --git a/Core/Relationships/ResolvedRelationshipsTree.cs b/Core/Relationships/ResolvedRelationshipsTree.cs
+index 4ced90d..f683566 100644
+--- a/Core/Relationships/ResolvedRelationshipsTree.cs
++++ b/Core/Relationships/ResolvedRelationshipsTree.cs
+@@ -61,7 +61,8 @@ namespace CKAN
+         public IReadOnlyList<CkanModule> Candidates(RelationshipDescriptor          rel,
+                                                     IReadOnlyCollection<CkanModule> installing,
+                                                     IRegistryQuerier                registry,
+-                                                    IGame                           game)
++                                                    IGame                           game,
++                                                    bool                            allowConflicts = false)
+         {
+             var candidates = new List<CkanModule>();
+             var unresolved = new List<ResolvedRelationship[]>();
+@@ -85,6 +86,8 @@ namespace CKAN
+                             // Skip other versions of mods being installed
+                         }
+                         else if (module.BadRelationships(installing)
++                                  // Caller will handle conflicts itself if allowed
++                                  .Where(r => !allowConflicts || r.Type != RelationshipType.Conflicts)
+                                   .Select(r => relationshipCache.GetValueOrDefault(r.Descriptor))
+                                   .OfType<ResolvedRelationship>()
+                                   .Select(badRR => new ResolvedRelationship[] { resRel, badRR })
+diff --git a/Tests/Core/IO/ModuleInstallerTests.cs b/Tests/Core/IO/ModuleInstallerTests.cs
+index d7e5e99..9e244cf 100644
+--- a/Tests/Core/IO/ModuleInstallerTests.cs
++++ b/Tests/Core/IO/ModuleInstallerTests.cs
+@@ -784,6 +784,47 @@ namespace Tests.Core.IO
+             }
+         }
+ 
++        [Test]
++        public void FindRecommendations_WithConflictingRecommendations_AllRecommended()
++        {
++            // Arrange
++            var crit = new GameVersionCriteria(new GameVersion(1, 12, 5));
++            using (var repo     = new TemporaryRepository(new string[]
++                                  {
++                                      @"{ ""identifier"": ""ModA"", ""conflicts"": [ { ""name"": ""ModB"" } ] }",
++                                      @"{ ""identifier"": ""ModB"" }",
++                                      @"{ ""identifier"": ""ModC"" }",
++                                      @"{
++                                          ""identifier"": ""Meta"",
++                                          ""recommends"": [ { ""name"": ""ModA"" }, { ""name"": ""ModB"" }, { ""name"": ""ModC"" } ],
++                                          ""suggests"":   [ { ""name"": ""ModB"" } ]
++                                      }",
++                                  }.Select(Relationships.RelationshipResolverTests.MergeWithDefaults)
++                                   .ToArray()))
++            using (var repoData = new TemporaryRepositoryData(nullUser, repo.repo))
++            using (var inst     = new DisposableKSP())
++            {
++                var registry = new CKAN.Registry(repoData.Manager, repo.repo);
++                var meta = registry.LatestAvailable("Meta", inst.KSP.StabilityToleranceConfig, crit)!;
++
++                // Act
++                ModuleInstaller.FindRecommendations(inst.KSP,
++                                                    new HashSet<CkanModule> { meta },
++                                                    new CkanModule[] { meta },
++                                                    Array.Empty<CkanModule>(),
++                                                    Array.Empty<CkanModule>(),
++                                                    registry,
++                                                    out Dictionary<CkanModule, Tuple<bool, List<string>>> recommendations,
++                                                    out Dictionary<CkanModule, List<string>> suggestions,
++                                                    out Dictionary<CkanModule, HashSet<string>> supporters);
++
++                // Assert
++                CollectionAssert.AreEquivalent(new string[] { "ModA", "ModB", "ModC" },
++                                               recommendations.Keys.Select(m => m.identifier),
++                                               "Conflicting recommendations should all be listed");
++            }
++        }
++
+         [Test,
+          TestCase(new string[] {
+                       @"{

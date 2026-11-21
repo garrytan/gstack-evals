@@ -1,0 +1,70 @@
+diff --git a/README.md b/README.md
+index 36549f5..c7c7a53 100644
+--- a/README.md
++++ b/README.md
+@@ -238,6 +238,7 @@ https://casbin.org/docs/benchmark
+ | RBAC with resource roles  | [rbac_model_with_resource_roles.conf](https://github.com/casbin/casbin/blob/master/examples/rbac_with_resource_roles_model.conf) | [rbac_policy_with_resource_roles.csv](https://github.com/casbin/casbin/blob/master/examples/rbac_with_resource_roles_policy.csv) |
+ | RBAC with domains/tenants | [rbac_model_with_domains.conf](https://github.com/casbin/casbin/blob/master/examples/rbac_with_domains_model.conf)               | [rbac_policy_with_domains.csv](https://github.com/casbin/casbin/blob/master/examples/rbac_with_domains_policy.csv)               |
+ | ABAC                      | [abac_model.conf](https://github.com/casbin/casbin/blob/master/examples/abac_model.conf)                                         | N/A                                                                                                                              |
++| BLP                       | [blp_model.conf](https://github.com/casbin/casbin/blob/master/examples/blp_model.conf)                                           | N/A                                                                                                                              |
+ | RESTful                   | [keymatch_model.conf](https://github.com/casbin/casbin/blob/master/examples/keymatch_model.conf)                                 | [keymatch_policy.csv](https://github.com/casbin/casbin/blob/master/examples/keymatch_policy.csv)                                 |
+ | Deny-override             | [rbac_model_with_deny.conf](https://github.com/casbin/casbin/blob/master/examples/rbac_with_deny_model.conf)                     | [rbac_policy_with_deny.csv](https://github.com/casbin/casbin/blob/master/examples/rbac_with_deny_policy.csv)                     |
+ | Priority                  | [priority_model.conf](https://github.com/casbin/casbin/blob/master/examples/priority_model.conf)                                 | [priority_policy.csv](https://github.com/casbin/casbin/blob/master/examples/priority_policy.csv)                                 |
+diff --git a/examples/blp_model.conf b/examples/blp_model.conf
+new file mode 100644
+index 0000000..845ccc2
+--- /dev/null
++++ b/examples/blp_model.conf
+@@ -0,0 +1,11 @@
++[request_definition]
++r = sub, sub_level, obj, obj_level, act
++
++[policy_definition]
++p = sub, obj, act
++
++[policy_effect]
++e = some(where (p.eft == allow))
++
++[matchers]
++m = (r.act == "read" && r.sub_level >= r.obj_level) || (r.act == "write" && r.sub_level <= r.obj_level)
+diff --git a/model_test.go b/model_test.go
+index 98a09e2..6f3817e 100644
+--- a/model_test.go
++++ b/model_test.go
+@@ -706,3 +706,36 @@ func TestReBACModel(t *testing.T) {
+ 	testEnforce(t, e, "bob", "doc3", "read", false)
+ 	testEnforce(t, e, "bob", "doc3", "write", false)
+ }
++
++func TestBLPModel(t *testing.T) {
++	e, _ := NewEnforcer("examples/blp_model.conf")
++
++	testEnforceBLP := func(sub string, subLevel int, obj string, objLevel int, act string, res bool) {
++		t.Helper()
++		myRes, err := e.Enforce(sub, subLevel, obj, objLevel, act)
++		if err != nil {
++			t.Errorf("Enforce Error: %s", err)
++			return
++		}
++		if myRes != res {
++			t.Errorf("%s, %d, %s, %d, %s: %t, supposed to be %t", sub, subLevel, obj, objLevel, act, myRes, res)
++		}
++	}
++
++	// Simple Security Property: no read up.
++	testEnforceBLP("alice", 3, "data1", 1, "read", true)
++	testEnforceBLP("alice", 3, "data2", 3, "read", true)
++	testEnforceBLP("bob", 2, "data3", 3, "read", false)
++	testEnforceBLP("charlie", 1, "data1", 1, "read", true)
++	testEnforceBLP("charlie", 1, "data2", 2, "read", false)
++
++	// *-Property: no write down.
++	testEnforceBLP("alice", 3, "data1", 1, "write", false)
++	testEnforceBLP("alice", 3, "data2", 3, "write", true)
++	testEnforceBLP("bob", 2, "data3", 3, "write", true)
++	testEnforceBLP("bob", 2, "data1", 1, "write", false)
++	testEnforceBLP("charlie", 1, "data2", 2, "write", true)
++
++	// Unknown actions are denied.
++	testEnforceBLP("alice", 3, "data1", 1, "delete", false)
++}

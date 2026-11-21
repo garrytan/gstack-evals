@@ -1,0 +1,167 @@
+diff --git a/pkg/cli/copilot_agent_logs.go b/pkg/cli/copilot_agent_logs.go
+index 0bd39af..67ed926 100644
+--- a/pkg/cli/copilot_agent_logs.go
++++ b/pkg/cli/copilot_agent_logs.go
+@@ -8,13 +8,31 @@ import (
+ )
+ 
+ var (
+-	agentTurnPattern     = regexp.MustCompile(`(?i)task.*iteration|agent.*turn|step.*\d+`)
+-	agentToolCallPattern = regexp.MustCompile(`(?i)tool.*call|executing.*tool|calling.*(\w+)`)
+-	toolNamePatterns     = []*regexp.Regexp{
+-		regexp.MustCompile(`(?i)tool[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)calling[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)executing[:\s]+([a-zA-Z0-9_-]+)`),
+-		regexp.MustCompile(`(?i)using[:\s]+tool[:\s]+([a-zA-Z0-9_-]+)`),
++	agentTurnPattern = regexp.MustCompile(`(?i)task.*iteration|agent.*turn|step.*\d+`)
++	// toolNamePatterns match explicit, structured tool-invocation markers only.
++	// Each pattern requires a colon separator directly after the keyword (e.g.
++	// "Tool call: github_search", "Executing tool: bash", "Calling: write_file").
++	// Free-form prose such as "the agent calls a tool to fetch data" or
++	// "tool calls since ..." must never yield tool names, so whitespace alone is
++	// NOT accepted as a separator.
++	toolNamePatterns = []*regexp.Regexp{
++		regexp.MustCompile(`(?i)\b(?:using\s+tool|executing\s+tool|calling\s+tool|tool\s+call|tool)\s*:\s*([a-zA-Z][a-zA-Z0-9_.-]*)`),
++		regexp.MustCompile(`(?i)\b(?:calling|executing)\s*:\s*([a-zA-Z][a-zA-Z0-9_.-]*)`),
++	}
++
++	// toolNameStopWords contains common English words that are never valid
++	// tool names. This is a defensive guard against prose that happens to
++	// match a tool-call pattern.
++	toolNameStopWords = map[string]bool{
++		"a": true, "an": true, "the": true, "to": true, "for": true, "or": true,
++		"and": true, "on": true, "in": true, "of": true, "with": true, "since": true,
++		"from": true, "by": true, "at": true, "as": true, "is": true, "it": true,
++		"this": true, "that": true, "these": true, "those": true, "be": true,
++		"call": true, "calls": true, "called": true, "calling": true,
++		"tool": true, "tools": true, "use": true, "uses": true, "using": true,
++		"execute": true, "executes": true, "executing": true, "executed": true,
++		"launch": true, "launches": true, "invoke": true, "invokes": true,
++		"none": true, "null": true, "undefined": true,
+ 	}
+ )
+ 
+@@ -48,24 +66,21 @@ func ParseCopilotCodingAgentLogMetrics(logContent string, verbose bool) workflow
+ 		}
+ 
+ 		// Extract tool calls from agent logs
+-		if matches := agentToolCallPattern.FindStringSubmatch(line); len(matches) > 1 {
+-			toolName := extractToolName(line)
+-			if toolName != "" {
+-				// Track tool call
+-				if _, exists := toolCallMap[toolName]; !exists {
+-					toolCallMap[toolName] = &workflow.ToolCallInfo{
+-						Name:      toolName,
+-						CallCount: 0,
+-					}
++		if toolName := extractToolName(line); toolName != "" {
++			// Track tool call
++			if _, exists := toolCallMap[toolName]; !exists {
++				toolCallMap[toolName] = &workflow.ToolCallInfo{
++					Name:      toolName,
++					CallCount: 0,
+ 				}
+-				toolCallMap[toolName].CallCount++
++			}
++			toolCallMap[toolName].CallCount++
+ 
+-				// Add to current sequence
+-				currentSequence = append(currentSequence, toolName)
++			// Add to current sequence
++			currentSequence = append(currentSequence, toolName)
+ 
+-				if verbose {
+-					copilotCodingAgentLog.Printf("Found tool call: %s", toolName)
+-				}
++			if verbose {
++				copilotCodingAgentLog.Printf("Found tool call: %s", toolName)
+ 			}
+ 		}
+ 
+@@ -100,12 +115,17 @@ func ParseCopilotCodingAgentLogMetrics(logContent string, verbose bool) workflow
+ 	return metrics
+ }
+ 
+-// extractToolName extracts a tool name from a log line
++// extractToolName extracts a tool name from a log line.
++// Only explicit "<keyword>: <name>" markers are recognized; natural-language
++// text and common English words are rejected.
+ func extractToolName(line string) string {
+-	// Try to extract tool name from various patterns
+ 	for _, pattern := range toolNamePatterns {
+ 		if matches := pattern.FindStringSubmatch(line); len(matches) > 1 {
+-			return strings.TrimSpace(matches[1])
++			name := strings.TrimRight(strings.TrimSpace(matches[1]), ".-")
++			if name == "" || toolNameStopWords[strings.ToLower(name)] {
++				continue
++			}
++			return name
+ 		}
+ 	}
+ 
+diff --git a/pkg/cli/copilot_agent_test.go b/pkg/cli/copilot_agent_test.go
+index 2829182..277931f 100644
+--- a/pkg/cli/copilot_agent_test.go
++++ b/pkg/cli/copilot_agent_test.go
+@@ -231,6 +231,31 @@ func TestExtractToolName(t *testing.T) {
+ 			line:     "Just a regular log line",
+ 			expected: "",
+ 		},
++		{
++			name:     "extracts from 'tool call:' pattern",
++			line:     "Tool call: github_create_pr",
++			expected: "github_create_pr",
++		},
++		{
++			name:     "ignores prose 'tool calls'",
++			line:     "The agent makes tool calls since the server launches",
++			expected: "",
++		},
++		{
++			name:     "ignores prose 'calling a tool to'",
++			line:     "It is calling the tool to fetch data or for misuse",
++			expected: "",
++		},
++		{
++			name:     "ignores prose 'executing with'",
++			line:     "Executing with unified diff on the repo",
++			expected: "",
++		},
++		{
++			name:     "rejects stop words after colon",
++			line:     "Tool: calls",
++			expected: "",
++		},
+ 	}
+ 
+ 	for _, tt := range tests {
+@@ -341,3 +366,29 @@ ERROR: Test error
+ 		t.Error("Expected tool calls to be extracted")
+ 	}
+ }
++
++func TestParseCopilotCodingAgentLogMetrics_IgnoresProse(t *testing.T) {
++	logContent := `
++The agent calls a command and each tool call is logged.
++Tool calls since startup: many. The tool to use for misuse or on unified diffs.
++Calling the server, which launches with a tool call.
++Executing tool: startHttpServer
++Tool call: noop
++Using tool: label_agent
++`
++	metrics := ParseCopilotCodingAgentLogMetrics(logContent, false)
++
++	got := make(map[string]int)
++	for _, tc := range metrics.ToolCalls {
++		got[tc.Name] = tc.CallCount
++	}
++	expected := map[string]int{"startHttpServer": 1, "noop": 1, "label_agent": 1}
++	if len(got) != len(expected) {
++		t.Fatalf("Expected tools %v, got %v", expected, got)
++	}
++	for name, count := range expected {
++		if got[name] != count {
++			t.Errorf("Expected %s to have %d calls, got %d (all: %v)", name, count, got[name], got)
++		}
++	}
++}

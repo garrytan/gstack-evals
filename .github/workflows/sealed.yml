@@ -82,7 +82,7 @@ jobs:
           printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
       - name: Fetch gstack at the pinned commit
         env:
-          GSTACK_SHA: 9ab50347ac3728b7bdf03735b4ccceca88b6d958 # gstack v1.99.0.0
+          GSTACK_SHA: a0534ce6db39a8da1f3c23ec070aac2479e44be9 # gstack v1.102.0.0
         run: |
           git init -q "$RUNNER_TEMP/gstack"
           git -C "$RUNNER_TEMP/gstack" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$GSTACK_SHA"

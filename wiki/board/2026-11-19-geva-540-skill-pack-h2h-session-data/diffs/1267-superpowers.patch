@@ -1,0 +1,52 @@
+diff --git a/xoraddr.go b/xoraddr.go
+index f6c125e..4247994 100644
+--- a/xoraddr.go
++++ b/xoraddr.go
+@@ -91,6 +91,9 @@ func (a *XORMappedAddress) GetFromAs(msg *Message, attr AttrType) error {
+ 	if err != nil {
+ 		return err
+ 	}
++	if len(value) <= 4 {
++		return io.ErrUnexpectedEOF
++	}
+ 	family := bin.Uint16(value[0:2])
+ 	if family != familyIPv6 && family != familyIPv4 {
+ 		return newDecodeErr("xor-mapped address", "family",
+@@ -111,9 +114,6 @@ func (a *XORMappedAddress) GetFromAs(msg *Message, attr AttrType) error {
+ 		}
+ 	}
+ 
+-	if len(value) <= 4 {
+-		return io.ErrUnexpectedEOF
+-	}
+ 	if err := CheckOverflow(attr, len(value[4:]), len(a.IP)); err != nil {
+ 		return err
+ 	}
+diff --git a/xoraddr_test.go b/xoraddr_test.go
+index e41ced6..fa80a5b 100644
+--- a/xoraddr_test.go
++++ b/xoraddr_test.go
+@@ -10,6 +10,7 @@ import (
+ 	"encoding/base64"
+ 	"encoding/binary"
+ 	"encoding/hex"
++	"errors"
+ 	"io"
+ 	"net"
+ 	"testing"
+@@ -173,3 +174,15 @@ func TestXORMappedAddress_String(t *testing.T) {
+ 		assert.Equalf(t, c.out, c.in.String(), "[%d]: XORMappesAddres.String()", i)
+ 	}
+ }
++
++func TestXORMappedAddress_GetFrom_ShortValue(t *testing.T) {
++	for _, value := range [][]byte{{}, {0x00}, {0x00, 0x01}, {0x00, 0x01, 0x00}, {0x00, 0x01, 0x00, 0x00}} {
++		m := New()
++		m.Add(AttrXORMappedAddress, value)
++		m.WriteHeader()
++		addr := new(XORMappedAddress)
++		if err := addr.GetFrom(m); !errors.Is(err, io.ErrUnexpectedEOF) {
++			t.Errorf("len %d: expected ErrUnexpectedEOF, got %v", len(value), err)
++		}
++	}
++}

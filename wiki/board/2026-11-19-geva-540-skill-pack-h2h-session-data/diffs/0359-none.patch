@@ -1,0 +1,165 @@
+diff --git a/src/Spectre.Console.Tests/Expectations/Public_API.Output.verified.txt b/src/Spectre.Console.Tests/Expectations/Public_API.Output.verified.txt
+index 4b55062..b5809cf 100644
+--- a/src/Spectre.Console.Tests/Expectations/Public_API.Output.verified.txt
++++ b/src/Spectre.Console.Tests/Expectations/Public_API.Output.verified.txt
+@@ -3097,6 +3097,7 @@
+         public static Spectre.Console.TextPrompt<T> EditableDefaultValue<T>(this Spectre.Console.TextPrompt<T> obj, bool state) { }
+         public static Spectre.Console.TextPrompt<T> HideChoices<T>(this Spectre.Console.TextPrompt<T> obj) { }
+         public static Spectre.Console.TextPrompt<T> HideDefaultValue<T>(this Spectre.Console.TextPrompt<T> obj) { }
++        public static Spectre.Console.TextPrompt<T> IgnoreCase<T>(this Spectre.Console.TextPrompt<T> obj) { }
+         public static Spectre.Console.TextPrompt<T> InvalidChoiceMessage<T>(this Spectre.Console.TextPrompt<T> obj, string message) { }
+         public static Spectre.Console.TextPrompt<T> PromptStyle<T>(this Spectre.Console.TextPrompt<T> obj, Spectre.Console.Style style) { }
+         public static Spectre.Console.TextPrompt<T> Secret<T>(this Spectre.Console.TextPrompt<T> obj) { }
+@@ -3108,6 +3109,7 @@
+         public static Spectre.Console.TextPrompt<T> Validate<T>(this Spectre.Console.TextPrompt<T> obj, System.Func<T, Spectre.Console.ValidationResult> validator) { }
+         public static Spectre.Console.TextPrompt<T> Validate<T>(this Spectre.Console.TextPrompt<T> obj, System.Func<T, bool> validator, string? message = null) { }
+         public static Spectre.Console.TextPrompt<T> ValidationErrorMessage<T>(this Spectre.Console.TextPrompt<T> obj, string message) { }
++        public static Spectre.Console.TextPrompt<T> WithComparer<T>(this Spectre.Console.TextPrompt<T> obj, System.StringComparer? comparer) { }
+         public static Spectre.Console.TextPrompt<T> WithConverter<T>(this Spectre.Console.TextPrompt<T> obj, System.Func<T, string>? displaySelector) { }
+     }
+     public sealed class TextPrompt<T> : Spectre.Console.IHasCulture, Spectre.Console.IPrompt<T>
+@@ -3117,6 +3119,7 @@
+         public System.Collections.Generic.List<T> Choices { get; }
+         public Spectre.Console.Style? ChoicesStyle { get; set; }
+         public bool ClearOnFinish { get; set; }
++        public System.StringComparer? Comparer { get; set; }
+         public System.Func<T, string>? Converter { get; set; }
+         public System.Globalization.CultureInfo? Culture { get; set; }
+         public Spectre.Console.Style? DefaultValueStyle { get; set; }
+diff --git a/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs b/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs
+index 80a18b5..9f3dcd5 100644
+--- a/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs
++++ b/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs
+@@ -91,6 +91,57 @@ public sealed class TextPromptTests
+         return Verifier.Verify(console.Output);
+     }
+ 
++    [Fact]
++    public void Should_Accept_Choice_Ignoring_Case_When_IgnoreCase_Is_Set()
++    {
++        // Given
++        var console = new TestConsole();
++        console.Input.PushTextWithEnter("yes");
++
++        // When
++        var result = console.Prompt(
++            new TextPrompt<string>("Helpful?")
++                .AddChoices(["Yes", "Partially", "No"])
++                .IgnoreCase());
++
++        // Then
++        result.ShouldBe("Yes");
++    }
++
++    [Fact]
++    public void Should_Accept_Choice_Ignoring_Case_When_Comparer_Is_Passed_To_Constructor()
++    {
++        // Given
++        var console = new TestConsole();
++        console.Input.PushTextWithEnter("PARTIALLY");
++
++        // When
++        var result = console.Prompt(
++            new TextPrompt<string>("Helpful?", StringComparer.OrdinalIgnoreCase)
++                .AddChoices(["Yes", "Partially", "No"]));
++
++        // Then
++        result.ShouldBe("Partially");
++    }
++
++    [Fact]
++    public void Should_Reject_Choice_With_Different_Case_By_Default()
++    {
++        // Given
++        var console = new TestConsole();
++        console.Input.PushTextWithEnter("yes");
++        console.Input.PushTextWithEnter("No");
++
++        // When
++        var result = console.Prompt(
++            new TextPrompt<string>("Helpful?")
++                .AddChoices(["Yes", "Partially", "No"]));
++
++        // Then
++        result.ShouldBe("No");
++        console.Output.ShouldContain("Please select one of the available options");
++    }
++
+     [Fact]
+     [Expectation("AutoComplete_Empty")]
+     public Task Should_Auto_Complete_To_First_Choice_If_Pressing_Tab_On_Empty_String()
+diff --git a/src/Spectre.Console/Prompts/TextPrompt.cs b/src/Spectre.Console/Prompts/TextPrompt.cs
+index 5418ef8..4bae256 100644
+--- a/src/Spectre.Console/Prompts/TextPrompt.cs
++++ b/src/Spectre.Console/Prompts/TextPrompt.cs
+@@ -7,7 +7,14 @@ namespace Spectre.Console;
+ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+ {
+     private readonly string _prompt;
+-    private readonly StringComparer? _comparer;
++
++    /// <summary>
++    /// Gets or sets the string comparer used when matching user input
++    /// against the available choices. Use e.g. <see cref="StringComparer.OrdinalIgnoreCase"/>
++    /// to make choice matching case-insensitive.
++    /// Defaults to <see langword="null"/> (case-sensitive, default comparer).
++    /// </summary>
++    public StringComparer? Comparer { get; set; }
+ 
+     /// <summary>
+     /// Gets or sets the prompt style.
+@@ -109,7 +116,7 @@ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+     public TextPrompt(string prompt, StringComparer? comparer = null)
+     {
+         _prompt = prompt ?? throw new System.ArgumentNullException(nameof(prompt));
+-        _comparer = comparer;
++        Comparer = comparer;
+     }
+ 
+     /// <summary>
+@@ -133,7 +140,7 @@ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+             var promptStyle = PromptStyle ?? Style.Plain;
+             var converter = Converter ?? TypeConverterHelper.ConvertToString;
+             var choices = Choices.Select(choice => converter(choice)).ToList();
+-            var choiceMap = Choices.ToDictionary(choice => converter(choice), choice => choice, _comparer);
++            var choiceMap = Choices.ToDictionary(choice => converter(choice), choice => choice, Comparer);
+ 
+             WritePrompt(console);
+ 
+diff --git a/src/Spectre.Console/Prompts/TextPromptExtensions.cs b/src/Spectre.Console/Prompts/TextPromptExtensions.cs
+index e0e9c46..9562481 100644
+--- a/src/Spectre.Console/Prompts/TextPromptExtensions.cs
++++ b/src/Spectre.Console/Prompts/TextPromptExtensions.cs
+@@ -244,6 +244,32 @@ public static class TextPromptExtensions
+         return obj;
+     }
+ 
++    /// <summary>
++    /// Sets the string comparer used when matching user input against the choices.
++    /// </summary>
++    /// <typeparam name="T">The prompt result type.</typeparam>
++    /// <param name="obj">The prompt.</param>
++    /// <param name="comparer">The comparer, or <see langword="null"/> to use the default (case-sensitive) comparer.</param>
++    /// <returns>The same instance so that multiple calls can be chained.</returns>
++    public static TextPrompt<T> WithComparer<T>(this TextPrompt<T> obj, StringComparer? comparer)
++    {
++        ArgumentNullException.ThrowIfNull(obj);
++
++        obj.Comparer = comparer;
++        return obj;
++    }
++
++    /// <summary>
++    /// Makes matching of user input against the choices case-insensitive.
++    /// </summary>
++    /// <typeparam name="T">The prompt result type.</typeparam>
++    /// <param name="obj">The prompt.</param>
++    /// <returns>The same instance so that multiple calls can be chained.</returns>
++    public static TextPrompt<T> IgnoreCase<T>(this TextPrompt<T> obj)
++    {
++        return WithComparer(obj, StringComparer.OrdinalIgnoreCase);
++    }
++
+     /// <summary>
+     /// Replaces prompt user input with asterisks in the console.
+     /// </summary>

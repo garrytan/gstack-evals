@@ -1,0 +1,175 @@
+diff --git a/backend/local/local.go b/backend/local/local.go
+index 91ec9cd..230ae95 100644
+--- a/backend/local/local.go
++++ b/backend/local/local.go
+@@ -1541,8 +1541,16 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 					return removeErr
+ 				}
+ 			}
+-			// Use the contents for the copied object to create a symlink
+-			err = os.Symlink(symlinkData.String(), o.path)
++			// Use the contents for the copied object to create a symlink,
++			// but only if the target stays within the root as the
++			// contents may come from an untrusted remote.
++			target := symlinkData.String()
++			if !symlinkTargetWithinRoot(o.fs.root, o.path, target) {
++				err = fmt.Errorf("refusing to create symlink %q -> %q: target is outside the destination root", o.path, target)
++				fs.Errorf(o, "%v", err)
++				return fserrors.NoRetryError(err)
++			}
++			err = os.Symlink(target, o.path)
+ 		}
+ 
+ 		// only continue if symlink creation succeeded
+@@ -1814,3 +1822,94 @@ var (
+ 	_ fs.SetModTimer     = &Directory{}
+ 	_ fs.SetMetadataer   = &Directory{}
+ )
++
++// splitPathComponents splits p into its path components
++func splitPathComponents(p string) []string {
++	return strings.FieldsFunc(p, func(r rune) bool {
++		return os.IsPathSeparator(uint8(r)) || r == '/'
++	})
++}
++
++// symlinkTargetWithinRoot returns true if a symlink at linkPath with
++// the given target would resolve to a location within root.
++//
++// The target is resolved component by component, following any
++// symlinks which already exist under root, so that chains of
++// symlinks (eg "a -> ." then "b -> a/..") can't be used to escape.
++// Components which don't exist yet are treated as directories.
++func symlinkTargetWithinRoot(root, linkPath, target string) bool {
++	if target == "" {
++		return false
++	}
++	root = filepath.Clean(root)
++	relDir, err := filepath.Rel(root, filepath.Dir(linkPath))
++	if err != nil {
++		return false
++	}
++	stack := splitPathComponents(relDir)
++	if len(stack) > 0 && stack[0] == ".." {
++		return false
++	}
++	// toRootRelative converts an absolute path into components relative to root
++	toRootRelative := func(p string) ([]string, bool) {
++		rel, err := filepath.Rel(root, filepath.Clean(p))
++		if err != nil {
++			return nil, false
++		}
++		parts := splitPathComponents(rel)
++		if len(parts) > 0 && parts[0] == ".." {
++			return nil, false
++		}
++		return parts, true
++	}
++	var pending []string
++	if filepath.IsAbs(target) || filepath.VolumeName(target) != "" {
++		var ok bool
++		stack, ok = toRootRelative(target)
++		if !ok {
++			return false
++		}
++	} else {
++		pending = splitPathComponents(target)
++	}
++	const maxHops = 255
++	hops := 0
++	for len(pending) > 0 {
++		comp := pending[0]
++		pending = pending[1:]
++		switch comp {
++		case "", ".":
++			continue
++		case "..":
++			if len(stack) == 0 {
++				return false
++			}
++			stack = stack[:len(stack)-1]
++			continue
++		}
++		cur := filepath.Join(append([]string{root}, append(stack, comp)...)...)
++		fi, err := os.Lstat(cur)
++		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
++			stack = append(stack, comp)
++			continue
++		}
++		hops++
++		if hops > maxHops {
++			return false
++		}
++		link, err := os.Readlink(cur)
++		if err != nil {
++			return false
++		}
++		if filepath.IsAbs(link) || filepath.VolumeName(link) != "" {
++			var ok bool
++			stack, ok = toRootRelative(link)
++			if !ok {
++				return false
++			}
++		} else {
++			pending = append(splitPathComponents(link), pending...)
++		}
++	}
++	return true
++}
+diff --git a/backend/local/local_internal_test.go b/backend/local/local_internal_test.go
+index f36cc17..d3cebae 100644
+--- a/backend/local/local_internal_test.go
++++ b/backend/local/local_internal_test.go
+@@ -730,3 +730,52 @@ func TestCopySymlink(t *testing.T) {
+ 	want = fstest.NewItem("dst2/file.txt", "hello world", when)
+ 	fstest.CompareItems(t, []fs.DirEntry{dst}, []fstest.Item{want}, nil, f.precision, "")
+ }
++
++func TestSymlinkTargetWithinRoot(t *testing.T) {
++	root := t.TempDir()
++	require.NoError(t, os.MkdirAll(filepath.Join(root, "a", "b"), 0777))
++	require.NoError(t, os.Symlink(".", filepath.Join(root, "dot")))
++	require.NoError(t, os.Symlink("a/b", filepath.Join(root, "ab")))
++	link := filepath.Join(root, "a", "link")
++	for _, test := range []struct {
++		target string
++		want   bool
++	}{
++		{"file", true},
++		{"b/file", true},
++		{"../file", true},
++		{"../a/b/../file", true},
++		{"../ab/..", true},
++		{filepath.Join(root, "x"), true},
++		{"", false},
++		{"../..", false},
++		{"../../etc/passwd", false},
++		{"b/../../../x", false},
++		{"/etc/passwd", false},
++		{filepath.Dir(root), false},
++		{"../dot/..", false}, // dot -> . so dot/.. is outside root
++	} {
++		assert.Equal(t, test.want, symlinkTargetWithinRoot(root, link, test.target), test.target)
++	}
++}
++
++func TestSymlinkOutsideRootRefused(t *testing.T) {
++	ctx := context.Background()
++	r := fstest.NewRun(t)
++	f := r.Flocal.(*Fs)
++	f.opt.TranslateSymlinks = true
++	outside := t.TempDir()
++
++	src := object.NewStaticObjectInfo("pwn"+fs.LinkSuffix, time.Now(), int64(len(outside)), true, nil, nil)
++	_, err := f.Put(ctx, bytes.NewBufferString(outside), src)
++	require.Error(t, err)
++	_, err = os.Lstat(filepath.Join(f.root, "pwn"))
++	assert.True(t, os.IsNotExist(err))
++
++	// A following object "inside" the link must not escape the root
++	src = object.NewStaticObjectInfo("pwn/authorized_keys", time.Now(), 5, true, nil, nil)
++	_, err = f.Put(ctx, bytes.NewBufferString("pwned"), src)
++	require.NoError(t, err)
++	_, err = os.Stat(filepath.Join(outside, "authorized_keys"))
++	assert.True(t, os.IsNotExist(err))
++}

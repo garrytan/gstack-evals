@@ -1,0 +1,111 @@
+diff --git a/pkg/proxy/httputil/proxy.go b/pkg/proxy/httputil/proxy.go
+index 3cd7211..9600f8d 100644
+--- a/pkg/proxy/httputil/proxy.go
++++ b/pkg/proxy/httputil/proxy.go
+@@ -67,6 +67,15 @@ func buildSingleHostProxy(target *url.URL, passHostHeader bool, preservePath boo
+ func rewriteRequestBuilder(target *url.URL, passHostHeader bool, preservePath bool) func(*httputil.ProxyRequest) {
+ 	return func(pr *httputil.ProxyRequest) {
+ 		copyForwardedHeader(pr.Out.Header, pr.In.Header)
++
++		// Request trailer values must not be forwarded to the backend:
++		// trailers arrive after the body, once routing and security decisions (e.g. header sanitization) have been made.
++		// When a middleware buffers the request body before the proxy (e.g. retry, buffering),
++		// the trailer values are already populated and would otherwise be copied to the outgoing request.
++		// Only the declared trailer names are kept, as permitted by RFC 9110 section 6.6.2.
++		for name := range pr.Out.Trailer {
++			pr.Out.Trailer[name] = nil
++		}
+ 		if !ShouldNotAppendXFF(pr.In.Context()) {
+ 			if clientIP, _, err := net.SplitHostPort(pr.In.RemoteAddr); err == nil {
+ 				// If we aren't the first proxy retain prior
+diff --git a/pkg/proxy/httputil/trailer_test.go b/pkg/proxy/httputil/trailer_test.go
+index aa2ba1f..f05e295 100644
+--- a/pkg/proxy/httputil/trailer_test.go
++++ b/pkg/proxy/httputil/trailer_test.go
+@@ -1,6 +1,7 @@
+ package httputil
+ 
+ import (
++	"bytes"
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+@@ -73,3 +74,78 @@ func TestRequestTrailersNotForwardedToBackend(t *testing.T) {
+ 
+ 	assert.Empty(t, backendTrailer.Get("X-Test-Trailer"))
+ }
++
++// TestRequestTrailerValuesNotForwardedWhenBodyBuffered ensures that request trailer values
++// are not forwarded to the backend when a middleware (e.g. retry, buffering) has already
++// consumed the request body, and thus populated the trailer values, before the proxy.
++func TestRequestTrailerValuesNotForwardedWhenBodyBuffered(t *testing.T) {
++	for _, h2 := range []bool{false, true} {
++		t.Run(map[bool]string{false: "http1", true: "h2"}[h2], func(t *testing.T) {
++			var backendTrailer http.Header
++
++			backend := httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
++				_, err := io.ReadAll(req.Body)
++				require.NoError(t, err)
++
++				backendTrailer = req.Trailer.Clone()
++
++				rw.WriteHeader(http.StatusOK)
++			}))
++			if h2 {
++				backend.EnableHTTP2 = true
++				backend.StartTLS()
++			} else {
++				backend.Start()
++			}
++			t.Cleanup(backend.Close)
++
++			transport := backend.Client().Transport
++			transportManager := &transportManagerMock{
++				roundTrippers: map[string]http.RoundTripper{"default": transport},
++			}
++
++			backendURL, err := url.Parse(backend.URL)
++			require.NoError(t, err)
++
++			p, err := NewProxyBuilder(transportManager, nil).Build("default", backendURL, true, false, 0)
++			require.NoError(t, err)
++
++			// Simulates a body-buffering middleware running before the proxy.
++			buffering := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
++				body, err := io.ReadAll(req.Body)
++				require.NoError(t, err)
++				require.Equal(t, "trailer-value", req.Trailer.Get("X-Test-Trailer"))
++
++				req.Body = io.NopCloser(bytes.NewReader(body))
++				req.ContentLength = int64(len(body))
++				p.ServeHTTP(rw, req)
++			})
++
++			proxy := httptest.NewServer(buffering)
++			t.Cleanup(proxy.Close)
++
++			pr, pw := io.Pipe()
++			req, err := http.NewRequest(http.MethodPost, proxy.URL, pr)
++			require.NoError(t, err)
++
++			req.Trailer = http.Header{"X-Test-Trailer": nil}
++
++			go func() {
++				_, _ = pw.Write([]byte("body data"))
++				req.Trailer.Set("X-Test-Trailer", "trailer-value")
++				_ = pw.Close()
++			}()
++
++			resp, err := http.DefaultClient.Do(req)
++			require.NoError(t, err)
++			t.Cleanup(func() { _ = resp.Body.Close() })
++
++			_, err = io.ReadAll(resp.Body)
++			require.NoError(t, err)
++			require.Equal(t, http.StatusOK, resp.StatusCode)
++
++			assert.Empty(t, backendTrailer.Get("X-Test-Trailer"))
++			assert.Empty(t, backendTrailer.Values("X-Test-Trailer"))
++		})
++	}
++}

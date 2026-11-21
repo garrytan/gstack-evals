@@ -1,0 +1,228 @@
+diff --git a/internal/web/events.go b/internal/web/events.go
+index 676b25c..7a60aa4 100644
+--- a/internal/web/events.go
++++ b/internal/web/events.go
+@@ -38,6 +38,32 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 
+ 	allContainers, errors := h.hostService.ListAllContainers(userLabels)
+ 
++	// When the caller is restricted by labels, keep track of the containers
++	// they are allowed to see so that stats and events for other containers
++	// are never forwarded.
++	filtering := userLabels.Exists()
++	visible := make(map[string]string) // container id -> host
++	setHostContainers := func(host string, containers []container.Container) {
++		for id, h := range visible {
++			if h == host {
++				delete(visible, id)
++			}
++		}
++		for _, c := range containers {
++			visible[c.ID] = c.Host
++		}
++	}
++	for _, c := range allContainers {
++		visible[c.ID] = c.Host
++	}
++	isVisible := func(id string) bool {
++		if !filtering {
++			return true
++		}
++		_, ok := visible[id]
++		return ok
++	}
++
+ 	for _, err := range errors {
+ 		log.Warn().Err(err).Msg("error listing containers")
+ 		if hostNotAvailableError, ok := err.(*docker_support.HostUnavailableError); ok {
+@@ -56,11 +82,23 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 	for {
+ 		select {
+ 		case host := <-availableHosts:
++			if filtering {
++				if host.Available {
++					if containers, err := h.hostService.ListContainersForHost(host.ID, userLabels); err == nil {
++						setHostContainers(host.ID, containers)
++					}
++				} else {
++					setHostContainers(host.ID, nil)
++				}
++			}
+ 			if err := sseWriter.Event("update-host", host); err != nil {
+ 				log.Error().Err(err).Msg("error writing event to event stream")
+ 				return
+ 			}
+ 		case stat := <-stats:
++			if !isVisible(stat.ID) {
++				continue
++			}
+ 			if err := sseWriter.Event("container-stat", stat); err != nil {
+ 				log.Error().Err(err).Msg("error writing event to event stream")
+ 				return
+@@ -70,11 +108,15 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 				return
+ 			}
+ 			log.Trace().Str("event", event.Name).Str("id", event.ActorID).Msg("container event from store")
++			if filtering && event.Name != "start" && event.Name != "rename" && !isVisible(event.ActorID) {
++				continue
++			}
+ 			switch event.Name {
+ 			case "start", "die", "destroy", "rename", "pause", "unpause":
+ 				if event.Name == "start" || event.Name == "rename" {
+ 					if containers, err := h.hostService.ListContainersForHost(event.Host, userLabels); err == nil {
+ 						log.Debug().Str("host", event.Host).Int("count", len(containers)).Msg("updating containers for host")
++						setHostContainers(event.Host, containers)
+ 						if err := sseWriter.Event("containers-changed", containers); err != nil {
+ 							log.Error().Err(err).Msg("error writing containers to event stream")
+ 							return
+@@ -82,11 +124,19 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 					}
+ 				}
+ 
++				if !isVisible(event.ActorID) {
++					continue
++				}
++
+ 				if err := sseWriter.Event("container-event", event); err != nil {
+ 					log.Error().Err(err).Msg("error writing event to event stream")
+ 					return
+ 				}
+ 
++				if event.Name == "destroy" {
++					delete(visible, event.ActorID)
++				}
++
+ 			case "update":
+ 				if err := sseWriter.Event("container-updated", event.Container); err != nil {
+ 					log.Error().Err(err).Msg("error writing event to event stream")
+diff --git a/internal/web/events_filter_test.go b/internal/web/events_filter_test.go
+new file mode 100644
+index 0000000..a376f3c
+--- /dev/null
++++ b/internal/web/events_filter_test.go
+@@ -0,0 +1,125 @@
++package web
++
++import (
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/amir20/dozzle/internal/auth"
++	"github.com/amir20/dozzle/internal/container"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++// filteringHostService is a fake HostService that honours label filters for
++// listing (like the real implementation) but emits stats/events for every
++// container on the host, regardless of labels.
++type filteringHostService struct {
++	HostService
++	all    []container.Container
++	events []container.ContainerEvent
++	stats  []container.ContainerStat
++	cancel context.CancelFunc
++}
++
++func matches(c container.Container, labels container.ContainerLabels) bool {
++	for k, values := range labels {
++		if k != "label" {
++			continue
++		}
++		for _, v := range values {
++			parts := strings.SplitN(v, "=", 2)
++			got, ok := c.Labels[parts[0]]
++			if !ok || (len(parts) == 2 && got != parts[1]) {
++				return false
++			}
++		}
++	}
++	return true
++}
++
++func (f *filteringHostService) filtered(labels container.ContainerLabels) []container.Container {
++	out := []container.Container{}
++	for _, c := range f.all {
++		if matches(c, labels) {
++			out = append(out, c)
++		}
++	}
++	return out
++}
++
++func (f *filteringHostService) ListAllContainers(labels container.ContainerLabels) ([]container.Container, []error) {
++	return f.filtered(labels), nil
++}
++
++func (f *filteringHostService) ListContainersForHost(host string, labels container.ContainerLabels) ([]container.Container, error) {
++	return f.filtered(labels), nil
++}
++
++func (f *filteringHostService) SubscribeAvailableHosts(ctx context.Context, hosts chan<- container.Host) {
++}
++
++func (f *filteringHostService) SubscribeEventsAndStats(ctx context.Context, events chan<- container.ContainerEvent, stats chan<- container.ContainerStat) {
++	go func() {
++		time.Sleep(20 * time.Millisecond)
++		for _, s := range f.stats {
++			stats <- s
++		}
++		for _, e := range f.events {
++			events <- e
++		}
++		time.Sleep(50 * time.Millisecond)
++		f.cancel()
++	}()
++}
++
++func Test_handler_streamEvents_respects_user_filter(t *testing.T) {
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++
++	visible := container.Container{ID: "visible00001", Name: "dz_visible", Host: "localhost", Labels: map[string]string{"visible": "yes"}}
++	secret := container.Container{ID: "secret000001", Name: "dz_secret", Host: "localhost", Labels: map[string]string{"secretproject": "acme-payroll"}}
++
++	hs := &filteringHostService{
++		all:    []container.Container{visible, secret},
++		cancel: cancel,
++		stats: []container.ContainerStat{
++			{ID: secret.ID, CPUPercent: 42},
++			{ID: visible.ID, CPUPercent: 7},
++		},
++	}
++	for _, c := range []container.Container{secret, visible} {
++		attrs := map[string]string{"name": c.Name}
++		for k, v := range c.Labels {
++			attrs[k] = v
++		}
++		hs.events = append(hs.events,
++			container.ContainerEvent{Name: "die", Host: "localhost", ActorID: c.ID, ActorAttributes: attrs},
++			container.ContainerEvent{Name: "start", Host: "localhost", ActorID: c.ID, ActorAttributes: attrs},
++			container.ContainerEvent{Name: "update", Host: "localhost", ActorID: c.ID, Container: &c},
++			container.ContainerEvent{Name: "health_status: healthy", Host: "localhost", ActorID: c.ID},
++		)
++	}
++
++	server := CreateServer(hs, nil, Config{Base: "/", NoAnalytics: true, Authorization: Authorization{
++		Provider:   FORWARD_PROXY,
++		Authorizer: auth.NewForwardProxyAuth("Remote-User", "Remote-Email", "Remote-Name", "Remote-Filter", "Remote-Roles"),
++	}})
++
++	req, err := http.NewRequestWithContext(ctx, "GET", "/api/events/stream", nil)
++	require.NoError(t, err)
++	req.Header.Set("Remote-User", "guest")
++	req.Header.Set("Remote-Filter", "label=visible=yes")
++	rr := httptest.NewRecorder()
++	server.Handler.ServeHTTP(rr, req)
++
++	body := rr.Body.String()
++	assert.Contains(t, body, visible.ID, "visible container should be streamed")
++	assert.Contains(t, body, `"cpu":7`, "visible container stats should be streamed")
++	assert.NotContains(t, body, secret.ID, "secret container must not leak via any channel")
++	assert.NotContains(t, body, "acme-payroll", "secret labels must not leak")
++	assert.NotContains(t, body, `"cpu":42`, "secret stats must not leak")
++}

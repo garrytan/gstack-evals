@@ -11,8 +11,8 @@
 // opened its slot and left no summary, halts with E_H2H_FINALIZE_HALT (the latter after POST /stop on the driver); a cap
 // stop writes its record and ends the part with CAP_STOP.
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { BOUNDS } from "../../pfchecks/run.ts";
 import { sessionManifest, type SessionImage } from "../../statemachines/image.ts";
@@ -20,10 +20,11 @@ import { HARBOR_MODEL } from "../../statemachines/run.ts";
 import { h2hFail, readPrereg, type H2hPrereg } from "../prereg.ts";
 import { BROWSER, type ArmInstall, type H2hSession, type H2hUnit } from "../types.ts";
 import { h2hLimits, H2H_PREFIX } from "./driver.ts";
-import { exposure, readAudit, readEvents } from "./exposure.ts";
+import { exposure, planningDirs, readAudit, readEvents } from "./exposure.ts";
 import { checkArmHome, type ArmHome } from "./home.ts";
+import { readMarkers } from "./markers.ts";
 import type { H2hPlanned } from "./plan.ts";
-import { attemptUsage, endOf, retries, retryCovered, SESSION_RERUN, sessionRecord, writeSessionRecord, type AttemptUsage, type H2hSessionRecord } from "./session.ts";
+import { attemptUsage, endOf, retries, retryCovered, SESSION_RERUN, sessionRecord, withRefusalFallback, writeSessionRecord, type AttemptUsage, type H2hSessionRecord } from "./session.ts";
 import { turnPlan } from "./turns.ts";
 import { buildRuntimeVolume, runtimePath, RUNTIMES_DIR } from "./runtimes.ts";
 
@@ -31,8 +32,9 @@ const ROOT = join(import.meta.dir, "../../../..");
 /** The Claude Code binary every session mounts: the pinned 2.1.325 native build (part A installs the same version). */
 export const H2H_CLAUDE = process.env.H2H_CLAUDE_BIN ?? join(homedir(), ".capy/work/h2h-s/claude/claude-2.1.325/package/claude");
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
-/** Claude Code's environment in every arm: pfchecks' fixed block and prereg.json's env. */
-export const claudeEnv = (p: H2hPrereg = readPrereg()): Record<string, string> => ({ CLAUDE_CONFIG_DIR: "/root/.claude", HOME: "/root", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000", DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1", IS_SANDBOX: "1", ...p.env });
+/** Claude Code's environment in every arm: pfchecks' fixed block, the todo tools Claude Code withholds from Opus 5.5 by
+ *  default (DEVIATIONS.md, 2026-11-16) and prereg.json's env. */
+export const claudeEnv = (p: H2hPrereg = readPrereg()): Record<string, string> => ({ CLAUDE_CONFIG_DIR: "/root/.claude", HOME: "/root", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000", DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1", IS_SANDBOX: "1", CLAUDE_CODE_ENABLE_TODO_TOOLS: "1", ...p.env });
 /** _drive's quiet rule, as pfchecks runs it. */
 export const QUIET = { quiet_sec: 30, bg_wait_sec: 600 } as const;
 export const SUMMARY = "h2h-summary.json";
@@ -167,15 +169,34 @@ export async function haltCheck(i: H2hRunInput, attempt: 1 | 2, summary: Record<
   h2hFail("E_H2H_FINALIZE_HALT", label + ": the attempt wrote an open line (" + join(ev!, OPENS) + ") and left no summary, so its slot may have spent; the session halts with no retry and no record, and " + (stop ? "POST " + i.control + "/stop failed (" + stop + "): stop the driver by hand; " : "the driver was stopped through POST /stop; ") + dir);
 }
 
-/** Exposure and the read audit from an attempt's transcripts and the paths its tree.tar holds. */
-export function readExposure(i: Pick<H2hRunInput, "session" | "installs">, dir: string): H2hSession["exposure"] {
+/** Exposure and the read audit from an attempt's transcripts and the paths its tree.tar holds. A GSD planning path that
+ *  the unit's base commit (image.head) already tracks is left out of those paths, read by git ls-tree from the tar's own
+ *  .git, so a repository that commits .planning/quick or .planning/debug never reads as GSD's procedure; the session's own
+ *  writes into such a file still count. With no planning path in the tree, git never runs. */
+export function readExposure(i: Pick<H2hRunInput, "session" | "installs" | "unit">, dir: string): H2hSession["exposure"] {
   const files = ["sdk-messages.jsonl", "claude-session.jsonl"].map((f) => join(dir, f)).filter(existsSync);
   if (!files.length) return null;
   const evs = readEvents(files);
   const tar = join(dir, "tree.tar");
   const listed = existsSync(tar) ? spawnSync("tar", ["-tf", tar, "--exclude=.git"], { encoding: "utf8", maxBuffer: 64 << 20 }) : null;
   if (listed && listed.status !== 0) h2hFail("E_H2H_EXPOSURE", tar + " does not list (" + (listed.error?.message ?? "tar exit " + listed.status) + "): " + String(listed.stderr ?? "").trim().slice(0, 500) + "; the session's exposure can't be read, so the session halts with no record and is never read as not exercised");
-  const e = exposure(i.session.arm, i.session.entry, evs, { files: listed ? listed.stdout.split("\n").filter(Boolean) : [] });
+  const paths = listed ? listed.stdout.split("\n").filter(Boolean) : [];
+  const m = readMarkers();
+  const dirs = planningDirs(m);
+  const planning = paths.filter((p) => dirs.some((d) => p.includes(d)));
+  const based = new Set<string>();
+  if (planning.length) {
+    const tmp = mkdtempSync(join(tmpdir(), "h2h-base-"));
+    try {
+      const x = spawnSync("tar", ["-xf", tar, "-C", tmp, "--no-same-owner", ".git"], { encoding: "utf8" });
+      const t = x.status === 0 ? spawnSync("git", ["--git-dir", join(tmp, ".git"), "--literal-pathspecs", "ls-tree", "-r", "-z", "--name-only", "--full-tree", i.unit.image.head, "--", ...planning], { cwd: tmp, encoding: "utf8", maxBuffer: 64 << 20 }) : x;
+      if (t.status !== 0) h2hFail("E_H2H_EXPOSURE", tar + " holds " + planning.length + " GSD planning path(s), and its .git can't list base " + i.unit.image.head + "'s tree (" + (t === x ? "tar " : "git ") + (t.error?.message ?? "exit " + t.status) + ": " + String(t.stderr ?? "").trim().slice(0, 300) + "), so a planning file the base already tracks can't be told from one the session added; the session halts with no record and is never read as not exercised");
+      for (const p of t.stdout.split("\0")) if (p) based.add(p);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+  const e = exposure(i.session.arm, i.session.entry, evs, { markers: m, files: paths.filter((p) => !based.has(p)) });
   return { ...e, foreign_reads: i.installs ? readAudit(evs, i.installs, i.session.arm).foreign_reads : [] };
 }
 
@@ -199,7 +220,7 @@ export async function runH2hSession(i: H2hRunInput): Promise<{ record: H2hSessio
     const { argv, env, config } = runCopy({ ...i, runtime }, attempt, dir, p);
     const { exit, killed } = await harbor(i.harbor ?? "harbor", argv, env, h2hBudget(config.limits.wall_sec, config.turns.length + config.continuation_cap).timer_ms, join(dir, "harbor.log"));
     const ev = find(join(dir, "jobs"), "evaluator");
-    const summary = ev && existsSync(join(ev, SUMMARY)) ? (JSON.parse(readFileSync(join(ev, SUMMARY), "utf8")) as Record<string, any>) : null;
+    const summary = ev && existsSync(join(ev, SUMMARY)) ? withRefusalFallback(JSON.parse(readFileSync(join(ev, SUMMARY), "utf8")) as Record<string, any>, join(ev, "sdk-messages.jsonl")) : null;
     if (!summary) writeFileSync(join(dir, "attempt.json"), JSON.stringify({ harbor_exit: exit, killed }) + "\n");
     await haltCheck(i, attempt, summary, ev, dir);
     if (typeof summary?.refused === "string" && summary.refused.startsWith("E_H2H_SESSION_ARM")) h2hFail("E_H2H_SESSION_ARM", summary.refused.slice("E_H2H_SESSION_ARM ".length) + "; " + dir);

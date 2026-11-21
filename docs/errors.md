@@ -340,6 +340,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_H2H_B_BROWSER](#e_h2h_b_browser) | 2 | U20 |
 | [E_H2H_B_LABEL](#e_h2h_b_label) | 2 | U20 |
 | [E_H2H_B_INFEASIBLE](#e_h2h_b_infeasible) | 2 | U20 |
+| [E_H2H_LABEL_INPUT](#e_h2h_label_input) | 2 | U20 |
 | [E_H2H_O_SOURCE](#e_h2h_o_source) | 2 | U20 |
 | [E_H2H_O_LICENCE](#e_h2h_o_licence) | 2 | U20 |
 | [E_H2H_O_EXCLUDED](#e_h2h_o_excluded) | 2 | U20 |
@@ -394,6 +395,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_EP_DRYRUN_FAIL](#e_ep_dryrun_fail) | 2 | U20 |
 | [E_DAYONE_OWNER](#e_dayone_owner) | 2 | U20 |
 | [E_DAYONE_APP](#e_dayone_app) | 2 | U20 |
+| [E_DAYONE_BACKGROUND](#e_dayone_background) | 2 | U20 |
 | [E_DAYONE_GAP](#e_dayone_gap) | 2 | U20 |
 | [E_DAYONE_LEAK](#e_dayone_leak) | 2 | U20 |
 | [E_DAYONE_CONTAMINATED](#e_dayone_contaminated) | 2 | U20 |
@@ -931,9 +933,9 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_INTERACTIVE_HOST
 
-No longer raised. It named a task declared interactive sent to --host codex while the Codex adapter ran non-interactive tasks only; the adapter now answers a Codex session's questions, so --host codex runs every task. The code stays so older run records still read.
+A task declared interactive was sent to --host codex with a model the pinned Codex offers no request_user_input_async. Codex answers its own request_user_input itself, so that model's questions would never reach the user simulator.
 
-Fix: Nothing to fix now: start a new run on --host codex. Do not --resume.
+Fix: Use --host claude, a Codex model in the adapter's ASYNC_QUESTION_MODELS list, or --tasks-only the non-interactive tasks. Do not --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U7.
 
@@ -2673,6 +2675,14 @@ Fix: None: this is the frozen outcome. Report it as the Infeasible row state.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
+### E_H2H_LABEL_INPUT
+
+h2h label-send refused its units before anything was opened: the --units file is missing or lists no unit dir, a dir is not a B1 unit (source h2h-b1), a unit id can't name a file, a unit is listed twice, or a unit's label packet differs from the packet one of its calls was sent, so its two answers would not read one packet.
+
+Fix: Fix the units file. A unit whose packet changed after a call was sent goes back to the dir that call read, or leaves --units; its sent call is never sent again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
 ### E_H2H_O_SOURCE
 
 The head-to-head's O frame could not read its source: SWE-bench-Live MultiLang's Hugging Face head is not the revision the state machines harness pins (eb09c2e5), the revision read failed, or a frozen input file (o-licences.json, the digest pins) is missing or malformed.
@@ -3064,6 +3074,14 @@ Day-one eval (section 6): the browser container or the node volume could not be 
 Fix: Read the line's docker output, fix the host, and run the stage again with --resume.
 
 Exit 2. Side effects: No spend: the checker's session has not started. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_BACKGROUND
+
+Day-one eval (pin change 2, item B): a planning session held open for background work it started (a background Bash or Agent task, or a pending ScheduleWakeup) reached its time limit with that work still running, so its cell is a recorded gap with that cause and no retry. Every arm's planning sessions hold the same way, at most the stage's minutes; builds and checks do not hold.
+
+Fix: Nothing to retry: report the gap beside the arm's result. The session's host/cli-stderr.log names the work still out.
+
+Exit 2. Side effects: The session's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
 
 ### E_DAYONE_GAP
 

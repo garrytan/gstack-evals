@@ -1,0 +1,219 @@
+diff --git a/caddyconfig/httpcaddyfile/tlsapp.go b/caddyconfig/httpcaddyfile/tlsapp.go
+index ddec0b9..a6ae42a 100644
+--- a/caddyconfig/httpcaddyfile/tlsapp.go
++++ b/caddyconfig/httpcaddyfile/tlsapp.go
+@@ -484,7 +484,7 @@ func (st ServerType) buildTLSApp(
+ 		}
+ 
+ 		// consolidate automation policies that are the exact same
+-		tlsApp.Automation.Policies = consolidateAutomationPolicies(tlsApp.Automation.Policies)
++		tlsApp.Automation.Policies = consolidateAutomationPolicies(tlsApp.Automation.Policies, forcedAutomatedNames)
+ 
+ 		// ensure automation policies don't overlap subjects (this should be
+ 		// an error at provision-time as well, but catch it in the adapt phase
+@@ -683,7 +683,7 @@ func newBaseAutomationPolicy(
+ 
+ // consolidateAutomationPolicies combines automation policies that are the same,
+ // for a cleaner overall output.
+-func consolidateAutomationPolicies(aps []*caddytls.AutomationPolicy) []*caddytls.AutomationPolicy {
++func consolidateAutomationPolicies(aps []*caddytls.AutomationPolicy, forcedAutomatedNames map[string]struct{}) []*caddytls.AutomationPolicy {
+ 	// sort from most specific to least specific; we depend on this ordering
+ 	sort.SliceStable(aps, func(i, j int) bool {
+ 		if automationPolicyIsSubset(aps[i], aps[j]) {
+@@ -698,10 +698,8 @@ func consolidateAutomationPolicies(aps []*caddytls.AutomationPolicy) []*caddytls
+ 	emptyAPCount := 0
+ 	origLenAPs := len(aps)
+ 	// compute the number of empty policies (disregarding subjects) - see #4128
+-	emptyAP := new(caddytls.AutomationPolicy)
+ 	for i := 0; i < len(aps); i++ {
+-		emptyAP.SubjectsRaw = aps[i].SubjectsRaw
+-		if reflect.DeepEqual(aps[i], emptyAP) {
++		if automationPolicyIsEmpty(aps[i]) {
+ 			emptyAPCount++
+ 			if !automationPolicyHasAllPublicNames(aps[i]) {
+ 				// if this automation policy has internal names, we might as well remove it
+@@ -716,6 +714,23 @@ func consolidateAutomationPolicies(aps []*caddytls.AutomationPolicy) []*caddytls
+ 		return nil
+ 	}
+ 
++	// an empty policy for names covered by a wildcard policy would be chosen at
++	// handshake-time instead of the wildcard's, hiding its settings such as
++	// get_certificate managers; those names are not managed individually (unless
++	// forced), so the wildcard's policy is the one that should apply to them
++	for i := len(aps) - 1; i >= 0; i-- {
++		if !automationPolicyIsEmpty(aps[i]) || slices.ContainsFunc(aps[i].SubjectsRaw, func(s string) bool {
++			_, forced := forcedAutomatedNames[s]
++			return forced
++		}) {
++			continue
++		}
++		j := automationPolicyShadows(i, aps)
++		if j >= 0 && len(aps[j].SubjectsRaw) > 0 && !automationPolicyIsEmpty(aps[j]) {
++			aps = slices.Delete(aps, i, i+1)
++		}
++	}
++
+ 	// remove or combine duplicate policies
+ outer:
+ 	for i := 0; i < len(aps); i++ {
+@@ -774,6 +789,11 @@ outer:
+ 	return aps
+ }
+ 
++// automationPolicyIsEmpty returns true if ap sets nothing but subjects.
++func automationPolicyIsEmpty(ap *caddytls.AutomationPolicy) bool {
++	return reflect.DeepEqual(ap, &caddytls.AutomationPolicy{SubjectsRaw: ap.SubjectsRaw})
++}
++
+ // automationPolicyIsSubset returns true if a's subjects are a subset
+ // of b's subjects.
+ func automationPolicyIsSubset(a, b *caddytls.AutomationPolicy) bool {
+diff --git a/caddytest/integration/caddyfile_adapt/tls_automation_wildcard_get_certificate.caddyfiletest b/caddytest/integration/caddyfile_adapt/tls_automation_wildcard_get_certificate.caddyfiletest
+new file mode 100644
+index 0000000..6812dfe
+--- /dev/null
++++ b/caddytest/integration/caddyfile_adapt/tls_automation_wildcard_get_certificate.caddyfiletest
+@@ -0,0 +1,143 @@
++*.example.com {
++	tls {
++		get_certificate http http://localhost:9000/certs
++	}
++	abort
++}
++
++wiki.example.com {
++	respond "Wiki!"
++}
++
++forced.example.com {
++	tls force_automate
++	respond "Forced!"
++}
++----------
++{
++	"apps": {
++		"http": {
++			"servers": {
++				"srv0": {
++					"listen": [
++						":443"
++					],
++					"routes": [
++						{
++							"match": [
++								{
++									"host": [
++										"forced.example.com"
++									]
++								}
++							],
++							"handle": [
++								{
++									"handler": "subroute",
++									"routes": [
++										{
++											"handle": [
++												{
++													"body": "Forced!",
++													"handler": "static_response"
++												}
++											]
++										}
++									]
++								}
++							],
++							"terminal": true
++						},
++						{
++							"match": [
++								{
++									"host": [
++										"wiki.example.com"
++									]
++								}
++							],
++							"handle": [
++								{
++									"handler": "subroute",
++									"routes": [
++										{
++											"handle": [
++												{
++													"body": "Wiki!",
++													"handler": "static_response"
++												}
++											]
++										}
++									]
++								}
++							],
++							"terminal": true
++						},
++						{
++							"match": [
++								{
++									"host": [
++										"*.example.com"
++									]
++								}
++							],
++							"handle": [
++								{
++									"handler": "subroute",
++									"routes": [
++										{
++											"handle": [
++												{
++													"abort": true,
++													"handler": "static_response"
++												}
++											]
++										}
++									]
++								}
++							],
++							"terminal": true
++						}
++					],
++					"tls_connection_policies": [
++						{
++							"match": {
++								"sni": [
++									"forced.example.com"
++								]
++							}
++						},
++						{}
++					]
++				}
++			}
++		},
++		"tls": {
++			"certificates": {
++				"automate": [
++					"forced.example.com"
++				]
++			},
++			"automation": {
++				"policies": [
++					{
++						"subjects": [
++							"forced.example.com"
++						]
++					},
++					{
++						"subjects": [
++							"*.example.com"
++						],
++						"get_certificate": [
++							{
++								"url": "http://localhost:9000/certs",
++								"via": "http"
++							}
++						]
++					}
++				]
++			}
++		}
++	}
++}

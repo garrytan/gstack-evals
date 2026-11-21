@@ -1,0 +1,22 @@
+diff --git a/libcaf_net/caf/net/abstract_actor_shell.cpp b/libcaf_net/caf/net/abstract_actor_shell.cpp
+index 22cbf81..3ea6543 100644
+--- a/libcaf_net/caf/net/abstract_actor_shell.cpp
++++ b/libcaf_net/caf/net/abstract_actor_shell.cpp
+@@ -27,6 +27,8 @@ abstract_actor_shell::abstract_actor_shell(actor_config& cfg,
+   mailbox_.try_block();
+   resume_ = make_action([this] {
+     for (;;) {
++      if (mailbox_.closed())
++        return;
+       if (!consume_message() && try_block_mailbox())
+         return;
+     }
+@@ -52,7 +54,7 @@ void abstract_actor_shell::quit(error reason) {
+ // -- mailbox access -----------------------------------------------------------
+ 
+ mailbox_element_ptr abstract_actor_shell::next_message() {
+-  if (!mailbox_.blocked())
++  if (!mailbox_.closed() && !mailbox_.blocked())
+     return mailbox_.pop_front();
+   return nullptr;
+ }

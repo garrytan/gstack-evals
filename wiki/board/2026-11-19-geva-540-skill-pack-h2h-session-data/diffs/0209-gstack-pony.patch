@@ -1,0 +1,134 @@
+diff --git a/src/Riok.Mapperly/Descriptors/MappingBuilders/UseNamedMappingBuilder.cs b/src/Riok.Mapperly/Descriptors/MappingBuilders/UseNamedMappingBuilder.cs
+index a873a56..ec85a41 100644
+--- a/src/Riok.Mapperly/Descriptors/MappingBuilders/UseNamedMappingBuilder.cs
++++ b/src/Riok.Mapperly/Descriptors/MappingBuilders/UseNamedMappingBuilder.cs
+@@ -1,6 +1,7 @@
+ using Microsoft.CodeAnalysis;
+ using Riok.Mapperly.Descriptors.Mappings;
+ using Riok.Mapperly.Descriptors.Mappings.ExistingTarget;
++using Riok.Mapperly.Descriptors.Mappings.UserMappings;
+ using Riok.Mapperly.Diagnostics;
+ using Riok.Mapperly.Helpers;
+ 
+@@ -20,6 +21,16 @@ public static class UseNamedMappingBuilder
+             return null;
+         }
+ 
++        if (mapping is GenericUserImplementedNewInstanceMethodMapping genericMapping)
++        {
++            mapping = genericMapping.TryCreateConcreteMapping(ctx.GenericTypeChecker, ctx.Source, ctx.Target);
++            if (mapping == null)
++            {
++                ctx.ReportDiagnostic(DiagnosticDescriptors.CouldNotCreateMapping, ctx.Source, ctx.Target);
++                return null;
++            }
++        }
++
+         if (!ctx.ParameterScope.TryUseParameters(mapping))
+         {
+             ctx.ReportDiagnostic(DiagnosticDescriptors.NamedMappingParametersUnsatisfied, ctx.MappingKey.Configuration.UseNamedMapping);
+@@ -52,6 +63,13 @@ public static class UseNamedMappingBuilder
+ 
+         var useNamedMapping = ctx.MappingKey.Configuration.UseNamedMapping;
+         var existingTargetMapping = ctx.FindExistingTargetNamedMapping(useNamedMapping);
++        if (existingTargetMapping is GenericUserImplementedExistingTargetMethodMapping genericMapping)
++        {
++            existingTargetMapping = genericMapping.TryCreateConcreteMapping(ctx.GenericTypeChecker, ctx.Source, ctx.Target);
++            if (existingTargetMapping is null)
++                ctx.ReportDiagnostic(DiagnosticDescriptors.CouldNotCreateMapping, ctx.Source, ctx.Target);
++        }
++
+         if (existingTargetMapping is null)
+             return null;
+ 
+diff --git a/src/Riok.Mapperly/Descriptors/MappingCollection.cs b/src/Riok.Mapperly/Descriptors/MappingCollection.cs
+index 3f0feea..9a836b0 100644
+--- a/src/Riok.Mapperly/Descriptors/MappingCollection.cs
++++ b/src/Riok.Mapperly/Descriptors/MappingCollection.cs
+@@ -184,7 +184,8 @@ public class MappingCollection(GenericTypeChecker genericTypeChecker)
+ 
+     private INewInstanceMapping? TryMatchGenericNewInstanceTemplate(TypeMappingKey mappingKey)
+     {
+-        if (_genericNewInstanceTemplates.Count == 0)
++        // a key referencing a named mapping must only be resolved by that name, not by a generic template
++        if (_genericNewInstanceTemplates.Count == 0 || mappingKey.Configuration.UseNamedMapping != null)
+             return null;
+ 
+         foreach (var template in _genericNewInstanceTemplates)
+@@ -202,7 +203,8 @@ public class MappingCollection(GenericTypeChecker genericTypeChecker)
+ 
+     private IExistingTargetMapping? TryMatchGenericExistingTargetTemplate(TypeMappingKey mappingKey)
+     {
+-        if (_genericExistingTargetTemplates.Count == 0)
++        // a key referencing a named mapping must only be resolved by that name, not by a generic template
++        if (_genericExistingTargetTemplates.Count == 0 || mappingKey.Configuration.UseNamedMapping != null)
+             return null;
+ 
+         foreach (var template in _genericExistingTargetTemplates)
+diff --git a/test/Riok.Mapperly.Tests/Mapping/UserMethodTest.cs b/test/Riok.Mapperly.Tests/Mapping/UserMethodTest.cs
+index 26c4343..2d4016f 100644
+--- a/test/Riok.Mapperly.Tests/Mapping/UserMethodTest.cs
++++ b/test/Riok.Mapperly.Tests/Mapping/UserMethodTest.cs
+@@ -867,6 +867,62 @@ public class UserMethodTest
+             );
+     }
+ 
++    [Fact]
++    public void WithGenericAndNonGenericUserImplementedUsedByName()
++    {
++        var source = TestSourceBuilder.MapperWithBodyAndTypes(
++            """
++            [MapProperty("NullableStr", "NullableStr", Use = nameof(TrimToNull))]
++            [MapProperty("Str", "Str", Use = nameof(Trim))]
++            [MapProperty("Value", "Value", Use = nameof(Identity))]
++            partial B Map(A source);
++
++            private string? TrimToNull(string? input) => input;
++            private string Trim(string input) => input.Trim();
++            private T Identity<T>(T input) => input;
++            """,
++            "public class A { public string? NullableStr { get; set; } public string Str { get; set; } public int Value { get; set; } }",
++            "public class B { public string? NullableStr { get; set; } public string Str { get; set; } public int Value { get; set; } }"
++        );
++        TestHelper
++            .GenerateMapper(source)
++            .Should()
++            .HaveMapMethodBody(
++                """
++                var target = new global::B();
++                target.NullableStr = TrimToNull(source.NullableStr);
++                target.Str = Trim(source.Str);
++                target.Value = Identity<int>(source.Value);
++                return target;
++                """
++            );
++    }
++
++    [Fact]
++    public void WithGenericAndNonGenericExternalUserImplementedUsedByNameForExistingTarget()
++    {
++        var source = TestSourceBuilder.MapperWithBodyAndTypes(
++            """
++            [MapProperty("Str", "Str", Use = nameof(@OtherMapper.Trim))]
++            [MapProperty("Value", "Value", Use = nameof(@OtherMapper.Identity))]
++            partial void Update(A source, [MappingTarget] B target);
++            """,
++            "public static class OtherMapper { public static string Trim(string input) => input.Trim(); public static T Identity<T>(T input) => input; }",
++            "public class A { public string Str { get; set; } public int Value { get; set; } }",
++            "public class B { public string Str { get; set; } public int Value { get; set; } }"
++        );
++        TestHelper
++            .GenerateMapper(source)
++            .Should()
++            .HaveMethodBody(
++                "Update",
++                """
++                target.Str = global::OtherMapper.Trim(source.Str);
++                target.Value = global::OtherMapper.Identity<int>(source.Value);
++                """
++            );
++    }
++
+     [Fact]
+     public Task WithGenericUserImplementedOptionalSample()
+     {

@@ -1,0 +1,86 @@
+diff --git a/src/framework/handlers/font.js b/src/framework/handlers/font.js
+index 3d74fde..0693e31 100644
+--- a/src/framework/handlers/font.js
++++ b/src/framework/handlers/font.js
+@@ -1,6 +1,8 @@
+ import { path } from '../../core/path.js';
+ import { string } from '../../core/string.js';
+ import { http } from '../../platform/net/http.js';
++import { Asset } from '../asset/asset.js';
++import { FONT_MSDF } from '../font/constants.js';
+ import { Font } from '../font/font.js';
+ import { ResourceHandler } from './handler.js';
+ 
+@@ -101,6 +103,20 @@ class FontHandler extends ResourceHandler {
+         const textures = new Array(numTextures);
+         const loader = this._loader;
+ 
++        // MSDF atlases must not be mipmapped: box-filtering the R/G/B channels corrupts the median
++        // the shader reconstructs, producing ghost artifacts on minified text. This has to be set at
++        // texture creation (WebGPU can't drop the mip chain later), so pass the creation options via
++        // a transient texture asset. Bitmap fonts keep the default mipmapped sampling.
++        const isMsdf = (data.type || FONT_MSDF) === FONT_MSDF;
++        const textureAsset = textureUrl => (isMsdf ? new Asset(textureUrl, 'texture', {
++            // filename is used as the original url, which also names (and cache-keys) the texture
++            url: textureUrl,
++            filename: textureUrl
++        }, {
++            mipmaps: false,
++            minfilter: 'linear'
++        }) : undefined);
++
+         const loadTexture = function (index) {
+             const onLoaded = function (err, texture) {
+                 if (error) return;
+@@ -119,11 +135,8 @@ class FontHandler extends ResourceHandler {
+                 }
+             };
+ 
+-            if (index === 0) {
+-                loader.load(url, 'texture', onLoaded);
+-            } else {
+-                loader.load(url.replace('.png', `${index}.png`), 'texture', onLoaded);
+-            }
++            const textureUrl = index === 0 ? url : url.replace('.png', `${index}.png`);
++            loader.load(textureUrl, 'texture', onLoaded, textureAsset(textureUrl));
+         };
+ 
+         for (let i = 0; i < numTextures; i++) {
+diff --git a/test/framework/handlers/font-handler.test.mjs b/test/framework/handlers/font-handler.test.mjs
+index d3fff34..c85f2b6 100644
+--- a/test/framework/handlers/font-handler.test.mjs
++++ b/test/framework/handlers/font-handler.test.mjs
+@@ -1,6 +1,7 @@
+ import { expect } from 'chai';
+ 
+ import { Asset } from '../../../src/framework/asset/asset.js';
++import { FILTER_LINEAR } from '../../../src/platform/graphics/constants.js';
+ import { createApp } from '../../app.mjs';
+ import { jsdomSetup, jsdomTeardown } from '../../jsdom.mjs';
+ 
+@@ -37,6 +38,25 @@ describe('FontHandler', function () {
+         asset.on('error', err => done(new Error(err)));
+     });
+ 
++    // MSDF atlases must be created without mipmaps - averaging the channels corrupts the median
++    it('creates msdf atlas textures without mipmaps', function (done) {
++        const asset = new Asset('arial', 'font', {
++            url: 'http://localhost:3210/test/assets/fonts/arial.json'
++        });
++
++        app.assets.add(asset);
++        app.assets.load(asset);
++
++        asset.ready(function () {
++            const texture = asset.resource.textures[0];
++            expect(texture.mipmaps).to.be.false;
++            expect(texture.minFilter).to.equal(FILTER_LINEAR);
++            done();
++        });
++
++        asset.on('error', err => done(new Error(err)));
++    });
++
+     // regression test for https://github.com/playcanvas/engine/issues/7033 - unloading a font
+     // asset must destroy its textures and remove them from the resource loader cache
+     it('destroys its textures and clears the loader cache on unload', function (done) {

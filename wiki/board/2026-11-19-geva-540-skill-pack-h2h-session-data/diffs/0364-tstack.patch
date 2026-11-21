@@ -1,0 +1,59 @@
+diff --git a/src/OrchardCore.Modules/OrchardCore.Markdown/Razor/ContentRazorHelperExtensions.cs b/src/OrchardCore.Modules/OrchardCore.Markdown/Razor/ContentRazorHelperExtensions.cs
+index a700bd1..79e2afa 100644
+--- a/src/OrchardCore.Modules/OrchardCore.Markdown/Razor/ContentRazorHelperExtensions.cs
++++ b/src/OrchardCore.Modules/OrchardCore.Markdown/Razor/ContentRazorHelperExtensions.cs
+@@ -40,7 +40,7 @@ public static class ContentRazorHelperExtensions
+         var html = markdownService.ToHtml(markdown ?? string.Empty);
+ 
+         // TODO: provide context argument (optional on this helper as with the liquid helper?).
+-        html = await shortcodeService.ProcessAsync(markdown);
++        html = await shortcodeService.ProcessAsync(html);
+ 
+         if (sanitize)
+         {
+diff --git a/test/OrchardCore.Tests/Modules/OrchardCore.Markdown/MarkdownTests.cs b/test/OrchardCore.Tests/Modules/OrchardCore.Markdown/MarkdownTests.cs
+index f5d86b3..22207ac 100644
+--- a/test/OrchardCore.Tests/Modules/OrchardCore.Markdown/MarkdownTests.cs
++++ b/test/OrchardCore.Tests/Modules/OrchardCore.Markdown/MarkdownTests.cs
+@@ -1,4 +1,5 @@
+ using OrchardCore.Markdown.Services;
++using OrchardCore.Shortcodes.Services;
+ 
+ namespace OrchardCore.Tests.Modules.OrchardCore.Markdown;
+ 
+@@ -45,4 +46,35 @@ public class MarkdownTests
+         html = html.ReplaceLineEndings(string.Empty);
+         Assert.Equal(@"<h1>foo</h1>", html);
+     }
++
++    [Fact]
++    public async Task MarkdownToHtmlAsyncShouldConvertMarkdown()
++    {
++        var services = new ServiceCollection();
++        services.AddOptions<MarkdownPipelineOptions>();
++        services.ConfigureMarkdownPipeline(pipeline => pipeline.UseEmphasisExtras());
++        services.AddScoped<IMarkdownService, DefaultMarkdownService>();
++        services.AddScoped<IShortcodeService>(_ => new ShortcodeService([], []));
++
++        var httpContext = new DefaultHttpContext
++        {
++            RequestServices = services.BuildServiceProvider(),
++        };
++
++        var orchardHelper = new TestOrchardHelper(httpContext);
++
++        var html = await orchardHelper.MarkdownToHtmlAsync("This _is_ a ==test== markdown.", sanitize: false);
++
++        Assert.Equal("<p>This <em>is</em> a <mark>test</mark> markdown.</p>", html.ToString().ReplaceLineEndings(string.Empty));
++    }
++
++    private sealed class TestOrchardHelper : IOrchardHelper
++    {
++        public TestOrchardHelper(HttpContext httpContext)
++        {
++            HttpContext = httpContext;
++        }
++
++        public HttpContext HttpContext { get; }
++    }
+ }

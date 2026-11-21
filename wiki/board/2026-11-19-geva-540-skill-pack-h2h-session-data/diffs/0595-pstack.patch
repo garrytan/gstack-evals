@@ -1,0 +1,165 @@
+diff --git a/.changeset/quick-ifs-wait.md b/.changeset/quick-ifs-wait.md
+new file mode 100644
+index 0000000..f612a43
+--- /dev/null
++++ b/.changeset/quick-ifs-wait.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: wait for destructured `{@const}` values in `{#if}` blocks with `{:else if}` branches
+diff --git a/packages/svelte/src/compiler/phases/3-transform/client/visitors/IfBlock.js b/packages/svelte/src/compiler/phases/3-transform/client/visitors/IfBlock.js
+index b0cd51c..9132a78 100644
+--- a/packages/svelte/src/compiler/phases/3-transform/client/visitors/IfBlock.js
++++ b/packages/svelte/src/compiler/phases/3-transform/client/visitors/IfBlock.js
+@@ -15,7 +15,11 @@ export function IfBlock(node, context) {
+ 	const statements = [];
+ 
+ 	const has_await = node.metadata.expression.has_await;
+-	const has_blockers = node.metadata.expression.has_blockers();
++	const branches = [node, ...(node.metadata.flattened ?? [])];
++	// flattened branches can depend on `{@const}` blockers unknown at analysis time
++	const blockers = new Set(
++		branches.flatMap((branch) => branch.metadata.expression.blockers().elements)
++	);
+ 	const expression = build_expression(context, node.test, node.metadata.expression);
+ 
+ 	// Build the if/else-if/else chain
+@@ -27,7 +31,7 @@ export function IfBlock(node, context) {
+ 	/** @type {AST.IfBlock | undefined} */
+ 	let last_alt;
+ 
+-	for (const branch of [node, ...(node.metadata.flattened ?? [])]) {
++	for (const branch of branches) {
+ 		const consequent = /** @type {BlockStatement} */ (context.visit(branch.consequent));
+ 		const consequent_id = b.id(context.state.scope.generate('consequent'));
+ 		statements.push(b.var(consequent_id, b.arrow([b.id('$$anchor')], consequent)));
+@@ -110,13 +114,13 @@ export function IfBlock(node, context) {
+ 
+ 	statements.push(add_svelte_meta(b.call('$.if', ...args), node, 'if'));
+ 
+-	if (has_await || has_blockers) {
++	if (has_await || blockers.size > 0) {
+ 		context.state.init.push(
+ 			b.stmt(
+ 				b.call(
+ 					'$.async',
+ 					context.state.node,
+-					node.metadata.expression.blockers(),
++					b.array([...blockers]),
+ 					has_await ? b.array([b.thunk(expression, true)]) : b.void0,
+ 					b.arrow(
+ 						has_await ? [context.state.node, b.id('$$condition')] : [context.state.node],
+diff --git a/packages/svelte/src/compiler/phases/nodes.js b/packages/svelte/src/compiler/phases/nodes.js
+index 2e54f33..6dd933d 100644
+--- a/packages/svelte/src/compiler/phases/nodes.js
++++ b/packages/svelte/src/compiler/phases/nodes.js
+@@ -95,19 +95,17 @@ export class ExpressionMetadata {
+ 	 */
+ 	references = new Set();
+ 
+-	/** @type {null | Set<Expression>} */
+-	#blockers = null;
+-
++	// not memoized: `{@const}` bindings only receive their blocker during transformation,
++	// after the analysis phase may already have read this
+ 	#get_blockers() {
+-		if (!this.#blockers) {
+-			this.#blockers = new Set();
++		/** @type {Set<Expression>} */
++		const blockers = new Set();
+ 
+-			for (const d of this.dependencies) {
+-				if (d.blocker) this.#blockers.add(d.blocker);
+-			}
++		for (const d of this.dependencies) {
++			if (d.blocker) blockers.add(d.blocker);
+ 		}
+ 
+-		return this.#blockers;
++		return blockers;
+ 	}
+ 
+ 	blockers() {
+@@ -122,8 +120,10 @@ export class ExpressionMetadata {
+ 	 * @param {ExpressionMetadata} other
+ 	 */
+ 	has_more_blockers_than(other) {
++		const others = other.#get_blockers();
++
+ 		for (const blocker of this.#get_blockers()) {
+-			if (!other.#get_blockers().has(blocker)) {
++			if (!others.has(blocker)) {
+ 				return true;
+ 			}
+ 		}
+@@ -144,7 +144,6 @@ export class ExpressionMetadata {
+ 		this.has_await ||= source.has_await;
+ 		this.has_member_expression ||= source.has_member_expression;
+ 		this.has_assignment ||= source.has_assignment;
+-		this.#blockers = null; // so that blockers are recalculated
+ 
+ 		for (const r of source.references) this.references.add(r);
+ 		for (const b of source.dependencies) this.dependencies.add(b);
+diff --git a/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if-blockers/_config.js b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if-blockers/_config.js
+new file mode 100644
+index 0000000..a6fc698
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if-blockers/_config.js
+@@ -0,0 +1,12 @@
++import { tick } from 'svelte';
++import { test } from '../../test';
++
++export default test({
++	mode: ['async-server', 'client', 'hydrate'],
++	ssrHtml: '<p>The Data: x</p> <p>flag</p> <p>late</p>',
++
++	async test({ assert, target }) {
++		await tick();
++		assert.htmlEqual(target.innerHTML, '<p>The Data: x</p> <p>flag</p> <p>late</p>');
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if-blockers/main.svelte b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if-blockers/main.svelte
+new file mode 100644
+index 0000000..9263e9d
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/async-const-destructure-if-blockers/main.svelte
+@@ -0,0 +1,37 @@
++<script>
++	let d = $derived(await Promise.resolve({ data: 'x', hasData: true }));
++	let showFetchCta = $derived(d.hasData);
++	let e = $derived(await Promise.resolve({ flag: true }));
++</script>
++
++{#if d}
++	{@const { data, hasData } = d}
++
++	{#if hasData}
++		<p>The Data: {data}</p>
++	{:else if showFetchCta}
++		<p>Fetch now</p>
++	{:else}
++		<p>No data</p>
++	{/if}
++{/if}
++
++{#if e}
++	{@const { flag } = e}
++
++	{#if !showFetchCta}
++		<p>no</p>
++	{:else if flag}
++		<p>flag</p>
++	{/if}
++{/if}
++
++{#if e}
++	{@const late = await Promise.resolve(true)}
++
++	{#if !showFetchCta}
++		<p>no</p>
++	{:else if late}
++		<p>late</p>
++	{/if}
++{/if}

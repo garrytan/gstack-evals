@@ -1,0 +1,13 @@
+diff --git a/mage/template.go b/mage/template.go
+index eb755be..8500f62 100644
+--- a/mage/template.go
++++ b/mage/template.go
+@@ -224,7 +224,7 @@ Options:
+ 	}
+ 
+ 	list := func() error {
+-		{{with .Description}}_fmt.Println(` + "`{{.}}\n`" + `)
++		{{with .Description}}_fmt.Println({{printf "%q" (printf "%s\n" .)}})
+ 		{{- end}}
+ 		{{- $default := .DefaultFunc}}
+ 		targets := map[string]string{

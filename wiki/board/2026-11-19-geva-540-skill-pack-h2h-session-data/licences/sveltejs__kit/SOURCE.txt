@@ -1,0 +1,3 @@
+https://github.com/sveltejs/kit at 2704b2c11220058108db15ee9d7db022a28406e7
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

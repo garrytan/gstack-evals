@@ -1,0 +1,115 @@
+diff --git a/src/framework/handlers/font.js b/src/framework/handlers/font.js
+index 3d74fde..9e94e77 100644
+--- a/src/framework/handlers/font.js
++++ b/src/framework/handlers/font.js
+@@ -1,6 +1,8 @@
+ import { path } from '../../core/path.js';
+ import { string } from '../../core/string.js';
+ import { http } from '../../platform/net/http.js';
++import { Asset } from '../asset/asset.js';
++import { FONT_MSDF } from '../font/constants.js';
+ import { Font } from '../font/font.js';
+ import { ResourceHandler } from './handler.js';
+ 
+@@ -101,6 +103,27 @@ class FontHandler extends ResourceHandler {
+         const textures = new Array(numTextures);
+         const loader = this._loader;
+ 
++        // MSDF atlases must not be mipmapped: box-filtering the R/G/B distance channels of each mip
++        // level corrupts the median (median(average) != average(median)), producing ghosting and
++        // flickering artifacts on minified text. The options have to be applied at texture
++        // creation (the mip chain can't be removed afterwards on WebGPU), so they are passed to the
++        // texture handler using a lightweight texture asset. Bitmap fonts keep their mipmaps.
++        const isMsdf = (data.type || FONT_MSDF) === FONT_MSDF;
++        const textureData = isMsdf ? { mipmaps: false, minfilter: 'linear' } : null;
++
++        const load = function (textureUrl, onLoaded) {
++            if (textureData) {
++                // asset name and filename match the url, so the texture name stays the cache key
++                const textureAsset = new Asset(textureUrl, 'texture', {
++                    url: textureUrl,
++                    filename: textureUrl
++                }, { ...textureData });
++                loader.load(textureUrl, 'texture', onLoaded, textureAsset);
++            } else {
++                loader.load(textureUrl, 'texture', onLoaded);
++            }
++        };
++
+         const loadTexture = function (index) {
+             const onLoaded = function (err, texture) {
+                 if (error) return;
+@@ -120,9 +143,9 @@ class FontHandler extends ResourceHandler {
+             };
+ 
+             if (index === 0) {
+-                loader.load(url, 'texture', onLoaded);
++                load(url, onLoaded);
+             } else {
+-                loader.load(url.replace('.png', `${index}.png`), 'texture', onLoaded);
++                load(url.replace('.png', `${index}.png`), onLoaded);
+             }
+         };
+ 
+diff --git a/test/framework/handlers/font-handler.test.mjs b/test/framework/handlers/font-handler.test.mjs
+index d3fff34..df49365 100644
+--- a/test/framework/handlers/font-handler.test.mjs
++++ b/test/framework/handlers/font-handler.test.mjs
+@@ -1,6 +1,7 @@
+ import { expect } from 'chai';
+ 
+ import { Asset } from '../../../src/framework/asset/asset.js';
++import { FILTER_LINEAR, FILTER_LINEAR_MIPMAP_LINEAR } from '../../../src/platform/graphics/constants.js';
+ import { createApp } from '../../app.mjs';
+ import { jsdomSetup, jsdomTeardown } from '../../jsdom.mjs';
+ 
+@@ -72,4 +73,49 @@ describe('FontHandler', function () {
+         asset.on('error', err => done(new Error(err)));
+     });
+ 
++    // MSDF atlases must be created without mipmaps - averaging the distance channels per mip level
++    // corrupts the median and produces artifacts on minified text
++    it('creates msdf font textures without mipmaps', function (done) {
++        const asset = new Asset('arial', 'font', {
++            url: 'http://localhost:3210/test/assets/fonts/arial.json'
++        });
++
++        app.assets.add(asset);
++        app.assets.load(asset);
++
++        asset.ready(function () {
++            const texture = asset.resource.textures[0];
++            expect(texture.mipmaps).to.equal(false);
++            expect(texture.minFilter).to.equal(FILTER_LINEAR);
++            // texture name must remain the loader cache key
++            expect(app.loader.getFromCache(texture.name, 'texture')).to.equal(texture);
++            done();
++        });
++
++        asset.on('error', err => done(new Error(err)));
++    });
++
++    it('keeps mipmaps for bitmap font textures', function (done) {
++        const asset = new Asset('arial', 'font', {
++            url: 'http://localhost:3210/test/assets/fonts/arial.png'
++        }, {
++            version: 3,
++            type: 'bitmap',
++            info: { face: 'arial', maps: [{ width: 1024, height: 512 }] },
++            chars: {}
++        });
++
++        app.assets.add(asset);
++        app.assets.load(asset);
++
++        asset.ready(function () {
++            const texture = asset.resource.textures[0];
++            expect(texture.mipmaps).to.equal(true);
++            expect(texture.minFilter).to.equal(FILTER_LINEAR_MIPMAP_LINEAR);
++            done();
++        });
++
++        asset.on('error', err => done(new Error(err)));
++    });
++
+ });

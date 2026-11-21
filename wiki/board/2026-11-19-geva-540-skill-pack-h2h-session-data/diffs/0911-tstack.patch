@@ -1,0 +1,120 @@
+diff --git a/lib/setup-sandbox.js b/lib/setup-sandbox.js
+index b85885f..bba4de8 100644
+--- a/lib/setup-sandbox.js
++++ b/lib/setup-sandbox.js
+@@ -2826,6 +2826,29 @@ function throwAsync() {
+ 	return new VMError('Async not available');
+ }
+ 
++// SECURITY (GHSA-x6m4-chr9-cg97): errors thrown by the host-side transformer
++// (SyntaxError from acorn / makeNiceSyntaxError, VMError from checkAsync) are
++// host-realm objects whose `.stack` was formatted by the host's
++// prepareStackTrace and contains absolute host paths and host function names.
++// Forwarding them through the bridge would let sandbox code read that stack.
++// Rebuild a fresh sandbox-realm error from the name and message only, so its
++// stack is produced by the sandbox formatter at this (sandbox) call site.
++function localTransformError(e) {
++	let name;
++	let message;
++	try {
++		name = e.name;
++		message = e.message;
++	} catch (_) {
++		/* fall through to defaults */
++	}
++	if (typeof name !== 'string') name = 'Error';
++	if (typeof message !== 'string') message = '';
++	if (name === 'VMError') return new VMError(message);
++	const Ctor = localErrorCtorForName(name);
++	return new Ctor(message);
++}
++
+ function makeFunction(inputArgs, isAsync, isGenerator) {
+ 	const lastArgs = inputArgs.length - 1;
+ 	let code = lastArgs >= 0 ? `${inputArgs[lastArgs]}` : '';
+@@ -2836,7 +2859,7 @@ function makeFunction(inputArgs, isAsync, isGenerator) {
+ 	try {
+ 		code = host.transformAndCheck(args, code, isAsync, isGenerator, allowAsync);
+ 	} catch (e) {
+-		throw bridge.from(e);
++		throw localTransformError(e);
+ 	}
+ 	return localEval(code);
+ }
+@@ -2859,7 +2882,7 @@ const EvalHandler = {
+ 		try {
+ 			code = host.transformAndCheck(null, code, false, false, allowAsync);
+ 		} catch (e) {
+-			throw bridge.from(e);
++			throw localTransformError(e);
+ 		}
+ 		return localEval(code);
+ 	},
+diff --git a/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+new file mode 100644
+index 0000000..9dc4e6a
+--- /dev/null
++++ b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+@@ -0,0 +1,62 @@
++'use strict';
++
++/**
++ * GHSA-x6m4-chr9-cg97 — host transformer error stacks leak host paths
++ *
++ * Sandbox `eval` / `Function` route source through the host-side transformer.
++ * When it throws (SyntaxError from acorn, VMError from the async check), the
++ * host-realm error — with a `.stack` formatted by the host — was forwarded
++ * through the bridge, exposing absolute host paths to sandbox code.
++ *
++ * Fix: `localTransformError` in `lib/setup-sandbox.js` rebuilds a fresh
++ * sandbox-realm error from the name and message only.
++ */
++
++const assert = require('assert');
++const path = require('path');
++const { VM, NodeVM } = require('../../../lib/main.js');
++
++const LIB = path.resolve(__dirname, '../../../lib');
++
++function assertClean(stack) {
++	assert.strictEqual(typeof stack, 'string');
++	assert.ok(!stack.includes(LIB), 'stack leaks vm2 lib path: ' + stack);
++	assert.ok(!stack.includes(__filename), 'stack leaks embedder path: ' + stack);
++	assert.ok(!/transformer\.js|setup-sandbox\.js|node:/.test(stack), 'stack leaks host frames: ' + stack);
++}
++
++describe('GHSA-x6m4-chr9-cg97 (transformer error stack leak)', () => {
++	it('eval syntax error stack has no host paths', () => {
++		const r = new VM().run(`
++			var r; try { eval("@@@ catch") } catch (e) { r = {stack: String(e.stack), isSE: e instanceof SyntaxError, msg: e.message} } r;
++		`);
++		assertClean(r.stack);
++		assert.strictEqual(r.isSE, true);
++		assert.strictEqual(r.msg, "Unexpected character '@'");
++	});
++
++	it('Function syntax error stack has no host paths', () => {
++		const r = new VM().run(`
++			var r; try { new Function("@@@ catch") } catch (e) { r = {stack: String(e.stack), isSE: e instanceof SyntaxError} } r;
++		`);
++		assertClean(r.stack);
++		assert.strictEqual(r.isSE, true);
++	});
++
++	it('async-disallowed VMError stack has no host paths', () => {
++		const r = new VM({allowAsync: false}).run(`
++			var r; try { eval("async function f(){}") } catch (e) { r = {stack: String(e.stack), name: e.name, isVM: e instanceof VMError} } r;
++		`);
++		assertClean(r.stack);
++		assert.strictEqual(r.name, 'VMError');
++		assert.strictEqual(r.isVM, true);
++	});
++
++	it('NodeVM eval syntax error stack has no host paths', () => {
++		const vm = new NodeVM();
++		const stack = vm.run(`
++			var s; try { eval("@@@ catch") } catch (e) { s = String(e.stack) } module.exports = s;
++		`);
++		assertClean(stack);
++	});
++});

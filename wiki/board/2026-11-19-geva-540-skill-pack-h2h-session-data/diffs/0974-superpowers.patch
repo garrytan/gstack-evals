@@ -1,0 +1,86 @@
+diff --git a/excelize.go b/excelize.go
+index c2fcf21..a529e28 100644
+--- a/excelize.go
++++ b/excelize.go
+@@ -416,6 +416,9 @@ func (ws *xlsxWorksheet) checkSheet() error {
+ // which cell is empty in the normal rows.
+ func (ws *xlsxWorksheet) checkSheetR0(sheetData *xlsxSheetData, rowData *xlsxRow, r0 bool) {
+ 	checkRow := func(col, row int, r0 bool, cell xlsxC) {
++		if col < 1 || col > MaxColumns || row < 1 || row > len(sheetData.Row) {
++			return
++		}
+ 		rowIdx := row - 1
+ 		columns, colIdx := len(sheetData.Row[rowIdx].C), col-1
+ 		for c := columns; c < col; c++ {
+diff --git a/lib.go b/lib.go
+index 004ef8e..491a2a1 100644
+--- a/lib.go
++++ b/lib.go
+@@ -217,20 +217,28 @@ func ColumnNameToNumber(name string) (int, error) {
+ 	if len(name) == 0 {
+ 		return -1, newInvalidColumnNameError(name)
+ 	}
+-	col := 0
+-	multi := 1
+-	for i := len(name) - 1; i >= 0; i-- {
++	col, exceeded := 0, false
++	for i := 0; i < len(name); i++ {
+ 		r := name[i]
++		var digit int
+ 		if r >= 'A' && r <= 'Z' {
+-			col += int(r-'A'+1) * multi
++			digit = int(r - 'A' + 1)
+ 		} else if r >= 'a' && r <= 'z' {
+-			col += int(r-'a'+1) * multi
++			digit = int(r - 'a' + 1)
+ 		} else {
+ 			return -1, newInvalidColumnNameError(name)
+ 		}
+-		multi *= 26
++		if exceeded {
++			continue // keep validating characters, but stop accumulating
++		}
++		// Every digit is at least 1, so the accumulated value is monotonically
++		// increasing; bounding it at each step prevents integer overflow.
++		col = col*26 + digit
++		if col > MaxColumns {
++			exceeded = true
++		}
+ 	}
+-	if col > MaxColumns {
++	if exceeded {
+ 		return -1, ErrColumnNumber
+ 	}
+ 	return col, nil
+diff --git a/lib_test.go b/lib_test.go
+index 7a9f854..e14903a 100644
+--- a/lib_test.go
++++ b/lib_test.go
+@@ -81,6 +81,27 @@ func TestColumnNameToNumber_Error(t *testing.T) {
+ 	}
+ 	_, err := ColumnNameToNumber("XFE")
+ 	assert.ErrorIs(t, err, ErrColumnNumber)
++	// Column names whose value would overflow int64 must be rejected
++	for _, name := range []string{"VGWQHXLSDVIKWV", "ZZZZZZZZZZZZZZZZZZZZ", "AAAAAAAAAAAAAA"} {
++		out, err := ColumnNameToNumber(name)
++		assert.ErrorIs(t, err, ErrColumnNumber, name)
++		assert.Equal(t, -1, out, name)
++	}
++	_, _, err = CellNameToCoordinates("VGWQHXLSDVIKWV1")
++	assert.ErrorIs(t, err, ErrColumnNumber)
++	// Invalid characters are still reported after an out-of-range prefix
++	_, err = ColumnNameToNumber("ZZZZ1")
++	assert.Equal(t, newInvalidColumnNameError("ZZZZ1"), err)
++}
++
++func TestCheckSheetR0OverflowColumn(t *testing.T) {
++	f := NewFile()
++	ws, ok := f.Sheet.Load("xl/worksheets/sheet1.xml")
++	assert.True(t, ok)
++	ws.(*xlsxWorksheet).SheetData = xlsxSheetData{Row: []xlsxRow{{R: 0, C: []xlsxC{{R: "VGWQHXLSDVIKWV1", T: "inlineStr", IS: &xlsxSI{T: &xlsxT{Val: "pwn"}}}}}}}
++	assert.NotPanics(t, func() {
++		assert.NoError(t, ws.(*xlsxWorksheet).checkSheet())
++	})
+ }
+ 
+ func TestColumnNumberToName_OK(t *testing.T) {

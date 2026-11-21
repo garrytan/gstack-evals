@@ -1,0 +1,116 @@
+diff --git a/.changeset/quiet-abort-handlers.md b/.changeset/quiet-abort-handlers.md
+new file mode 100644
+index 0000000..0f27f3a
+--- /dev/null
++++ b/.changeset/quiet-abort-handlers.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: don't run abort signal handlers in a reactive context, avoiding false positive `state_unsafe_mutation` errors
+diff --git a/packages/svelte/src/internal/client/runtime.js b/packages/svelte/src/internal/client/runtime.js
+index 3d760e4..15a1e3c 100644
+--- a/packages/svelte/src/internal/client/runtime.js
++++ b/packages/svelte/src/internal/client/runtime.js
+@@ -278,7 +278,15 @@ export function update_reaction(reaction) {
+ 	update_version = ++read_version;
+ 
+ 	if (reaction.ac !== null) {
+-		reaction.ac.abort(STALE_REACTION);
++		// abort handlers may write to state, so they must not run in a reactive context
++		active_reaction = null;
++
++		try {
++			reaction.ac.abort(STALE_REACTION);
++		} finally {
++			active_reaction = (flags & (BRANCH_EFFECT | ROOT_EFFECT)) === 0 ? reaction : null;
++		}
++
+ 		reaction.ac = null;
+ 	}
+ 
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-mutation/Component.svelte b/packages/svelte/tests/runtime-runes/samples/abort-signal-mutation/Component.svelte
+new file mode 100644
+index 0000000..de5a2e7
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-mutation/Component.svelte
+@@ -0,0 +1,32 @@
++<script>
++	import { onMount, getAbortSignal } from 'svelte';
++
++	const { test } = $props();
++
++	onMount(() => {
++		const signal = getAbortSignal();
++
++		test.value = true;
++		signal.addEventListener('abort', () => {
++			try {
++				test.value = false;
++			} catch (e) {
++				console.log(e.message);
++			}
++		});
++	});
++
++	const value = $derived.by(() => {
++		const signal = getAbortSignal();
++		signal.addEventListener('abort', () => {
++			try {
++				test.value = false;
++			} catch (e) {
++				console.log(e.message);
++			}
++		});
++		return test.value;
++	});
++</script>
++
++{value}
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-mutation/_config.js b/packages/svelte/tests/runtime-runes/samples/abort-signal-mutation/_config.js
+new file mode 100644
+index 0000000..ff2d261
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-mutation/_config.js
+@@ -0,0 +1,19 @@
++import { flushSync } from 'svelte';
++import { test } from '../../test';
++
++export default test({
++	test({ assert, target, logs }) {
++		const [button] = target.querySelectorAll('button');
++
++		flushSync(() => button.click());
++		assert.htmlEqual(target.innerHTML, '<button>click</button> false');
++
++		flushSync(() => button.click());
++		assert.htmlEqual(target.innerHTML, '<button>click</button>');
++
++		flushSync(() => button.click());
++		assert.htmlEqual(target.innerHTML, '<button>click</button> false');
++
++		assert.deepEqual(logs, []);
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-mutation/main.svelte b/packages/svelte/tests/runtime-runes/samples/abort-signal-mutation/main.svelte
+new file mode 100644
+index 0000000..7b2704b
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-mutation/main.svelte
+@@ -0,0 +1,15 @@
++<script>
++	import Component from './Component.svelte';
++
++	class Test {
++		value = $state(false);
++	}
++
++	const test = new Test();
++	let show = $state(false);
++</script>
++
++<button onclick={() => (show = !show)}>click</button>
++{#if show}
++	<Component {test} />
++{/if}

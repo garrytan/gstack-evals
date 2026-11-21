@@ -1,0 +1,13 @@
+diff --git a/crates/hir-ty/src/infer.rs b/crates/hir-ty/src/infer.rs
+index ebcc0bd..64d0e2a 100644
+--- a/crates/hir-ty/src/infer.rs
++++ b/crates/hir-ty/src/infer.rs
+@@ -1994,7 +1994,7 @@ impl<'body, 'db> InferenceContext<'body, 'db> {
+ 
+     fn identity_args(&self) -> GenericArgs<'db> {
+         *self.identity_args.get_or_init(|| {
+-            GenericArgs::identity_for_item(self.interner(), self.store_owner.into())
++            GenericArgs::identity_for_item(self.interner(), self.generic_def.into())
+         })
+     }
+ 

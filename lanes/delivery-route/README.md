@@ -131,6 +131,36 @@ bun lanes/delivery-route/cli.ts b1c report <table.jsonl> [--out <dir>]
 
 The launcher commands are L1's under B1c's profile: host root ~/b1c, ledger port 9949, ARMS holding project-md.tar. The launch guard reads B1C_LEDGERS and B1C_CREW the way B1b's reads its pair, and refuses when the run commit's or the checkout's harness differs from B1b's run or B1's (`b1c reuse`) or the checkout holds uncommitted changes to those paths. `sessions run` needs Docker and the hm-session image, as B1b's does, and makes no model call.
 
+## B1d: gstack main with its hooks on by default
+
+B1d installs gstack main at 5afef04 the way a user does (`./setup`, the full loadout), adds B1's prove-it skill beside it, and runs B1's 60 bugs on Opus 5.5 unattended, as one arm, gstack-main. gstack's owner's rule reads the count of sessions where prove-it loaded against 39 (B1c's count). Because gstack's matcher was tuned on those 60 prompts, a sealed held-out set of 60 other bugs runs four arms side by side: gstack-main, B1c's project-md arm, project-md-noescape (B1c's block without its escape clause) and B1's none arm. The plan, the decision table, the held-out draw and the frozen numbers are in [its preregistration](../../wiki/plans/2026-11-19-capy-b1d-hook-default-prereg/README.md). B1's, B1b's and B1c's files stay as merged; table.ts reads B1d's arm names, and fake-model.ts gains two scripts (verify, guard).
+
+| File | What it does |
+|---|---|
+| b1d-pins.ts | Frozen values: gstack's pin and the blobs of its route files, the hook registrations, the listing, the noescape change, the four held-out arms and their rates, the held-out draw's digests and coverage, the smoke, the items, caps, all-in stop, bar, margin and held-out MDD, and B1c's run whose rows are the in-sample control |
+| b1d-build.sh | Builds the gstack-main tar: fetches gstack by sha, runs its setup in quick/laneb/arms/Dockerfile's gstack-l1-tar target with the full loadout, and adds prove-it |
+| arms/b1d/CLAUDE-noescape.md | The noescape arm's block |
+| b1d.ts | The arm checks and the small tars, the keyless route table, the plan, caps and launch guard, the reuse checks, the session rows (loaded, /verify loaded, what the hook named, why not), the in-sample and held-out reports with the decision and R48 verdict, the power table and eight keyless scripted sessions |
+
+```
+lanes/delivery-route/b1d-build.sh
+bun lanes/delivery-route/cli.ts b1d arms build [--out <dir>] [--manifests]
+bun lanes/delivery-route/cli.ts b1d arms check
+bun lanes/delivery-route/cli.ts b1d routes --export <SWE-rebench export> [--out <tsv>] [--check] [--sealed <tsv>]
+bun lanes/delivery-route/cli.ts b1d sessions run --out <dir> [--cut tests/delivery-route/fixtures/b1d-sessions]
+bun lanes/delivery-route/cli.ts b1d plan | power | reuse [--head <commit>]
+bun lanes/delivery-route/cli.ts b1d approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who>
+bun lanes/delivery-route/cli.ts b1d prepare <work> --item <item>
+bun lanes/delivery-route/cli.ts b1d host-up|attach|recover|host-down <work>
+bun lanes/delivery-route/cli.ts b1d launch|relaunch|rerun <work> --part <part>
+bun lanes/delivery-route/cli.ts b1d guard <work>
+bun lanes/delivery-route/cli.ts b1d done --ledger <jsonl> --item <item>
+bun lanes/delivery-route/cli.ts b1d table <config.json> <out.jsonl>
+bun lanes/delivery-route/cli.ts b1d report <table.jsonl> --item <b1d-smoke|b1d-in|b1d-ho> [--in <in-sample table.jsonl>] [--routes <sealed held-out route table>] [--out <dir>]
+```
+
+The launcher commands are L1's under B1d's profile: host root ~/b1d, ledger port 9950, ARMS holding the four held-out tars. The launch guard reads B1D_LEDGERS and B1D_CREW, and refuses when the run commit's or the checkout's harness differs from B1c's run or B1's (`b1d reuse`) or the checkout holds uncommitted changes to those paths or B1d's own. Its all-in stop is $400 (b1d-pins.ts B1D.stopUsd, raised from $340 on 2026-11-19 before the pilot). A relaunch is never refused on money: when it would pass its item's cap or the all-in stop, the guard prints `B1D_LAUNCH OVERSHOOT` and the reasons for the Captain, and the relaunch runs its salvage. A fresh launch past either still refuses. Held-out commands read the sealed list from B1D_HELDOUT and refuse it unless it is the committed draw. `routes` needs the built tree and an export holding each task's instruction.md; `sessions run` needs Docker, the hm-session image and the built tars. None of them makes a model call.
+
 ## Credits
 
-The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19. NOTICE.md has the rows.
+The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19, and B1d installs gstack itself at 5afef04e31de. NOTICE.md has the rows.

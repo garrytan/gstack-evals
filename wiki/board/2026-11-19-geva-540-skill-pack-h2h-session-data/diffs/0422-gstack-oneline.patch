@@ -1,0 +1,16 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+index 7d91917..023c293 100644
+--- a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+@@ -274,7 +274,11 @@ public class JsonValueSerializer
+         }
+         // and if we got null, can also just write it directly
+         if (value == null) {
++            // Type id is for the POJO (non-null), so still need to write it
++            WritableTypeId typeIdDef = typeSer0.writeTypePrefix(gen, ctxt,
++                    typeSer0.typeId(bean, JsonToken.VALUE_NULL));
+             ctxt.defaultSerializeNullValue(gen);
++            typeSer0.writeTypeSuffix(gen, ctxt, typeIdDef);
+             return;
+         }
+         ValueSerializer<Object> ser = _valueSerializer;

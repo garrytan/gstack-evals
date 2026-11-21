@@ -1,0 +1,49 @@
+diff --git a/src/core/event/index.js b/src/core/event/index.js
+index f1a5571..227df2a 100644
+--- a/src/core/event/index.js
++++ b/src/core/event/index.js
+@@ -408,7 +408,7 @@ export function Events(Base) {
+       const { query } = this.route;
+       const focusEl = query.id
+         ? // Heading ID
+-          dom.find(`#${query.id}`)
++          dom.find(`#main [id="${query.id}"]`)
+         : // First heading
+           dom.find('#main :where(h1, h2, h3, h4, h5, h6)') ||
+           // Content container
+diff --git a/test/e2e/coverpage.test.js b/test/e2e/coverpage.test.js
+new file mode 100644
+index 0000000..f03114f
+--- /dev/null
++++ b/test/e2e/coverpage.test.js
+@@ -0,0 +1,30 @@
++import docsifyInit from '../helpers/docsify-init.js';
++import { test, expect } from './fixtures/docsify-init-fixture.js';
++
++test.describe('Coverpage', () => {
++  test('heading id targets main content, not coverpage', async ({ page }) => {
++    await docsifyInit({
++      markdown: {
++        coverpage: '# Quick start',
++        homepage: `
++          # Quick start
++
++          ${'Lorem ipsum.\n\n'.repeat(80)}
++        `,
++      },
++    });
++
++    const coverHeading = page.locator('.cover-main #quick-start');
++    const mainHeading = page.locator('#main #quick-start');
++
++    await expect(coverHeading).toHaveCount(1);
++    await expect(mainHeading).toHaveCount(1);
++
++    await coverHeading.locator('a').click();
++
++    await expect(page).toHaveURL(/\?id=quick-start$/);
++    await expect(mainHeading).toBeFocused();
++    await expect(mainHeading).toBeInViewport();
++    await expect(coverHeading).not.toBeInViewport();
++  });
++});

@@ -1,0 +1,257 @@
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+index 86cfc96..d933a75 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+@@ -27,6 +27,9 @@ import org.verapdf.wcag.algorithms.semanticalgorithms.utils.ListUtils;
+ import org.verapdf.wcag.algorithms.semanticalgorithms.utils.TextChunkUtils;
+ 
+ import java.util.ArrayList;
++import java.util.Collections;
++import java.util.IdentityHashMap;
++import java.util.Set;
+ import java.util.Comparator;
+ import java.util.List;
+ 
+@@ -40,12 +43,22 @@ public class TextLineProcessor {
+         List<IObject> newContents = new ArrayList<>();
+         TextLine previousLine = new TextLine(new TextChunk(""));
+         boolean isSeparateLine = false;
++        boolean isPrecededByWhiteSpace = false;
++        Set<TextChunk> chunksPrecededByWhiteSpace = Collections.newSetFromMap(new IdentityHashMap<>());
+         for (IObject content : contents) {
+             if (content instanceof TextChunk) {
+                 TextChunk textChunk = (TextChunk) content;
+-                if (textChunk.isWhiteSpaceChunk() || textChunk.isEmpty()) {
++                if (textChunk.isEmpty()) {
+                     continue;
+                 }
++                if (textChunk.isWhiteSpaceChunk()) {
++                    isPrecededByWhiteSpace = true;
++                    continue;
++                }
++                if (isPrecededByWhiteSpace) {
++                    chunksPrecededByWhiteSpace.add(textChunk);
++                    isPrecededByWhiteSpace = false;
++                }
+                 TextLine currentLine = new TextLine(textChunk);
+                 double oneLineProbability = ChunksMergeUtils.countOneLineProbability(new SemanticTextNode(), previousLine, currentLine);
+                 isSeparateLine |= (oneLineProbability < ONE_LINE_PROBABILITY) || previousLine.isHiddenText() != currentLine.isHiddenText();
+@@ -58,6 +71,7 @@ public class TextLineProcessor {
+                 }
+                 isSeparateLine = false;
+             } else {
++                isPrecededByWhiteSpace = false;
+                 if (content instanceof TableBorder) {
+                     isSeparateLine = true;
+                 }
+@@ -70,14 +84,15 @@ public class TextLineProcessor {
+                 TextLine textLine = (TextLine) content;
+                 textLine.getTextChunks().sort(TEXT_CHUNK_COMPARATOR);
+                 double threshold = textLine.getFontSize() * TextChunkUtils.TEXT_LINE_SPACE_RATIO;
+-                newContents.set(i, getTextLineWithSpaces(textLine, threshold));
++                newContents.set(i, getTextLineWithSpaces(textLine, threshold, chunksPrecededByWhiteSpace));
+             }
+         }
+         linkTextLinesWithConnectedLineArtBullet(newContents);
+         return newContents;
+     }
+ 
+-    private static TextLine getTextLineWithSpaces(TextLine textLine, double threshold) {
++    private static TextLine getTextLineWithSpaces(TextLine textLine, double threshold,
++                                                  Set<TextChunk> chunksPrecededByWhiteSpace) {
+         List<TextChunk> textChunks = textLine.getTextChunks();
+         TextChunk currentTextChunk = textChunks.get(0);
+         double previousEnd = currentTextChunk.getBoundingBox().getRightX();
+@@ -86,10 +101,12 @@ public class TextLineProcessor {
+         for (int i = 1; i < textChunks.size(); i++) {
+             currentTextChunk = textChunks.get(i);
+             double currentStart = currentTextChunk.getBoundingBox().getLeftX();
+-            if (currentStart - previousEnd > threshold) {
++            // Insert a space if there is a visible gap between chunks, or if the PDF contains an explicit
++            // white space between them (the gap may be small or even negative due to inaccurate glyph widths)
++            if (currentStart - previousEnd > threshold || chunksPrecededByWhiteSpace.contains(currentTextChunk)) {
+                 BoundingBox spaceBBox = new BoundingBox(currentTextChunk.getBoundingBox());
+-                spaceBBox.setLeftX(previousEnd);
+-                spaceBBox.setRightX(currentStart);
++                spaceBBox.setLeftX(Math.min(previousEnd, currentStart));
++                spaceBBox.setRightX(Math.max(previousEnd, currentStart));
+                 TextChunk spaceChunk = new TextChunk(spaceBBox, " ", textLine.getFontSize(), textLine.getBaseLine());
+                 newLine.add(spaceChunk);
+             }
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java
+index f1ea435..18b609b 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextProcessor.java
+@@ -85,12 +85,61 @@ public class TextProcessor {
+         }
+     }
+ 
++    /**
++     * Trims leading and trailing white spaces of text chunks.
++     * <p>
++     * The trimmed white spaces are kept as separate white space chunks, so that the information about
++     * the white space between words is not lost. It is used later by {@link TextLineProcessor} to insert
++     * spaces between words even if the geometric gap between them is small (e.g. due to inaccurate glyph widths).
++     */
+     public static void trimTextChunksWhiteSpaces(List<IObject> contents) {
+         for (int i = 0; i < contents.size(); i++) {
+             IObject object = contents.get(i);
+-            if (object instanceof TextChunk) {
+-                contents.set(i, ChunksMergeUtils.getTrimTextChunk((TextChunk) object));
++            if (!(object instanceof TextChunk)) {
++                continue;
++            }
++            TextChunk textChunk = (TextChunk) object;
++            String value = textChunk.getValue();
++            if (value == null || value.isEmpty() || textChunk.isWhiteSpaceChunk()) {
++                continue;
++            }
++            int length = value.length();
++            int start = 0;
++            while (start < length && TextChunkUtils.isWhiteSpaceChar(value.charAt(start))) {
++                start++;
++            }
++            int end = length;
++            while (end > start && TextChunkUtils.isWhiteSpaceChar(value.charAt(end - 1))) {
++                end--;
+             }
++            TextChunk trimmedChunk = ChunksMergeUtils.getTrimTextChunk(textChunk);
++            contents.set(i, trimmedChunk);
++            if (start > 0 && start < end) {
++                TextChunk leadingSpace = createWhiteSpaceChunk(textChunk, 0, start);
++                if (leadingSpace != null) {
++                    contents.add(i, leadingSpace);
++                    i++;
++                }
++            }
++            if (end < length && start < end) {
++                TextChunk trailingSpace = createWhiteSpaceChunk(textChunk, end, length);
++                if (trailingSpace != null) {
++                    contents.add(i + 1, trailingSpace);
++                    i++;
++                }
++            }
++        }
++    }
++
++    private static TextChunk createWhiteSpaceChunk(TextChunk textChunk, int start, int end) {
++        try {
++            TextChunk spaceChunk = TextChunk.getTextChunk(textChunk, start, end);
++            if (spaceChunk == null || !spaceChunk.isWhiteSpaceChunk()) {
++                return null;
++            }
++            return spaceChunk;
++        } catch (RuntimeException e) {
++            return null;
+         }
+     }
+ 
+@@ -155,6 +204,16 @@ public class TextProcessor {
+     }
+ 
+     private static boolean areNeighborsTextChunks(TextChunk firstTextChunk, TextChunk secondTextChunk) {
++        double gap = secondTextChunk.getTextStart() - firstTextChunk.getTextEnd();
++        // Chunks separated by a word-sized gap belong to different words. Merging them would concatenate
++        // the words without a space (the space is later inserted by TextLineProcessor using the same threshold).
++        // The height-based epsilon alone is not sufficient: fonts with a tall bounding box produce an epsilon
++        // larger than the width of a regular space.
++        double wordSpaceThreshold = Math.min(firstTextChunk.getFontSize(), secondTextChunk.getFontSize()) *
++            TextChunkUtils.TEXT_LINE_SPACE_RATIO;
++        if (wordSpaceThreshold > 0 && gap > wordSpaceThreshold) {
++            return false;
++        }
+         return NodeUtils.areCloseNumbers(firstTextChunk.getTextEnd(), secondTextChunk.getTextStart(),
+             NEIGHBORS_TEXT_CHUNKS_EPSILON * firstTextChunk.getBoundingBox().getHeight());
+     }
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+index 855aa82..79ad971 100644
+--- a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+@@ -47,6 +47,48 @@ public class TextLineProcessorTest {
+         Assertions.assertEquals("test", ((TextLine) contents.get(1)).getValue());
+     }
+ 
++    /**
++     * Words separated by an explicit white space in the PDF must keep the space, even if the
++     * geometric gap between the word chunks is too small (e.g. because of inaccurate glyph widths).
++     */
++    @Test
++    public void testProcessTextLinesKeepsExplicitWhiteSpaces() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        List<IObject> contents = new ArrayList<>();
++        contents.add(new TextChunk(new BoundingBox(0, 10.0, 30.0, 50.0, 40.0),
++            "Lexical", 10, 30.0));
++        contents.add(new TextChunk(new BoundingBox(0, 50.0, 30.0, 50.5, 40.0),
++            " ", 10, 30.0));
++        contents.add(new TextChunk(new BoundingBox(0, 50.5, 30.0, 90.0, 40.0),
++            "Search:", 10, 30.0));
++        contents = TextLineProcessor.processTextLines(contents);
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("Lexical Search:", ((TextLine) contents.get(0)).getValue());
++    }
++
++    @Test
++    public void testFilteredContentsKeepTrailingWhiteSpaces() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        List<IObject> contents = new ArrayList<>();
++        TextChunk first = new TextChunk(new BoundingBox(0, 10.0, 30.0, 60.0, 40.0),
++            "Evolution ", 10, 30.0);
++        first.adjustSymbolEndsToBoundingBox(null);
++        TextChunk second = new TextChunk(new BoundingBox(0, 59.0, 30.0, 70.0, 40.0),
++            "Of", 10, 30.0);
++        second.adjustSymbolEndsToBoundingBox(null);
++        contents.add(first);
++        contents.add(second);
++        TextProcessor.trimTextChunksWhiteSpaces(contents);
++        Assertions.assertEquals(3, contents.size());
++        Assertions.assertEquals("Evolution", ((TextChunk) contents.get(0)).getValue());
++        Assertions.assertTrue(((TextChunk) contents.get(1)).isWhiteSpaceChunk());
++        contents = TextLineProcessor.processTextLines(contents);
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("Evolution Of", ((TextLine) contents.get(0)).getValue());
++    }
++
+     /**
+      * Regression test for issue #150: text chunks on the same line should be sorted by leftX.
+      *
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java
+index 31a1629..c88e01b 100644
+--- a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextProcessorTest.java
+@@ -186,6 +186,34 @@ public class TextProcessorTest {
+         Assertions.assertEquals("Hello", ((TextChunk) contents.get(0)).getValue());
+     }
+ 
++    /**
++     * Chunks of different words separated by a word-sized gap must not be merged,
++     * even if the chunk bounding box is tall (large height-based epsilon).
++     */
++    @Test
++    public void testMergeCloseTextChunksWordGapNotMerged() {
++        List<IObject> contents = new ArrayList<>();
++        TextChunk chunk1 = new TextChunk(new BoundingBox(0, 10.0, 100.0, 50.0, 130.0),
++            "Lexical", 10, 100.0);
++        chunk1.adjustSymbolEndsToBoundingBox(null);
++        chunk1.setFontName("Arial");
++        chunk1.setFontWeight(400);
++        chunk1.setTextEnd(50.0);
++        TextChunk chunk2 = new TextChunk(new BoundingBox(0, 52.5, 100.0, 90.0, 130.0),
++            "Search", 10, 100.0);
++        chunk2.adjustSymbolEndsToBoundingBox(null);
++        chunk2.setFontName("Arial");
++        chunk2.setFontWeight(400);
++        chunk2.setTextStart(52.5);
++        contents.add(chunk1);
++        contents.add(chunk2);
++
++        TextProcessor.mergeCloseTextChunks(contents);
++        contents = DocumentProcessor.removeNullObjectsFromList(contents);
++
++        Assertions.assertEquals(2, contents.size());
++    }
++
+     @Test
+     public void testMeasureReplacementCharRatioAllReplacement() {
+         List<IObject> contents = new ArrayList<>();

@@ -1,0 +1,31 @@
+diff --git a/src/extras/exporters/gltf-exporter.js b/src/extras/exporters/gltf-exporter.js
+index 56dcf36..218b66b 100644
+--- a/src/extras/exporters/gltf-exporter.js
++++ b/src/extras/exporters/gltf-exporter.js
+@@ -665,6 +665,9 @@ class GltfExporter extends CoreExporter {
+ 
+                 this.attachTexture(resources, mat, material, 'normalTexture', 'normalMap', json);
+                 this.attachTexture(resources, mat, material, 'occlusionTexture', 'aoMap', json);
++                if (material.occlusionTexture && mat.aoIntensity !== 1) {
++                    material.occlusionTexture.strength = mat.aoIntensity;
++                }
+                 this.attachTexture(resources, mat, material, 'emissiveTexture', 'emissiveMap', json);
+ 
+                 return material;
+diff --git a/src/framework/parsers/glb-parser.js b/src/framework/parsers/glb-parser.js
+index c957254..e7be799 100644
+--- a/src/framework/parsers/glb-parser.js
++++ b/src/framework/parsers/glb-parser.js
+@@ -587,8 +587,11 @@ const createMaterial = (gltfMaterial, textures) => {
+         material.aoMap = textures[occlusionTexture.index];
+         material.aoMapChannel = 'r';
+ 
++        if (occlusionTexture.hasOwnProperty('strength')) {
++            material.aoIntensity = occlusionTexture.strength;
++        }
++
+         extractTextureTransform(occlusionTexture, material, ['ao']);
+-        // TODO: support 'strength'
+     }
+ 
+     if (gltfMaterial.hasOwnProperty('emissiveFactor')) {

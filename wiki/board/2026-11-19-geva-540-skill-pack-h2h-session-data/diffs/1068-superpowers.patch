@@ -1,0 +1,188 @@
+diff --git a/internal/web/events.go b/internal/web/events.go
+index 676b25c..8cb39b1 100644
+--- a/internal/web/events.go
++++ b/internal/web/events.go
+@@ -38,6 +38,12 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 
+ 	allContainers, errors := h.hostService.ListAllContainers(userLabels)
+ 
++	// When the user is restricted by label filters, keep track of the containers
++	// they are allowed to see so that stats and events for other containers are
++	// not leaked over the stream.
++	filtered := userLabels.Exists()
++	visible := newVisibleContainers(allContainers)
++
+ 	for _, err := range errors {
+ 		log.Warn().Err(err).Msg("error listing containers")
+ 		if hostNotAvailableError, ok := err.(*docker_support.HostUnavailableError); ok {
+@@ -61,6 +67,9 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 				return
+ 			}
+ 		case stat := <-stats:
++			if filtered && !visible.hasID(stat.ID) {
++				continue
++			}
+ 			if err := sseWriter.Event("container-stat", stat); err != nil {
+ 				log.Error().Err(err).Msg("error writing event to event stream")
+ 				return
+@@ -73,7 +82,14 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 			switch event.Name {
+ 			case "start", "die", "destroy", "rename", "pause", "unpause":
+ 				if event.Name == "start" || event.Name == "rename" {
+-					if containers, err := h.hostService.ListContainersForHost(event.Host, userLabels); err == nil {
++					containers, err := h.hostService.ListContainersForHost(event.Host, userLabels)
++					if err == nil {
++						visible.setHost(event.Host, containers)
++					}
++					if filtered && !visible.has(event.Host, event.ActorID) {
++						continue
++					}
++					if err == nil {
+ 						log.Debug().Str("host", event.Host).Int("count", len(containers)).Msg("updating containers for host")
+ 						if err := sseWriter.Event("containers-changed", containers); err != nil {
+ 							log.Error().Err(err).Msg("error writing containers to event stream")
+@@ -82,17 +98,27 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 					}
+ 				}
+ 
++				if filtered && !visible.has(event.Host, event.ActorID) {
++					continue
++				}
++
+ 				if err := sseWriter.Event("container-event", event); err != nil {
+ 					log.Error().Err(err).Msg("error writing event to event stream")
+ 					return
+ 				}
+ 
+ 			case "update":
++				if filtered && !visible.has(event.Host, event.ActorID) {
++					continue
++				}
+ 				if err := sseWriter.Event("container-updated", event.Container); err != nil {
+ 					log.Error().Err(err).Msg("error writing event to event stream")
+ 					return
+ 				}
+ 			case "health_status: healthy", "health_status: unhealthy":
++				if filtered && !visible.has(event.Host, event.ActorID) {
++					continue
++				}
+ 				healthy := "unhealthy"
+ 				if event.Name == "health_status: healthy" {
+ 					healthy = "healthy"
+@@ -113,6 +139,56 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 	}
+ }
+ 
++// visibleContainers tracks the set of container IDs a user is allowed to see, per host.
++type visibleContainers struct {
++	byHost map[string]map[string]struct{}
++}
++
++func newVisibleContainers(containers []container.Container) *visibleContainers {
++	v := &visibleContainers{byHost: make(map[string]map[string]struct{})}
++	for _, c := range containers {
++		ids, ok := v.byHost[c.Host]
++		if !ok {
++			ids = make(map[string]struct{})
++			v.byHost[c.Host] = ids
++		}
++		ids[c.ID] = struct{}{}
++	}
++	return v
++}
++
++func (v *visibleContainers) setHost(host string, containers []container.Container) {
++	ids := make(map[string]struct{}, len(containers))
++	for _, c := range containers {
++		ids[c.ID] = struct{}{}
++	}
++	v.byHost[host] = ids
++}
++
++func (v *visibleContainers) has(host, id string) bool {
++	if id == "" {
++		return false
++	}
++	ids, ok := v.byHost[host]
++	if !ok {
++		return false
++	}
++	_, ok = ids[id]
++	return ok
++}
++
++func (v *visibleContainers) hasID(id string) bool {
++	if id == "" {
++		return false
++	}
++	for _, ids := range v.byHost {
++		if _, ok := ids[id]; ok {
++			return true
++		}
++	}
++	return false
++}
++
+ func sendBeaconEvent(h *handler, r *http.Request, runningContainers int) {
+ 	if h.config.NoAnalytics {
+ 		return
+diff --git a/internal/web/events_test.go b/internal/web/events_test.go
+index a32c169..c9868b6 100644
+--- a/internal/web/events_test.go
++++ b/internal/web/events_test.go
+@@ -66,3 +66,55 @@ func Test_handler_streamEvents_happy(t *testing.T) {
+ 	abide.AssertHTTPResponse(t, t.Name(), rr.Result())
+ 	mockedClient.AssertExpectations(t)
+ }
++
++func Test_handler_streamEvents_filtersByUserLabels(t *testing.T) {
++	ctx, cancel := context.WithCancel(context.Background())
++	req, err := http.NewRequestWithContext(ctx, "GET", "/api/events/stream", nil)
++	require.NoError(t, err)
++
++	labels := container.ContainerLabels{"visible": []string{"yes"}}
++	visibleContainer := container.Container{ID: "visible12345", Name: "visible", Image: "test", Host: "localhost", State: "running", Labels: map[string]string{"visible": "yes"}, Stats: utils.NewRingBuffer[container.ContainerStat](300)}
++	secretContainer := container.Container{ID: "secret123456", Name: "dz_secret", Image: "test", Host: "localhost", State: "running", Labels: map[string]string{"secretproject": "acme-payroll"}, Stats: utils.NewRingBuffer[container.ContainerStat](300)}
++
++	mockedClient := new(MockedClient)
++	mockedClient.On("ListContainers", mock.Anything, labels).Return([]container.Container{visibleContainer}, nil)
++	mockedClient.On("ListContainers", mock.Anything, mock.Anything).Return([]container.Container{visibleContainer, secretContainer}, nil)
++	mockedClient.On("ContainerEvents", mock.Anything, mock.AnythingOfType("chan<- container.ContainerEvent")).Return(nil).Run(func(args mock.Arguments) {
++		messages := args.Get(1).(chan<- container.ContainerEvent)
++		time.Sleep(50 * time.Millisecond)
++		for _, name := range []string{"die", "start", "health_status: healthy"} {
++			messages <- container.ContainerEvent{Name: name, ActorID: secretContainer.ID, Host: "localhost", ActorAttributes: map[string]string{"secretproject": "acme-payroll"}}
++		}
++		messages <- container.ContainerEvent{Name: "die", ActorID: visibleContainer.ID, Host: "localhost"}
++		time.Sleep(50 * time.Millisecond)
++		cancel()
++	})
++	mockedClient.On("FindContainer", mock.Anything, secretContainer.ID).Return(secretContainer, nil).Maybe()
++	mockedClient.On("FindContainer", mock.Anything, visibleContainer.ID).Return(visibleContainer, nil).Maybe()
++	mockedClient.On("Host").Return(container.Host{ID: "localhost"})
++
++	manager := docker_support.NewRetriableClientManager(nil, 3*time.Second, tls.Certificate{}, docker_support.NewDockerClientService(mockedClient, labels))
++	multiHostService := docker_support.NewMultiHostService(manager, 3*time.Second)
++	server := CreateServer(multiHostService, nil, Config{Base: "/", Labels: labels, Authorization: Authorization{Provider: NONE}})
++
++	rr := httptest.NewRecorder()
++	server.Handler.ServeHTTP(rr, req)
++
++	body := rr.Body.String()
++	require.Contains(t, body, visibleContainer.ID)
++	require.NotContains(t, body, secretContainer.ID)
++	require.NotContains(t, body, "acme-payroll")
++}
++
++func Test_visibleContainers(t *testing.T) {
++	v := newVisibleContainers([]container.Container{{ID: "a", Host: "h1"}})
++	require.True(t, v.has("h1", "a"))
++	require.True(t, v.hasID("a"))
++	require.False(t, v.has("h2", "a"))
++	require.False(t, v.hasID("b"))
++	require.False(t, v.hasID(""))
++
++	v.setHost("h1", []container.Container{{ID: "b", Host: "h1"}})
++	require.False(t, v.hasID("a"))
++	require.True(t, v.has("h1", "b"))
++}

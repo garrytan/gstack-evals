@@ -1,0 +1,69 @@
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+index 86cfc96..4c25802 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+@@ -24,7 +24,6 @@ import org.verapdf.wcag.algorithms.entities.geometry.BoundingBox;
+ import org.verapdf.wcag.algorithms.entities.tables.tableBorders.TableBorder;
+ import org.verapdf.wcag.algorithms.semanticalgorithms.utils.ChunksMergeUtils;
+ import org.verapdf.wcag.algorithms.semanticalgorithms.utils.ListUtils;
+-import org.verapdf.wcag.algorithms.semanticalgorithms.utils.TextChunkUtils;
+ 
+ import java.util.ArrayList;
+ import java.util.Comparator;
+@@ -33,6 +32,9 @@ import java.util.List;
+ public class TextLineProcessor {
+ 
+     private static final double ONE_LINE_PROBABILITY = 0.75;
++    // Gap between word chunks, in font-size units, above which a space is inserted.
++    // Matches pdf.js (0.102) and Poppler (0.1); tight or justified fonts use word gaps below 0.17.
++    private static final double WORD_SPACE_RATIO = 0.1;
+     private static final Comparator<TextChunk> TEXT_CHUNK_COMPARATOR =
+         Comparator.comparingDouble(o -> o.getBoundingBox().getLeftX());
+ 
+@@ -69,7 +71,7 @@ public class TextLineProcessor {
+             if (content instanceof TextLine) {
+                 TextLine textLine = (TextLine) content;
+                 textLine.getTextChunks().sort(TEXT_CHUNK_COMPARATOR);
+-                double threshold = textLine.getFontSize() * TextChunkUtils.TEXT_LINE_SPACE_RATIO;
++                double threshold = textLine.getFontSize() * WORD_SPACE_RATIO;
+                 newContents.set(i, getTextLineWithSpaces(textLine, threshold));
+             }
+         }
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+index 855aa82..febd6d2 100644
+--- a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+@@ -115,4 +115,33 @@ public class TextLineProcessorTest {
+             "There should be a space between chunks when there is a physical gap");
+     }
+ 
++    @Test
++    public void testProcessTextLinesInsertsSpacesForTightWordGaps() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        List<IObject> contents = new ArrayList<>();
++        contents.add(new TextChunk(new BoundingBox(0, 10.0, 300.0, 50.0, 310.0), "Evolution", 10, 300.0));
++        contents.add(new TextChunk(new BoundingBox(0, 51.5, 300.0, 61.5, 310.0), "Of", 10, 300.0));
++        contents.add(new TextChunk(new BoundingBox(0, 63.0, 300.0, 93.0, 310.0), "Search", 10, 300.0));
++
++        contents = TextLineProcessor.processTextLines(contents);
++
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("Evolution Of Search", ((TextLine) contents.get(0)).getValue());
++    }
++
++    @Test
++    public void testProcessTextLinesKeepsAdjacentGlyphRunsJoined() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        List<IObject> contents = new ArrayList<>();
++        contents.add(new TextChunk(new BoundingBox(0, 10.0, 300.0, 30.0, 310.0), "Evol", 10, 300.0));
++        contents.add(new TextChunk(new BoundingBox(0, 30.5, 300.0, 50.0, 310.0), "ution", 10, 300.0));
++
++        contents = TextLineProcessor.processTextLines(contents);
++
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("Evolution", ((TextLine) contents.get(0)).getValue());
++    }
++
+ }

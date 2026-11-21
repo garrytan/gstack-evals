@@ -1,0 +1,113 @@
+diff --git a/packages/core-base/test/translate.test.ts b/packages/core-base/test/translate.test.ts
+index 9687393..9f87825 100644
+--- a/packages/core-base/test/translate.test.ts
++++ b/packages/core-base/test/translate.test.ts
+@@ -757,6 +757,36 @@ describe('escapeParameter', () => {
+     console.warn = originalWarn
+   })
+ 
++  test('vulnerable case - iframe srcdoc attack', () => {
++    const originalWarn = console.warn
++    console.warn = vi.fn()
++
++    const ctx = context({
++      locale: 'en',
++      warnHtmlMessage: false,
++      escapeParameter: true,
++      messages: {
++        en: {
++          param: '<iframe srcdoc="{content}"></iframe>',
++          markup: '<iframe srcdoc="<b>x</b>"></iframe>'
++        }
++      }
++    })
++
++    const paramResult = translate(ctx, 'param', {
++      content: '<img src=x onerror=alert(1)>'
++    })
++    expect(paramResult).not.toMatch(/[\s<]srcdoc\s*=/i)
++    expect(paramResult.startsWith('<iframe &#115;rcdoc="')).toBe(true)
++
++    const markupResult = translate(ctx, 'markup')
++    expect(markupResult).toEqual(
++      '<iframe &#115;rcdoc="&lt;b&gt;x&lt;/b&gt;"></iframe>'
++    )
++
++    console.warn = originalWarn
++  })
++
+   test('vulnerable case - attribute injection attack', () => {
+     const ctx = context({
+       locale: 'en',
+diff --git a/packages/shared/src/sanitize.ts b/packages/shared/src/sanitize.ts
+index 6167007..f71a622 100644
+--- a/packages/shared/src/sanitize.ts
++++ b/packages/shared/src/sanitize.ts
+@@ -29,6 +29,9 @@ const colonCharacterReferencePattern = /&colon;?/gi
+ const controlOrWhitespacePattern = /[\u0000-\u0020\u007f-\u009f]/g
+ const eventHandlerPattern = /(?:^|[\s"'<>/])on\w+\s*=\s*["']?[^"'>]+["']?/i
+ const eventHandlerAttributePattern = /(^|[\s"'<>/])on(\w+\s*=)/gi
++// `srcdoc` is parsed as an HTML document after character references are
++// decoded, so escaping its value cannot make it safe. Neutralize the attribute.
++const srcdocAttributePattern = /(^|[\s"'<>/])s(rcdoc\s*=)/gi
+ const unquotedUrlAttributePattern =
+   /(^|[\s"'<>/])((?:href|src|action|formaction)\s*=\s*)([^\s"'=<>`]+)/gi
+ 
+@@ -151,6 +154,21 @@ export function sanitizeTranslatedHtml(html: string): string {
+     html = html.replace(eventHandlerAttributePattern, '$1&#111;n$2')
+   }
+ 
++  // Detect and neutralize srcdoc attributes
++  // NOTE: srcdoc value is decoded and parsed as a same-origin HTML document,
++  // so any character-reference escaping inside it is undone by the browser.
++  srcdocAttributePattern.lastIndex = 0
++  if (srcdocAttributePattern.test(html)) {
++    if (__DEV__) {
++      warn(
++        'Potentially dangerous srcdoc attribute detected in translation. ' +
++          'Consider removing srcdoc from your translation messages.'
++      )
++    }
++    srcdocAttributePattern.lastIndex = 0
++    html = html.replace(srcdocAttributePattern, '$1&#115;$2')
++  }
++
+   // Disable javascript: URLs in unquoted attributes
+   html = html.replace(
+     unquotedUrlAttributePattern,
+diff --git a/packages/shared/test/sanitize.test.ts b/packages/shared/test/sanitize.test.ts
+index ec8a086..d9b8c71 100644
+--- a/packages/shared/test/sanitize.test.ts
++++ b/packages/shared/test/sanitize.test.ts
+@@ -244,7 +244,30 @@ describe('sanitizeTranslatedHtml', () => {
+     const html = '<iframe srcdoc="<script>alert(1)</script>">Test</iframe>'
+     const result = sanitizeTranslatedHtml(html)
+     expect(result).toBe(
+-      '<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;">Test</iframe>'
++      '<iframe &#115;rcdoc="&lt;script&gt;alert(1)&lt;/script&gt;">Test</iframe>'
++    )
++  })
++
++  test('neutralize srcdoc attribute variants', () => {
++    expect(sanitizeTranslatedHtml('<iframe srcdoc="<b>x</b>"></iframe>')).toBe(
++      '<iframe &#115;rcdoc="&lt;b&gt;x&lt;/b&gt;"></iframe>'
++    )
++    expect(
++      sanitizeTranslatedHtml("<iframe SRCDOC='<img src=x onerror=alert(1)>'>")
++    ).toBe(
++      "<iframe &#115;RCDOC='&lt;img src=x &#111;nerror=alert(1)&gt;'>"
++    )
++    expect(sanitizeTranslatedHtml('<iframe/srcdoc = &lt;b&gt;x>')).toBe(
++      '<iframe/&#115;rcdoc = &lt;b&gt;x>'
++    )
++    expect(
++      sanitizeTranslatedHtml('<iframe src="x"srcdoc="&lt;b&gt;"></iframe>')
++    ).toBe('<iframe src="x"&#115;rcdoc="&lt;b&gt;"></iframe>')
++  })
++
++  test('do not touch srcdoc-like attribute names', () => {
++    expect(sanitizeTranslatedHtml('<div data-srcdoc="x">Test</div>')).toBe(
++      '<div data-srcdoc="x">Test</div>'
+     )
+   })
+ 

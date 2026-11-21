@@ -356,8 +356,8 @@ export const CODES = {
   },
   E_INTERACTIVE_HOST: {
     exit: 2,
-    meaning: "No longer raised. It named a task declared interactive sent to --host codex while the Codex adapter ran non-interactive tasks only; the adapter now answers a Codex session's questions, so --host codex runs every task. The code stays so older run records still read.",
-    fix: "Nothing to fix now: start a new run on --host codex. Do not --resume.",
+    meaning: "A task declared interactive was sent to --host codex with a model the pinned Codex offers no request_user_input_async. Codex answers its own request_user_input itself, so that model's questions would never reach the user simulator.",
+    fix: "Use --host claude, a Codex model in the adapter's ASYNC_QUESTION_MODELS list, or --tasks-only the non-interactive tasks. Do not --resume.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
@@ -2850,6 +2850,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_H2H_LABEL_INPUT: {
+    exit: 2,
+    meaning: "h2h label-send refused its units before anything was opened: the --units file is missing or lists no unit dir, a dir is not a B1 unit (source h2h-b1), a unit id can't name a file, a unit is listed twice, or a unit's label packet differs from the packet one of its calls was sent, so its two answers would not read one packet.",
+    fix: "Fix the units file. A unit whose packet changed after a call was sent goes back to the dir that call read, or leaves --units; its sent call is never sent again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   // h2h, part C: O draw, scoring additions, analysis, items and the rerun command.
   E_H2H_O_SOURCE: {
     exit: 2,
@@ -3319,6 +3328,15 @@ export const CODES = {
     fix: "Read the line's docker output, fix the host, and run the stage again with --resume.",
     side_effects: "No spend: the checker's session has not started.",
     retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_DAYONE_BACKGROUND: {
+    exit: 2,
+    meaning: "Day-one eval (pin change 2, item B): a planning session held open for background work it started (a background Bash or Agent task, or a pending ScheduleWakeup) reached its time limit with that work still running, so its cell is a recorded gap with that cause and no retry. Every arm's planning sessions hold the same way, at most the stage's minutes; builds and checks do not hold.",
+    fix: "Nothing to retry: report the gap beside the arm's result. The session's host/cli-stderr.log names the work still out.",
+    side_effects: "The session's metered spend stays on the lease.",
+    retry_safe: false,
     resumable: true,
     owner: "U20",
   },

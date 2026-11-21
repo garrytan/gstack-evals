@@ -1,0 +1,341 @@
+diff --git a/compiler-core/src/erlang/tests/inlining.rs b/compiler-core/src/erlang/tests/inlining.rs
+index df9ef86..aec1700 100644
+--- a/compiler-core/src/erlang/tests/inlining.rs
++++ b/compiler-core/src/erlang/tests/inlining.rs
+@@ -312,3 +312,58 @@ fn divide(a, b) {
+ "
+     );
+ }
++
++#[test]
++fn inlined_variable_used_in_record_update() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub type Config {
++  Config(host: String, ssl: Bool)
++}
++
++pub fn main(config: Config) {
++  use ssl <- result.map(Ok(True))
++  Config(..config, ssl:)
++}
++"
++    );
++}
++
++#[test]
++fn inlined_variable_used_in_case_guard() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub fn main() {
++  use x <- result.map(Ok(1))
++  case 2 {
++    y if y == x -> True
++    _ -> False
++  }
++}
++"
++    );
++}
++
++#[test]
++fn inlined_variable_used_in_bit_array_size_pattern() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub fn main() {
++  use size <- result.map(Ok(8))
++  case <<1>> {
++    <<_:size(size)>> -> True
++    _ -> False
++  }
++}
++"
++    );
++}
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inline_qualified_record_constructor_passed_as_function.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inline_qualified_record_constructor_passed_as_function.snap
+new file mode 100644
+index 0000000..fa70b37
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inline_qualified_record_constructor_passed_as_function.snap
+@@ -0,0 +1,32 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++assertion_line: 337
++expression: "\nimport gleam/result\nimport other\n\npub fn main() {\n  result.map(Ok(10), other.Wrapper)\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++import other
++
++pub fn main() {
++  result.map(Ok(10), other.Wrapper)
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/0]).
++
++-file("project/test/my/mod.gleam", 5).
++-spec main() -> {ok, other:wrapper()} | {error, any()}.
++main() ->
++    case {ok, 10} of
++        {ok, Value} ->
++            {ok, {wrapper, Value}};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inline_record_constructor_passed_as_function.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inline_record_constructor_passed_as_function.snap
+new file mode 100644
+index 0000000..447d537
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inline_record_constructor_passed_as_function.snap
+@@ -0,0 +1,38 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++assertion_line: 319
++expression: "\nimport gleam/result\n\npub type Wrapper {\n  Wrapper(Int)\n}\n\npub fn main() {\n  result.map(Ok(10), Wrapper)\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub type Wrapper {
++  Wrapper(Int)
++}
++
++pub fn main() {
++  result.map(Ok(10), Wrapper)
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/0]).
++-export_type([wrapper/0]).
++
++-type wrapper() :: {wrapper, integer()}.
++
++-file("project/test/my/mod.gleam", 8).
++-spec main() -> {ok, wrapper()} | {error, any()}.
++main() ->
++    case {ok, 10} of
++        {ok, Value} ->
++            {ok, {wrapper, Value}};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_variable_used_in_bit_array_size_pattern.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_variable_used_in_bit_array_size_pattern.snap
+new file mode 100644
+index 0000000..e42c197
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_variable_used_in_bit_array_size_pattern.snap
+@@ -0,0 +1,44 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++expression: "\nimport gleam/result\n\npub fn main() {\n  use size <- result.map(Ok(8))\n  case <<1>> {\n    <<_:size(size)>> -> True\n    _ -> False\n  }\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub fn main() {
++  use size <- result.map(Ok(8))
++  case <<1>> {
++    <<_:size(size)>> -> True
++    _ -> False
++  }
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/0]).
++
++-file("project/test/my/mod.gleam", 4).
++-spec main() -> {ok, boolean()} | {error, any()}.
++main() ->
++    case {ok, 8} of
++        {ok, Value} ->
++            {ok,
++                begin
++                    Size = Value,
++                    case <<1>> of
++                        <<_:Size>> ->
++                            true;
++
++                        _ ->
++                            false
++                    end
++                end};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_variable_used_in_case_guard.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_variable_used_in_case_guard.snap
+new file mode 100644
+index 0000000..85903cd
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_variable_used_in_case_guard.snap
+@@ -0,0 +1,44 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++expression: "\nimport gleam/result\n\npub fn main() {\n  use x <- result.map(Ok(1))\n  case 2 {\n    y if y == x -> True\n    _ -> False\n  }\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub fn main() {
++  use x <- result.map(Ok(1))
++  case 2 {
++    y if y == x -> True
++    _ -> False
++  }
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/0]).
++
++-file("project/test/my/mod.gleam", 4).
++-spec main() -> {ok, boolean()} | {error, any()}.
++main() ->
++    case {ok, 1} of
++        {ok, Value} ->
++            {ok,
++                begin
++                    X = Value,
++                    case 2 of
++                        Y when Y =:= X ->
++                            true;
++
++                        _ ->
++                            false
++                    end
++                end};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_variable_used_in_record_update.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_variable_used_in_record_update.snap
+new file mode 100644
+index 0000000..b8c5375
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__inlined_variable_used_in_record_update.snap
+@@ -0,0 +1,38 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++expression: "\nimport gleam/result\n\npub type Config {\n  Config(host: String, ssl: Bool)\n}\n\npub fn main(config: Config) {\n  use ssl <- result.map(Ok(True))\n  Config(..config, ssl:)\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub type Config {
++  Config(host: String, ssl: Bool)
++}
++
++pub fn main(config: Config) {
++  use ssl <- result.map(Ok(True))
++  Config(..config, ssl:)
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/1]).
++-export_type([config/0]).
++
++-type config() :: {config, binary(), boolean()}.
++
++-file("project/test/my/mod.gleam", 8).
++-spec main(config()) -> {ok, config()} | {error, any()}.
++main(Config) ->
++    case {ok, true} of
++        {ok, Value} ->
++            {ok, {config, erlang:element(2, Config), Value}};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/inline.rs b/compiler-core/src/inline.rs
+index 81df9e9..cfbc00d 100644
+--- a/compiler-core/src/inline.rs
++++ b/compiler-core/src/inline.rs
+@@ -479,7 +479,22 @@ impl Inliner<'_> {
+                 record_assignment: record_assignment
+                     .map(|assignment| Box::new(self.assignment(*assignment))),
+                 constructor: self.boxed_expression(constructor),
+-                arguments,
++                arguments: arguments
++                    .into_iter()
++                    .map(
++                        |TypedCallArg {
++                             label,
++                             location,
++                             value,
++                             implicit,
++                         }| TypedCallArg {
++                            label,
++                            location,
++                            value: self.expression(value),
++                            implicit,
++                        },
++                    )
++                    .collect(),
+             },
+         }
+     }
+@@ -1004,7 +1019,9 @@ impl<'ast> Visit<'ast> for FindInlinableParameters {
+         _type_: &'ast Arc<Type>,
+         location: &'ast SrcSpan,
+     ) {
+-        self.register_reference(name, *location);
++        // Variables are not substituted inside clause guards, so a parameter
++        // referenced in a guard must always be assigned and cannot be inlined.
++        _ = self.parameters.remove(&(name.clone(), *location));
+     }
+ 
+     fn visit_typed_bit_array_size_variable(
+@@ -1018,8 +1035,11 @@ impl<'ast> Visit<'ast> for FindInlinableParameters {
+             Some(constructor) => &constructor.variant,
+             None => return,
+         };
++        // Variables are not substituted inside patterns, so a parameter
++        // referenced in a bit array size pattern must always be assigned and
++        // cannot be inlined.
+         if let ValueConstructorVariant::LocalVariable { location, .. } = variant {
+-            self.register_reference(name, *location);
++            _ = self.parameters.remove(&(name.clone(), *location));
+         }
+     }
+ 

@@ -10,7 +10,7 @@ import { commands } from "../../lanes/outcome-skills/h2h/sessions/commands.ts";
 import { armHome, homeRule } from "../../lanes/outcome-skills/h2h/sessions/home.ts";
 import type { H2hPlanned } from "../../lanes/outcome-skills/h2h/sessions/plan.ts";
 import { composeOverlay, h2hBudget, h2hConfig } from "../../lanes/outcome-skills/h2h/sessions/run.ts";
-import { endOf, gapOf, retries, sessionRecord } from "../../lanes/outcome-skills/h2h/sessions/session.ts";
+import { endOf, gapOf, retries, sessionRecord, withRefusalFallback } from "../../lanes/outcome-skills/h2h/sessions/session.ts";
 import { BROWSER, type ArmInstall, type H2hArm } from "../../lanes/outcome-skills/h2h/types.ts";
 
 const P = readPrereg();
@@ -46,6 +46,48 @@ test("one whole-session retry on upstream or infra, then a gap; a capture refusa
   expect(retries("completed", 1, cap)).toBe(false);
   expect(gapOf("completed", 1, cap)).toBe("E_H2H_CAPTURE");
   expect(gapOf("cap_stop", 1, { cap_stop: true })).toBe("CAP_STOP");
+});
+
+test("Claude Code's refusal fallback is a safety stop, and an ordinary provider error is still upstream (section 7 step 6)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "h2h-fallback-"));
+  try {
+    const line = (o: unknown) => JSON.stringify(o) + "\n";
+    const init = line({ type: "SystemMessage", t: 0.4, subtype: "init", data: { type: "system", subtype: "init", model: P.model }, phase: "t1" });
+    const notice = line({ type: "SystemMessage", t: 5.48, subtype: "model_refusal_fallback", data: { type: "system", subtype: "model_refusal_fallback", trigger: "refusal", direction: "retry", scope: "session", original_model: P.model, fallback_model: "claude-opus-4-8", api_refusal_category: "cyber" }, phase: "t1" });
+    const result = line({ type: "ResultMessage", t: 5.51, subtype: "success", is_error: true, stop_reason: "stop_sequence", phase: "t1" });
+    const flagged = join(dir, "flagged.jsonl"), plain = join(dir, "plain.jsonl");
+    writeFileSync(flagged, init + notice + result);
+    writeFileSync(plain, init + result);
+    const refusedModel = summary([turn("t1", "error_result", { results: [{ subtype: "success", is_error: true, stop_reason: "stop_sequence", num_turns: 2, api_error_status: 403, terminal_reason: "api_error" }] })], { finalized: true, allowance_stops: 0, refusals: ["E_ALLOWANCE"] });
+    const overloaded = summary([turn("t1", "error_result", { results: [{ subtype: "success", is_error: true, stop_reason: null, num_turns: 1, api_error_status: 529, terminal_reason: "api_error" }] })], { finalized: true, allowance_stops: 0, refusals: ["E_UPSTREAM 529"] });
+
+    const stop = withRefusalFallback(refusedModel, flagged);
+    expect(endOf(stop)).toBe("safety_stop");
+    expect(retries(endOf(stop), 1, stop)).toBe(false);
+    expect([gapOf(endOf(stop), 1, stop), gapOf(endOf(stop), 2, stop)]).toEqual([null, null]);
+    expect(sessionRecord(planned("tstack"), stop, { model: P.model, attempt: 2, exposure: null, wall_ms: 5, home_tree_sha256: null })).toMatchObject({ end: "safety_stop", gap: null });
+
+    const noNotice = withRefusalFallback(refusedModel, plain);
+    expect(endOf(noNotice)).toBe("upstream");
+    expect(retries(endOf(noNotice), 1, noNotice)).toBe(true);
+    expect(gapOf(endOf(noNotice), 2, noNotice)).toBe("E_H2H_UPSTREAM_GAP");
+
+    const ordinary = withRefusalFallback(overloaded, plain);
+    expect(endOf(ordinary)).toBe("upstream");
+    expect(retries(endOf(ordinary), 1, ordinary)).toBe(true);
+    expect(gapOf(endOf(ordinary), 2, ordinary)).toBe("E_H2H_UPSTREAM_GAP");
+
+    expect(endOf(withRefusalFallback(summary([turn("t1", "error")]), flagged))).toBe("safety_stop");
+    expect(endOf(withRefusalFallback(summary([turn("t1", "error")]), plain))).toBe("infra");
+    expect(endOf(withRefusalFallback(summary([turn("t1", "error")], { finalized: false, allowance_stops: 0 }), flagged))).toBe("infra");
+    expect(endOf(withRefusalFallback(summary([turn("t1", "error_result")], { finalized: true, allowance_stops: 1 }), flagged))).toBe("limit_allowance");
+    expect(endOf(withRefusalFallback(summary([turn("t1", "completed")]), flagged))).toBe("safety_stop");
+    expect(endOf(withRefusalFallback(summary([turn("t1", "completed")]), plain))).toBe("completed");
+    expect(withRefusalFallback(refusedModel, join(dir, "missing.jsonl"))).toBe(refusedModel);
+    expect(withRefusalFallback(null, flagged)).toBeNull();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("the session record counts turns, continuations, questions, refusals, spend and tokens", () => {

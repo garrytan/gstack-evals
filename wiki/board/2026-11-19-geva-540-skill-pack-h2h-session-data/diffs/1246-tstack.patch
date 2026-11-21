@@ -1,0 +1,130 @@
+diff --git a/content/file/utils.go b/content/file/utils.go
+index bd1f4af..745199f 100644
+--- a/content/file/utils.go
++++ b/content/file/utils.go
+@@ -186,13 +186,16 @@ func extractTarDirectory(dirPath, dirName string, r io.Reader, buf []byte, prese
+ 			// If a hard link is found in the tarball, it will be extracted.
+ 			// If the target link already exists, os.Link will throw an error.
+ 			// This is a known limitation and will not be addressed.
+-			var target string
+-			if target, err = ensureLinkPath(dirPath, dirName, filePath, header.Linkname); err == nil {
+-				err = os.Link(target, filePath)
++			// Use the resolved path rather than the raw link name, since
++			// os.Link resolves relative paths against the process working
++			// directory instead of the directory containing the link.
++			var resolved string
++			if _, resolved, err = ensureLinkPath(dirPath, dirName, filePath, header.Linkname); err == nil {
++				err = os.Link(resolved, filePath)
+ 			}
+ 		case tar.TypeSymlink:
+ 			var target string
+-			target, err = ensureLinkPath(dirPath, dirName, filePath, header.Linkname)
++			target, _, err = ensureLinkPath(dirPath, dirName, filePath, header.Linkname)
+ 			if err != nil {
+ 				return err
+ 			}
+@@ -260,8 +263,10 @@ func resolveRelToBase(baseAbs, baseRel, target string) (string, error) {
+ }
+ 
+ // ensureLinkPath ensures the target path pointed by the link is in the base
+-// path. It returns target path if validated.
+-func ensureLinkPath(baseAbs, baseRel, link, target string) (string, error) {
++// path. If validated, it returns the original target, suitable for symbolic
++// links, and the target path resolved relative to the directory of the link,
++// suitable for hard links.
++func ensureLinkPath(baseAbs, baseRel, link, target string) (string, string, error) {
+ 	// resolve link
+ 	path := target
+ 	if !filepath.IsAbs(target) {
+@@ -269,9 +274,9 @@ func ensureLinkPath(baseAbs, baseRel, link, target string) (string, error) {
+ 	}
+ 	// ensure path is under baseAbs or baseRel
+ 	if _, err := resolveRelToBase(baseAbs, baseRel, path); err != nil {
+-		return "", err
++		return "", "", err
+ 	}
+-	return target, nil
++	return target, path, nil
+ }
+ 
+ // writeFile writes content to the file specified by the `path` parameter.
+diff --git a/content/file/utils_test.go b/content/file/utils_test.go
+index a379ff5..aab1269 100644
+--- a/content/file/utils_test.go
++++ b/content/file/utils_test.go
+@@ -224,7 +224,7 @@ func Test_ensureLinkPath(t *testing.T) {
+ 	}
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+-			got, err := ensureLinkPath(baseAbs, baseRel, tt.link, tt.target)
++			got, _, err := ensureLinkPath(baseAbs, baseRel, tt.link, tt.target)
+ 			if (err != nil) != tt.wantErr {
+ 				t.Errorf("ensureLinkPath() error = %v, wantErr %v", err, tt.wantErr)
+ 				return
+@@ -376,6 +376,66 @@ func Test_extractTarDirectory_HardLink(t *testing.T) {
+ 			t.Error("extractTarDirectory() error = nil, wantErr = true")
+ 		}
+ 	})
++
++	t.Run("hard link with a relative path should not resolve against the working directory", func(t *testing.T) {
++		tempDir := t.TempDir()
++		cwd := filepath.Join(tempDir, "cwd")
++		if err := os.MkdirAll(cwd, 0700); err != nil {
++			t.Fatal(err)
++		}
++		sentinelPath := filepath.Join(cwd, "sentinel.txt")
++		if err := os.WriteFile(sentinelPath, []byte("secret"), 0600); err != nil {
++			t.Fatal(err)
++		}
++		t.Chdir(cwd)
++
++		dirName := "base"
++		dirPath := filepath.Join(tempDir, "extract", dirName)
++		buf := make([]byte, 1024)
++		tarData := createTar(t, []tarEntry{
++			{name: "base/", mode: os.ModeDir | 0777},
++			{name: "base/readme.txt", content: "hello", mode: 0666},
++			{name: "base/evil_link", linkname: "sentinel.txt", mode: 0666, isHardLink: true},
++		})
++
++		if err := extractTarDirectory(dirPath, dirName, bytes.NewReader(tarData), buf, false); err == nil {
++			linkInfo, err := os.Stat(filepath.Join(dirPath, "evil_link"))
++			if err != nil {
++				t.Fatalf("failed to stat link: %v", err)
++			}
++			sentinelInfo, err := os.Stat(sentinelPath)
++			if err != nil {
++				t.Fatalf("failed to stat sentinel: %v", err)
++			}
++			if os.SameFile(linkInfo, sentinelInfo) {
++				t.Fatal("hard link escaped the extraction directory via the working directory")
++			}
++		}
++	})
++
++	t.Run("hard link with a valid relative path should be extracted", func(t *testing.T) {
++		tempDir := t.TempDir()
++		t.Chdir(t.TempDir())
++		dirName := "base"
++		dirPath := filepath.Join(tempDir, dirName)
++		buf := make([]byte, 1024)
++		tarData := createTar(t, []tarEntry{
++			{name: "base/", mode: os.ModeDir | 0777},
++			{name: "base/test.txt", content: "hello world", mode: 0666},
++			{name: "base/test_hardlink", linkname: "test.txt", mode: 0666, isHardLink: true},
++		})
++
++		if err := extractTarDirectory(dirPath, dirName, bytes.NewReader(tarData), buf, false); err != nil {
++			t.Fatalf("extractTarDirectory() error = %v", err)
++		}
++		gotContent, err := os.ReadFile(filepath.Join(dirPath, "test_hardlink"))
++		if err != nil {
++			t.Fatalf("failed to read hard link: %v", err)
++		}
++		if string(gotContent) != "hello world" {
++			t.Errorf("file content = %s, want hello world", gotContent)
++		}
++	})
+ }
+ 
+ type tarEntry struct {

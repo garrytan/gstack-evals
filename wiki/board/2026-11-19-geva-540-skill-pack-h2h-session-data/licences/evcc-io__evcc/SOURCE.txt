@@ -1,0 +1,3 @@
+https://github.com/evcc-io/evcc at 398affc431afbf6aac3f1514b2acac65e1054ea2
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE, LICENSES

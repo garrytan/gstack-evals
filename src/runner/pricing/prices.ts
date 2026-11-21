@@ -196,8 +196,9 @@ export function quoteClientValue(value: unknown, form: "json" | "n" | "type" | "
 
 /**
  * The first part of a request that the provider bills beyond its bytes: a remote or stored file or image (fetched and
- * tokenized by the provider), or a hosted tool enabled under tools (billed per call). Inline base64 media, and replayed
- * hosted-tool calls and results, are counted by their bytes.
+ * tokenized by the provider), or a hosted tool enabled under tools (billed per call). Inline base64 media, a replayed client
+ * tool call's input (a tool_use block in a content list: the model's own arguments, such as a browser tool's url, which the
+ * provider never fetches), and replayed hosted-tool calls and results, are counted by their bytes.
  */
 function unboundedInput(value: unknown, key = "", markers: readonly string[] = []): string | null {
   if (typeof value === "string") {
@@ -217,6 +218,7 @@ function unboundedInput(value: unknown, key = "", markers: readonly string[] = [
   if (key === "tools" && typeof v.type === "string" && HOSTED_TOOL.test(v.type)) return `the hosted tool ${quoteClientValue(v.type, "type", markers)}`;
   if (key === "source" && (v.type === "url" || v.type === "file")) return `a ${v.type} source`;
   for (const [k, child] of Object.entries(v)) {
+    if (k === "input" && key === "content" && v.type === "tool_use") continue;
     const found = unboundedInput(child, k, markers);
     if (found) return found;
   }

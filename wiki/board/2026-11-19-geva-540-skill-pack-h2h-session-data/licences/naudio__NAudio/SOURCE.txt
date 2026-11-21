@@ -1,0 +1,3 @@
+https://github.com/naudio/NAudio at 2292ef00f810af710a071a8e1865c19e553a906a
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

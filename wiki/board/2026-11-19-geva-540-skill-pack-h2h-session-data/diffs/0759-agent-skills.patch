@@ -1,0 +1,92 @@
+diff --git a/.changeset/preserve-session-config-on-update.md b/.changeset/preserve-session-config-on-update.md
+new file mode 100644
+index 0000000..2590b8a
+--- /dev/null
++++ b/.changeset/preserve-session-config-on-update.md
+@@ -0,0 +1,5 @@
++---
++'@openai/agents-realtime': patch
++---
++
++fix: preserve session config (e.g. audio formats) when updating the agent or handing off
+diff --git a/packages/agents-realtime/src/realtimeSession.ts b/packages/agents-realtime/src/realtimeSession.ts
+index 3c4f22e..50bda38 100644
+--- a/packages/agents-realtime/src/realtimeSession.ts
++++ b/packages/agents-realtime/src/realtimeSession.ts
+@@ -313,9 +313,17 @@ export class RealtimeSession<
+       );
+     }
+ 
++    // Start from the user-provided session config so that settings such as
++    // audio formats, turn detection, etc. are preserved on every session
++    // update (e.g. when switching agents), not just on the initial connect.
++    const baseConfig: Partial<RealtimeSessionConfig> = {
++      ...(this.options.config ?? {}),
++    };
++
+     return {
++      ...baseConfig,
+       instructions,
+-      voice: this.#currentAgent.voice,
++      voice: this.#currentAgent.voice ?? baseConfig.voice,
+       model: this.options.model,
+       tools: this.#currentTools,
+       tracing: tracingConfig,
+diff --git a/packages/agents-realtime/test/realtimeSession.test.ts b/packages/agents-realtime/test/realtimeSession.test.ts
+index e39df37..bfda652 100644
+--- a/packages/agents-realtime/test/realtimeSession.test.ts
++++ b/packages/agents-realtime/test/realtimeSession.test.ts
+@@ -301,3 +301,53 @@ describe('RealtimeSession', () => {
+     expect(startEvents).toBe(2);
+   });
+ });
++
++describe('RealtimeSession config preservation', () => {
++  it('preserves session config (e.g. audio formats) when updating the agent', async () => {
++    const transport = new FakeTransport();
++    const agent = new RealtimeAgent({ name: 'A', handoffs: [] });
++    const session = new RealtimeSession(agent, {
++      transport,
++      config: {
++        inputAudioFormat: 'g711_ulaw',
++        outputAudioFormat: 'g711_ulaw',
++      },
++    });
++    await session.connect({ apiKey: 'test' });
++
++    await session.updateAgent(
++      agent.clone({ name: 'Bob', instructions: 'You are Bob.' }),
++    );
++
++    const update = transport.updateSessionConfigCalls.at(-1)!;
++    expect(update.inputAudioFormat).toBe('g711_ulaw');
++    expect(update.outputAudioFormat).toBe('g711_ulaw');
++    expect(update.instructions).toBe('You are Bob.');
++  });
++
++  it('preserves session config when handing off via tool call', async () => {
++    const transport = new FakeTransport();
++    const agentB = new RealtimeAgent({ name: 'B', instructions: 'I am B' });
++    const agentA = new RealtimeAgent({ name: 'A', handoffs: [agentB] });
++    const session = new RealtimeSession(agentA, {
++      transport,
++      config: { inputAudioFormat: 'g711_ulaw', outputAudioFormat: 'g711_ulaw' },
++    });
++    await session.connect({ apiKey: 'test' });
++
++    transport.emit('function_call', {
++      type: 'function_call',
++      name: 'transfer_to_B',
++      callId: 'c1',
++      arguments: '{}',
++    } as any);
++    await vi.waitFor(() =>
++      expect(transport.updateSessionConfigCalls.length).toBeGreaterThan(0),
++    );
++
++    const update = transport.updateSessionConfigCalls.at(-1)!;
++    expect(update.inputAudioFormat).toBe('g711_ulaw');
++    expect(update.outputAudioFormat).toBe('g711_ulaw');
++    expect(update.instructions).toBe('I am B');
++  });
++});

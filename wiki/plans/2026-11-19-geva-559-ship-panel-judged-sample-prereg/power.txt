@@ -1,0 +1,14 @@
+# 145 sampled findings in 44 PRs; frame weights {'RT': 69, 'AD': 32, 'SM': 33, 'FR': 40}
+# scenario: blocker share in every stratum, and the share of extra-voice blockers whose same_first is none (only);
+# the rest split evenly between also-fixed and also-listed. Every sampled PR has a complete first-pass list, so no trail is unknown; k = 1 for every item
+# floor	only	true_U	mean_U	mean_ci_width	P(keep)	P(backs-486)	P(inconclusive)	P(no-reading)	skipped_replicates
+0.4	0.02	0.025	0.022	0.061	0.00	0.89	0.11	0.00	0
+0.4	0.05	0.061	0.057	0.131	0.00	0.57	0.42	0.00	0
+0.4	0.15	0.172	0.179	0.250	0.01	0.01	0.98	0.00	0
+0.4	0.35	0.360	0.349	0.287	0.72	0.00	0.28	0.00	0
+0.4	0.6	0.546	0.545	0.262	1.00	0.00	0.00	0.00	1
+0.6	0.02	0.025	0.024	0.064	0.00	0.94	0.06	0.00	0
+0.6	0.05	0.061	0.058	0.120	0.00	0.66	0.34	0.00	0
+0.6	0.15	0.172	0.173	0.199	0.01	0.03	0.96	0.00	0
+0.6	0.35	0.360	0.359	0.229	0.86	0.00	0.14	0.00	0
+0.6	0.6	0.546	0.546	0.207	1.00	0.00	0.00	0.00	0

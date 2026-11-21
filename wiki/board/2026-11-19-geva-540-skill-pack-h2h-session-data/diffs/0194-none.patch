@@ -1,0 +1,248 @@
+diff --git a/RELEASE_NOTES.md b/RELEASE_NOTES.md
+index 91e9e10..faf7331 100644
+--- a/RELEASE_NOTES.md
++++ b/RELEASE_NOTES.md
+@@ -64,6 +64,7 @@ extensive correctness work during development — see [Docs/Sampler.md](Docs/Sam
+  * `WaveFileWriter`: removed the finalizer that fired an unconditional `Debug.Assert` and could crash the process on the finalizer thread when construction had thrown
+  * `WaveFileWriter.WriteSample` / `WriteSamples`: fixed 32-bit `WaveFormatExtensible` output writing near-silence or corrupt data — `WriteSample(float)` truncated the normalised float to an `Int32` before scaling (writing zero for almost every sample), and both paths ignored the format's SubFormat; they now write IEEE-float or integer-PCM samples according to the declared subformat (#651)
+  * `WaveExtensionMethods.AsStandardWaveFormat`: now also resolves the SubFormat of a `WaveFormatExtraData` (how an extensible format read from a file/stream is materialised), not just a `WaveFormatExtensible`
++ * `WaveStream.CopyTo` / `CopyToAsync` (e.g. `reader.CopyTo(mp3Writer)` when converting a file) now always read whole blocks with a buffer that doesn't depend on the possibly-estimated `Length`; the default .NET Core implementation sizes and rents a buffer that isn't block aligned, which made readers throw or end the copy early. `AudioFileReader.Read` also only requests whole sample frames
+  * `AudioClient.Dispose` is now idempotent and safe against concurrent/re-entrant disposal, fixing an intermittent interop `NullReferenceException` (#1183)
+  * `AcmInterop`: serialised all `msacm32` P/Invokes process-wide, fixing process-killing access violations under concurrent ACM use
+  * `WaveFileReader` / `AiffFileReader`: malformed headers declaring `BlockAlign=0` now throw `InvalidDataException` from the constructor instead of `DivideByZeroException` later (#1254); `WaveFileReader` no longer throws on an oversized `fmt` `cbSize` (#482)
+diff --git a/src/NAudio.Core/Wave/WaveStreams/WaveStream.cs b/src/NAudio.Core/Wave/WaveStreams/WaveStream.cs
+index 9002926..6fa2018 100644
+--- a/src/NAudio.Core/Wave/WaveStreams/WaveStream.cs
++++ b/src/NAudio.Core/Wave/WaveStreams/WaveStream.cs
+@@ -100,6 +100,68 @@ public abstract class WaveStream : Stream, IWaveProvider
+     /// </summary>
+     public virtual int BlockAlign => WaveFormat.BlockAlign;
+ 
++    /// <summary>
++    /// Default size, in bytes, of the buffer used by <see cref="CopyTo(Stream, int)"/>
++    /// (matches <see cref="Stream"/>'s own default copy buffer size)
++    /// </summary>
++    private const int DefaultCopyBufferSize = 81920;
++
++    /// <summary>
++    /// Reads all the remaining audio from this WaveStream and writes it to another stream.
++    /// </summary>
++    /// <remarks>
++    /// The base <see cref="Stream"/> implementation on modern .NET sizes its buffer from
++    /// <c>Length - Position</c> and rents it from <see cref="System.Buffers.ArrayPool{T}"/>, so the
++    /// requested read size is neither guaranteed to be a whole number of blocks nor based on a
++    /// reliable length (for many WaveStreams <see cref="Stream.Length"/> is only an estimate).
++    /// That can make readers which require block-aligned reads throw, or readers which can only
++    /// return whole sample frames report end of stream early, truncating the copied audio.
++    /// This override always reads using a buffer that is a whole multiple of
++    /// <see cref="BlockAlign"/>, and keeps reading until the source returns no more data.
++    /// </remarks>
++    /// <param name="destination">The stream to copy the audio to</param>
++    /// <param name="bufferSize">Requested buffer size in bytes (rounded to a whole number of blocks)</param>
++    public override void CopyTo(Stream destination, int bufferSize)
++    {
++        ValidateCopyToArguments(destination, bufferSize);
++        var buffer = new byte[GetBlockAlignedCopyBufferSize(bufferSize)];
++        int bytesRead;
++        while ((bytesRead = Read(buffer, 0, buffer.Length)) != 0)
++        {
++            destination.Write(buffer, 0, bytesRead);
++        }
++    }
++
++    /// <summary>
++    /// Asynchronously reads all the remaining audio from this WaveStream and writes it to another stream,
++    /// using a buffer that is a whole multiple of <see cref="BlockAlign"/>.
++    /// See <see cref="CopyTo(Stream, int)"/>.
++    /// </summary>
++    /// <param name="destination">The stream to copy the audio to</param>
++    /// <param name="bufferSize">Requested buffer size in bytes (rounded to a whole number of blocks)</param>
++    /// <param name="cancellationToken">Cancellation token</param>
++    public override async System.Threading.Tasks.Task CopyToAsync(Stream destination, int bufferSize,
++        System.Threading.CancellationToken cancellationToken)
++    {
++        ValidateCopyToArguments(destination, bufferSize);
++        var buffer = new byte[GetBlockAlignedCopyBufferSize(bufferSize)];
++        int bytesRead;
++        while ((bytesRead = await ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false)) != 0)
++        {
++            await destination.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
++        }
++    }
++
++    private int GetBlockAlignedCopyBufferSize(int requestedSize)
++    {
++        // Stream.CopyTo(Stream) derives the size from Length - Position, which for many
++        // WaveStreams is only an estimate (and may be tiny or zero), so never go below the default
++        int blockAlign = Math.Max(1, BlockAlign);
++        int size = Math.Max(requestedSize, DefaultCopyBufferSize);
++        size -= size % blockAlign;
++        return Math.Max(size, blockAlign);
++    }
++
+     /// <summary>
+     /// Moves forward or backwards the specified number of seconds in the stream
+     /// </summary>
+diff --git a/src/NAudio/AudioFileReader.cs b/src/NAudio/AudioFileReader.cs
+index f523fcb..f2e9ff8 100644
+--- a/src/NAudio/AudioFileReader.cs
++++ b/src/NAudio/AudioFileReader.cs
+@@ -113,6 +113,9 @@ public class AudioFileReader : WaveStream, ISampleProvider
+     public override int Read(Span<byte> buffer)
+     {
+         var floatSpan = MemoryMarshal.Cast<byte, float>(buffer);
++        // only ever request whole sample frames from the underlying reader
++        int channels = sampleChannel.WaveFormat.Channels;
++        floatSpan = floatSpan.Slice(0, floatSpan.Length - (floatSpan.Length % channels));
+         int samplesRead = Read(floatSpan);
+         return samplesRead * 4;
+     }
+diff --git a/tests/NAudio.Core.Tests/WaveStreams/WaveStreamCopyToTests.cs b/tests/NAudio.Core.Tests/WaveStreams/WaveStreamCopyToTests.cs
+new file mode 100644
+index 0000000..efcf2d2
+--- /dev/null
++++ b/tests/NAudio.Core.Tests/WaveStreams/WaveStreamCopyToTests.cs
+@@ -0,0 +1,143 @@
++using System;
++using System.IO;
++using System.Threading.Tasks;
++using NAudio.Utils;
++using NAudio.Wave;
++using NUnit.Framework;
++
++namespace NAudio.Core.Tests.WaveStreams;
++
++/// <summary>
++/// Stream.CopyTo on modern .NET sizes its buffer from Length - Position and rents it from the
++/// ArrayPool (power-of-two sizes), so the read sizes it issues are not block aligned. WaveStream
++/// overrides CopyTo / CopyToAsync to always read whole blocks and never trust Length.
++/// </summary>
++[TestFixture]
++[Category("UnitTest")]
++public class WaveStreamCopyToTests
++{
++    private static MemoryStream CreateWav(WaveFormat format, int seconds)
++    {
++        var ms = new MemoryStream();
++        using (var writer = new WaveFileWriter(new IgnoreDisposeStream(ms), format))
++        {
++            var data = new byte[format.AverageBytesPerSecond * seconds];
++            for (int n = 0; n < data.Length; n++)
++            {
++                data[n] = (byte)n;
++            }
++            writer.Write(data, 0, data.Length);
++        }
++        ms.Position = 0;
++        return ms;
++    }
++
++    [TestCase(8000, 16, 1)]
++    [TestCase(8000, 24, 1)]
++    [TestCase(44100, 24, 2)]
++    [TestCase(22050, 8, 1)]
++    public void CopyToCopiesAllAudioFromWaveFileReader(int sampleRate, int bits, int channels)
++    {
++        var format = new WaveFormat(sampleRate, bits, channels);
++        using var reader = new WaveFileReader(CreateWav(format, 16));
++        var dest = new MemoryStream();
++
++        reader.CopyTo(dest);
++
++        Assert.That(dest.Length, Is.EqualTo(reader.Length));
++        Assert.That(dest.Length, Is.EqualTo(format.AverageBytesPerSecond * 16));
++    }
++
++    [TestCase(8000, 24, 1)]
++    [TestCase(8000, 16, 1)]
++    public async Task CopyToAsyncCopiesAllAudioFromWaveFileReader(int sampleRate, int bits, int channels)
++    {
++        var format = new WaveFormat(sampleRate, bits, channels);
++        using var reader = new WaveFileReader(CreateWav(format, 16));
++        var dest = new MemoryStream();
++
++        await reader.CopyToAsync(dest);
++
++        Assert.That(dest.Length, Is.EqualTo(format.AverageBytesPerSecond * 16));
++    }
++
++    [TestCase(1)]
++    [TestCase(3)]
++    [TestCase(1000)]
++    public void CopyToHonoursBufferSizeButAlwaysReadsWholeBlocks(int bufferSize)
++    {
++        var format = new WaveFormat(8000, 24, 1);
++        using var reader = new WaveFileReader(CreateWav(format, 2));
++        var dest = new MemoryStream();
++
++        reader.CopyTo(dest, bufferSize);
++
++        Assert.That(dest.Length, Is.EqualTo(format.AverageBytesPerSecond * 2));
++    }
++
++    [Test]
++    public void CopyToDoesNotTruncateWhenLengthIsAnUnderestimate()
++    {
++        // a mono float stream that can only return whole samples and reports a
++        // Length of a quarter of its actual content (as estimated lengths can)
++        var stream = new UnderestimatedLengthStream(WaveFormat.CreateIeeeFloatWaveFormat(8000, 1),
++            actualBytes: 8000 * 4 * 16, reportedLength: 8000 * 4 * 4);
++        var dest = new MemoryStream();
++
++        stream.CopyTo(dest);
++
++        Assert.That(dest.Length, Is.EqualTo(8000 * 4 * 16));
++    }
++
++    [Test]
++    public void CopyToFromNearTheEndWithUnderestimatedLengthStillCopiesRemainder()
++    {
++        var stream = new UnderestimatedLengthStream(WaveFormat.CreateIeeeFloatWaveFormat(8000, 1),
++            actualBytes: 8000, reportedLength: 4000);
++        var first = new byte[4000];
++        Assert.That(stream.Read(first, 0, first.Length), Is.EqualTo(4000));
++        var dest = new MemoryStream();
++
++        // Position == Length here, so Stream's default sizing would pick a 1 byte buffer
++        stream.CopyTo(dest);
++
++        Assert.That(dest.Length, Is.EqualTo(4000));
++    }
++
++    private class UnderestimatedLengthStream : WaveStream
++    {
++        private readonly long actualBytes;
++        private readonly long reportedLength;
++        private long position;
++
++        public UnderestimatedLengthStream(WaveFormat format, long actualBytes, long reportedLength)
++        {
++            WaveFormat = format;
++            this.actualBytes = actualBytes;
++            this.reportedLength = reportedLength;
++        }
++
++        public override WaveFormat WaveFormat { get; }
++
++        public override long Length => reportedLength;
++
++        public override long Position
++        {
++            get => position;
++            set => position = value;
++        }
++
++        public override int Read(Span<byte> buffer)
++        {
++            // like AudioFileReader, only whole sample frames can be returned
++            int count = (int)Math.Min(buffer.Length, actualBytes - position);
++            count -= count % WaveFormat.BlockAlign;
++            buffer.Slice(0, count).Clear();
++            position += count;
++            return count;
++        }
++
++        public override int Read(byte[] buffer, int offset, int count)
++            => Read(buffer.AsSpan(offset, count));
++    }
++}

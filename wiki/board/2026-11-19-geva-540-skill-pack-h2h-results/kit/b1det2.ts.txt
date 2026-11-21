@@ -1,0 +1,45 @@
+// b1det2.ts (GEVA-540 kit scratch): b1det.ts for stage 2. B1's merged Prove-It detector (lanes/delivery-route/detect.ts
+// at b5d89f2, ~/h2h/mainwt) over agent-skills' bug sessions, beside the frozen reading, plus the both-ways exposure
+// (frozen procedure, or bash_only_source). Descriptive only. The patch is the scorer's own main-checkout change
+// (sessionTree + openTree at the session's base_head, as scoreSession calls it), the transcript the session's sdk-messages.jsonl through parseLog.
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+const { detect } = await import("/home/ubi/h2h/mainwt/lanes/delivery-route/detect.ts");
+const { parseLog } = await import("/home/ubi/h2h/mainwt/quick/laneb/l1/probes.ts");
+const { sessionTree } = await import("/home/ubi/h2h/repo/lanes/outcome-skills/h2h/score/score.ts");
+const { openTree } = await import("/home/ubi/h2h/repo/lanes/outcome-skills/h2h/score/tree.ts");
+const R = "/home/ubi/h2h/run/geva540-s2-7700a8f";
+const units = new Map<string, any>(JSON.parse(readFileSync(R + "/stage/units.json", "utf8")).map((u: any) => [u.id, u]));
+const agg: Record<string, Record<string, number>> = {};
+const rows: string[] = [];
+for (const d of readdirSync(join(R, "out/sessions")).sort()) {
+  if (!d.endsWith("-agent-skills")) continue;
+  const sd = join(R, "out/sessions", d);
+  const rec = JSON.parse(readFileSync(join(sd, "session.json"), "utf8"));
+  const u = units.get(rec.unit);
+  if (u.entry !== "bug" || rec.gap) continue;
+  const repoDir = JSON.parse(readFileSync(join(R, "stage/units", rec.unit, "unit.json"), "utf8")).repo_dir;
+  const cls = u.kind === "O" ? "O-bug" : u.kind;
+  const work = mkdtempSync(join(tmpdir(), "b1det-"));
+  let patch = "";
+  try {
+    const t = openTree(sessionTree(sd, rec.tree_bundle, work), rec.base_head, { containerRepoDir: repoDir });
+    patch = t.main.patch;
+    t.close();
+  } catch (e) {
+    rows.push([rec.index, cls, "capture_failed", String((e as Error).message).slice(0, 120)].join("\t"));
+    continue;
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+  const x = detect(parseLog(readFileSync(join(sd, "sdk-messages.jsonl"), "utf8")), patch, "/testbed");
+  const frozen = !!rec.exposure?.procedure;
+  const a = (agg[cls] ??= { n: 0, frozen: 0, upper: 0, followed: 0, followed_tool_only: 0, test_before_source: 0, failing_before_source: 0, test_failing_before_source: 0, passing_after_source: 0, bash_only_source: 0, source_write_unseen: 0, unresolved: 0 });
+  a.n++; a.frozen += +frozen; a.upper += +(frozen || !!x.bash_only_source); a.followed += +x.followed; a.followed_tool_only += +x.followed_tool_only;
+  a.test_before_source += +x.test_before_source; a.failing_before_source += +x.failing_before_source; a.test_failing_before_source += +(x.test_before_source && x.failing_before_source);
+  a.passing_after_source += +x.passing_after_source; a.bash_only_source += +x.bash_only_source; a.source_write_unseen += +x.source_write_unseen; a.unresolved += +(x.unresolved_writes > 0);
+  rows.push([rec.index, cls, +frozen, +!!x.bash_only_source, +x.followed, +x.test_before_source, +x.failing_before_source].join("\t"));
+}
+writeFileSync(R + "/analysis/agent-skills-b1det.tsv", "index\tclass\tfrozen\tbash_only_source\tfollowed\ttest_before_source\tfailing_before_source\n" + rows.join("\n") + "\n");
+console.log(JSON.stringify(agg));

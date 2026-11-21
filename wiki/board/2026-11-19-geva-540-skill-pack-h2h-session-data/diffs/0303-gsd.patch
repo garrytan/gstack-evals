@@ -1,0 +1,63 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java b/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
+index fcc4c74..2140983 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
++++ b/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
+@@ -152,7 +152,7 @@ public class CognitoJsonHandler {
+         List<UserPoolClient> clients = service.listUserPoolClients(request.path("UserPoolId").asText());
+         ObjectNode response = objectMapper.createObjectNode();
+         ArrayNode items = response.putArray("UserPoolClients");
+-        clients.forEach(c -> items.add(clientToNode(c)));
++        clients.forEach(c -> items.add(clientToDescriptionNode(c)));
+         return Response.ok(response).build();
+     }
+ 
+@@ -465,6 +465,18 @@ public class CognitoJsonHandler {
+         return node;
+     }
+ 
++    /**
++     * Builds a UserPoolClientDescription as returned by ListUserPoolClients,
++     * which only contains ClientId, ClientName and UserPoolId.
++     */
++    private ObjectNode clientToDescriptionNode(UserPoolClient c) {
++        ObjectNode node = objectMapper.createObjectNode();
++        node.put("ClientId", c.getClientId());
++        node.put("ClientName", c.getClientName());
++        node.put("UserPoolId", c.getUserPoolId());
++        return node;
++    }
++
+     private ObjectNode clientToNode(UserPoolClient c) {
+         ObjectNode node = objectMapper.createObjectNode();
+         node.put("ClientId", c.getClientId());
+diff --git a/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoOAuthTokenIntegrationTest.java b/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoOAuthTokenIntegrationTest.java
+index 6459e38..1901fd6 100644
+--- a/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoOAuthTokenIntegrationTest.java
++++ b/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoOAuthTokenIntegrationTest.java
+@@ -125,6 +125,26 @@ class CognitoOAuthTokenIntegrationTest {
+                 response.path("UserPoolClient").path("AllowedOAuthFlows").get(0).asText());
+     }
+ 
++    @Test
++    @Order(2)
++    void listUserPoolClientsReturnsOnlyDescriptionFields() throws Exception {
++        JsonNode response = cognitoJson("ListUserPoolClients", """
++                {
++                  "UserPoolId": "%s"
++                }
++                """.formatted(poolId));
++
++        JsonNode clients = response.path("UserPoolClients");
++        assertTrue(clients.isArray());
++        assertEquals(3, clients.size());
++        for (JsonNode client : clients) {
++            assertEquals(3, client.size(), "Unexpected fields: " + client);
++            assertTrue(client.hasNonNull("ClientId"));
++            assertTrue(client.hasNonNull("ClientName"));
++            assertEquals(poolId, client.path("UserPoolId").asText());
++        }
++    }
++
+     @Test
+     @Order(3)
+     void updateResourceServerReplacesNameAndScopes() throws Exception {

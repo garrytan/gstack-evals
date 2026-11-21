@@ -1,0 +1,85 @@
+diff --git a/pkg/server/server.go b/pkg/server/server.go
+index 86f17e8..16f332f 100644
+--- a/pkg/server/server.go
++++ b/pkg/server/server.go
+@@ -861,12 +861,33 @@ func newMetricsMiddleware(reg prometheus.Registerer) func(http.Handler) http.Han
+ 			rec := statusCodeRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+ 			handler.ServeHTTP(&rec, r)
+ 			path := normalizedPath(r)
+-			requests.WithLabelValues(r.Method, path, strconv.Itoa(rec.statusCode)).Inc()
+-			duration.WithLabelValues(r.Method, path).Observe(time.Since(start).Seconds())
++			method := metricsMethodLabel(r.Method)
++			requests.WithLabelValues(method, path, strconv.Itoa(rec.statusCode)).Inc()
++			duration.WithLabelValues(method, path).Observe(time.Since(start).Seconds())
+ 		})
+ 	}
+ }
+ 
++var metricsMethods = map[string]struct{}{
++	http.MethodGet:     {},
++	http.MethodPost:    {},
++	http.MethodPut:     {},
++	http.MethodDelete:  {},
++	http.MethodOptions: {},
++	http.MethodHead:    {},
++	http.MethodConnect: {},
++	http.MethodTrace:   {},
++}
++
++// metricsMethodLabel clamps the client-controlled method to a fixed set so
++// arbitrary methods cannot create unbounded Prometheus series.
++func metricsMethodLabel(method string) string {
++	if _, ok := metricsMethods[method]; ok {
++		return method
++	}
++	return "other"
++}
++
+ // normalizedPath returns a normalized mux path template representation
+ func normalizedPath(r *http.Request) string {
+ 	if route := mux.CurrentRoute(r); route != nil {
+diff --git a/pkg/server/server_test.go b/pkg/server/server_test.go
+index d4c9952..7afebbe 100644
+--- a/pkg/server/server_test.go
++++ b/pkg/server/server_test.go
+@@ -395,6 +395,40 @@ func TestDeleteSecret(t *testing.T) {
+ 	}
+ }
+ 
++func TestMetricsClampsUnknownMethods(t *testing.T) {
++	y := newTestServer(t, &mockDB{}, 1, false)
++	h := y.HTTPHandler()
++
++	for _, method := range []string{"M1", "M2", "PATCH", "get", "GET"} {
++		req, err := http.NewRequest(method, "/", nil)
++		if err != nil {
++			t.Fatal(err)
++		}
++		h.ServeHTTP(httptest.NewRecorder(), req)
++	}
++
++	families, err := y.Registry.Gather()
++	if err != nil {
++		t.Fatal(err)
++	}
++	methods := map[string]bool{}
++	for _, mf := range families {
++		if mf.GetName() != "yopass_http_requests_total" && mf.GetName() != "yopass_http_request_duration_seconds" {
++			continue
++		}
++		for _, m := range mf.GetMetric() {
++			for _, l := range m.GetLabel() {
++				if l.GetName() == "method" {
++					methods[l.GetValue()] = true
++				}
++			}
++		}
++	}
++	if len(methods) != 2 || !methods["GET"] || !methods["other"] {
++		t.Fatalf("expected method labels {GET, other}; got %v", methods)
++	}
++}
++
+ func TestMetrics(t *testing.T) {
+ 	requests := []struct {
+ 		method string

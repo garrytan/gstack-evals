@@ -1,0 +1,73 @@
+diff --git a/lib/dispatcher/client-h2.js b/lib/dispatcher/client-h2.js
+index 3fc6384..2b04058 100644
+--- a/lib/dispatcher/client-h2.js
++++ b/lib/dispatcher/client-h2.js
+@@ -292,7 +292,18 @@ function writeH2 (client, request) {
+     const key = reqHeaders[n + 0]
+     const val = reqHeaders[n + 1]
+ 
+-    if (Array.isArray(val)) {
++    if (key.toLowerCase() === 'cookie') {
++      // RFC 9113, Section 8.2.3: cookie-pairs are delimited by ";" and the
++      // Cookie header MAY be split into separate header fields. Send each
++      // value as its own field instead of joining with ",".
++      const existing = headers[key]
++      const values = Array.isArray(val) ? val : [val]
++      if (existing === undefined) {
++        headers[key] = values.length === 1 ? values[0] : [...values]
++      } else {
++        headers[key] = (Array.isArray(existing) ? existing : [existing]).concat(values)
++      }
++    } else if (Array.isArray(val)) {
+       for (let i = 0; i < val.length; i++) {
+         if (headers[key]) {
+           headers[key] += `, ${val[i]}`
+diff --git a/test/http2.js b/test/http2.js
+index 83e1422..745078b 100644
+--- a/test/http2.js
++++ b/test/http2.js
+@@ -173,6 +173,44 @@ test('Should support H2 connection (headers as array)', async t => {
+   t.strictEqual(Buffer.concat(body).toString('utf8'), 'hello h2!')
+ })
+ 
++test('Should send multiple cookie values as separate H2 header fields', async t => {
++  const server = createSecureServer(await pem.generate({ opts: { keySize: 2048 } }))
++
++  server.on('stream', (stream, headers, flags, rawHeaders) => {
++    // Node joins multiple cookie fields with "; " (RFC 9113 8.2.3)
++    t.strictEqual(headers.cookie, 'a=b; c=d; e=f')
++    const cookies = []
++    for (let i = 0; i < rawHeaders.length; i += 2) {
++      if (rawHeaders[i] === 'cookie') cookies.push(rawHeaders[i + 1])
++    }
++    t.deepStrictEqual(cookies, ['a=b', 'c=d', 'e=f'])
++    stream.respond({ ':status': 200 })
++    stream.end()
++  })
++
++  server.listen(0)
++  await once(server, 'listening')
++
++  const client = new Client(`https://localhost:${server.address().port}`, {
++    connect: {
++      rejectUnauthorized: false
++    },
++    allowH2: true
++  })
++
++  t = tspl(t, { plan: 3 })
++  after(() => server.close())
++  after(() => client.close())
++
++  const response = await client.request({
++    path: '/',
++    method: 'GET',
++    headers: { cookie: ['a=b', 'c=d', 'e=f'] }
++  })
++  await response.body.dump()
++  t.strictEqual(response.statusCode, 200)
++})
++
+ test('Should support H2 connection(POST Buffer)', async t => {
+   const server = createSecureServer({ ...await pem.generate({ opts: { keySize: 2048 } }), allowHTTP1: false })
+ 

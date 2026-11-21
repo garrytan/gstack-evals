@@ -1,0 +1,3 @@
+https://github.com/oauth2-proxy/oauth2-proxy at 21ea0a74e10bef436b133b4285d029d398256624
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

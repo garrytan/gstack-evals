@@ -1,0 +1,74 @@
+diff --git a/src/BootstrapBlazor/Services/DefaultBrowserFingerService.cs b/src/BootstrapBlazor/Services/DefaultBrowserFingerService.cs
+index b99da81..82bfd55 100644
+--- a/src/BootstrapBlazor/Services/DefaultBrowserFingerService.cs
++++ b/src/BootstrapBlazor/Services/DefaultBrowserFingerService.cs
+@@ -14,11 +14,18 @@ class DefaultBrowserFingerService(IJSRuntime jSRuntime) : IBrowserFingerService
+     private JSModule? _module = null;
+ 
+     /// <summary>
+-    /// 获取剪切板数据方法
++    /// <inheritdoc/>
+     /// </summary>
+-    public async Task<string?> GetFingerCodeAsync(CancellationToken token = default)
++    public Task<string?> GetFingerCodeAsync(CancellationToken token = default) => InvokeAsync("getFingerCode", token);
++
++    /// <summary>
++    /// <inheritdoc/>
++    /// </summary>
++    public Task<string?> GetClientHubIdAsync(CancellationToken token = default) => InvokeAsync("getClientHubId", token);
++
++    private async Task<string?> InvokeAsync(string identifier, CancellationToken token)
+     {
+         _module ??= await jSRuntime.LoadUtility();
+-        return await _module.InvokeAsync<string?>("getFingerCode", token);
++        return await _module.InvokeAsync<string?>(identifier, token);
+     }
+ }
+diff --git a/src/BootstrapBlazor/Services/IBrowserFingerService.cs b/src/BootstrapBlazor/Services/IBrowserFingerService.cs
+index 6c46122..ee91616 100644
+--- a/src/BootstrapBlazor/Services/IBrowserFingerService.cs
++++ b/src/BootstrapBlazor/Services/IBrowserFingerService.cs
+@@ -15,4 +15,10 @@ public interface IBrowserFingerService
+     /// </summary>
+     /// <returns></returns>
+     Task<string?> GetFingerCodeAsync(CancellationToken token = default);
++
++    /// <summary>
++    /// 获得当前客户端 Hub Id 方法
++    /// </summary>
++    /// <returns></returns>
++    Task<string?> GetClientHubIdAsync(CancellationToken token = default);
+ }
+diff --git a/src/BootstrapBlazor/wwwroot/modules/utility.js b/src/BootstrapBlazor/wwwroot/modules/utility.js
+index 0d97300..81cb655 100644
+--- a/src/BootstrapBlazor/wwwroot/modules/utility.js
++++ b/src/BootstrapBlazor/wwwroot/modules/utility.js
+@@ -677,6 +677,10 @@ const hashCode = str => {
+     return hash;
+ }
+ 
++export function getClientHubId() {
++    return localStorage.getItem('bb_hub_connection_id');
++}
++
+ export function getFingerCode() {
+     const canvas = document.createElement('canvas');
+     canvas.width = 200;
+diff --git a/test/UnitTest/Services/BrowserFingerServiceTest.cs b/test/UnitTest/Services/BrowserFingerServiceTest.cs
+index 7d28958..9b8c350 100644
+--- a/test/UnitTest/Services/BrowserFingerServiceTest.cs
++++ b/test/UnitTest/Services/BrowserFingerServiceTest.cs
+@@ -15,4 +15,13 @@ public class BrowserFingerServiceTest : BootstrapBlazorTestBase
+         var code = await service.GetFingerCodeAsync();
+         Assert.Equal("9527", code);
+     }
++
++    [Fact]
++    public async Task GetClientHubIdAsync_Ok()
++    {
++        Context.JSInterop.Setup<string?>("getClientHubId").SetResult("hub-9527");
++        var service = Context.Services.GetRequiredService<IBrowserFingerService>();
++        var id = await service.GetClientHubIdAsync();
++        Assert.Equal("hub-9527", id);
++    }
+ }

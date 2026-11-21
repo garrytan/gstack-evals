@@ -1,0 +1,94 @@
+diff --git a/.changeset/quiet-inputs-wait.md b/.changeset/quiet-inputs-wait.md
+new file mode 100644
+index 0000000..ea579ef
+--- /dev/null
++++ b/.changeset/quiet-inputs-wait.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: wait until changes propagate before updating input selection state
+diff --git a/packages/svelte/src/internal/client/dom/elements/bindings/input.js b/packages/svelte/src/internal/client/dom/elements/bindings/input.js
+index 67e6ff1..b21ed3b 100644
+--- a/packages/svelte/src/internal/client/dom/elements/bindings/input.js
++++ b/packages/svelte/src/internal/client/dom/elements/bindings/input.js
+@@ -6,7 +6,7 @@ import * as e from '../../../errors.js';
+ import { is } from '../../../proxy.js';
+ import { queue_micro_task } from '../../task.js';
+ import { hydrating } from '../../hydration.js';
+-import { untrack } from '../../../runtime.js';
++import { tick, untrack } from '../../../runtime.js';
+ import { is_runes } from '../../../context.js';
+ import { current_batch, previous_batch } from '../../../reactivity/batch.js';
+ 
+@@ -21,7 +21,7 @@ export function bind_value(input, get, set = get) {
+ 
+ 	var batches = new WeakSet();
+ 
+-	listen_to_event_and_reset_event(input, 'input', (is_reset) => {
++	listen_to_event_and_reset_event(input, 'input', async (is_reset) => {
+ 		if (DEV && input.type === 'checkbox') {
+ 			// TODO should this happen in prod too?
+ 			e.bind_invalid_checkbox_value();
+@@ -36,6 +36,10 @@ export function bind_value(input, get, set = get) {
+ 			batches.add(current_batch);
+ 		}
+ 
++		// `{#each}` blocks update their item sources during the flush, so reading
++		// `get()` synchronously here can return a stale value. Wait for the flush first.
++		await tick();
++
+ 		// In runes mode, respect any validation in accessors (doesn't apply in legacy mode,
+ 		// because we use mutable state which ensures the render effect always runs)
+ 		if (runes && value !== (value = get())) {
+diff --git a/packages/svelte/tests/runtime-runes/samples/bind-value-function-each-reassign/_config.js b/packages/svelte/tests/runtime-runes/samples/bind-value-function-each-reassign/_config.js
+new file mode 100644
+index 0000000..e8d6a70
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/bind-value-function-each-reassign/_config.js
+@@ -0,0 +1,22 @@
++import { tick } from 'svelte';
++import { test } from '../../test';
++
++export default test({
++	async test({ assert, target }) {
++		const input = /** @type {HTMLInputElement} */ (target.querySelector('input'));
++		const div = /** @type {HTMLDivElement} */ (target.querySelector('div'));
++		input.focus();
++
++		input.value = 'value1';
++		input.dispatchEvent(new Event('input', { bubbles: true }));
++		await tick();
++		assert.equal(div.textContent, 'value1');
++		assert.equal(input.value, 'value1');
++
++		input.value = 'value12';
++		input.dispatchEvent(new Event('input', { bubbles: true }));
++		await tick();
++		assert.equal(div.textContent, 'value12');
++		assert.equal(input.value, 'value12');
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/bind-value-function-each-reassign/main.svelte b/packages/svelte/tests/runtime-runes/samples/bind-value-function-each-reassign/main.svelte
+new file mode 100644
+index 0000000..d89815b
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/bind-value-function-each-reassign/main.svelte
+@@ -0,0 +1,16 @@
++<script>
++	class MyStore {
++		arrayOfComplexObjects = $state([{ value: 'value' }]);
++
++		updateObject = (x) => {
++			this.arrayOfComplexObjects = this.arrayOfComplexObjects.map((_) => ({ value: x }));
++		};
++	}
++
++	const myStore = new MyStore();
++</script>
++
++{#each myStore.arrayOfComplexObjects as obj}
++	<div>{obj.value}</div>
++	<input bind:value={() => obj.value, (x) => myStore.updateObject(x)} />
++{/each}

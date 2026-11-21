@@ -1,0 +1,231 @@
+diff --git a/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java b/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java
+index b1b3123..502e124 100644
+--- a/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java
++++ b/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java
+@@ -13,6 +13,7 @@ import io.strimzi.crdgenerator.annotations.AddedIn;
+ import io.strimzi.crdgenerator.annotations.Crd;
+ import io.strimzi.crdgenerator.annotations.Description;
+ import io.strimzi.crdgenerator.annotations.DescriptionFile;
++import io.strimzi.crdgenerator.annotations.ExternalLink;
+ import io.strimzi.crdgenerator.annotations.KubeLink;
+ import io.strimzi.crdgenerator.annotations.PresentInVersions;
+ 
+@@ -89,7 +90,7 @@ class DocGenerator {
+         Set<Property> memorableProperties = new HashSet<>();
+ 
+         for (Property property : properties(crApiVersion, cls).values()) {
+-            if (property.isAnnotationPresent(KubeLink.class)) {
++            if (property.isAnnotationPresent(KubeLink.class) || property.isAnnotationPresent(ExternalLink.class)) {
+                 continue;
+             }
+ 
+@@ -151,9 +152,7 @@ class DocGenerator {
+             final Property property = entry.getValue();
+             PropertyType propertyType = property.getType();
+         
+-            // Set the external link to Kubernetes docs or the link for fields distinguished by `type`
+-            KubeLink kubeLink = property.getAnnotation(KubeLink.class);
+-            String externalUrl = linker != null && kubeLink != null ? linker.link(kubeLink) : null;
++            String externalUrl = externalUrl(property);
+         
+             // Add the property name
+             out.append("|").append(propertyName);
+@@ -188,6 +187,16 @@ class DocGenerator {
+         appendNestedTypes(crd, types);
+     }    
+ 
++    private String externalUrl(Property property) {
++        ExternalLink externalLink = property.getAnnotation(ExternalLink.class);
++        if (externalLink != null) {
++            return externalLink.value();
++        }
++
++        KubeLink kubeLink = property.getAnnotation(KubeLink.class);
++        return linker != null && kubeLink != null ? linker.link(kubeLink) : null;
++    }
++
+     /**
+      * Sets warning message for deprecated fields
+      *
+diff --git a/crd-generator/src/main/java/io/strimzi/crdgenerator/annotations/ExternalLink.java b/crd-generator/src/main/java/io/strimzi/crdgenerator/annotations/ExternalLink.java
+new file mode 100644
+index 0000000..952e5c5
+--- /dev/null
++++ b/crd-generator/src/main/java/io/strimzi/crdgenerator/annotations/ExternalLink.java
+@@ -0,0 +1,26 @@
++/*
++ * Copyright Strimzi authors.
++ * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
++ */
++package io.strimzi.crdgenerator.annotations;
++
++import java.lang.annotation.ElementType;
++import java.lang.annotation.Retention;
++import java.lang.annotation.RetentionPolicy;
++import java.lang.annotation.Target;
++
++/**
++ * Configures an external URL to which the documentation should link for the annotated property. Unlike
++ * {@link KubeLink}, which generates links to the Kubernetes API reference, this can point to any URL, for example
++ * to the Gateway API documentation.
++ */
++@Retention(RetentionPolicy.RUNTIME)
++@Target({ElementType.METHOD, ElementType.FIELD})
++public @interface ExternalLink {
++    /**
++     * Gets the URL to which the link should point.
++     *
++     * @return  URL to which the link should point
++     */
++    String value();
++}
+diff --git a/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleCrd.java b/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleCrd.java
+index 4620827..97b9421 100644
+--- a/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleCrd.java
++++ b/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleCrd.java
+@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+ import com.fasterxml.jackson.annotation.JsonSubTypes;
+ import com.fasterxml.jackson.annotation.JsonTypeInfo;
+ import io.fabric8.kubernetes.api.model.Affinity;
++import io.fabric8.kubernetes.api.model.LocalObjectReference;
+ import io.fabric8.kubernetes.api.model.Quantity;
+ import io.fabric8.kubernetes.client.CustomResource;
+ import io.strimzi.crdgenerator.annotations.AddedIn;
+@@ -18,6 +19,7 @@ import io.strimzi.crdgenerator.annotations.CelValidation;
+ import io.strimzi.crdgenerator.annotations.Crd;
+ import io.strimzi.crdgenerator.annotations.Description;
+ import io.strimzi.crdgenerator.annotations.Example;
++import io.strimzi.crdgenerator.annotations.ExternalLink;
+ import io.strimzi.crdgenerator.annotations.KubeLink;
+ import io.strimzi.crdgenerator.annotations.Minimum;
+ import io.strimzi.crdgenerator.annotations.MinimumItems;
+@@ -61,7 +63,7 @@ import java.util.Map;
+ @OneOf({@OneOf.Alternative(@OneOf.Alternative.Property("either")), @OneOf.Alternative(@OneOf.Alternative.Property("or")), @OneOf.Alternative({@OneOf.Alternative.Property("mapStringString"), @OneOf.Alternative.Property("mapStringObject")})})
+ @JsonInclude(JsonInclude.Include.NON_NULL)
+ @JsonPropertyOrder({"ignored", "stringProperty", "intProperty", "longProperty", "booleanProperty", "normalEnum", "customisedEnum",
+-    "objectProperty", "mapStringObject", "mapStringString", "mapStringQuantity", "polymorphicProperty", "affinity", "fieldProperty",
++    "objectProperty", "mapStringObject", "mapStringString", "mapStringQuantity", "polymorphicProperty", "affinity", "localObjectReference", "fieldProperty",
+     "arrayProperty", "arrayProperty2", "listOfInts", "listOfInts2", "listOfObjects", "listOfPolymorphic",
+     "rawList", "listOfRawList", "arrayOfList", "arrayOfRawList", "listOfArray", "arrayOfTypeVar", "listOfTypeVar",
+     "arrayOfBoundTypeVar", "listOfBoundTypeVar", "arrayOfBoundTypeVar2", "listOfBoundTypeVar2",
+@@ -87,6 +89,8 @@ public class ExampleCrd<T, U extends Number, V extends U> extends CustomResource
+ 
+     private Affinity affinity;
+ 
++    private LocalObjectReference localObjectReference;
++
+     @Description("Example of field property.")
+     public String fieldProperty;
+ 
+@@ -353,4 +357,13 @@ public class ExampleCrd<T, U extends Number, V extends U> extends CustomResource
+     public void setAffinity(Affinity affinity) {
+         this.affinity = affinity;
+     }
++
++    @ExternalLink("https://gateway-api.sigs.k8s.io/reference/spec/#localobjectreference")
++    public LocalObjectReference getLocalObjectReference() {
++        return localObjectReference;
++    }
++
++    public void setLocalObjectReference(LocalObjectReference localObjectReference) {
++        this.localObjectReference = localObjectReference;
++    }
+ }
+diff --git a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.adoc b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.adoc
+index 838d824..8778837 100644
+--- a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.adoc
++++ b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.adoc
+@@ -41,6 +41,9 @@
+ |affinity
+ |{KubeApiReferenceBase}#affinity-v1-core[Affinity]
+ |
++|localObjectReference
++|https://gateway-api.sigs.k8s.io/reference/spec/#localobjectreference[LocalObjectReference]
++|
+ |fieldProperty
+ |string
+ |Example of field property.
+diff --git a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.yaml b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.yaml
+index f1f84a2..12dca3c 100644
+--- a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.yaml
++++ b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.yaml
+@@ -443,6 +443,11 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          localObjectReference:
++            type: object
++            properties:
++              name:
++                type: string
+           fieldProperty:
+             type: string
+             description: Example of field property.
+@@ -1054,6 +1059,11 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          localObjectReference:
++            type: object
++            properties:
++              name:
++                type: string
+           fieldProperty:
+             type: string
+             description: Example of field property.
+diff --git a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestHelmMetadata.yaml b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestHelmMetadata.yaml
+index 54516c3..ffcd8dc 100644
+--- a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestHelmMetadata.yaml
++++ b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestHelmMetadata.yaml
+@@ -449,6 +449,11 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          localObjectReference:
++            type: object
++            properties:
++              name:
++                type: string
+           fieldProperty:
+             type: string
+             description: Example of field property.
+@@ -1060,6 +1065,11 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          localObjectReference:
++            type: object
++            properties:
++              name:
++                type: string
+           fieldProperty:
+             type: string
+             description: Example of field property.
+diff --git a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestWithoutDescriptions.yaml b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestWithoutDescriptions.yaml
+index 09062a6..ac2c4cd 100644
+--- a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestWithoutDescriptions.yaml
++++ b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestWithoutDescriptions.yaml
+@@ -439,6 +439,11 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          localObjectReference:
++            type: object
++            properties:
++              name:
++                type: string
+           fieldProperty:
+             type: string
+           arrayProperty:
+@@ -1044,6 +1049,11 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          localObjectReference:
++            type: object
++            properties:
++              name:
++                type: string
+           fieldProperty:
+             type: string
+           arrayProperty:

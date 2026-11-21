@@ -1,0 +1,83 @@
+diff --git a/rust/src/dashboard/routes/helpers.rs b/rust/src/dashboard/routes/helpers.rs
+index dc848c6..ad821e2 100644
+--- a/rust/src/dashboard/routes/helpers.rs
++++ b/rust/src/dashboard/routes/helpers.rs
+@@ -173,9 +173,77 @@ fn git_root_for(path: &str) -> Option<String> {
+     let mut p = Path::new(path);
+     loop {
+         let git = p.join(".git");
+-        if git.exists() {
++        if is_valid_git_boundary(&git) {
+             return Some(p.to_string_lossy().to_string());
+         }
+         p = p.parent()?;
+     }
+ }
++
++fn is_valid_git_boundary(git: &Path) -> bool {
++    if git.is_dir() {
++        return true;
++    }
++    let Ok(contents) = std::fs::read_to_string(git) else {
++        return false;
++    };
++    let Some(target) = contents
++        .lines()
++        .find_map(|l| l.trim().strip_prefix("gitdir:"))
++        .map(str::trim)
++        .filter(|t| !t.is_empty())
++    else {
++        return false;
++    };
++    let target = Path::new(target);
++    let resolved = if target.is_absolute() {
++        target.to_path_buf()
++    } else {
++        git.parent().map_or_else(|| target.to_path_buf(), |d| d.join(target))
++    };
++    resolved.is_dir()
++}
++
++#[cfg(test)]
++mod git_root_tests {
++    use super::git_root_for;
++
++    #[test]
++    fn broken_ancestor_gitfile_is_ignored() {
++        let tmp = tempfile::tempdir().unwrap();
++        let workspace = tmp.path().join("workspace");
++        let project = workspace.join("project");
++        std::fs::create_dir_all(&project).unwrap();
++        std::fs::write(workspace.join(".git"), "gitdir: ../missing/git-dir\n").unwrap();
++
++        assert_eq!(git_root_for(project.to_str().unwrap()), None);
++    }
++
++    #[test]
++    fn broken_gitfile_falls_through_to_valid_outer_repo() {
++        let tmp = tempfile::tempdir().unwrap();
++        let outer = tmp.path();
++        std::fs::create_dir(outer.join(".git")).unwrap();
++        let project = outer.join("ws").join("project");
++        std::fs::create_dir_all(&project).unwrap();
++        std::fs::write(outer.join("ws").join(".git"), "gitdir: /nope/missing\n").unwrap();
++
++        assert_eq!(
++            git_root_for(project.to_str().unwrap()).as_deref(),
++            outer.to_str()
++        );
++    }
++
++    #[test]
++    fn valid_gitfile_worktree_promotes_to_checkout_root() {
++        let tmp = tempfile::tempdir().unwrap();
++        let main = tmp.path().join("main");
++        std::fs::create_dir_all(main.join(".git").join("worktrees").join("wt")).unwrap();
++        let wt = tmp.path().join("wt");
++        let sub = wt.join("src");
++        std::fs::create_dir_all(&sub).unwrap();
++        std::fs::write(wt.join(".git"), "gitdir: ../main/.git/worktrees/wt\n").unwrap();
++
++        assert_eq!(git_root_for(sub.to_str().unwrap()).as_deref(), wt.to_str());
++    }
++}

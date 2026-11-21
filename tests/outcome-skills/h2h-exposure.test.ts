@@ -7,7 +7,8 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fixtureRepo } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
 import { events, exposure, readAudit, readEvents, readInstalls, type Ev } from "../../lanes/outcome-skills/h2h/sessions/exposure.ts";
 import { freeze, lead, MARKERS_PATH, readMarkers, type Markers } from "../../lanes/outcome-skills/h2h/sessions/markers.ts";
 import { readExposure } from "../../lanes/outcome-skills/h2h/sessions/run.ts";
@@ -85,6 +86,42 @@ test("agent-skills: a failing test written and run before the source on bugs, SP
   expect(flags(run("agent-skills", "feature", sdk().user("<command-name>/superpowers:brainstorming</command-name>").evs()))).toEqual([false, false]);
 });
 
+test("agent-skills on bugs: a test Bash writes counts, its failing run may be that call or a later one, and a background run counts where its output is read", () => {
+  const ran = (s: ReturnType<typeof sdk>) => run("agent-skills", "bug", s.evs()).markers;
+  const fix = { file_path: "/testbed/src/cc65/pragma.c", old_string: "a", new_string: "b" };
+  const heredoc = "cd /testbed/test; cat > val/pragma-comment.c <<'EOF'\nint main(void) { return 0; }\nEOF\n../bin/cc65 -o /tmp/p.s val/pragma-comment.c; echo $?";
+  const rejected = "val/pragma-comment.c:9: Error: Invalid pragma argument\n5 errors and 0 warnings generated.\n1";
+  expect(ran(sdk().tool("Bash", { command: heredoc }, rejected).tool("Edit", fix))).toEqual(["test-first:/testbed/test/val/pragma-comment.c", "failing-run"]);
+  const python = "cd internal/urlx && python3 - <<'EOF'\np='urlx_test.go'\ns=open(p).read()\nopen(p,'w').write(s)\nEOF\ngo test .";
+  expect(ran(sdk().tool("Bash", { command: python }, "--- FAIL: TestIsSameSite\nFAIL").tool("Write", { file_path: "/testbed/internal/urlx/urlx.go" }))).toEqual(["test-first:internal/urlx/urlx_test.go", "failing-run"]);
+  expect(ran(sdk().tool("Bash", { command: "sed -i 's/old/new/' tests/test_parse.py" }).tool("Bash", { command: "pytest tests" }, "1 failed", true).tool("Edit", { file_path: "/app/parse.py" }))).toEqual(["test-first:tests/test_parse.py", "failing-run"]);
+  expect(ran(sdk().tool("Bash", { command: "cat <<'EOF' | tee -a spec/parse_spec.rb\nit 'parses'\nEOF" }).tool("Bash", { command: "rspec" }, "1 example, 1 failure").tool("Edit", { file_path: "/app/lib/parse.rb" }))).toEqual(["test-first:spec/parse_spec.rb", "failing-run"]);
+
+  const write = "cat > /app/pkg/parse_test.go <<'EOF'\npackage pkg\nEOF";
+  const notice = "Command running in background with ID: b7k2. Output is being written to: /tmp/claude/tasks/b7k2.output.";
+  const launched = () => sdk().tool("Bash", { command: write }).tool("Bash", { command: "go test ./pkg/", run_in_background: true }, notice);
+  expect(ran(launched().tool("Read", { file_path: "/tmp/claude/tasks/b7k2.output" }, "--- FAIL: TestParse").tool("Edit", { file_path: "/app/pkg/parse.go" }))).toEqual(["test-first:/app/pkg/parse_test.go", "failing-run"]);
+  expect(ran(launched().tool("TaskOutput", { task_id: "b7k2" }, "--- FAIL: TestParse").tool("Edit", { file_path: "/app/pkg/parse.go" }))).toEqual(["test-first:/app/pkg/parse_test.go", "failing-run"]);
+  expect(ran(launched().user("<task-notification>\n<task-id>b7k2</task-id>\n--- FAIL: TestParse\n</task-notification>").tool("Edit", { file_path: "/app/pkg/parse.go" }))).toEqual(["test-first:/app/pkg/parse_test.go", "failing-run"]);
+
+  // Still not run: a test written after the source edit, a test that never fails before it, a background run whose
+  // output is read only after it, and a failing run of tests the session did not write.
+  expect(ran(sdk().tool("Edit", fix).tool("Bash", { command: heredoc }, rejected))).toEqual([]);
+  expect(ran(sdk().tool("Bash", { command: write + "\ngo test ./pkg/" }, "ok  \tpkg\t0.01s").tool("Edit", { file_path: "/app/pkg/parse.go" }).tool("Bash", { command: "go test ./..." }, "--- FAIL: TestOther"))).toEqual([]);
+  expect(ran(launched().tool("Edit", { file_path: "/app/pkg/parse.go" }).tool("Read", { file_path: "/tmp/claude/tasks/b7k2.output" }, "--- FAIL: TestParse"))).toEqual([]);
+  expect(ran(launched().tool("Read", { file_path: "/tmp/claude/tasks/other.output" }, "--- FAIL: TestParse").tool("Edit", { file_path: "/app/pkg/parse.go" }))).toEqual([]);
+  expect(ran(sdk().tool("Bash", { command: "go test ./... > /tmp/test_run.log 2>&1" }, "Exit code 1", true).tool("Bash", { command: "cd tests && pytest 2>&1 | tee run_tests.txt" }, "FAILED tests/test_parse.py::test_x").tool("Bash", { command: "cat tests/test_parse.py; pytest tests/test_parse.py" }, "1 failed", true).tool("Edit", { file_path: "/app/parse.py" }))).toEqual([]);
+});
+
+test("agent-skills on bugs: a spec or specs folder is no test by itself, a spec-named file still is", () => {
+  const ran = (s: ReturnType<typeof sdk>) => run("agent-skills", "bug", s.evs()).markers;
+  const pkg = { file_path: "/testbed/src/hdmf/spec/namespace.py", old_string: "a", new_string: "b" };
+  expect(ran(sdk().tool("Write", { file_path: "/testbed/tests/unit/test_namespace.py", content: "x" }).tool("Bash", { command: "pytest tests/unit" }, "1 failed", true).tool("Edit", pkg))).toEqual(["test-first:/testbed/tests/unit/test_namespace.py", "failing-run"]);
+  expect(ran(sdk().tool("Edit", pkg).tool("Bash", { command: "pytest tests/unit" }, "1 failed", true).tool("Edit", { file_path: "/testbed/src/hdmf/utils.py" }))).toEqual([]);
+  expect(ran(sdk().tool("Write", { file_path: "/app/spec/models/user_spec.rb" }).tool("Bash", { command: "rspec" }, "1 example, 1 failure").tool("Edit", { file_path: "/app/app/models/user.rb" }))).toEqual(["test-first:/app/spec/models/user_spec.rb", "failing-run"]);
+  expect(ran(sdk().tool("Write", { file_path: "/app/specs/parse.spec.ts" }).tool("Bash", { command: "bun test" }, "1 fail", true).tool("Edit", { file_path: "/app/src/parse.ts" }))).toEqual(["test-first:/app/specs/parse.spec.ts", "failing-run"]);
+});
+
 test("gsd: its tools run and a quick or debug planning file written", () => {
   expect(run("gsd", "bug", sdk().user("<command-name>/gsd-debug</command-name>").tool("Bash", { command: "node \"$HOME/.claude/gsd-core/bin/gsd-tools.cjs\" init debug" }).tool("Write", { file_path: "/app/.planning/debug/parse.md" }).evs()).markers).toEqual(["command:/gsd-debug", "gsd-tools", "planning:/app/.planning/debug/parse.md"]);
   expect(flags(run("gsd", "feature", sdk().user("<command-name>/gsd-quick</command-name>").tool("Bash", { command: "gsd_run init quick" }).evs(), M, [".planning/quick/260101-flag/PLAN.md"]))).toEqual([true, true]);
@@ -133,46 +170,83 @@ test("Claude Code's own transcript shape reads the same, sidechains apart", () =
   expect(run("superpowers", "feature", evs).loaded).toBe(true);
 });
 
-/** A gsd quick session's run dir: its transcript runs gsd-tools and writes nothing, so only tree.tar can show a planning file. */
-function gsdQuickRun() {
+const PLAN = ".planning/quick/1/PLAN.md";
+/** A gsd quick session's run dir and its unit repo, a one-commit git repo as the session image holds it. The transcript
+ *  runs gsd-tools and, with edit, edits PLAN; tracked commits PLAN at the base, else the session leaves it untracked. tar()
+ *  packs the repo as h2h_turns.py's TREE_TAR does: .git and every path git lists. */
+function gsdQuickRun(o: { tracked?: boolean; edit?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "h2h-exposure-tree-"));
+  const tool = (id: string, name: string, input: Rec) => [
+    { type: "AssistantMessage", content: [{ type: "tool_use", id, name, input }], parent_tool_use_id: null },
+    { type: "UserMessage", content: [{ type: "tool_result", tool_use_id: id, content: "ok", is_error: false }], parent_tool_use_id: null },
+  ];
   const recs = [
     { type: "UserMessage", content: "<command-name>/gsd-quick</command-name>", parent_tool_use_id: null },
-    { type: "AssistantMessage", content: [{ type: "tool_use", id: "toolu_q", name: "Bash", input: { command: "gsd_run init quick" } }], parent_tool_use_id: null },
-    { type: "UserMessage", content: [{ type: "tool_result", tool_use_id: "toolu_q", content: "ok", is_error: false }], parent_tool_use_id: null },
+    ...tool("toolu_q", "Bash", { command: "gsd_run init quick" }),
+    ...(o.edit ? tool("toolu_e", "Edit", { file_path: "/app/" + PLAN, old_string: "x", new_string: "y" }) : []),
   ];
   writeFileSync(join(dir, "sdk-messages.jsonl"), recs.map((r) => JSON.stringify(r) + "\n").join(""));
-  const tree = join(dir, "t");
-  mkdirSync(join(tree, ".planning/quick/1"), { recursive: true });
-  mkdirSync(join(tree, ".git"));
-  writeFileSync(join(tree, ".planning/quick/1/PLAN.md"), "x\n");
-  writeFileSync(join(tree, ".git/HEAD"), "x\n");
-  const tar = () => expect(spawnSync("tar", ["-C", tree, "-cf", join(dir, "tree.tar"), ".git", ".planning/quick/1/PLAN.md"]).status).toBe(0);
-  const i = { session: { arm: "gsd", entry: "feature" } } as unknown as Parameters<typeof readExposure>[0];
-  return { dir, tar, i };
+  const repo = fixtureRepo({ "src/app.ts": "export {};\n", [(o.tracked ? "" : "untracked:") + PLAN]: "x\n" }, 1);
+  const tar = () => expect(spawnSync("bash", ["-c", '{ printf ".git\\0"; git ls-files -z --cached --others --exclude-standard; } | tar --null -T - -cf "$1/tree.tar"', "tree", dir], { cwd: repo.dir }).status).toBe(0);
+  const i = { session: { arm: "gsd", entry: "feature" }, unit: { image: { head: repo.head } } } as unknown as Parameters<typeof readExposure>[0];
+  return { dir, tar, i, done: () => [dir, dirname(repo.dir)].forEach((d) => rmSync(d, { recursive: true, force: true })) };
 }
-const PLANNED = { loaded: true, procedure: true, markers: ["command:/gsd-quick", "gsd-tools", "planning:.planning/quick/1/PLAN.md"] };
+const PLANNED = { loaded: true, procedure: true, markers: ["command:/gsd-quick", "gsd-tools", "planning:" + PLAN] };
 
 test("readExposure counts the GSD planning files the session's tree.tar holds", () => {
-  const { dir, tar, i } = gsdQuickRun();
+  const { dir, tar, i, done } = gsdQuickRun();
   try {
     expect(flags(readExposure(i, dir)!)).toEqual([true, false]);
     tar();
     expect(readExposure(i, dir)).toMatchObject(PLANNED);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    done();
   }
 });
 
 test("readExposure halts on a tree.tar tar cannot list, with tar's stderr, and reads a valid one", () => {
-  const { dir, tar, i } = gsdQuickRun();
+  const { dir, tar, i, done } = gsdQuickRun();
   try {
     writeFileSync(join(dir, "tree.tar"), "not a tar archive\n".repeat(64));
     expect(() => readExposure(i, dir)).toThrow(/^E_H2H_EXPOSURE .*tree\.tar does not list \(tar exit 2\): tar: This does not look like a tar archive.*never read as not exercised/s);
     tar();
     expect(readExposure(i, dir)).toMatchObject(PLANNED);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    done();
+  }
+});
+
+test("readExposure leaves out a GSD planning file the unit's base commit already tracks, and counts one the session added or edited", () => {
+  const based = gsdQuickRun({ tracked: true });
+  const added = gsdQuickRun();
+  const edited = gsdQuickRun({ tracked: true, edit: true });
+  try {
+    for (const r of [based, added, edited]) r.tar();
+    expect(readExposure(based.i, based.dir)).toMatchObject({ loaded: true, procedure: false, markers: ["command:/gsd-quick"] });
+    expect(readExposure(added.i, added.dir)).toMatchObject(PLANNED);
+    expect(readExposure(edited.i, edited.dir)).toMatchObject({ loaded: true, procedure: true, markers: ["command:/gsd-quick", "gsd-tools", "planning:/app/" + PLAN] });
+  } finally {
+    for (const r of [based, added, edited]) r.done();
+  }
+});
+
+test("readExposure halts when a tree with planning paths has no .git that lists the base, and runs no git without them", () => {
+  const { dir, i, done } = gsdQuickRun();
+  const t = join(dir, "t");
+  const pack = (...paths: string[]) => expect(spawnSync("tar", ["-C", t, "-cf", join(dir, "tree.tar"), ...paths]).status).toBe(0);
+  try {
+    for (const [p, body] of [[".git/HEAD", "x\n"], [PLAN, "x\n"], ["src/app.ts", "x\n"]] as const) {
+      mkdirSync(dirname(join(t, p)), { recursive: true });
+      writeFileSync(join(t, p), body);
+    }
+    pack(".git", PLAN, "src/app.ts");
+    expect(() => readExposure(i, dir)).toThrow(/^E_H2H_EXPOSURE .*tree\.tar holds 1 GSD planning path\(s\), and its \.git can't list base [0-9a-f]{40}'s tree \(git exit \d+: fatal: .*never read as not exercised/s);
+    pack(PLAN, "src/app.ts");
+    expect(() => readExposure(i, dir)).toThrow(/^E_H2H_EXPOSURE .*can't list base [0-9a-f]{40}'s tree \(tar exit 2: tar: \.git: Not found in archive/s);
+    pack(".git", "src/app.ts");
+    expect(flags(readExposure(i, dir)!)).toEqual([true, false]);
+  } finally {
+    done();
   }
 });
 

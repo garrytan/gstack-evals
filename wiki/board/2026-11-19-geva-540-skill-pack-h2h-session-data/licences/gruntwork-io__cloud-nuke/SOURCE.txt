@@ -1,0 +1,3 @@
+https://github.com/gruntwork-io/cloud-nuke at c57cdec04dc7e99480bcd337d8032b7b4e709a46
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE.txt

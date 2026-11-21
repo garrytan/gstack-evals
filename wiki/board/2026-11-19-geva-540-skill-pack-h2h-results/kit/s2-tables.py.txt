@@ -1,0 +1,23 @@
+import json,os
+a=json.load(open(os.path.expanduser('~/h2h/run/geva540-s2-7700a8f/analysis/stage2-analysis.json')))
+p=lambda x: 'na' if x is None else '%.1f'%(100*x)
+ci=lambda c: 'none' if not c else '[%s, %s]'%(p(c[0]),p(c[1]))
+print('ARMS class arm | verified k/n rate [ci] | worst | $/fix | $mean | loaded proc | cont spur | safety allow | lines med | gaps')
+for r in a['arms']:
+    v=r['verified']; e=r['exposure']; d=r['dollars']
+    print(r['class'],r['arm'],'|',v['k'],'/',v['n'],p(v['rate']),ci(v.get('ci95')),'|',p(r['worst_case_rate']),'|',d['per_verified_fix'] and round(d['per_verified_fix'],3),'|',round(d['mean'],3),'|',p(e.get('loaded')),p(e.get('procedure')),'|',r['continuations'],r['spurious_continuations'],'|',r['safety_stops'],r['allowance_stops'],'|',r['lines']['median'],'|',r['cell']['gaps'])
+print('FAMILY class other | n repos | control(other) gstack | delta [ci] | disc | b_only a_only | p p_exact holm rank alpha | mdd | state | worst delta [ci]')
+for r in a['family']:
+    t=r['test']; w=r['worst_case']
+    print(r['class'],r['other'],'|',t['n'],t['n_repos'],'|',p(t['a_rate']),p(t['b_rate']),'|',p(t['delta']),ci(t['ci95']),'|',round(t['discordant_share'],3),'|',t['b_only'],t['a_only'],'|',round(t['p'],4),round(t['p_exact'],4),round(r['p_holm'],4),r['holm_rank'],round(r['holm_alpha'],5),'|',r['mdd'],'|',r['state'],'|',p(w['delta']),ci(w['ci95']))
+g=a['piece_g']
+print('PIECEG', json.dumps({k:g[k] for k in ('lines','oneline','p_holm','less_code','more_correct','adopt','exercised')})[:900])
+print('PIECEG verified', json.dumps(g['verified'])[:400])
+print('PONY exposure', json.dumps(g['exposure_pony']))
+print('NONE_VS_PACK')
+for c in a['none_vs_pack']: t=c['test']; print(' ',c['label'],p(t['delta']),ci(t['ci95']),'n',t['n'])
+print('STRATA')
+for s in a['strata']:
+    print(' ',s['name'],s['units'],{k:(None if v is None else round(100*v)) for k,v in s['rates'].items()})
+print('fix_method_exposure',a['fix_method_exposure'])
+print('ideas',a['ideas_to_study'])

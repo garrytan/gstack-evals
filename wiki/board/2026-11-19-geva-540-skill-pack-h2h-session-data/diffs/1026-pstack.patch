@@ -1,0 +1,44 @@
+diff --git a/index.js b/index.js
+index 8ddc89b..eb93252 100644
+--- a/index.js
++++ b/index.js
+@@ -26,7 +26,9 @@ var UNSAFE_CHARS_REGEXP   = /[<>\/\u2028\u2029]/g;
+ // stays in script data, so only these need neutralizing. The bare-prefix form
+ // matters because the matching `>` could be supplied by a different
+ // serialized value later in the output, so escaping stops there without
+-// waiting for a closing `>`. A trailing backslash is not a delimiter here
++// waiting for a closing `>`. For the same reason a bare `</script` at the
++// very end of the body is matched too: the delimiter can come from whatever
++// the surrounding output places after it. A trailing backslash is not a delimiter here
+ // (that's a JS-level concern, not an HTML one), so this doesn't affect tagged
+ // template literals like `String.raw`.
+ //
+@@ -38,7 +40,7 @@ var UNSAFE_CHARS_REGEXP   = /[<>\/\u2028\u2029]/g;
+ // longer contain a second `<`, every `</script` in the source is either the
+ // start of its own match or is followed by a non-delimiter — and the latter
+ // the tokenizer never treats as an end tag.
+-var SCRIPT_CLOSE_REGEXP = /<\/script[^<>]*>|<\/script(?=[\t\n\f\r \/>])/gi;
++var SCRIPT_CLOSE_REGEXP = /<\/script[^<>]*>|<\/script(?=[\t\n\f\r \/>]|$)/gi;
+ 
+ var RESERVED_SYMBOLS = ['*', 'async'];
+ 
+diff --git a/test/unit/serialize.js b/test/unit/serialize.js
+index 3d4de00..880e8c2 100644
+--- a/test/unit/serialize.js
++++ b/test/unit/serialize.js
+@@ -809,6 +809,15 @@ describe('serialize( obj )', function () {
+             strictEqual(deserialized('/'), fn('/'));
+             strictEqual(deserialized('x'), fn('x'));
+         });
++
++        it('should escape a bare `</script` at the end of a function body', function () {
++            function f() {} f.toString = function () { return 'function f(){ return 1 }//</script'; };
++            function g() {} g.toString = function () { return 'function g(x){ return x } > <img src=x onerror=alert(1)>'; };
++            var serialized = serialize({ a: { f: f }, g: g }, { space: 2 });
++
++            strictEqual(/<\/script[\t\n\f\r \/>]/i.test(serialized), false);
++            strictEqual(/<\/script/i.test(serialize(f)), false);
++        });
+     });
+ 
+     describe('options', function () {

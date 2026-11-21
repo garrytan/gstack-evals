@@ -1,0 +1,78 @@
+diff --git a/src/Riok.Mapperly/Descriptors/MappingCollection.cs b/src/Riok.Mapperly/Descriptors/MappingCollection.cs
+index 3f0feea..c066149 100644
+--- a/src/Riok.Mapperly/Descriptors/MappingCollection.cs
++++ b/src/Riok.Mapperly/Descriptors/MappingCollection.cs
+@@ -189,6 +189,10 @@ public class MappingCollection(GenericTypeChecker genericTypeChecker)
+ 
+         foreach (var template in _genericNewInstanceTemplates)
+         {
++            // if a named mapping is referenced, only the template registered with this name may be used
++            if (mappingKey.Configuration.UseNamedMapping is { } name && !_newInstanceMappings.IsNamedMapping(name, template))
++                continue;
++
+             if (template.TryCreateConcreteMapping(genericTypeChecker, mappingKey.Source, mappingKey.Target) is not { } mapping)
+                 continue;
+ 
+@@ -207,6 +211,10 @@ public class MappingCollection(GenericTypeChecker genericTypeChecker)
+ 
+         foreach (var template in _genericExistingTargetTemplates)
+         {
++            // if a named mapping is referenced, only the template registered with this name may be used
++            if (mappingKey.Configuration.UseNamedMapping is { } name && !_existingTargetMappings.IsNamedMapping(name, template))
++                continue;
++
+             if (template.TryCreateConcreteMapping(genericTypeChecker, mappingKey.Source, mappingKey.Target) is not { } mapping)
+                 continue;
+ 
+@@ -305,6 +313,9 @@ public class MappingCollection(GenericTypeChecker genericTypeChecker)
+             return mapping;
+         }
+ 
++        public bool IsNamedMapping(string name, T mapping) =>
++            _namedMappings.TryGetValue(name, out var namedMapping) && ReferenceEquals(namedMapping, mapping);
++
+         public T? FindNamed(string name, out bool ambiguousName)
+         {
+             ambiguousName = false;
+diff --git a/test/Riok.Mapperly.Tests/Mapping/UserMethodTest.cs b/test/Riok.Mapperly.Tests/Mapping/UserMethodTest.cs
+index 26c4343..97a643d 100644
+--- a/test/Riok.Mapperly.Tests/Mapping/UserMethodTest.cs
++++ b/test/Riok.Mapperly.Tests/Mapping/UserMethodTest.cs
+@@ -1189,6 +1189,37 @@ public class UserMethodTest
+             );
+     }
+ 
++    [Fact]
++    public void WithGenericUserImplementedAndNamedNonGenericMappingsShouldUseNamedMappings()
++    {
++        var source = TestSourceBuilder.MapperWithBodyAndTypes(
++            """
++            [MapProperty(nameof(A.NullableStr), nameof(B.NullableStr), Use = nameof(TrimToNull))]
++            [MapProperty(nameof(A.Str), nameof(B.Str), Use = nameof(Trim))]
++            [MapProperty(nameof(A.Value), nameof(B.Value), Use = nameof(Identity))]
++            public partial B Map(A source);
++
++            private string? TrimToNull(string? input) => input;
++            private string Trim(string input) => input.Trim();
++            private T Identity<T>(T input) => input;
++            """,
++            "public class A { public string? NullableStr { get; set; } public string Str { get; set; } public int Value { get; set; } }",
++            "public class B { public string? NullableStr { get; set; } public string Str { get; set; } public int Value { get; set; } }"
++        );
++        TestHelper
++            .GenerateMapper(source)
++            .Should()
++            .HaveMapMethodBody(
++                """
++                var target = new global::B();
++                target.NullableStr = TrimToNull(source.NullableStr);
++                target.Str = Trim(source.Str);
++                target.Value = Identity<int>(source.Value);
++                return target;
++                """
++            );
++    }
++
+     [Fact]
+     public void WithGenericUserImplementedConstraintMismatchShouldNotMatch()
+     {

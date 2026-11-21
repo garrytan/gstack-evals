@@ -1,0 +1,64 @@
+diff --git a/.changeset/preserve-session-config.md b/.changeset/preserve-session-config.md
+new file mode 100644
+index 0000000..f35c1a4
+--- /dev/null
++++ b/.changeset/preserve-session-config.md
+@@ -0,0 +1,5 @@
++---
++'@openai/agents-realtime': patch
++---
++
++fix: preserve the initial session config (e.g. audio formats) when calling `updateAgent` or performing a handoff
+diff --git a/packages/agents-realtime/src/realtimeSession.ts b/packages/agents-realtime/src/realtimeSession.ts
+index 3c4f22e..4104b1e 100644
+--- a/packages/agents-realtime/src/realtimeSession.ts
++++ b/packages/agents-realtime/src/realtimeSession.ts
+@@ -314,6 +314,10 @@ export class RealtimeSession<
+     }
+ 
+     return {
++      // Preserve the user-provided session configuration (e.g. audio formats,
++      // turn detection, etc.) so that subsequent session updates such as agent
++      // changes or handoffs do not reset these values to the defaults.
++      ...(this.options.config ?? {}),
+       instructions,
+       voice: this.#currentAgent.voice,
+       model: this.options.model,
+diff --git a/packages/agents-realtime/test/realtimeSession.test.ts b/packages/agents-realtime/test/realtimeSession.test.ts
+index e39df37..13f176c 100644
+--- a/packages/agents-realtime/test/realtimeSession.test.ts
++++ b/packages/agents-realtime/test/realtimeSession.test.ts
+@@ -43,6 +43,33 @@ describe('RealtimeSession', () => {
+     expect(newHist).toEqual([item]);
+   });
+ 
++  it('preserves initial session config when updating the agent', async () => {
++    const t = new FakeTransport();
++    const agent = new RealtimeAgent({ name: 'A', handoffs: [] });
++    const s = new RealtimeSession(agent, {
++      transport: t,
++      config: {
++        inputAudioFormat: 'g711_ulaw',
++        outputAudioFormat: 'g711_ulaw',
++      },
++    });
++    await s.connect({ apiKey: 'test' });
++    expect(t.connectCalls[0]?.initialSessionConfig?.inputAudioFormat).toBe(
++      'g711_ulaw',
++    );
++
++    const newAgent = new RealtimeAgent({
++      name: 'B',
++      instructions: 'You are Bob',
++      handoffs: [],
++    });
++    await s.updateAgent(newAgent);
++    const update = t.updateSessionConfigCalls.at(-1)!;
++    expect(update.inputAudioFormat).toBe('g711_ulaw');
++    expect(update.outputAudioFormat).toBe('g711_ulaw');
++    expect(update.instructions).toBe('You are Bob');
++  });
++
+   it('sets the trace config correctly', async () => {
+     transport.connectCalls = [];
+     session.options.tracingDisabled = true;

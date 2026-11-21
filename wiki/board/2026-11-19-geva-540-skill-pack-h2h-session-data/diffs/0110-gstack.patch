@@ -1,0 +1,123 @@
+diff --git a/crates/hir-def/src/macro_expansion_tests/mbe.rs b/crates/hir-def/src/macro_expansion_tests/mbe.rs
+index 9a46ddb..d166749 100644
+--- a/crates/hir-def/src/macro_expansion_tests/mbe.rs
++++ b/crates/hir-def/src/macro_expansion_tests/mbe.rs
+@@ -238,6 +238,88 @@ fn foo() {
+     );
+ }
+ 
++#[test]
++fn float_field_access_without_dot() {
++    check(
++        r#"
++macro_rules! m {
++    ($a:tt) => {
++        fn f() { s.$a; }
++    };
++}
++// +errors +tree
++m!(00E+10);
++// +errors +tree
++m!(1e0);
++"#,
++        expect![[r#"
++macro_rules! m {
++    ($a:tt) => {
++        fn f() { s.$a; }
++    };
++}
++/* parse error: illegal float literal */
++fn f() {
++    s.00E+10;
++}
++// MACRO_ITEMS@0..16
++//   FN@0..16
++//     FN_KW@0..2 "fn"
++//     NAME@2..3
++//       IDENT@2..3 "f"
++//     PARAM_LIST@3..5
++//       L_PAREN@3..4 "("
++//       R_PAREN@4..5 ")"
++//     BLOCK_EXPR@5..16
++//       STMT_LIST@5..16
++//         L_CURLY@5..6 "{"
++//         EXPR_STMT@6..15
++//           FIELD_EXPR@6..14
++//             FIELD_EXPR@6..14
++//               PATH_EXPR@6..7
++//                 PATH@6..7
++//                   PATH_SEGMENT@6..7
++//                     NAME_REF@6..7
++//                       IDENT@6..7 "s"
++//               DOT@7..8 "."
++//               ERROR@8..14
++//                 FLOAT_NUMBER@8..14 "00E+10"
++//           SEMICOLON@14..15 ";"
++//         R_CURLY@15..16 "}"
++
++/* parse error: illegal float literal */
++fn f() {
++    s.1e0;
++}
++// MACRO_ITEMS@0..13
++//   FN@0..13
++//     FN_KW@0..2 "fn"
++//     NAME@2..3
++//       IDENT@2..3 "f"
++//     PARAM_LIST@3..5
++//       L_PAREN@3..4 "("
++//       R_PAREN@4..5 ")"
++//     BLOCK_EXPR@5..13
++//       STMT_LIST@5..13
++//         L_CURLY@5..6 "{"
++//         EXPR_STMT@6..12
++//           FIELD_EXPR@6..11
++//             FIELD_EXPR@6..11
++//               PATH_EXPR@6..7
++//                 PATH@6..7
++//                   PATH_SEGMENT@6..7
++//                     NAME_REF@6..7
++//                       IDENT@6..7 "s"
++//               DOT@7..8 "."
++//               ERROR@8..11
++//                 FLOAT_NUMBER@8..11 "1e0"
++//           SEMICOLON@11..12 ";"
++//         R_CURLY@12..13 "}"
++
++"#]],
++    );
++}
++
+ #[test]
+ fn mbe_smoke_test() {
+     check(
+diff --git a/crates/syntax-bridge/src/lib.rs b/crates/syntax-bridge/src/lib.rs
+index 0dcf18a..d91612e 100644
+--- a/crates/syntax-bridge/src/lib.rs
++++ b/crates/syntax-bridge/src/lib.rs
+@@ -903,7 +903,24 @@ impl TtTreeSink<'_> {
+                 }
+                 self.text_pos += TextSize::of(text);
+             }
+-            None => unreachable!(),
++            None => {
++                // illegal float literal which doesn't have dot in form (like 1e0)
++                // we should emit an error node here
++                self.error("illegal float literal".to_owned());
++                self.inner.start_node(SyntaxKind::ERROR);
++                self.inner.token(SyntaxKind::FLOAT_NUMBER, text);
++                self.token_map.push(self.text_pos + TextSize::of(text), span);
++                self.inner.finish_node();
++
++                // move up
++                self.inner.finish_node();
++
++                if !has_pseudo_dot {
++                    // the parser creates an unbalanced start node, we are required to close it here
++                    self.inner.finish_node();
++                }
++                self.text_pos += TextSize::of(text);
++            }
+         }
+         self.cursor.bump();
+     }

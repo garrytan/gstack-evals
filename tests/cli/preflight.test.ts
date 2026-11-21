@@ -240,6 +240,17 @@ describe("preflight's ledger, key and host steps", () => {
     expect(real.err).toContain("E_ISOLATION_COUNTED a real host run is counted (it leases from a ledger line item under a rig admission), so it runs under --isolation docker only");
   });
 
+  // Value: protects=an interactive task on --host codex is E_INTERACTIVE_HOST for a model the pinned Codex 0.166.0 offers no request_user_input_async (particle-1 gets only the sync tool, which Codex answers itself), and passes for Sol, which gets it; fails_when=preflight lets a sync-only model run interactive tasks whose questions never reach the user simulator, or refuses Sol; why_new=the read-only final review's red-team finding on sync questions; seam=preflight, offersAsyncQuestion; no_claim=models the frozen list does not name
+  test("an interactive task on codex is E_INTERACTIVE_HOST for particle-1 and passes for Sol", async () => {
+    const { repo, args } = await lockedLearn();
+    writeFileSync(join(repo.root, "test/fixtures/skill-evals/learn/tasks.ext.json"), JSON.stringify({ schema_version: 1, tasks: { "prune-stale": { interactive: true } } }));
+    const sync = await run(args("codex", "particle-ai/particle-1"));
+    expect(sync.err).toContain("E_INTERACTIVE_HOST");
+    expect(sync.err).toContain("particle-ai/particle-1");
+    const sol = await run(args("codex", "gpt-6.1-sol"));
+    expect(sol.err).not.toContain("E_INTERACTIVE_HOST");
+  });
+
   // Value: protects=brief item 3: preflight flags a task that sends a PDF; fails_when=a PDF in the prompt or fixtures passes silently; why_new=U3 accepted inline base64 PDFs as won't-fix; seam=none; no_claim=how much the reservation is off
   test("a task that sends a PDF gets the PDF_INPUT warning", async () => {
     const root = tree({ "demo/SKILL.md": "---\nname: demo\ndescription: d\n---\n\nNEVER guess.\n", "test/fixtures/skill-evals/demo/tasks.json": JSON.stringify([{ id: "read-pdf", prompt: "Summarize report.pdf for me.", must: ["revenue"] }, { id: "plain", prompt: "Hi.", must: ["hello"] }]) });

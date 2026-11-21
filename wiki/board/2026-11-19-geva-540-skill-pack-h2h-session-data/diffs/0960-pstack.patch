@@ -1,0 +1,47 @@
+diff --git a/cell.go b/cell.go
+index 1cac3e4..71b3b4b 100644
+--- a/cell.go
++++ b/cell.go
+@@ -1646,7 +1646,11 @@ func (ws *xlsxWorksheet) mergeCellsParser(cell string) (string, error) {
+ 				i--
+ 				continue
+ 			}
+-			if ref := ws.MergeCells.Cells[i].Ref; len(ws.MergeCells.Cells[i].rect) == 0 && ref != "" {
++			ref := ws.MergeCells.Cells[i].Ref
++			if ref == "" {
++				continue
++			}
++			if len(ws.MergeCells.Cells[i].rect) == 0 {
+ 				if strings.Count(ref, ":") != 1 {
+ 					ref += ":" + ref
+ 				}
+diff --git a/merge_test.go b/merge_test.go
+index 3675cea..9032244 100644
+--- a/merge_test.go
++++ b/merge_test.go
+@@ -238,4 +238,25 @@ func TestMergeCellsParser(t *testing.T) {
+ 	ws := &xlsxWorksheet{MergeCells: &xlsxMergeCells{Cells: []*xlsxMergeCell{nil}}}
+ 	_, err := ws.mergeCellsParser("A1")
+ 	assert.NoError(t, err)
++
++	f := NewFile()
++	f.Sheet.Delete("xl/worksheets/sheet1.xml")
++	f.Pkg.Store("xl/worksheets/sheet1.xml", []byte(fmt.Sprintf(
++		`<worksheet xmlns="%s"><sheetData><row r="1"><c r="B1" t="str"><v>x</v></c></row></sheetData>`+
++			`<mergeCells count="2"><mergeCell ref=""/><mergeCell ref="B1:C2"/></mergeCells></worksheet>`,
++		NameSpaceSpreadSheet.Value)))
++	buf, err := f.WriteToBuffer()
++	assert.NoError(t, err)
++	f, err = OpenReader(buf)
++	assert.NoError(t, err)
++	for _, cell := range []string{"A1", "B1", "A2"} {
++		_, err = f.GetCellValue("Sheet1", cell)
++		assert.NoError(t, err, cell)
++	}
++	val, err := f.GetCellValue("Sheet1", "C2")
++	assert.NoError(t, err)
++	assert.Equal(t, "x", val)
++	_, err = f.GetCellType("Sheet1", "A1")
++	assert.NoError(t, err)
++	assert.NoError(t, f.SetCellValue("Sheet1", "A1", 1))
+ }

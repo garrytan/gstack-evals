@@ -1,0 +1,299 @@
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/ContentFilterProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/ContentFilterProcessor.java
+index ecf8603..421b831 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/ContentFilterProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/ContentFilterProcessor.java
+@@ -26,6 +26,7 @@ import org.verapdf.wcag.algorithms.semanticalgorithms.utils.TextChunkUtils;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
++import java.util.Collections;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Set;
+@@ -140,13 +141,69 @@ public class ContentFilterProcessor {
+         }
+     }
+ 
++    /**
++     * Splits a text chunk by whitespaces. Unlike {@link TextChunkUtils#splitTextChunkByWhiteSpaces(TextChunk)},
++     * the removed whitespaces are kept as separate whitespace chunks (positioned between the text parts),
++     * so that later line building can restore word separators even when the gap is narrow.
++     */
++    static List<TextChunk> splitTextChunkKeepingWhiteSpaces(TextChunk textChunk) {
++        String value = textChunk.getValue();
++        if (value == null || value.isEmpty() || !TextChunkUtils.isContainsWhiteSpaceChar(value)) {
++            return Collections.singletonList(textChunk);
++        }
++        List<TextChunk> parts = new ArrayList<>();
++        for (TextChunk part : TextChunkUtils.splitTextChunkByWhiteSpaces(textChunk)) {
++            if (!part.isEmpty() && !part.isWhiteSpaceChunk()) {
++                parts.add(part);
++            }
++        }
++        List<TextChunk> result = new ArrayList<>();
++        if (parts.isEmpty()) {
++            // Whitespace-only chunk
++            result.add(createWhiteSpaceChunk(textChunk, textChunk.getLeftX(), textChunk.getRightX()));
++            return result;
++        }
++        if (TextChunkUtils.isWhiteSpaceChar(value.charAt(0))) {
++            result.add(createWhiteSpaceChunk(textChunk, textChunk.getLeftX(),
++                Math.max(textChunk.getLeftX(), parts.get(0).getLeftX())));
++        }
++        for (int i = 0; i < parts.size(); i++) {
++            TextChunk part = parts.get(i);
++            if (i > 0) {
++                TextChunk previousPart = parts.get(i - 1);
++                result.add(createWhiteSpaceChunk(textChunk, previousPart.getRightX(),
++                    Math.max(previousPart.getRightX(), part.getLeftX())));
++            }
++            result.add(part);
++        }
++        if (TextChunkUtils.isWhiteSpaceChar(value.charAt(value.length() - 1))) {
++            TextChunk lastPart = parts.get(parts.size() - 1);
++            result.add(createWhiteSpaceChunk(textChunk, lastPart.getRightX(),
++                Math.max(lastPart.getRightX(), textChunk.getRightX())));
++        }
++        return result;
++    }
++
++    private static TextChunk createWhiteSpaceChunk(TextChunk textChunk, double leftX, double rightX) {
++        BoundingBox boundingBox = new BoundingBox(textChunk.getBoundingBox());
++        boundingBox.setLeftX(leftX);
++        boundingBox.setRightX(rightX);
++        TextChunk whiteSpaceChunk = new TextChunk(boundingBox, " ", textChunk.getFontSize(), textChunk.getBaseLine());
++        whiteSpaceChunk.setFontName(textChunk.getFontName());
++        whiteSpaceChunk.setFontWeight(textChunk.getFontWeight());
++        whiteSpaceChunk.setItalicAngle(textChunk.getItalicAngle());
++        whiteSpaceChunk.setFontColor(textChunk.getFontColor());
++        whiteSpaceChunk.setTextFormat(textChunk.getTextFormat());
++        whiteSpaceChunk.adjustSymbolEndsToBoundingBox(null);
++        return whiteSpaceChunk;
++    }
++
+     private static List<IObject> splitTextChunksByWhiteSpacesInPageContents(List<IObject> contents) {
+         List<IObject> newContents = new ArrayList<>();
+         for (IObject object : contents) {
+             if (object instanceof TextChunk) {
+                 TextChunk textChunk = (TextChunk) object;
+-                List<TextChunk> splitChunks = TextChunkUtils.splitTextChunkByWhiteSpaces(textChunk);
+-                newContents.addAll(splitChunks);
++                newContents.addAll(splitTextChunkKeepingWhiteSpaces(textChunk));
+             } else {
+                 newContents.add(object);
+             }
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+index 86cfc96..4bbb834 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+@@ -28,7 +28,9 @@ import org.verapdf.wcag.algorithms.semanticalgorithms.utils.TextChunkUtils;
+ 
+ import java.util.ArrayList;
+ import java.util.Comparator;
++import java.util.IdentityHashMap;
+ import java.util.List;
++import java.util.Map;
+ 
+ public class TextLineProcessor {
+ 
+@@ -39,11 +41,19 @@ public class TextLineProcessor {
+     public static List<IObject> processTextLines(List<IObject> contents) {
+         List<IObject> newContents = new ArrayList<>();
+         TextLine previousLine = new TextLine(new TextChunk(""));
++        // Explicit whitespace chunks encountered while building each line. They are not added to the
++        // line itself, but are used to restore word separators whose gap is below the space threshold.
++        Map<TextLine, List<BoundingBox>> whiteSpaces = new IdentityHashMap<>();
++        List<BoundingBox> pendingWhiteSpaces = new ArrayList<>();
+         boolean isSeparateLine = false;
+         for (IObject content : contents) {
+             if (content instanceof TextChunk) {
+                 TextChunk textChunk = (TextChunk) content;
+-                if (textChunk.isWhiteSpaceChunk() || textChunk.isEmpty()) {
++                if (textChunk.isEmpty()) {
++                    continue;
++                }
++                if (textChunk.isWhiteSpaceChunk()) {
++                    pendingWhiteSpaces.add(textChunk.getBoundingBox());
+                     continue;
+                 }
+                 TextLine currentLine = new TextLine(textChunk);
+@@ -56,8 +66,13 @@ public class TextLineProcessor {
+                 } else {
+                     previousLine.add(currentLine);
+                 }
++                if (!pendingWhiteSpaces.isEmpty()) {
++                    whiteSpaces.computeIfAbsent(previousLine, k -> new ArrayList<>()).addAll(pendingWhiteSpaces);
++                    pendingWhiteSpaces.clear();
++                }
+                 isSeparateLine = false;
+             } else {
++                pendingWhiteSpaces.clear();
+                 if (content instanceof TableBorder) {
+                     isSeparateLine = true;
+                 }
+@@ -70,14 +85,16 @@ public class TextLineProcessor {
+                 TextLine textLine = (TextLine) content;
+                 textLine.getTextChunks().sort(TEXT_CHUNK_COMPARATOR);
+                 double threshold = textLine.getFontSize() * TextChunkUtils.TEXT_LINE_SPACE_RATIO;
+-                newContents.set(i, getTextLineWithSpaces(textLine, threshold));
++                newContents.set(i, getTextLineWithSpaces(textLine, threshold,
++                    whiteSpaces.getOrDefault(textLine, new ArrayList<>())));
+             }
+         }
+         linkTextLinesWithConnectedLineArtBullet(newContents);
+         return newContents;
+     }
+ 
+-    private static TextLine getTextLineWithSpaces(TextLine textLine, double threshold) {
++    private static TextLine getTextLineWithSpaces(TextLine textLine, double threshold,
++                                                  List<BoundingBox> whiteSpaces) {
+         List<TextChunk> textChunks = textLine.getTextChunks();
+         TextChunk currentTextChunk = textChunks.get(0);
+         double previousEnd = currentTextChunk.getBoundingBox().getRightX();
+@@ -86,7 +103,8 @@ public class TextLineProcessor {
+         for (int i = 1; i < textChunks.size(); i++) {
+             currentTextChunk = textChunks.get(i);
+             double currentStart = currentTextChunk.getBoundingBox().getLeftX();
+-            if (currentStart - previousEnd > threshold) {
++            if (currentStart - previousEnd > threshold ||
++                hasWhiteSpaceBetween(textLine, previousEnd, currentStart, whiteSpaces)) {
+                 BoundingBox spaceBBox = new BoundingBox(currentTextChunk.getBoundingBox());
+                 spaceBBox.setLeftX(previousEnd);
+                 spaceBBox.setRightX(currentStart);
+@@ -100,6 +118,34 @@ public class TextLineProcessor {
+         return newLine;
+     }
+ 
++    /**
++     * Checks whether an explicit whitespace chunk from the PDF lies between two adjacent text chunks
++     * of the line. This keeps word separators when the visual gap is narrower than the threshold
++     * (e.g. fonts with narrow space glyphs or tightly justified text).
++     */
++    private static boolean hasWhiteSpaceBetween(TextLine textLine, double previousEnd, double currentStart,
++                                                List<BoundingBox> whiteSpaces) {
++        if (whiteSpaces.isEmpty()) {
++            return false;
++        }
++        BoundingBox lineBox = textLine.getBoundingBox();
++        double epsilon = textLine.getFontSize() * TextChunkUtils.TEXT_LINE_SPACE_RATIO;
++        for (BoundingBox whiteSpace : whiteSpaces) {
++            if (whiteSpace.getPageNumber() != null && lineBox.getPageNumber() != null &&
++                !whiteSpace.getPageNumber().equals(lineBox.getPageNumber())) {
++                continue;
++            }
++            double centerY = (whiteSpace.getBottomY() + whiteSpace.getTopY()) / 2;
++            if (centerY < lineBox.getBottomY() || centerY > lineBox.getTopY()) {
++                continue;
++            }
++            if (whiteSpace.getLeftX() >= previousEnd - epsilon && whiteSpace.getRightX() <= currentStart + epsilon) {
++                return true;
++            }
++        }
++        return false;
++    }
++
+     private static void linkTextLinesWithConnectedLineArtBullet(List<IObject> contents) {
+         LineArtChunk lineArtChunk = null;
+         for (IObject content : contents) {
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/ContentFilterProcessorTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/ContentFilterProcessorTest.java
+index 463e6d7..64f386e 100644
+--- a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/ContentFilterProcessorTest.java
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/ContentFilterProcessorTest.java
+@@ -18,8 +18,10 @@ package org.opendataloader.pdf.processors;
+ import org.junit.jupiter.api.Assertions;
+ import org.junit.jupiter.api.Test;
+ import org.verapdf.wcag.algorithms.entities.IObject;
++import org.verapdf.wcag.algorithms.entities.content.TextLine;
+ import org.verapdf.wcag.algorithms.entities.content.TextChunk;
+ import org.verapdf.wcag.algorithms.entities.geometry.BoundingBox;
++import org.verapdf.wcag.algorithms.semanticalgorithms.containers.StaticContainers;
+ 
+ import java.util.ArrayList;
+ import java.util.List;
+@@ -110,4 +112,44 @@ public class ContentFilterProcessorTest {
+         Assertions.assertEquals(100.0, textChunk.getBoundingBox().getWidth(), 0.01,
+             "Long text width should remain unchanged");
+     }
++
++    @Test
++    public void testSplitTextChunkKeepsWhiteSpacesBetweenWords() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        TextChunk chunk = new TextChunk(new BoundingBox(0, 10.0, 30.0, 60.0, 40.0), "Evolution Of", 10, 30.0);
++        chunk.adjustSymbolEndsToBoundingBox(null);
++        List<TextChunk> parts = ContentFilterProcessor.splitTextChunkKeepingWhiteSpaces(chunk);
++        Assertions.assertEquals(3, parts.size());
++        Assertions.assertEquals("Evolution", parts.get(0).getValue());
++        Assertions.assertTrue(parts.get(1).isWhiteSpaceChunk());
++        Assertions.assertEquals("Of", parts.get(2).getValue());
++        Assertions.assertEquals(parts.get(0).getRightX(), parts.get(1).getLeftX(), 1e-6);
++        Assertions.assertEquals(parts.get(2).getLeftX(), parts.get(1).getRightX(), 1e-6);
++    }
++
++    @Test
++    public void testSplitTextChunkKeepsWhiteSpaceOnlyChunk() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        TextChunk chunk = new TextChunk(new BoundingBox(0, 10.0, 30.0, 12.0, 40.0), " ", 10, 30.0);
++        chunk.adjustSymbolEndsToBoundingBox(null);
++        List<TextChunk> parts = ContentFilterProcessor.splitTextChunkKeepingWhiteSpaces(chunk);
++        Assertions.assertEquals(1, parts.size());
++        Assertions.assertTrue(parts.get(0).isWhiteSpaceChunk());
++    }
++
++    /**
++     * Narrow spaces (gap below fontSize * TEXT_LINE_SPACE_RATIO) must survive split + line building.
++     */
++    @Test
++    public void testNarrowSpacesSurviveSplitAndLineBuilding() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        // 3 symbols "a b" over width 3 with font size 10: space width 1 < threshold 1.7
++        TextChunk chunk = new TextChunk(new BoundingBox(0, 10.0, 30.0, 13.0, 40.0), "a b", 10, 30.0);
++        chunk.adjustSymbolEndsToBoundingBox(null);
++        List<IObject> contents = new ArrayList<>(ContentFilterProcessor.splitTextChunkKeepingWhiteSpaces(chunk));
++        contents = TextLineProcessor.processTextLines(contents);
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("a b", ((TextLine) contents.get(0)).getValue());
++    }
+ }
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+index 855aa82..85e30ac 100644
+--- a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+@@ -115,4 +115,37 @@ public class TextLineProcessorTest {
+             "There should be a space between chunks when there is a physical gap");
+     }
+ 
++
++    /**
++     * Words separated by explicit space glyphs must keep the space even when the visual gap
++     * is narrower than the gap-based threshold (fontSize * TEXT_LINE_SPACE_RATIO).
++     */
++    @Test
++    public void testProcessTextLinesKeepsExplicitNarrowSpaces() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        List<IObject> contents = new ArrayList<>();
++        // font size 10 -> threshold 1.7; space glyph width 1.5
++        contents.add(new TextChunk(new BoundingBox(0, 10.0, 30.0, 40.0, 40.0), "Evolution", 10, 30.0));
++        contents.add(new TextChunk(new BoundingBox(0, 40.0, 30.0, 41.5, 40.0), " ", 10, 30.0));
++        contents.add(new TextChunk(new BoundingBox(0, 41.5, 30.0, 48.0, 40.0), "Of", 10, 30.0));
++        contents.add(new TextChunk(new BoundingBox(0, 48.0, 30.0, 49.5, 40.0), " ", 10, 30.0));
++        contents.add(new TextChunk(new BoundingBox(0, 49.5, 30.0, 70.0, 40.0), "Search", 10, 30.0));
++        contents = TextLineProcessor.processTextLines(contents);
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("Evolution Of Search", ((TextLine) contents.get(0)).getValue());
++    }
++
++    @Test
++    public void testProcessTextLinesNoSpaceWithoutExplicitSpaceOrGap() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        List<IObject> contents = new ArrayList<>();
++        contents.add(new TextChunk(new BoundingBox(0, 10.0, 30.0, 40.0, 40.0), "Evolu", 10, 30.0));
++        contents.add(new TextChunk(new BoundingBox(0, 40.5, 30.0, 60.0, 40.0), "tion", 10, 30.0));
++        // whitespace on another line must not affect this one
++        contents.add(new TextChunk(new BoundingBox(0, 40.0, 10.0, 41.0, 20.0), " ", 10, 10.0));
++        contents = TextLineProcessor.processTextLines(contents);
++        Assertions.assertEquals("Evolution", ((TextLine) contents.get(0)).getValue());
++    }
+ }

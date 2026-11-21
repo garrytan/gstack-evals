@@ -1,0 +1,30 @@
+diff --git a/crates/syntax-bridge/src/lib.rs b/crates/syntax-bridge/src/lib.rs
+index 0dcf18a..35e37ee 100644
+--- a/crates/syntax-bridge/src/lib.rs
++++ b/crates/syntax-bridge/src/lib.rs
+@@ -903,7 +903,24 @@ impl TtTreeSink<'_> {
+                 }
+                 self.text_pos += TextSize::of(text);
+             }
+-            None => unreachable!(),
++            None => {
++                // illegal float literal which doesn't have dot in form (like 1e0)
++                // we should emit an error node here
++                self.inner.error("illegal float literal".to_owned(), self.text_pos);
++                self.inner.start_node(SyntaxKind::ERROR);
++                self.inner.token(SyntaxKind::FLOAT_NUMBER, text);
++                self.token_map.push(self.text_pos + TextSize::of(text), span);
++                self.inner.finish_node();
++
++                // move up
++                self.inner.finish_node();
++
++                if !has_pseudo_dot {
++                    // the parser creates an unbalanced start node, we are required to close it here
++                    self.inner.finish_node();
++                }
++                self.text_pos += TextSize::of(text);
++            }
+         }
+         self.cursor.bump();
+     }

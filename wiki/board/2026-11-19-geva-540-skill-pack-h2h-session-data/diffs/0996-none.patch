@@ -1,0 +1,86 @@
+diff --git a/col.go b/col.go
+index ee7f6e6..9327cc5 100644
+--- a/col.go
++++ b/col.go
+@@ -545,30 +545,38 @@ func (ws *xlsxWorksheet) setColWidth(minVal, maxVal int, width float64) {
+ // flatCols provides a method for the column's operation functions to flatten
+ // and check the worksheet columns.
+ func flatCols(col xlsxCol, cols []xlsxCol, replacer func(fc, c xlsxCol) xlsxCol) []xlsxCol {
++	// clampRange limits the column range to the valid worksheet column
++	// boundaries, to avoid unbounded expansion of crafted column ranges.
++	clampRange := func(minVal, maxVal int) (int, int) {
++		if minVal < MinColumns {
++			minVal = MinColumns
++		}
++		if maxVal > MaxColumns {
++			maxVal = MaxColumns
++		}
++		return minVal, maxVal
++	}
+ 	var fc []xlsxCol
+-	for i := col.Min; i <= col.Max; i++ {
++	index := make(map[int]int)
++	minVal, maxVal := clampRange(col.Min, col.Max)
++	for i := minVal; i <= maxVal; i++ {
+ 		var c xlsxCol
+ 		_ = deepcopy.Copy(&c, col)
+ 		c.Min, c.Max = i, i
++		index[i] = len(fc)
+ 		fc = append(fc, c)
+ 	}
+-	inFlat := func(colID int, cols []xlsxCol) (int, bool) {
+-		for idx, c := range cols {
+-			if c.Max == colID && c.Min == colID {
+-				return idx, true
+-			}
+-		}
+-		return -1, false
+-	}
+ 	for _, column := range cols {
+-		for i := column.Min; i <= column.Max; i++ {
+-			if idx, ok := inFlat(i, fc); ok {
++		minVal, maxVal := clampRange(column.Min, column.Max)
++		for i := minVal; i <= maxVal; i++ {
++			if idx, ok := index[i]; ok {
+ 				fc[idx] = replacer(fc[idx], column)
+ 				continue
+ 			}
+ 			var c xlsxCol
+ 			_ = deepcopy.Copy(&c, column)
+ 			c.Min, c.Max = i, i
++			index[i] = len(fc)
+ 			fc = append(fc, c)
+ 		}
+ 	}
+diff --git a/col_test.go b/col_test.go
+index fcea60f..68e7f64 100644
+--- a/col_test.go
++++ b/col_test.go
+@@ -2,6 +2,7 @@ package excelize
+ 
+ import (
+ 	"fmt"
++	"math"
+ 	"path/filepath"
+ 	"sort"
+ 	"strings"
+@@ -585,3 +586,19 @@ func TestAutoFitColWidth(t *testing.T) {
+ 	_, err = f.autoFitColWidth("Sheet1", 1, 1, &Font{})
+ 	assert.Equal(t, err, newInvalidStyleID(1))
+ }
++
++func TestFlatColsOutOfRange(t *testing.T) {
++	f := NewFile()
++	ws, ok := f.Sheet.Load("xl/worksheets/sheet1.xml")
++	assert.True(t, ok)
++	ws.(*xlsxWorksheet).Cols = &xlsxCols{Col: []xlsxCol{{Min: -5, Max: math.MaxInt32, Width: float64Ptr(9)}}}
++	assert.NoError(t, f.SetColWidth("Sheet1", "A", "A", 12))
++	cols := ws.(*xlsxWorksheet).Cols.Col
++	assert.Len(t, cols, MaxColumns)
++	for _, c := range cols {
++		assert.True(t, c.Min >= MinColumns && c.Max <= MaxColumns)
++	}
++	assert.NoError(t, f.SetColStyle("Sheet1", "B", 0))
++	assert.NoError(t, f.SetColVisible("Sheet1", "C", false))
++	assert.NoError(t, f.SetColOutlineLevel("Sheet1", "D", 2))
++}

@@ -1,0 +1,148 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 8c50e4e..94fe333 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
+ 
+ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+ 
++## Unreleased
++
++### Fixed
++
++- Security: with `{ requireWellFormed: true }`, `XMLSerializer.serializeToString()` (and `Node.toString()`, `NodeList.toString()`) now throws `InvalidStateError` when a serialized attribute's qualified name — including synthesized `xmlns:PREFIX` namespace declarations — does not match the XML `QName` production. This prevents attribute injection through names passed to `Element.setAttribute()`, which still does not validate names at creation time. Default serialization is unchanged. [`GHSA-4w3w-2rp5-g8jm`](https://github.com/xmldom/xmldom/security/advisories/GHSA-4w3w-2rp5-g8jm)
++
+ ## [0.9.10](https://github.com/xmldom/xmldom/compare/0.9.9...0.9.10)
+ 
+ ### Fixed
+diff --git a/index.d.ts b/index.d.ts
+index 7b31309..8862eb1 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1585,8 +1585,8 @@ declare module '@xmldom/xmldom' {
+ 		 * When `splitCDATASections` is `true` (the default), `"]]>"` sequences are split across
+ 		 * concatenated CDATA sections — **deprecated**, will be removed in the next breaking
+ 		 * release.
+-		 * - W3C DOM Parsing §3.2.1.1 requires well-formedness checks on Element `localName`s,
+-		 * prefixes, and attribute serialization when `requireWellFormed` is `true`. These checks are
++		 * - W3C DOM Parsing §3.2.1.1 requires well-formedness checks on Element `localName`s
++		 * and prefixes when `requireWellFormed` is `true`. These checks are
+ 		 * **not implemented** in this release — see the tracking issue filed against the next
+ 		 * breaking milestone.
+ 		 *
+@@ -1604,6 +1604,8 @@ declare module '@xmldom/xmldom' {
+ 		 * production (W3C DOM Parsing §3.2.1.3; XML 1.0 production [11])
+ 		 * - a DocumentType's `internalSubset` contains `"]>"`
+ 		 * - the Document has no `documentElement`
++		 * - a serialized attribute's qualified name (including synthesized `xmlns:PREFIX` namespace
++		 * declarations) does not match the XML `QName` production
+ 		 * @see https://developer.mozilla.org/docs/Web/API/XMLSerializer/serializeToString
+ 		 * @see https://html.spec.whatwg.org/#dom-xmlserializer-serializetostring
+ 		 * @see https://github.com/w3c/DOM-Parsing/issues/84
+diff --git a/lib/dom.js b/lib/dom.js
+index 6a2e0b0..6c4880e 100644
+--- a/lib/dom.js
++++ b/lib/dom.js
+@@ -2955,6 +2955,8 @@ function XMLSerializer() {}
+  * production (W3C DOM Parsing §3.2.1.3; XML 1.0 production [11])
+  * - a DocumentType's `internalSubset` contains `"]>"`
+  * - the Document has no `documentElement`
++ * - a serialized attribute's qualified name (including synthesized `xmlns:PREFIX` namespace
++ * declarations) does not match the XML `QName` production
+  * @see https://developer.mozilla.org/docs/Web/API/XMLSerializer/serializeToString
+  * @see https://html.spec.whatwg.org/#dom-xmlserializer-serializetostring
+  * @see https://github.com/w3c/DOM-Parsing/issues/84
+@@ -3039,7 +3041,13 @@ function needNamespaceDefine(node, isHTML, visibleNamespaces) {
+  * @see https://w3c.github.io/DOM-Parsing/#serializing-an-element-s-attributes
+  * @prettierignore
+  */
+-function addSerializedAttribute(buf, qualifiedName, value) {
++function addSerializedAttribute(buf, qualifiedName, value, requireWellFormed) {
++	if (requireWellFormed && !g.QName_exact.test(qualifiedName)) {
++		throw new DOMException(
++			'The attribute name "' + qualifiedName + '" is not a valid XML QName',
++			DOMExceptionName.InvalidStateError
++		);
++	}
+ 	buf.push(' ', qualifiedName, '="', value.replace(/[<>&"\t\n\r]/g, _xmlEncoder), '"');
+ }
+ 
+@@ -3135,7 +3143,7 @@ function serializeToString(node, buf, visibleNamespaces, opts) {
+ 							if (needNamespaceDefine(attr, isHTML, childNamespaces)) {
+ 								var attrPrefix = attr.prefix || '';
+ 								var uri = attr.namespaceURI;
+-								addSerializedAttribute(buf, attrPrefix ? 'xmlns:' + attrPrefix : 'xmlns', uri);
++								addSerializedAttribute(buf, attrPrefix ? 'xmlns:' + attrPrefix : 'xmlns', uri, requireWellFormed);
+ 								childNamespaces.push({ prefix: attrPrefix, namespace: uri });
+ 							}
+ 							// Apply nodeFilter and serialize the attribute.
+@@ -3144,7 +3152,7 @@ function serializeToString(node, buf, visibleNamespaces, opts) {
+ 								if (typeof filteredAttr === 'string') {
+ 									buf.push(filteredAttr);
+ 								} else {
+-									addSerializedAttribute(buf, filteredAttr.name, filteredAttr.value);
++									addSerializedAttribute(buf, filteredAttr.name, filteredAttr.value, requireWellFormed);
+ 								}
+ 							}
+ 						}
+@@ -3153,7 +3161,7 @@ function serializeToString(node, buf, visibleNamespaces, opts) {
+ 						if (nodeName === prefixedNodeName && needNamespaceDefine(n, isHTML, childNamespaces)) {
+ 							var nodePrefix = n.prefix || '';
+ 							var uri = n.namespaceURI;
+-							addSerializedAttribute(buf, nodePrefix ? 'xmlns:' + nodePrefix : 'xmlns', uri);
++							addSerializedAttribute(buf, nodePrefix ? 'xmlns:' + nodePrefix : 'xmlns', uri, requireWellFormed);
+ 							childNamespaces.push({ prefix: nodePrefix, namespace: uri });
+ 						}
+ 
+@@ -3197,7 +3205,7 @@ function serializeToString(node, buf, visibleNamespaces, opts) {
+ 						// Pass namespaces through; each child element will slice independently.
+ 						return { ns: namespaces };
+ 					case ATTRIBUTE_NODE:
+-						addSerializedAttribute(buf, n.name, n.value);
++						addSerializedAttribute(buf, n.name, n.value, requireWellFormed);
+ 						return null;
+ 					case TEXT_NODE:
+ 						/*
+diff --git a/test/dom/serializer.test.js b/test/dom/serializer.test.js
+index 4bd555a..e2aa52f 100644
+--- a/test/dom/serializer.test.js
++++ b/test/dom/serializer.test.js
+@@ -509,6 +509,38 @@ describe('XMLSerializer.serializeToString', () => {
+ 			const attr = el.attributes.item(0);
+ 			expect(new XMLSerializer().serializeToString(attr)).toBe(' class="hello"');
+ 		});
++
++		describe('attribute name injection (GHSA-4w3w-2rp5-g8jm)', () => {
++			const injected = 'class="safe" onclick';
++
++			test('default serialization emits names verbatim', () => {
++				doc.documentElement.setAttribute(injected, 'alert(1)');
++				expect(new XMLSerializer().serializeToString(doc)).toBe('<root class="safe" onclick="alert(1)"/>');
++			});
++			test('requireWellFormed: true throws InvalidStateError for invalid attribute name on element', () => {
++				doc.documentElement.setAttribute(injected, 'alert(1)');
++				expectDOMException(() => new XMLSerializer().serializeToString(doc, { requireWellFormed: true }), 'InvalidStateError');
++			});
++			test('requireWellFormed: true throws InvalidStateError for invalid attribute node name', () => {
++				const el = doc.createElement('el');
++				el.setAttribute(injected, 'x');
++				const attr = el.attributes.item(0);
++				expectDOMException(() => new XMLSerializer().serializeToString(attr, { requireWellFormed: true }), 'InvalidStateError');
++			});
++			test('requireWellFormed: true throws InvalidStateError for invalid synthesized xmlns prefix', () => {
++				const attr = doc.createAttributeNS('urn:x', 'p:a');
++				attr.prefix = 'x" onclick="alert(1)';
++				doc.documentElement.setAttributeNode(attr);
++				expectDOMException(() => new XMLSerializer().serializeToString(doc, { requireWellFormed: true }), 'InvalidStateError');
++			});
++			test('requireWellFormed: true accepts valid qualified attribute names', () => {
++				doc.documentElement.setAttribute('class', 'a');
++				doc.documentElement.setAttributeNS('urn:y', 'q:a', 'v');
++				expect(new XMLSerializer().serializeToString(doc, { requireWellFormed: true })).toBe(
++					'<root class="a" xmlns:q="urn:y" q:a="v"/>'
++				);
++			});
++		});
+ 	});
+ 
+ 	describe('EntityReference', () => {

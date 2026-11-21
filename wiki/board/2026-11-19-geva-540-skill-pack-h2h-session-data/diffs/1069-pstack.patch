@@ -1,0 +1,172 @@
+diff --git a/internal/web/__snapshots__/web.snapshot b/internal/web/__snapshots__/web.snapshot
+index c4ee6e9..e6da7b4 100644
+--- a/internal/web/__snapshots__/web.snapshot
++++ b/internal/web/__snapshots__/web.snapshot
+@@ -130,11 +130,11 @@ Content-Type: text/event-stream
+ X-Accel-Buffering: no
+ 
+ event: containers-changed
+-data: []
++data: [{"id":"1234","name":"test","image":"test","command":"","created":"0001-01-01T00:00:00Z","startedAt":"0001-01-01T00:00:00Z","finishedAt":"0001-01-01T00:00:00Z","state":"","stats":[],"memoryLimit":0,"cpuLimit":0}]
+ 
+ 
+ event: containers-changed
+-data: []
++data: [{"id":"1234","name":"test","image":"test","command":"","created":"0001-01-01T00:00:00Z","startedAt":"0001-01-01T00:00:00Z","finishedAt":"0001-01-01T00:00:00Z","state":"","stats":[],"memoryLimit":0,"cpuLimit":0}]
+ 
+ 
+ event: container-event
+diff --git a/internal/web/events.go b/internal/web/events.go
+index 676b25c..7896073 100644
+--- a/internal/web/events.go
++++ b/internal/web/events.go
+@@ -47,6 +47,18 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 		}
+ 	}
+ 
++	visible := make(map[string]struct{})
++	markVisible := func(containers []container.Container) {
++		for _, c := range containers {
++			visible[c.ID] = struct{}{}
++		}
++	}
++	isVisible := func(id string) bool {
++		_, ok := visible[id]
++		return ok
++	}
++	markVisible(allContainers)
++
+ 	if err := sseWriter.Event("containers-changed", allContainers); err != nil {
+ 		log.Error().Err(err).Msg("error writing containers to event stream")
+ 	}
+@@ -61,6 +73,9 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 				return
+ 			}
+ 		case stat := <-stats:
++			if !isVisible(stat.ID) {
++				continue
++			}
+ 			if err := sseWriter.Event("container-stat", stat); err != nil {
+ 				log.Error().Err(err).Msg("error writing event to event stream")
+ 				return
+@@ -70,15 +85,23 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 				return
+ 			}
+ 			log.Trace().Str("event", event.Name).Str("id", event.ActorID).Msg("container event from store")
++			var hostContainers []container.Container
++			if event.Name == "start" || event.Name == "rename" {
++				if containers, err := h.hostService.ListContainersForHost(event.Host, userLabels); err == nil {
++					hostContainers = containers
++					markVisible(containers)
++				}
++			}
++			if !isVisible(event.ActorID) {
++				continue
++			}
+ 			switch event.Name {
+ 			case "start", "die", "destroy", "rename", "pause", "unpause":
+-				if event.Name == "start" || event.Name == "rename" {
+-					if containers, err := h.hostService.ListContainersForHost(event.Host, userLabels); err == nil {
+-						log.Debug().Str("host", event.Host).Int("count", len(containers)).Msg("updating containers for host")
+-						if err := sseWriter.Event("containers-changed", containers); err != nil {
+-							log.Error().Err(err).Msg("error writing containers to event stream")
+-							return
+-						}
++				if hostContainers != nil {
++					log.Debug().Str("host", event.Host).Int("count", len(hostContainers)).Msg("updating containers for host")
++					if err := sseWriter.Event("containers-changed", hostContainers); err != nil {
++						log.Error().Err(err).Msg("error writing containers to event stream")
++						return
+ 					}
+ 				}
+ 
+diff --git a/internal/web/events_test.go b/internal/web/events_test.go
+index a32c169..1c67be0 100644
+--- a/internal/web/events_test.go
++++ b/internal/web/events_test.go
+@@ -3,6 +3,7 @@ package web
+ import (
+ 	"context"
+ 	"crypto/tls"
++	"strings"
+ 	"time"
+ 
+ 	"net/http"
+@@ -24,7 +25,7 @@ func Test_handler_streamEvents_happy(t *testing.T) {
+ 
+ 	mockedClient := new(MockedClient)
+ 
+-	mockedClient.On("ListContainers", mock.Anything, mock.Anything).Return([]container.Container{}, nil)
++	mockedClient.On("ListContainers", mock.Anything, mock.Anything).Return([]container.Container{{ID: "1234", Name: "test", Image: "test", Stats: utils.NewRingBuffer[container.ContainerStat](300)}}, nil)
+ 	mockedClient.On("ContainerEvents", mock.Anything, mock.AnythingOfType("chan<- container.ContainerEvent")).Return(nil).Run(func(args mock.Arguments) {
+ 		messages := args.Get(1).(chan<- container.ContainerEvent)
+ 
+@@ -66,3 +67,68 @@ func Test_handler_streamEvents_happy(t *testing.T) {
+ 	abide.AssertHTTPResponse(t, t.Name(), rr.Result())
+ 	mockedClient.AssertExpectations(t)
+ }
++
++type statsEmittingClient struct {
++	*MockedClient
++}
++
++func (c *statsEmittingClient) ContainerStats(ctx context.Context, id string, stats chan<- container.ContainerStat) error {
++	select {
++	case stats <- container.ContainerStat{ID: id, CPUPercent: 42}:
++	case <-ctx.Done():
++	}
++	<-ctx.Done()
++	return ctx.Err()
++}
++
++func Test_handler_streamEvents_respects_label_filter(t *testing.T) {
++	ctx, cancel := context.WithCancel(context.Background())
++	req, err := http.NewRequestWithContext(ctx, "GET", "/api/events/stream", nil)
++	require.NoError(t, err)
++
++	visible := container.Container{ID: "visible00001", Name: "visible", Host: "localhost", State: "running", Labels: map[string]string{"visible": "yes"}, Stats: utils.NewRingBuffer[container.ContainerStat](300)}
++	secret := container.Container{ID: "secret000001", Name: "secret", Host: "localhost", State: "running", Labels: map[string]string{"secretproject": "acme-payroll"}, Stats: utils.NewRingBuffer[container.ContainerStat](300)}
++
++	mockedClient := &statsEmittingClient{new(MockedClient)}
++	mockedClient.On("ListContainers", mock.Anything, mock.MatchedBy(func(l container.ContainerLabels) bool { return l.Exists() })).Return([]container.Container{visible}, nil)
++	mockedClient.On("ListContainers", mock.Anything, mock.MatchedBy(func(l container.ContainerLabels) bool { return !l.Exists() })).Return([]container.Container{visible, secret}, nil)
++	mockedClient.On("FindContainer", mock.Anything, visible.ID).Return(visible, nil)
++	mockedClient.On("FindContainer", mock.Anything, secret.ID).Return(secret, nil)
++	mockedClient.On("Host").Return(container.Host{ID: "localhost"})
++	mockedClient.On("ContainerEvents", mock.Anything, mock.AnythingOfType("chan<- container.ContainerEvent")).Return(nil).Run(func(args mock.Arguments) {
++		messages := args.Get(1).(chan<- container.ContainerEvent)
++		time.Sleep(100 * time.Millisecond)
++		for _, e := range []container.ContainerEvent{
++			{Name: "start", ActorID: secret.ID, Host: "localhost", ActorAttributes: secret.Labels},
++			{Name: "die", ActorID: secret.ID, Host: "localhost"},
++			{Name: "health_status: healthy", ActorID: secret.ID, Host: "localhost"},
++			{Name: "update", ActorID: secret.ID, Host: "localhost", Container: &secret},
++			{Name: "die", ActorID: visible.ID, Host: "localhost"},
++		} {
++			select {
++			case messages <- e:
++			case <-ctx.Done():
++				return
++			}
++		}
++		time.Sleep(100 * time.Millisecond)
++		cancel()
++	})
++
++	manager := docker_support.NewRetriableClientManager(nil, 3*time.Second, tls.Certificate{}, docker_support.NewDockerClientService(mockedClient, container.ContainerLabels{}))
++	multiHostService := docker_support.NewMultiHostService(manager, 3*time.Second)
++	server := CreateServer(multiHostService, nil, Config{
++		Base:          "/",
++		Authorization: Authorization{Provider: NONE},
++		Labels:        container.ContainerLabels{"visible": {"yes"}},
++	})
++
++	rr := httptest.NewRecorder()
++	server.Handler.ServeHTTP(rr, req)
++	body := rr.Body.String()
++
++	require.Contains(t, body, `"id":"visible00001","cpu":42`, "stats for visible container are streamed")
++	require.Contains(t, body, `"name":"die","host":"localhost","actorId":"visible00001"`, "events for visible container are streamed")
++	require.False(t, strings.Contains(body, secret.ID), "nothing about the filtered-out container is streamed:\n%s", body)
++	require.NotContains(t, body, "acme-payroll")
++}

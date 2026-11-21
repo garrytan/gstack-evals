@@ -1,0 +1,19 @@
+diff --git a/pkl-parser/src/main/java/org/pkl/parser/Lexer.java b/pkl-parser/src/main/java/org/pkl/parser/Lexer.java
+index 5b7ee93..988c4fc 100644
+--- a/pkl-parser/src/main/java/org/pkl/parser/Lexer.java
++++ b/pkl-parser/src/main/java/org/pkl/parser/Lexer.java
+@@ -489,11 +489,13 @@ public class Lexer {
+   }
+ 
+   private void lexQuotedIdentifier() {
+-    while (lookahead != '`' && lookahead != '\n' && lookahead != '\r') {
++    while (lookahead != '`' && lookahead != '\n' && lookahead != '\r' && lookahead != EOF) {
+       nextChar();
+     }
+     if (lookahead == '`') {
+       nextChar();
++    } else if (lookahead == EOF) {
++      throw unexpectedEndOfFile();
+     } else {
+       throw unexpectedChar(lookahead, "backquote");
+     }

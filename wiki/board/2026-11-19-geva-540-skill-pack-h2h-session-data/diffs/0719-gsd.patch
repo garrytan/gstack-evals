@@ -1,0 +1,100 @@
+diff --git a/src/items.rs b/src/items.rs
+index 775c763..f6e4fa4 100644
+--- a/src/items.rs
++++ b/src/items.rs
+@@ -2586,13 +2586,15 @@ fn rewrite_fn_base(
+             .map_or(false, |last_line| last_line.contains("//"));
+ 
+         if context.config.style_edition() >= StyleEdition::Edition2024 {
+-            if closing_paren_overflow_max_width {
+-                result.push(')');
++            if params_last_line_contains_comment {
++                // The closing paren must go on its own line, otherwise it would be
++                // swallowed by the trailing line comment.
+                 result.push_str(&indent.to_string_with_newline(context.config));
++                result.push(')');
+                 no_params_and_over_max_width = true;
+-            } else if params_last_line_contains_comment {
+-                result.push_str(&indent.to_string_with_newline(context.config));
++            } else if closing_paren_overflow_max_width {
+                 result.push(')');
++                result.push_str(&indent.to_string_with_newline(context.config));
+                 no_params_and_over_max_width = true;
+             } else {
+                 result.push(')');
+diff --git a/tests/source/fn_empty_params_comment_long_ret_2015.rs b/tests/source/fn_empty_params_comment_long_ret_2015.rs
+new file mode 100644
+index 0000000..211da4d
+--- /dev/null
++++ b/tests/source/fn_empty_params_comment_long_ret_2015.rs
+@@ -0,0 +1,14 @@
++// rustfmt-style_edition: 2015
++// rustfmt-edition: 2021
++
++pub async fn foo(
++    // OriginalUri(original_uri): OriginalUri,
++) -> Option<Option<Option<Option<String>>>> {
++    None
++}
++
++fn bar(
++    // a comment that is long enough to make the signature overflow max_width
++) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
++    todo!()
++}
+diff --git a/tests/source/fn_empty_params_comment_long_ret_2024.rs b/tests/source/fn_empty_params_comment_long_ret_2024.rs
+new file mode 100644
+index 0000000..b6c5082
+--- /dev/null
++++ b/tests/source/fn_empty_params_comment_long_ret_2024.rs
+@@ -0,0 +1,14 @@
++// rustfmt-style_edition: 2024
++// rustfmt-edition: 2021
++
++pub async fn foo(
++    // OriginalUri(original_uri): OriginalUri,
++) -> Option<Option<Option<Option<String>>>> {
++    None
++}
++
++fn bar(
++    // a comment that is long enough to make the signature overflow max_width
++) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
++    todo!()
++}
+diff --git a/tests/target/fn_empty_params_comment_long_ret_2015.rs b/tests/target/fn_empty_params_comment_long_ret_2015.rs
+new file mode 100644
+index 0000000..55accc9
+--- /dev/null
++++ b/tests/target/fn_empty_params_comment_long_ret_2015.rs
+@@ -0,0 +1,12 @@
++// rustfmt-style_edition: 2015
++// rustfmt-edition: 2021
++
++pub async fn foo(// OriginalUri(original_uri): OriginalUri,
++) -> Option<Option<Option<Option<String>>>> {
++    None
++}
++
++fn bar(// a comment that is long enough to make the signature overflow max_width
++) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
++    todo!()
++}
+diff --git a/tests/target/fn_empty_params_comment_long_ret_2024.rs b/tests/target/fn_empty_params_comment_long_ret_2024.rs
+new file mode 100644
+index 0000000..b5feaed
+--- /dev/null
++++ b/tests/target/fn_empty_params_comment_long_ret_2024.rs
+@@ -0,0 +1,12 @@
++// rustfmt-style_edition: 2024
++// rustfmt-edition: 2021
++
++pub async fn foo(// OriginalUri(original_uri): OriginalUri,
++) -> Option<Option<Option<Option<String>>>> {
++    None
++}
++
++fn bar(// a comment that is long enough to make the signature overflow max_width
++) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
++    todo!()
++}

@@ -1,0 +1,236 @@
+diff --git a/caddyconfig/httpcaddyfile/tlsapp.go b/caddyconfig/httpcaddyfile/tlsapp.go
+index ddec0b9..5c61100 100644
+--- a/caddyconfig/httpcaddyfile/tlsapp.go
++++ b/caddyconfig/httpcaddyfile/tlsapp.go
+@@ -94,6 +94,11 @@ func (st ServerType) buildTLSApp(
+ 
+ 	forcedAutomatedNames := make(map[string]struct{}) // explicitly configured to be automated, even if covered by a wildcard
+ 
++	// automation policies that were created for site blocks without any
++	// TLS-related customizations (i.e. they are identical to the base policy
++	// apart from their subjects); these may need to yield to wildcard policies
++	defaultSiteAPs := make(map[*caddytls.AutomationPolicy]struct{})
++
+ 	for _, p := range pairings {
+ 		// avoid setting up TLS automation policies for a server that is HTTP-only
+ 		var addresses []string
+@@ -232,6 +237,17 @@ func (st ServerType) buildTLSApp(
+ 				catchAllAP = ap
+ 			}
+ 
++			// remember whether this policy has any customizations for this site
++			// block (compared to the base policy), before subjects are set
++			var isDefaultSiteAP bool
++			if ap != catchAllAP {
++				baseAP, err := newBaseAutomationPolicy(options, warnings, true)
++				if err != nil {
++					return nil, warnings, err
++				}
++				isDefaultSiteAP = reflect.DeepEqual(ap, baseAP)
++			}
++
+ 			hostsNotHTTP := sblock.hostsFromKeysNotHTTP(httpPort)
+ 			sort.Strings(hostsNotHTTP) // solely for deterministic test results
+ 
+@@ -282,6 +298,8 @@ func (st ServerType) buildTLSApp(
+ 			tlsApp.Automation.Policies = append(tlsApp.Automation.Policies, ap)
+ 			if ap2 != nil {
+ 				tlsApp.Automation.Policies = append(tlsApp.Automation.Policies, ap2)
++			} else if isDefaultSiteAP && len(ap.SubjectsRaw) > 0 {
++				defaultSiteAPs[ap] = struct{}{}
+ 			}
+ 
+ 			// certificate loaders
+@@ -293,6 +311,43 @@ func (st ServerType) buildTLSApp(
+ 		}
+ 	}
+ 
++	// if a site block without any TLS customizations has hostnames that are
++	// covered by a wildcard in another site block's automation policy that
++	// uses certificate managers (e.g. get_certificate), then those hostnames
++	// must not get their own (default) automation policy, since it would be
++	// chosen over the wildcard policy at handshake-time and the managers would
++	// never be consulted (see issue about get_certificate with wildcards);
++	// names that are forced to be automated keep their own policy
++	if tlsApp.Automation != nil && len(defaultSiteAPs) > 0 {
++		coveredByWildcardWithManagers := func(subj string) bool {
++			for _, other := range tlsApp.Automation.Policies {
++				if _, isDefault := defaultSiteAPs[other]; isDefault || len(other.ManagersRaw) == 0 {
++					continue
++				}
++				for _, otherSubj := range other.SubjectsRaw {
++					if otherSubj != subj && strings.Contains(otherSubj, "*") &&
++						certmagic.MatchWildcard(subj, otherSubj) {
++						return true
++					}
++				}
++			}
++			return false
++		}
++		tlsApp.Automation.Policies = slices.DeleteFunc(tlsApp.Automation.Policies, func(ap *caddytls.AutomationPolicy) bool {
++			if _, ok := defaultSiteAPs[ap]; !ok {
++				return false
++			}
++			ap.SubjectsRaw = slices.DeleteFunc(ap.SubjectsRaw, func(subj string) bool {
++				if _, forced := forcedAutomatedNames[subj]; forced {
++					return false
++				}
++				return coveredByWildcardWithManagers(subj)
++			})
++			// a policy without subjects would become a catch-all, so remove it entirely
++			return len(ap.SubjectsRaw) == 0
++		})
++	}
++
+ 	// group certificate loaders by module name, then add to config
+ 	if len(certLoaders) > 0 {
+ 		loadersByName := make(map[string]caddytls.CertificateLoader)
+diff --git a/caddytest/integration/caddyfile_adapt/tls_automation_wildcard_get_certificate.caddyfiletest b/caddytest/integration/caddyfile_adapt/tls_automation_wildcard_get_certificate.caddyfiletest
+new file mode 100644
+index 0000000..ad3960d
+--- /dev/null
++++ b/caddytest/integration/caddyfile_adapt/tls_automation_wildcard_get_certificate.caddyfiletest
+@@ -0,0 +1,143 @@
++*.example.com {
++	tls {
++		get_certificate http http://localhost:9000/certs
++	}
++	abort
++}
++
++wiki.example.com {
++	respond "Wiki"
++}
++
++forced.example.com {
++	tls force_automate
++	respond "Forced"
++}
++----------
++{
++	"apps": {
++		"http": {
++			"servers": {
++				"srv0": {
++					"listen": [
++						":443"
++					],
++					"routes": [
++						{
++							"match": [
++								{
++									"host": [
++										"forced.example.com"
++									]
++								}
++							],
++							"handle": [
++								{
++									"handler": "subroute",
++									"routes": [
++										{
++											"handle": [
++												{
++													"body": "Forced",
++													"handler": "static_response"
++												}
++											]
++										}
++									]
++								}
++							],
++							"terminal": true
++						},
++						{
++							"match": [
++								{
++									"host": [
++										"wiki.example.com"
++									]
++								}
++							],
++							"handle": [
++								{
++									"handler": "subroute",
++									"routes": [
++										{
++											"handle": [
++												{
++													"body": "Wiki",
++													"handler": "static_response"
++												}
++											]
++										}
++									]
++								}
++							],
++							"terminal": true
++						},
++						{
++							"match": [
++								{
++									"host": [
++										"*.example.com"
++									]
++								}
++							],
++							"handle": [
++								{
++									"handler": "subroute",
++									"routes": [
++										{
++											"handle": [
++												{
++													"abort": true,
++													"handler": "static_response"
++												}
++											]
++										}
++									]
++								}
++							],
++							"terminal": true
++						}
++					],
++					"tls_connection_policies": [
++						{
++							"match": {
++								"sni": [
++									"forced.example.com"
++								]
++							}
++						},
++						{}
++					]
++				}
++			}
++		},
++		"tls": {
++			"certificates": {
++				"automate": [
++					"forced.example.com"
++				]
++			},
++			"automation": {
++				"policies": [
++					{
++						"subjects": [
++							"forced.example.com"
++						]
++					},
++					{
++						"subjects": [
++							"*.example.com"
++						],
++						"get_certificate": [
++							{
++								"url": "http://localhost:9000/certs",
++								"via": "http"
++							}
++						]
++					}
++				]
++			}
++		}
++	}
++}

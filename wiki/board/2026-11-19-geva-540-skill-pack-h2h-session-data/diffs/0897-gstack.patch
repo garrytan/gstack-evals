@@ -1,0 +1,71 @@
+diff --git a/packages/react/src/menu/popup/MenuPopup.tsx b/packages/react/src/menu/popup/MenuPopup.tsx
+index cf3d523..59039d6 100644
+--- a/packages/react/src/menu/popup/MenuPopup.tsx
++++ b/packages/react/src/menu/popup/MenuPopup.tsx
+@@ -43,6 +43,7 @@ export const MenuPopup = React.forwardRef(function MenuPopup(
+     parent,
+     lastOpenChangeReason,
+     rootId,
++    closeParentOnEsc,
+   } = useMenuRootContext();
+   const { side, align, floatingContext } = useMenuPositionerContext();
+ 
+@@ -101,6 +102,11 @@ export const MenuPopup = React.forwardRef(function MenuPopup(
+   if (parent.type === 'menubar' && lastOpenChangeReason !== 'outside-press') {
+     returnFocus = true;
+   }
++  // When a submenu is closed with the Escape key without closing its parent,
++  // focus should move back to the submenu trigger.
++  if (parent.type === 'menu' && lastOpenChangeReason === 'escape-key' && !closeParentOnEsc) {
++    returnFocus = true;
++  }
+ 
+   return (
+     <FloatingFocusManager
+diff --git a/packages/react/src/menu/root/MenuRoot.test.tsx b/packages/react/src/menu/root/MenuRoot.test.tsx
+index d6b697f..eb5958e 100644
+--- a/packages/react/src/menu/root/MenuRoot.test.tsx
++++ b/packages/react/src/menu/root/MenuRoot.test.tsx
+@@ -837,6 +837,10 @@ describe('<Menu.Root />', () => {
+       });
+ 
+       expect(menus[0].id).to.equal('parent-menu');
++
++      await waitFor(() => {
++        expect(getByRole('menuitem', { name: '2' })).toHaveFocus();
++      });
+     });
+   });
+ 
+diff --git a/packages/react/src/menu/root/MenuRoot.tsx b/packages/react/src/menu/root/MenuRoot.tsx
+index 91730fb..dfb8cb2 100644
+--- a/packages/react/src/menu/root/MenuRoot.tsx
++++ b/packages/react/src/menu/root/MenuRoot.tsx
+@@ -516,6 +516,7 @@ export const MenuRoot: React.FC<MenuRoot.Props> = function MenuRoot(props) {
+       rootId,
+       allowMouseEnter,
+       setAllowMouseEnter,
++      closeParentOnEsc,
+     }),
+     [
+       activeIndex,
+@@ -541,6 +542,7 @@ export const MenuRoot: React.FC<MenuRoot.Props> = function MenuRoot(props) {
+       rootId,
+       allowMouseEnter,
+       setAllowMouseEnter,
++      closeParentOnEsc,
+     ],
+   );
+ 
+diff --git a/packages/react/src/menu/root/MenuRootContext.ts b/packages/react/src/menu/root/MenuRootContext.ts
+index fb5089c..3bd4594 100644
+--- a/packages/react/src/menu/root/MenuRootContext.ts
++++ b/packages/react/src/menu/root/MenuRootContext.ts
+@@ -31,6 +31,7 @@ export interface MenuRootContext {
+   transitionStatus: TransitionStatus;
+   allowMouseUpTriggerRef: React.RefObject<boolean>;
+   lastOpenChangeReason: MenuRoot.OpenChangeReason | null;
++  closeParentOnEsc: boolean;
+   instantType: 'dismiss' | 'click' | 'group' | undefined;
+   onOpenChangeComplete: ((open: boolean) => void) | undefined;
+   setHoverEnabled: React.Dispatch<React.SetStateAction<boolean>>;
