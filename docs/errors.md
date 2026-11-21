@@ -312,6 +312,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
 | [E_H2HX_PREREG](#e_h2hx_prereg) | 2 | U20 |
 | [E_H2HX_INPUT](#e_h2hx_input) | 2 | U20 |
+| [E_H2HX_ROUTE_CONFIG](#e_h2hx_route_config) | 2 | U20 |
+| [E_H2HX_ROUTE_PROVIDER](#e_h2hx_route_provider) | 2 | U20 |
+| [E_H2HX_ROUTE_RECORD](#e_h2hx_route_record) | 2 | U20 |
 | [E_H2HX_ANALYSIS_INPUT](#e_h2hx_analysis_input) | 2 | U20 |
 | [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
 | [E_H2H_INSTALL](#e_h2h_install) | 2 | U20 |
@@ -2448,6 +2451,30 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 An extension command got input it can't use: an unknown part, stage or arm, a unit listed twice, a B1 unit, a non-O unit in part L, or an empty problem statement.
 
 Fix: Pass the part's own units and arms, each once, as the extension's preregistration lists them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ROUTE_CONFIG
+
+Part P's particle-1 route in the extension's prereg.json does not match the metering proxy's: it goes somewhere other than OpenRouter, pins a provider with no known OpenRouter slug, or pins providers, fallbacks or data collection other than the proxy's price row sends.
+
+Fix: Make the price row in src/runner/pricing/prices.ts and prereg.json's parts.P.route agree, through a dated plan change if prereg.json is the one that moves. No particle-1 session runs until they do.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ROUTE_PROVIDER
+
+A particle-1 answer was served by a provider other than the one part P pins (OpenRouter's generation record names another provider_name).
+
+Fix: Part P's items stop. Bring the session, its answer id and the generation record to the Captain; nothing is retried to get another provider.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ROUTE_RECORD
+
+A particle-1 answer has no readable OpenRouter generation record, so the provider that served it is unknown: the answer id is malformed, the lookup did not answer 200, or the record names another id or no provider.
+
+Fix: Part P's items stop. Read the generation record by hand through the proxy's free route and bring it to the Captain before any more particle-1 sessions open.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
