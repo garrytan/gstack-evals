@@ -428,7 +428,7 @@ export const CODES = {
   },
   E_CACHE_STALE: {
     exit: 2,
-    meaning: "A cached session's key no longer matches (arm tree, task, fixture, check or verifier scripts, image, model, host version, adapter, isolation, timeout, passthrough env, judge model or policy).",
+    meaning: "A cached session's key no longer matches (arm tree, task, fixture, check or verifier scripts, image, model, host version, adapter, isolation, timeout, passthrough env or policy).",
     fix: "Read which key parts changed, then rerun the affected cells with --repair \"<named repair>\", which writes a new verdict id.",
     side_effects: NO_SPEND,
     retry_safe: true,
