@@ -470,6 +470,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_STOP_LIMIT](#e_cso_stop_limit) | 2 | U20 |
 | [E_CSO_GAP_UPSTREAM](#e_cso_gap_upstream) | 2 | U20 |
 | [E_CSO_GAP_INFRA](#e_cso_gap_infra) | 2 | U20 |
+| [E_CSO_RERUN_PRECONDITION](#e_cso_rerun_precondition) | 3 | U20 |
+| [E_CSO_RERUN_UNWIRED](#e_cso_rerun_unwired) | 3 | U20 |
 | [E_CSO_SCAN](#e_cso_scan) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_DEP](#e_cso_drop_install_dep) | 2 | U20 |
@@ -3768,6 +3770,22 @@ Office-hours rewrite eval (section 12): a judge's check could not be read. It ha
 Fix: Admission's one repair, by a dated change to the plan, under stage 1's remaining cap.
 
 Exit 3. Side effects: The check's metered spend stays on its lease. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_RERUN_PRECONDITION
+
+gstack-evals cso rerun refused a precondition before any spend: the units file is missing, unreadable or holds no unit ids, or the arm does not run on that model in any stage (untold runs on Opus in stages 0 and 1 only).
+
+Fix: Fix the named input and run again; --dry-run checks it without spending.
+
+Exit 3. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_RERUN_UNWIRED
+
+gstack-evals cso rerun has no session runner wired yet, so only --dry-run works.
+
+Fix: Wire the Harbor session runner into lanes/outcome-skills/cso/cli.ts before a real run; until then use --dry-run.
+
+Exit 3. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Warnings: attach to any verdict, never change the exit code
 
