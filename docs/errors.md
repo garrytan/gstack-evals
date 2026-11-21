@@ -312,6 +312,13 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
 | [E_H2HX_PREREG](#e_h2hx_prereg) | 2 | U20 |
 | [E_H2HX_INPUT](#e_h2hx_input) | 2 | U20 |
+| [E_H2HX_UNITS_INPUT](#e_h2hx_units_input) | 2 | U20 |
+| [E_H2HX_UNITS_RECIPE](#e_h2hx_units_recipe) | 2 | U20 |
+| [E_H2HX_UNITS_ORACLE](#e_h2hx_units_oracle) | 2 | U20 |
+| [E_H2HX_UNITS_CONTAIN](#e_h2hx_units_contain) | 2 | U20 |
+| [E_H2HX_UNITS_POOL](#e_h2hx_units_pool) | 2 | U20 |
+| [E_H2HX_UNITS_PENDING](#e_h2hx_units_pending) | 2 | U20 |
+| [E_H2HX_UNITS_SHORT](#e_h2hx_units_short) | 2 | U20 |
 | [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
 | [E_H2H_INSTALL](#e_h2h_install) | 2 | U20 |
 | [E_H2H_PIN](#e_h2h_pin) | 2 | U20 |
@@ -2447,6 +2454,62 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 An extension command got input it can't use: an unknown part, stage or arm, a unit listed twice, a B1 unit, a non-O unit in part L, or an empty problem statement.
 
 Fix: Pass the part's own units and arms, each once, as the extension's preregistration lists them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_INPUT
+
+The extension's unit builder got records it can't use: a frozen file is missing or has another schema, a count does not match the head-to-head's (100 O and 60 B2 stage 2 units, 12 and 12 stage 1 units), a unit is listed twice or has no recipe input, or a draw position does not follow the frozen order.
+
+Fix: Build from the head-to-head's committed frames, orders and session data and the run's exported records, unchanged. A record that disagrees with the frozen files goes to the Captain; nothing is filled in by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_RECIPE
+
+A rebuilt unit is not the unit the head-to-head ran: its recipe did not build, or a payload file it wrote (fix.patch, test.patch, issue.md, parser.py) hashes differently from the original. The unit drops for every arm of parts S and P.
+
+Fix: None inside the run: the unit is listed with its reason. Check the recipe pins (dataset revision, advisory commit, fix commit) before rebuilding anything else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_ORACLE
+
+A rebuilt or fresh unit failed the base plan's oracle: its verdict was not kept, or it did not run 3 base and 3 fixed runs. A rebuilt unit drops for every arm of parts S and P; a part L candidate drops at that position.
+
+Fix: None inside the run: the unit is listed with the oracle's verdict. Infrastructure faults are not drops; they leave the unit pending for a rerun.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_CONTAIN
+
+A unit failed containment: a ref or commit object past the base, an alternate or another object store, a nested .git, or a hidden test name or marker outside the repository or in an arm's home. The unit drops for every arm of its part (both parts S and P for a rebuilt unit).
+
+Fix: None inside the run: the unit is listed with the failed check. Never patch an image to pass containment.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_POOL
+
+Part L's frame is not complete: a pool's ids could not all be recovered from the surviving records, so its seeded order is provisional and no walk may use it.
+
+Fix: Recover the missing ids from a record that holds them (the head-to-head's walk logs) or change the plan's pool by a dated change before the walk. Never fill a pool by guessing.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_PENDING
+
+Part L's walk stopped at a candidate whose gate has no result yet (a licence read, row text, oracle or containment reading); positions after it are not drawn.
+
+Fix: Run the named gate on the named unit, then walk again. The walk never skips a pending unit.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2HX_UNITS_SHORT
+
+Part L's walk ran out of candidates before it filled its 6 pilot units, 100 counted units and 5 reserves. The counted units are what is left after the pilot and the reserves; under 60 makes part L underpowered.
+
+Fix: Report the restated counts and MDDs as the plan's section 5 says. Under 60 counted units, part L is descriptive only and goes back to the Captain.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
