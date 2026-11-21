@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Keyless token-shape captures for GPT-6.1 Sol in Codex CLI 0.170.0 against a stub Responses server, one per arm
+# (none, current, new): a session start, then a session of the first message plus 4 resumed turns.
+set -uo pipefail
+C=~/.capy/work/ohr2/codex; M=~/.capy/work/ohr2/money; X=$C/cli/package/vendor/x86_64-unknown-linux-musl/bin/codex
+PORT=18571
+cd $M
+mkdir -p caps msgs
+python3 - <<'PY'
+import json, os
+M = os.path.expanduser('~/.capy/work/ohr2/money')
+f = json.load(open(f'{M}/founder.json'))
+LENS = "Act as a YC partner holding office hours with me."
+CLOSING = "I need to stop here. Please end your reply with exactly these three lines, filled in:\nDECISION: what I should do.\nNEXT ACTION: one thing, who and by when.\nWHY: up to three facts from our talk."
+open(f'{M}/msgs/first-skill.txt', 'w').write("$office-hours " + LENS + "\n\n" + f['opening'])
+open(f'{M}/msgs/first-none.txt', 'w').write(LENS + "\n\n" + f['opening'])
+for i, t in enumerate(f['founder'] + [CLOSING]):
+    open(f'{M}/msgs/turn{i+1}.txt', 'w').write(t)
+PY
+home() { # arm dir
+  local arm=$1 H=$2
+  rm -rf $H; mkdir -p $H/.codex
+  if [ $arm != none ]; then cp -a $C/home-$arm/.codex/skills $H/.codex/skills; fi
+  {
+    printf 'model = "gpt-6.1-sol"\nmodel_provider = "stub"\nmodel_reasoning_effort = "low"\nmodel_context_window = 500000\ncheck_for_update_on_startup = false\n\n[skills.bundled]\nenabled = false\n\n'
+    if [ $arm != none ]; then for s in office-hours plan-design-review gstack-upgrade; do test -f $H/.codex/skills/gstack/$s/SKILL.md || echo "missing $s" >&2; printf '[[skills.config]]\npath = "%s/.codex/skills/gstack/%s/SKILL.md"\nenabled = false\n\n' $H $s; done; fi
+    printf '[model_providers.stub]\nname = "stub"\nbase_url = "http://127.0.0.1:%s/v1"\nwire_api = "responses"\nenv_key = "STUB_API_KEY"\n' $PORT
+  } > $H/.codex/config.toml
+}
+cx() { # H workdir args...
+  local H=$1 W=$2; shift 2
+  (cd $W && env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u CODEX_API_KEY HOME=$H CODEX_HOME=$H/.codex STUB_API_KEY=stub-not-a-key timeout 120 $X "$@" < /dev/null)
+}
+for arm in none current new; do
+  first=$M/msgs/first-skill.txt; [ $arm = none ] && first=$M/msgs/first-none.txt
+  # session start
+  H=$M/home-start-$arm; W=$M/work-start-$arm; home $arm $H; rm -rf $W; mkdir -p $W; (cd $W && git init -q)
+  : > caps/start-$arm.request.jsonl
+  bun $M/stub-turns.ts $M/caps/start-$arm.request.jsonl $PORT $M/replies.json > caps/stub-start-$arm.log 2>&1 & S=$!; sleep 1.5
+  cx $H $W exec --json -s read-only "$(cat $first)" > caps/start-$arm.events.jsonl 2> caps/start-$arm.stderr; echo "start-$arm exit $?"
+  kill $S; wait $S 2>/dev/null
+  cp $H/.codex/config.toml caps/start-$arm.config.toml
+  # multi-turn
+  H=$M/home-turns-$arm; W=$M/work-turns-$arm; home $arm $H; rm -rf $W; mkdir -p $W; (cd $W && git init -q)
+  : > caps/turns-$arm.request.jsonl
+  bun $M/stub-turns.ts $M/caps/turns-$arm.request.jsonl $PORT $M/replies.json > caps/stub-turns-$arm.log 2>&1 & S=$!; sleep 1.5
+  cx $H $W exec --json -s read-only "$(cat $first)" > caps/turns-$arm.events.jsonl 2> caps/turns-$arm.stderr; echo "turns-$arm first exit $?"
+  TID=$(python3 -c "import json,sys; print(next(json.loads(l)['thread_id'] for l in open(sys.argv[1]) if '\"thread.started\"' in l))" caps/turns-$arm.events.jsonl)
+  for k in 1 2 3 4; do
+    cx $H $W exec --json -s read-only resume $TID "$(cat $M/msgs/turn$k.txt)" >> caps/turns-$arm.events.jsonl 2>> caps/turns-$arm.stderr; echo "turns-$arm resume $k exit $?"
+  done
+  kill $S; wait $S 2>/dev/null
+done
