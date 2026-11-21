@@ -2595,6 +2595,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_H2HX_RUN: {
+    exit: 2,
+    meaning: "h2h x-run stopped an extension stage: a precondition failed before anything opened (the part's environment, Docker, Harbor, the driver, a unit dir or tree volume), its plan.json holds another plan, a session dir exists with no session.json or holds another session, or an arm's home holds a confirmed answer-key hit for the unit.",
+    fix: "Meet a named precondition and run again. Otherwise bring the stage's out dir to the Captain: a stopped session is ruled on before the stage goes on, and a unit with an answer-key hit drops for every arm by the frozen rule.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_H2HX_CODEX_RUNTIME: {
     exit: 2,
     meaning: "Part S's Codex runtime is not its pin: the platform tarball's sha256 differs from prereg.json, the binary does not print codex-cli 0.170.0, the runtime volume reads another version or digest or holds a file named codex on PATH, or a session's sol-agent link reads another version.",

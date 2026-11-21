@@ -312,6 +312,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
 | [E_H2HX_PREREG](#e_h2hx_prereg) | 2 | U20 |
 | [E_H2HX_INPUT](#e_h2hx_input) | 2 | U20 |
+| [E_H2HX_RUN](#e_h2hx_run) | 2 | U20 |
 | [E_H2HX_CODEX_RUNTIME](#e_h2hx_codex_runtime) | 2 | U20 |
 | [E_H2HX_CODEX_CONFIG](#e_h2hx_codex_config) | 2 | U20 |
 | [E_H2HX_CODEX_INSTALL](#e_h2hx_codex_install) | 2 | U20 |
@@ -2464,6 +2465,14 @@ An extension command got input it can't use: an unknown part, stage or arm, a un
 Fix: Pass the part's own units and arms, each once, as the extension's preregistration lists them.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_RUN
+
+h2h x-run stopped an extension stage: a precondition failed before anything opened (the part's environment, Docker, Harbor, the driver, a unit dir or tree volume), its plan.json holds another plan, a session dir exists with no session.json or holds another session, or an arm's home holds a confirmed answer-key hit for the unit.
+
+Fix: Meet a named precondition and run again. Otherwise bring the stage's out dir to the Captain: a stopped session is ruled on before the stage goes on, and a unit with an answer-key hit drops for every arm by the frozen rule.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_H2HX_CODEX_RUNTIME
 

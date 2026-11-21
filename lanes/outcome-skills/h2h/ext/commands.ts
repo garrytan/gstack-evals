@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// The extension's analysis commands: x-analyze (section 9), x-look (part S's interim look, section 11), x-ledger-dryrun
-// (section 14) and x-power-table (section 13). They are exported as commands, so the h2h dispatcher wires them by
-// listing "./ext/commands.ts" in COMMAND_MODULES; run this file directly to use them before then.
+// The extension's commands: x-run (one part's stage of sessions, ext/runner.ts), x-analyze (section 9), x-look (part S's
+// interim look, section 11), x-ledger-dryrun (section 14) and x-power-table (section 13). The h2h dispatcher wires them
+// through "./ext/commands.ts" in COMMAND_MODULES; running this file directly works too.
 import { join } from "node:path";
 import { parseFlags, refusal, type Command } from "../cli.ts";
 import { h2hFail } from "../prereg.ts";
@@ -12,6 +12,7 @@ import { extLedgerDryRun } from "./items.ts";
 import { interimLook, lookLines } from "./look.ts";
 import { extPowerText } from "./power.ts";
 import { PARTS, type Part } from "./prereg.ts";
+import { extPreflight, runExtStage } from "./runner.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 /** The head-to-head's published session data, whose score records give particle-1's gap to Opus. */
@@ -73,6 +74,29 @@ const dryrunCmd: Command = async (argv) => {
   return 0;
 };
 
+const RUN_HELP = `Usage: gstack-evals h2h x-run --part S|P|L --stage stage0|stage1|stage2 --units <units> --out <dir> [--frame <frame>] [--allowance <usd>]
+Runs one part's stage on the running outcome driver: plans the stage's units from prereg.json's order_seed, then runs,
+scores and writes the tests-added record of each session in order under --out (one dir per session; a relaunch keeps the
+sessions already written). The driver, its proxy, the unit dirs and the homes come from the environment (ext/runner.ts).
+--allowance is the part's session allowance, or exactly twice it after the doubling rule.`;
+const runCmd: Command = async (argv) => {
+  const f = parseFlags(argv, ["--part", "--stage", "--units", "--frame", "--out", "--allowance"], [], RUN_HELP, ["--units", "--frame"]);
+  if (!f) return 0;
+  const part = f.need("--part") as Part;
+  if (!PARTS.includes(part)) h2hFail("E_USAGE", "--part is S, P or L");
+  const stage = f.need("--stage") as Stage;
+  if (!["stage0", "stage1", "stage2"].includes(stage)) h2hFail("E_USAGE", "--stage is stage0, stage1 or stage2");
+  if (!f.all("--units").length) h2hFail("E_USAGE", "--units is required\n" + RUN_HELP);
+  const allowance = f.one("--allowance") === undefined ? undefined : Number(f.one("--allowance"));
+  if (allowance !== undefined && !(allowance > 0)) h2hFail("E_USAGE", "--allowance is a dollar amount above 0");
+  const units = readAnalysisUnits(f.all("--units"), f.all("--frame")).filter((u) => u.stage === stage);
+  const why = await extPreflight(part, units);
+  if (why) h2hFail("E_H2HX_RUN", why + "; nothing was opened");
+  const r = await runExtStage({ part, stage, units, out: f.need("--out"), allowance });
+  console.log("x-run part " + part + " " + stage + ": " + r.plan.sessions.length + " sessions planned, " + r.ran + " run, " + r.kept + " kept from an earlier launch");
+  return 0;
+};
+
 const powerCmd: Command = async (argv) => {
   const f = parseFlags(argv, [], [], "Usage: gstack-evals h2h x-power-table\nPrints section 13's table and the no-harm pass rates; it matches the extension bundle's power.txt byte for byte.");
   if (!f) return 0;
@@ -80,7 +104,7 @@ const powerCmd: Command = async (argv) => {
   return 0;
 };
 
-export const commands: Record<string, Command> = { "x-analyze": analyzeCmd, "x-look": lookCmd, "x-ledger-dryrun": dryrunCmd, "x-power-table": powerCmd };
+export const commands: Record<string, Command> = { "x-run": runCmd, "x-analyze": analyzeCmd, "x-look": lookCmd, "x-ledger-dryrun": dryrunCmd, "x-power-table": powerCmd };
 
 if (import.meta.main) {
   const [sub, ...rest] = process.argv.slice(2);
