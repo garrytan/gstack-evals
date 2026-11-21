@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { B1F_CASES, B1F_FILES, B1F_PROFILE, b1fApprove, b1fCap, b1fCaseProblems, b1fDone, b1fGuard, b1fPlan, b1fStats, b1fTotals, buildB1fTable, checkB1fRows, committedRoutes, counts, descriptionOf, inventoryDiff, listingFacts, loadB1fCaptured, mainReport, mdd, pairPower, pilotCells, pilotCheck, powerLines, reserveList, skillFile, skillProblems, supplyCells, taskList, verdictOf, VERDICTS, type B1fRow } from "../../lanes/delivery-route/b1f.ts";
+import { B1F_CASES, B1F_FILES, B1F_PROFILE, b1fApprove, b1fCap, b1fCaseProblems, b1fDone, b1fGuard, b1fPlan, b1fStats, b1fTotals, buildB1fTable, checkB1fRows, committedRoutes, counts, descriptionOf, inventoryDiff, listingFacts, loadB1fCaptured, mainReport, mdd, pairPower, pilotCaps, pilotCells, pilotCheck, powerLines, reserveList, skillFile, skillProblems, supplyCells, taskList, verdictOf, VERDICTS, type B1fRow } from "../../lanes/delivery-route/b1f.ts";
 import { B1F, B1F_ARM_NAMES, B1F_CAPS_USD, B1F_PILOT, DESCRIPTIONS, EXT_ARMS, GSTACK_ARMS, GSTACK_STABLE, RESERVE, SUPPLY, TASK_SETS } from "../../lanes/delivery-route/b1f-pins.ts";
 import { twoArmPower, routeCounts } from "../../lanes/delivery-route/b1d.ts";
 import { B1D } from "../../lanes/delivery-route/b1d-pins.ts";
@@ -229,6 +229,19 @@ describe("the pilot", () => {
     expect(pilotCheck(pilot((r) => (r.arm === "required" ? { route_mark: true } : {})), routes, tars).failed).toEqual(["required"]);
     expect(pilotCheck(pilot((r) => (r.arm === "own" ? { audit_hits: ["/root/.capy"] } : {})), routes, tars).failed).toEqual(["own"]);
     expect(pilotCheck(pilot((r) => ({ load: { ...r.load, loaded: false } })), routes, tars).failed).toEqual(["loads"]);
+  });
+  test("each arm's pilot cap is section 11's: the $50 pilot cap split by its pilot sessions, rounded down to the cent", () => {
+    expect(pilotCaps()).toEqual({ hook: 14.28, own: 7.14, long: 14.28, required: 14.28 });
+  });
+  test("an arm whose pilot sessions settle over its pilot cap fails, reruns included; at its cap it passes, and every arm's spend prints", () => {
+    const spend = (a: string, x: string, cap: string) => "  pilot spend " + a + ": settled $" + x + " of its $" + cap + " pilot cap (README section 11)";
+    const at = pilotCheck(pilot((r) => (r.arm === "own" ? { cost_usd: 3.57 } : {})), routes, tars);
+    expect([at.failed, at.lines.slice(-4)]).toEqual([[], [spend("hook", "2.00", "14.28"), spend("own", "7.14", "7.14"), spend("long", "2.00", "14.28"), spend("required", "2.00", "14.28")]]);
+    const over = pilotCheck(pilot((r) => (r.arm === "own" ? { cost_usd: 3.58 } : {})), routes, tars);
+    expect([over.failed, over.lines[1]]).toEqual([["own"], "  pilot FAIL own: its pilot sessions settled $7.16, over its $7.14 pilot cap"]);
+    const rows = pilot(), first = rows.find((r) => r.arm === "hook" && r.task === B1F_PILOT[0])!;
+    const rerun = pilotCheck([...rows, { ...first, trial: first.trial + "-a1", outcome: "infra", reason: "no verifier reward, verifier infrastructure error", cost_usd: 12.29 }], routes, tars);
+    expect([rerun.failed, rerun.lines[0]]).toEqual([["hook"], "  pilot FAIL hook: its pilot sessions settled $14.29, over its $14.28 pilot cap"]);
   });
   test("an audit hit on a session the pilot doesn't count fails the arm, even beside a clean graded rerun", () => {
     const rows = pilot(), t = B1F_PILOT[0]!, clean = rows.find((r) => r.arm === "long" && r.task === t)!;

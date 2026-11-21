@@ -405,9 +405,12 @@ export const pilotCells = (repo = REPO): PilotCell[] => [...B1F_PILOT.flatMap((t
  *  every session it counts with its tar the manifest's and its route as planned (hook: the hook named what the route table says and, where it named a
  *  skill, the line reached the request; the others: no routed event and no line). A supply task with no counted session
  *  (graded on the primary set, a model response on the non-fit set) is a supply failure: the arm still passes and the task
- *  goes to the reserve rule. Across the arms, at least one load the detector reads at this pin. */
+ *  goes to the reserve rule. Across the arms, at least one load the detector reads at this pin. Each arm's pilot sessions
+ *  settle at most its pilot cap, the $50 pilot cap split by its pilot sessions (README section 11; dated change of 2026-11-21,
+ *  before the pilot): every arm's line prints its settled spend against that cap, and an arm over it fails. */
+export const pilotCaps = (cells: PilotCell[] = pilotCells()) => Object.fromEntries(GSTACK_ARMS.map((a) => [a, Math.floor((100 * B1F_CAPS_USD["b1f-pilot"] * cells.filter((c) => c.arm === a).length) / cells.length) / 100])) as Record<GstackArm, number>;
 export function pilotCheck(rows: B1fRow[], routeRows: string[][], tarSha: Record<GstackArm, string>, cells: PilotCell[] = pilotCells()): { lines: string[]; failed: string[]; supply: string[] } {
-  const lines: string[] = [], failed: string[] = [], supply: string[] = [];
+  const lines: string[] = [], failed: string[] = [], supply: string[] = [], spend: string[] = [], caps = pilotCaps(cells);
   for (const arm of GSTACK_ARMS) {
     const why: string[] = [];
     for (const c of cells.filter((x) => x.arm === arm)) {
@@ -421,6 +424,9 @@ export function pilotCheck(rows: B1fRow[], routeRows: string[][], tarSha: Record
         if (want?.length && r.route_mark !== true) why.push(t + ": the hook's line did not reach the request");
       } else if (r.routed_events !== 0 && r.routed_events !== null || r.route_mark !== false) why.push(t + ": routing is not off (" + r.routed_events + " routed events, line delivered " + r.route_mark + ")");
     }
+    const spent = rows.filter((r) => r.arm === arm && cells.some((c) => c.arm === arm && c.task === r.task)).reduce((x, r) => x + (r.cost_usd ?? 0), 0);
+    if (spent > caps[arm] + 1e-9) why.push("its pilot sessions settled $" + spent.toFixed(2) + ", over its $" + caps[arm].toFixed(2) + " pilot cap");
+    spend.push("  pilot spend " + arm + ": settled $" + spent.toFixed(2) + " of its $" + caps[arm].toFixed(2) + " pilot cap (README section 11)");
     if (why.length) failed.push(arm);
     lines.push("  pilot " + (why.length ? "FAIL " + arm + ": " + why.join("; ") : "PASS " + arm));
   }
@@ -429,6 +435,7 @@ export function pilotCheck(rows: B1fRow[], routeRows: string[][], tarSha: Record
   const loads = rows.filter((r) => counts(r) && r.load.loaded);
   lines.push("  pilot loads read: " + loads.length + " (" + loads.map((r) => r.arm + " via " + r.load.via + " at call " + r.load.at_call).join(", ") + ")");
   if (!loads.length) { failed.push("loads"); lines.push("  pilot FAIL loads: no pilot session loaded prove-it, so the pilot does not show the detector reading a load at this pin"); }
+  lines.push(...spend);
   return { lines, failed, supply };
 }
 export const reasonsTsv = (rows: B1fRow[]) => ["set\tarm\ttask\ttrial\toutcome\treason\tloaded\tfollowed\tnamed\tfirst_text", ...[...rows].sort((a, b) => (a.set + a.arm + a.task).localeCompare(b.set + b.arm + b.task)).map((r) => [r.set, r.arm, r.task, r.trial, counts(r) ? "counted" : r.outcome, r.reason, r.load.loaded, !!r.detect?.followed, r.named === null ? "-" : r.named.join(","), r.load.first_text.replace(/[\t\n]/g, " ")].join("\t"))].join("\n") + "\n";
