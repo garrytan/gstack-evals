@@ -19,7 +19,7 @@ links:
 
 ## Decision
 
-A model judge's numbers count only after it agrees with labelled outputs: a kappa of at least 0.6. Garry approved raising the number of labelled outputs that check needs from 40 to 100, for plans frozen from 2026-11-22. Kappa stays at 0.6, and nothing else in the judge rule changes: the judge still comes from another lab than the models it scores, and its errors are still read per arm.
+A model judge's numbers count only after it agrees with labelled outputs: a kappa of at least 0.6. Garry approved raising the number of labelled outputs that check needs from 40 to 100, for plans frozen from 2026-11-22. His words, on 2026-11-21: "Do it". Kappa stays at 0.6, and nothing else in the judge rule changes: the judge still comes from another lab than the models it scores, and its errors are still read per arm.
 
 `bun run wiki:check` now enforces it. A new preregistration dated 2026-11-22 or later fails unless its Judge check says `Labelled outputs: 100` or more. One dated earlier still needs 40. The error names the floor that applied and why. This changes item 3 of [the eval-plan check decision](2026-11-19-geva-564-eval-plan-check.md); the rest of that decision stands.
 
