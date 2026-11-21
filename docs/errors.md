@@ -994,7 +994,7 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_CACHE_STALE
 
-A cached session's key no longer matches (arm tree, task, fixture, check or verifier scripts, image, model, host version, adapter, isolation, timeout, passthrough env, judge model or policy).
+A cached session's key no longer matches (arm tree, task, fixture, check or verifier scripts, image, model, host version, adapter, isolation, timeout, passthrough env or policy).
 
 Fix: Read which key parts changed, then rerun the affected cells with --repair "&lt;named repair>", which writes a new verdict id.
 
