@@ -15,7 +15,10 @@ import { dirname, join } from "node:path";
 // texts, MANIFEST.sha256 and session JSONL, about 12 MB that took #352's reviewer diff past the ceiling. gstack counts a
 // .patch file, a MANIFEST.sha256 and an extension-less licence as code, so review_content_patterns declares those three
 // kinds as data; gstack excludes a file only when both keys match it, and still keeps source, agent prose and config.
-// The post's README.md and units.json stay in review.
+// The post's README.md and units.json stay in review. The Codex hooks eval's arm manifests (the file lists of part R's arm
+// tarballs, quick/laneb/arms/manifests/codex-hooks-r/*.files.tsv) and its recorded Codex rollouts, hook logs and states
+// (tests/codex-hooks/**/fixtures/**) are excluded too: about 4.8 MB that took #400's reviewer diff past the ceiling. gstack
+// keeps the fixtures READMEs in review as prose.
 const ROOT = join(import.meta.dir, "..", "..");
 const POLICY = JSON.parse(readFileSync(join(ROOT, ".gstack", "ship-policy.json"), "utf8")) as { review_exclude_paths: string[]; review_content_patterns: string[] };
 const DATA = "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data";
@@ -28,6 +31,8 @@ const PATTERNS = [
   DATA + "/licences/**",
   DATA + "/MANIFEST.sha256",
   DATA + "/*.jsonl",
+  "quick/laneb/arms/manifests/codex-hooks-r/*.files.tsv",
+  "tests/codex-hooks/**/fixtures/**",
 ];
 const CONTENT = [DATA + "/diffs/*.patch", DATA + "/licences/**", DATA + "/MANIFEST.sha256"];
 
@@ -47,6 +52,8 @@ const inPlansPost = (p: string) => /^wiki\/plans\/[^/]+\/[^/]+\.json$/.test(p);
 const inArmFixtures = (p: string) => p.startsWith("tests/harness-mechanics/fixtures/arms/");
 /** The head-to-head session data's diffs, licences, manifest and JSONL files. */
 const inSessionData = (p: string) => p.startsWith(DATA + "/") && /^(diffs\/|licences\/|MANIFEST\.sha256$|[^/]+\.jsonl$)/.test(p.slice(DATA.length + 1));
+/** The Codex hooks eval's arm file lists, and anything inside a fixtures folder under tests/codex-hooks. */
+const inCodexHooksData = (p: string) => /^quick\/laneb\/arms\/manifests\/codex-hooks-r\/[^/]+\.files\.tsv$/.test(p) || /^tests\/codex-hooks\/(.+\/)?fixtures\//.test(p);
 /** The files review_content_patterns may declare: the session data's .patch files, licence texts and manifest. */
 const declarable = (p: string) => p.startsWith(DATA + "/") && /^(diffs\/[^/]+\.patch$|licences\/|MANIFEST\.sha256$)/.test(p.slice(DATA.length + 1));
 
@@ -73,20 +80,34 @@ const DATA_MISSES = [
   "wiki/board/2030-01-02-other-data/MANIFEST.sha256",
 ];
 
+const MANIFESTS = "quick/laneb/arms/manifests/codex-hooks-r";
+const CODEX_HOOKS_HITS = [MANIFESTS + "/r-on.files.tsv", MANIFESTS + "/r-none.files.tsv", "tests/codex-hooks/c/fixtures/sessions/rollout.jsonl", "tests/codex-hooks/r/fixtures/hooks/a.jsonl", "tests/codex-hooks/fixtures/states.jsonl"];
+const CODEX_HOOKS_MISSES = [
+  MANIFESTS + "/r-on.json",
+  MANIFESTS + "/sub/r-on.files.tsv",
+  "quick/laneb/arms/manifests/b1c/b1c.files.tsv",
+  "quick/laneb/arms/manifests/codex-hooks-r.files.tsv",
+  "tests/codex-hooks/allin.test.ts",
+  "tests/codex-hooks/c/run.test.ts",
+  "tests/codex-hooks/c/fixturesx/a.json",
+  "tests/codex-hooks-x/fixtures/a.json",
+  "lanes/codex-hooks/c/fixtures/a.json",
+];
+
 describe("review_exclude_paths in .gstack/ship-policy.json", () => {
-  test("holds exactly the three frozen data-file patterns, the recorded arm fixtures and the head-to-head session data", () => {
+  test("holds exactly the three frozen data-file patterns, the recorded arm fixtures, the head-to-head session data and the Codex hooks eval's data", () => {
     expect(POLICY.review_exclude_paths).toEqual(PATTERNS);
   });
 
-  test("matches only .json files directly inside a wiki/plans post, the recorded arm fixtures and the session data, in this tree", () => {
-    expect(matched(ROOT).filter((p) => !inPlansPost(p) && !inArmFixtures(p) && !inSessionData(p))).toEqual([]);
+  test("matches only .json files directly inside a wiki/plans post, the recorded arm fixtures, the session data and the Codex hooks eval's data, in this tree", () => {
+    expect(matched(ROOT).filter((p) => !inPlansPost(p) && !inArmFixtures(p) && !inSessionData(p) && !inCodexHooksData(p))).toEqual([]);
   });
 
-  test("matches no file but a wiki/plans post's data files, the recorded arm fixtures and the session data", () => {
+  test("matches no file but a wiki/plans post's data files, the recorded arm fixtures, the session data and the Codex hooks eval's data", () => {
     const dir = join(scratch, "repo");
     const post = "wiki/plans/2030-01-02-a-prereg";
     const arms = "tests/harness-mechanics/fixtures/arms";
-    const hits = [post + "/b1-frame.json", post + "/b1-repos.json", post + "/o-licences.json", arms + "/hook-stop/transcript.jsonl", arms + "/hook-stop/first-request.json", arms + "/in-image/none.txt"];
+    const hits = [post + "/b1-frame.json", post + "/b1-repos.json", post + "/o-licences.json", arms + "/hook-stop/transcript.jsonl", arms + "/hook-stop/first-request.json", arms + "/in-image/none.txt", ...CODEX_HOOKS_HITS];
     const misses = [
       "b1-frame.json",
       "wiki/b1-frame.json",
@@ -111,6 +132,7 @@ describe("review_exclude_paths in .gstack/ship-policy.json", () => {
       "lanes/harness-mechanics/fixtures/arms/a.jsonl",
       "tests/fixtures/arms/a.jsonl",
       ...DATA_MISSES,
+      ...CODEX_HOOKS_MISSES,
     ];
     for (const p of [...hits, ...DATA_HITS, ...misses]) {
       mkdirSync(join(dir, dirname(p)), { recursive: true });
