@@ -108,6 +108,10 @@ export interface CodexOptions {
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
   /** More -c settings after the adapter's own, as TOML scalars; one that names an adapter setting is refused. */
   settings?: Record<string, string | number | boolean>;
+  /** Pass --dangerously-bypass-hook-trust, so hooks in $CODEX_HOME/hooks.json run without Codex's trust prompt; recorded in init.json. */
+  hookTrust?: boolean;
+  /** The Codex CLI to run in the agent's environment, when a run pins one beside the image's default; unset, CODEX_BIN. Recorded in init.json. */
+  bin?: string;
 }
 
 /** The agent env the adapter adds: the slot's bearer, by the name the provider definition reads, and the session kind. */
@@ -134,12 +138,12 @@ export function codexConfig(o: Pick<CodexOptions, "provider" | "proxy">): Record
 }
 
 /** The argv after the CLI's name: the session's first exec, or with thread a resume of it; the message follows on stdin. */
-export function codexArgs(o: Pick<CodexOptions, "model" | "provider" | "proxy" | "effort" | "settings">, thread: string | null = null): string[] {
+export function codexArgs(o: Pick<CodexOptions, "model" | "provider" | "proxy" | "effort" | "settings" | "hookTrust">, thread: string | null = null): string[] {
   const own = { ...codexConfig(o), ...(o.effort === null ? {} : { model_reasoning_effort: o.effort }) };
   const clash = Object.keys(o.settings ?? {}).filter((k) => k in own || k === "model_reasoning_effort");
   if (clash.length) throw new Error("E_INTERNAL: extra Codex settings may not replace the adapter's own: " + clash.join(", "));
   const settings = Object.entries({ ...own, ...o.settings }).flatMap(([k, v]) => ["-c", k + "=" + JSON.stringify(v)]);
-  return ["exec", "--json", "--strict-config", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "--color", "never", "-m", o.model, ...settings, ...(thread ? ["resume", thread] : []), "-"];
+  return ["exec", "--json", "--strict-config", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", ...(o.hookTrust ? ["--dangerously-bypass-hook-trust"] : []), "--color", "never", "-m", o.model, ...settings, ...(thread ? ["resume", thread] : []), "-"];
 }
 
 export interface CodexQuestion {
@@ -251,7 +255,7 @@ export function codexDriver(o: CodexOptions): CodexDriver {
       let message = task.prompt;
       let termination: Termination = { kind: "completed" };
       const records = () => {
-        writeFileSync(join(o.out, "init.json"), JSON.stringify({ model: o.model, provider: o.provider, reasoning_effort: o.effort, thread_id: thread, argv: first, resume_argv: resumes }, null, 2) + "\n");
+        writeFileSync(join(o.out, "init.json"), JSON.stringify({ model: o.model, provider: o.provider, reasoning_effort: o.effort, hook_trust: o.hookTrust === true, bin: o.bin ?? CODEX_BIN, thread_id: thread, argv: first, resume_argv: resumes }, null, 2) + "\n");
         writeFileSync(join(o.out, "questions.json"), JSON.stringify(questions, null, 2) + "\n");
       };
       for (let turn = 1; ; turn++) {
@@ -259,7 +263,7 @@ export function codexDriver(o: CodexOptions): CodexDriver {
           termination = { kind: "timeout" };
           break;
         }
-        const argv = [CODEX_BIN, ...codexArgs(o, thread)];
+        const argv = [o.bin ?? CODEX_BIN, ...codexArgs(o, thread)];
         if (thread) resumes.push(argv);
         else first = argv;
         records();

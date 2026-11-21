@@ -376,6 +376,17 @@ describe("Codex adapter pieces", () => {
     expect(() => codexArgs({ ...o, settings: { "model_providers.gstack_evals_proxy.base_url": "http://elsewhere" } })).toThrow("E_INTERNAL");
   });
 
+  // Value: protects=the hook-trust bypass is passed only when the caller asks, before the model flag, so a gstack arm's hooks run under codex exec and a no-gstack arm's command line is unchanged; fails_when=the flag is always or never passed, or lands after the stdin dash; why_new=the Codex hooks eval's gstack arms (GEVA-562 preregistration, section 2); seam=codexArgs; no_claim=that Codex runs the hooks, which the eval's keyless checks show
+  test("codexArgs passes --dangerously-bypass-hook-trust only when hookTrust is set", () => {
+    const o = { model: "gpt-6.1-sol", provider: "openai" as const, proxy: { baseUrl: "http://10.231.7.2:8080", slot: "s_abc", token: "t" }, effort: "low" };
+    expect(codexArgs(o)).not.toContain("--dangerously-bypass-hook-trust");
+    expect(codexArgs({ ...o, hookTrust: false })).not.toContain("--dangerously-bypass-hook-trust");
+    const argv = codexArgs({ ...o, hookTrust: true });
+    expect(argv.filter((a) => a === "--dangerously-bypass-hook-trust")).toHaveLength(1);
+    expect(argv.indexOf("--dangerously-bypass-hook-trust")).toBeLessThan(argv.indexOf("-m"));
+    expect(argv.at(-1)).toBe("-");
+  });
+
   // Value: protects=skill-eval's explicit effort for each model it runs on Codex is the default_reasoning_level of codex 0.166.0's own catalog (codex debug models), and null for a model the catalog lacks, where Codex sends no effort; fails_when=a value drifts from the pinned catalog or a catalog-less model gets an effort it never had; why_new=the effort pin keeps skill-eval's behaviour; seam=catalogEffort; no_claim=that these efforts suit any eval
   test("catalogEffort gives codex 0.166.0's default effort per model, and null off the catalog", () => {
     expect(["gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna", "openai/gpt-6.1-sol", "x-ai/gpt-6-luna", "particle-ai/particle-1", "deepseek/deepseek-v4.1-flash-1017"].map(catalogEffort)).toEqual(["low", "low", "medium", "low", "medium", null, null]);
