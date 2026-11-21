@@ -22,7 +22,7 @@ The day-one lane decides which autoplan run a gstack session made by reading the
 
 Each Bash call is parsed by [mvdan/sh](https://github.com/mvdan/sh), the parser behind shfmt, through [sh-syntax](https://github.com/un-ts/sh-syntax) 0.8.7, its WebAssembly build. NOTICE.md records both, with their licences and versions. The reader walks the parsed tree the way bash runs it.
 
-When the parser refuses a call, the reader no longer guesses. Bash reads each command whole before it runs it, so a call it refuses at a line with no command before it ran nothing, and the reader reads it that way. A call refused after an earlier command is unreadable, because whether the earlier lines ran depends on how the call was run. The same holds for a call that runs more than 10,000 commands or nests more than 16 deep. A session with an unreadable call has no record that counts. The one form the parser refuses that bash 5 accepts, a line such as `EOF)` that closes a heredoc and its `$( )` at once, is split in two before a second parse, as bash reads it.
+When the parser refuses a call, the reader no longer guesses. Bash reads each command whole before it runs it, so a call the parser refuses at a line with no command before it ran nothing, as long as `bash -n` refuses the same text. When `bash -n` accepts it, the parser refused a form bash runs (an associative array subscript such as `([/work/app]=1)`, or `$(( (cmd) ) )`), so the call is unreadable. A call refused after an earlier command is unreadable too, because whether the earlier lines ran depends on how the call was run. The same holds for a call that runs more than 10,000 commands or nests more than 16 deep. A session with an unreadable call has no record that counts. A line such as `EOF)`, which closes a heredoc and its `$( )` at once, is split in two before a second parse, as bash reads it.
 
 ## What the reader now reads as bash does
 
@@ -31,16 +31,20 @@ Each fix has a test that failed before it.
 - A pipeline or `&&` list that a newline continues and an `&` ends runs in the background whole, not just its last member.
 - A subshell, a pipeline member, a statement an `&` ends, a substitution and a child shell each get a copy of the shell. A `cd`, a variable or a function they set stays inside them, and a `bash -c` child starts with no functions.
 - A function's `$1`, `$2` and `"$@"` are its call's arguments, and `bash -c` gets its own.
+- Assignments on one line take effect left to right, and a command's own assignments reach only that command.
+- A function's `local`, `declare` and `typeset` names go back to the caller's values when it returns, before its call's own assignments are undone. `declare -g` sets the caller's variable.
+- A function defined inside `eval` or `bash -c` reads its own text when it is called later.
 - `&>`, `&>>` and `|&` are a redirect and a pipe, never a background `&`.
 - A function defined after `then`, or with a redirect on its definition, edits nothing until it is called. `command` and `builtin` skip functions.
 - A `for` or `if` body that an `&` ends runs in the background. A `for` loop reads its body once per item.
 - A function that calls itself is read once, so it ends in bounded time.
 - Inline code that names two run.json paths in one token names both.
 
-## Two changes to the run-matching rules
+## One change to the run-matching rules
 
 - A start run in the background is matched to the run it made until the next Bash call holding a start begins. That call's start time counts even before it has a result, and a second start in the same Bash call no longer closes the window at once.
-- A start whose `--out` the log spells out makes only the run at that `--out`. Before, it could be taken for the maker of a run in another folder that was created during its call.
+
+A rule that a start whose `--out` the log spells out makes only the run at that `--out` was tried and dropped. The reader cannot always tell which folder a relative or `$PWD` `--out` resolves against (after `cd "$(git rev-parse --show-toplevel)"`, `cd -`, a failed `cd` or Claude Code's own reset of its shell folder), and the rule then refused the run the start really made. Timing alone ties the start to its run, as on main. So a run created while two starts span it stays unmatched, even when one of them names another folder.
 
 ## Two receipt bindings
 

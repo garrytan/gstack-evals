@@ -736,13 +736,13 @@ describe("the shell forms the full review of the hand lexer left open", () => {
       refused(work, txt([{ command: start, at: AT, done: DONE }, { command: "echo '{}' &> " + MAIN + "/run.json", at: "2026-11-18T05:48:10.000Z" }]), "&> onto the record");
     }));
 
-  test("a second start in the same Bash call does not cut the first start's background window, and a spelled --out makes no other run", () =>
+  test("two starts whose spans hold the record leave it unmatched, even when one --out is spelled out (the finding 6 note)", () =>
     withDir((dir) => {
       const work = join(dir, "work");
       put(work, WORK, MAIN, pending(MAIN));
       const notes = BIN + " next --out /work/app/.gstack/tmp/autoplan/notes --plan /work/app/notes.md";
-      found(work, txt([{ command: UNSPELT + " & wait; " + notes, at: AT, done: DONE }, LATER]), "start & wait; start2", MAIN);
-      found(work, txt([{ command: UNSPELT + "; " + notes, at: AT, done: DONE }]), "a foreground start beside a spelled one", MAIN);
+      refused(work, txt([{ command: UNSPELT + " & wait; " + notes, at: AT, done: DONE }, LATER]), "start & wait; start2");
+      refused(work, txt([{ command: UNSPELT + "; " + notes, at: AT, done: DONE }]), "a foreground start beside a spelled one");
       refused(work, txt([{ command: UNSPELT + " & wait; " + UNSPELT.replace("main-", "x-"), at: AT, done: DONE }, LATER]), "two unspelt starts");
     }));
 
@@ -842,7 +842,7 @@ describe("the shell forms the full review of the hand lexer left open", () => {
       found(work, tx([{ command: C }, { command: "R=" + RUN + " F=$R/run.json true; sed -i 's/a/b/' \"$F\"" }]), "a command's assignments end with it");
     }));
 
-  test("a positional parameter built from a substitution is not spelled out", () =>
+  test("a positional parameter built from a substitution still ties the start to its run by time", () =>
     withDir((dir) => {
       const work = join(dir, "work");
       put(work, WORK, MAIN, pending(MAIN));
@@ -872,5 +872,37 @@ describe("the shell forms the full review of the hand lexer left open", () => {
       for (const decl of ["local", "declare", "typeset"]) found(work, tx([{ command: "cd /work/app; out=.gstack/tmp/autoplan/run; h() { " + decl + " out=/tmp/x; :; }; h; " + start }]), decl + " in a function");
       found(work, tx([{ command: "cd /work/app; h() { local out=.gstack/tmp/autoplan/run; " + start + "; }; h" }]), "a local used inside its function");
       found(work, tx([{ command: "cd /work/app; out=.gstack/tmp/autoplan/run; h() { local out; out=/tmp/x; }; h; " + start }]), "a local named first and set later");
+    }));
+
+  test("a relative or $PWD --out after a cd the reader cannot follow still ties the start to its run by time", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, MAIN, pending(MAIN));
+      const rel = ".gstack/tmp/autoplan/main-20261118-054759";
+      for (const [name, command] of [
+        ["relative after cd $(...)", 'cd "$(git rev-parse --show-toplevel)"; ' + BIN + " next --out " + rel + " --plan /work/app/plan.md --full"],
+        ["$PWD after cd $(...)", 'cd "$(git rev-parse --show-toplevel)"; ' + BIN + ' next --out "$PWD/' + rel + '" --plan /work/app/plan.md --full'],
+        ["relative after cd -", "cd /work/app; cd /tmp; cd -; " + BIN + " next --out " + rel + " --plan /work/app/plan.md --full"],
+        ["$PWD after cd -", "cd /work/app; cd /tmp; cd -; " + BIN + ' next --out "$PWD/' + rel + '" --plan /work/app/plan.md --full'],
+      ] as const) found(work, txt([{ command, at: AT, done: DONE }]), name, MAIN);
+    }));
+
+  test("a first-line refusal ran nothing only when bash -n refuses the call too; a form only the parser refuses is unreadable", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      found(work, tx([{ command: C }, { command: ": > " + RUN + '/run.json; echo "x' }]), "an unclosed quote bash refuses");
+      refused(work, tx([{ command: C }, { command: "declare -A seen=([/work/app]=1); sed -i s/a/b/ " + RUN + "/run.json" }]), "an associative array bash accepts");
+    }));
+
+  test("declare -g in a function sets the caller's variable, and a function's locals are restored before its call's prefix assignments", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      const start = BIN + ' next --out "$out" --plan "$PWD/plan.md" --full';
+      found(work, tx([{ command: "cd /work/app; out=/tmp/x; h() { declare -g out=.gstack/tmp/autoplan/run; }; h; " + start }]), "declare -g");
+      found(work, tx([{ command: "cd /work/app; out=/tmp/x; h() { declare -gx out=.gstack/tmp/autoplan/run; }; h; " + start }]), "declare -gx");
+      found(work, tx([{ command: "cd /work/app; out=.gstack/tmp/autoplan/run; h() { local out=/tmp/y; :; }; out=/tmp/x h; " + start }]), "a prefix assignment on a call to a function with that local");
+      refused(work, tx([{ command: "cd /work/app; out=/tmp/x; h() { local out=.gstack/tmp/autoplan/run; }; h; " + start }]), "local without -g leaves the caller's value");
     }));
 });
