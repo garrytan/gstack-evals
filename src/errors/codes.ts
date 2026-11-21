@@ -3333,7 +3333,7 @@ export const CODES = {
   },
   E_DAYONE_BACKGROUND: {
     exit: 2,
-    meaning: "Day-one eval (pin change 2, item B): a planning session held open for background work it started (a background Bash or Agent task, or a pending ScheduleWakeup) reached its time limit with that work still running, so its cell is a recorded gap with that cause and no retry. Every arm's planning sessions hold the same way, at most the stage's minutes; builds and checks do not hold.",
+    meaning: "Day-one eval (section 7, item B, of the first pin change): a planning session held open for background work it started (a background Bash or Agent task, or a pending ScheduleWakeup) reached its time limit with that work still running on both of its attempts, so its cell is a recorded gap with that cause. Every arm's planning sessions hold the same way, at most the stage's minutes; builds and checks do not hold.",
     fix: "Nothing to retry: report the gap beside the arm's result. The session's host/cli-stderr.log names the work still out.",
     side_effects: "The session's metered spend stays on the lease.",
     retry_safe: false,

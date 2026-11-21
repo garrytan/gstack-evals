@@ -106,13 +106,13 @@ New eval plans and results pages carry a few fixed headings and labelled lines, 
 
 The check reads these posts:
 
-- a **preregistration**: an id ending in `-prereg`, or a title starting "Preregistration";
+- a **preregistration**: an id ending in `-prereg` (or a numbered `-prereg-v2`, `-prereg-2`), or a title starting "Preregistration";
 - a **quick look**: an id ending in `-quick-look`, or a title starting "Quick look";
-- a **results page**: an id ending in `-results`, whatever its title says.
+- a **results page**: an id ending in `-results` (or a numbered `-results-v2`), whatever its title says.
 
 Amendments, pins and addenda are not preregistrations, so they are not checked. A post that is already on the base branch is never checked, so plans and results merged before these rules stay as they are. The check decides this from git, not from the post's date. With no base (`--base none`) it does not run.
 
-A preregistration has four sections. A heading may carry a number and a note in brackets, such as `## 2. Pilots (R111)`. Labelled lines start the line, as `Label: value`. Lines inside code fences (``` or ~~~) are not read, so a fenced example never counts as the plan. Dollar figures may end in k or M for thousands or millions, such as $1.2k.
+A preregistration has four sections. A heading may carry a number and a note in brackets, such as `## 2. Pilots (R111)`. Labelled lines start the line, as `Label: value`. Lines inside code fences (``` or ~~~) and HTML comments (`<!-- -->`) are not read, so a fenced or commented-out example never counts as the plan. A dollar value holds exactly one figure, which may end in k or M for thousands or millions when the letter touches the number, such as $1.2k; a value with two figures, a space before the k or M, or a spelled-out unit is refused.
 
 ```markdown
 ## Decision
@@ -144,7 +144,7 @@ Other looks: none
 
 - **Decision** names at least two outcomes, each with what we do then: `- If <outcome>: <what we do>` lines, or a table with a row per outcome.
 - **Pilots** has one row per arm, the no-gstack arm included, with these six cells in this order. The pilot cap is at most a tenth of the arm's budget, both in dollars. Each pilot says how it shows, on that arm's own outputs, that the part under test ran, that the judge passes its check there, and that the tasks can be supplied at the planned rate. The judge cell may be `none` only when the plan has no model judge.
-- **Judge check** has one `Judge: <lab>/<model> scores <lab>/<model>[, ...]` line per judge, and the judge's lab differs from every lab it scores. Then at least 40 labelled outputs, a kappa of at least 0.6, and errors read per arm. A plan with no model judge writes `Judge: none` and nothing else here; an empty `Judge:` line fails.
+- **Judge check** has one `Judge: <lab>/<model> scores <lab>/<model>[, ...]` line per judge, and the judge's lab differs from every lab it scores. The lab is the first path segment, or the second after an `openrouter/` prefix, so `openrouter/anthropic/claude-opus-5-5` is an Anthropic model. Then at least 40 labelled outputs, a kappa of at least 0.6, and errors read per arm. A plan with no model judge writes `Judge: none` and nothing else here; an empty `Judge:` line fails.
 - **Interim look** gives the planned paid spend of the largest counted run. Above $500, the plan takes one look at half the units, fixes its stop bounds and takes no other look. At $500 or less, the other lines are optional; `Look: none` says so.
 
 A quick look (at most $100 paid and one day) needs none of that, only its three-line plan and its size:
