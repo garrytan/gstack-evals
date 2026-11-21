@@ -3961,7 +3961,7 @@ export const CODES = {
   },
   E_CSO_CAP_STOP: {
     exit: 2,
-    meaning: "A /cso eval session's slot was refused at its item's cap. The item ends incomplete and the session is not retried; sessions run unit by unit with arms interleaved, so at most one unit is left unpaired.",
+    meaning: "A /cso eval session's slot was refused at its item's cap. The item ends incomplete and the session is not retried; the record names every unit left unpaired, since sessions from more than one unit can be in flight when the stop lands.",
     fix: "Report the item as incomplete. A cap stop is never retried to change a verdict; a new line needs the Captain's word.",
     side_effects: PARTIAL,
     retry_safe: false,
@@ -4005,8 +4005,8 @@ export const CODES = {
     owner: "U20",
   },
   E_CSO_RERUN_PRECONDITION: {
-    exit: 3,
-    meaning: "gstack-evals cso rerun refused a precondition before any spend: the units file is missing, unreadable or holds no unit ids, or the arm does not run on that model in any stage (untold runs on Opus in stages 0 and 1 only).",
+    exit: 2,
+    meaning: "gstack-evals cso rerun refused a precondition before any spend (exit 3): the units file is missing, unreadable or holds no unit ids, or the arm does not run on that model in any stage (untold runs on Opus in stages 0 and 1 only).",
     fix: "Fix the named input and run again; --dry-run checks it without spending.",
     side_effects: NO_SPEND,
     retry_safe: true,
@@ -4014,7 +4014,7 @@ export const CODES = {
     owner: "U20",
   },
   E_CSO_RERUN_UNWIRED: {
-    exit: 3,
+    exit: 2,
     meaning: "gstack-evals cso rerun has no session runner wired yet, so only --dry-run works.",
     fix: "Wire the Harbor session runner into lanes/outcome-skills/cso/cli.ts before a real run; until then use --dry-run.",
     side_effects: NO_SPEND,

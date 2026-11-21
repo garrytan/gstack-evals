@@ -4,6 +4,7 @@
 // rerun runs one arm on a unit list under a spend cap, and its --dry-run opens and settles one ledger lease per frozen item
 // on a temporary ledger and runs nothing; preflight is the no-model check for the VM (a unit build on the first
 // candidates, every arm's containment and the read audit of each home). Every refusal prints its reason code first.
+import { JUDGE_COMMANDS } from "./cli-judge.ts";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -201,7 +202,7 @@ async function preflight(argv: string[]): Promise<number> {
   return res.filled ? 0 : 1;
 }
 
-export const COMMANDS: Record<string, Command> = { units, draw: drawCmd, rerun: (a) => rerun(a, null), preflight };
+export const COMMANDS: Record<string, Command> = { units, draw: drawCmd, rerun: (a) => rerun(a, null), preflight, ...JUDGE_COMMANDS };
 
 /** A refusal as lines that each start with the code, then its fix and docs anchor. */
 export function refusal(e: unknown): { code: string; text: string } {
