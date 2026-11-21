@@ -455,6 +455,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_UNIT_IDS](#e_cso_unit_ids) | 2 | U20 |
 | [E_CSO_SCAN](#e_cso_scan) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
+| [E_CSO_DROP_INSTALL_DEP](#e_cso_drop_install_dep) | 2 | U20 |
 | [E_CSO_RELEASE](#e_cso_release) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -3530,6 +3531,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 Deviation (a): a /cso eval unit's GHSA id, a CVE id of its advisory or its fix commit's first 12 hex characters appears in an arm's installed gstack tree (a file, a git object or an archive two levels deep). The unit drops from every cell, so pairing holds; the record names the arm, the path and the id.
 
 Fix: None for the unit: it is dropped by rule and the draw moves to the next usable position. Report the drop per arm in the results.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_INSTALL_DEP
+
+Deviation (c): an arm's installed gstack tree holds a /cso eval unit's affected package at or past its fixed version (in bun.lock, package-lock.json, yarn.lock, pnpm-lock.yaml, an installed node_modules package.json, Cargo.lock or go.sum), so that arm carries the fixed code of the library under audit. The unit drops from every cell; the 16 such units at gstack's pin drop by name before the draw.
+
+Fix: None for the unit: it is dropped by rule and the draw moves to the next usable position. Report the drop per arm, with the file and version behind it.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 

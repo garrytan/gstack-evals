@@ -3869,7 +3869,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
-
+  E_CSO_DROP_INSTALL_DEP: {
+    exit: 2,
+    meaning: "Deviation (c): an arm's installed gstack tree holds a /cso eval unit's affected package at or past its fixed version (in bun.lock, package-lock.json, yarn.lock, pnpm-lock.yaml, an installed node_modules package.json, Cargo.lock or go.sum), so that arm carries the fixed code of the library under audit. The unit drops from every cell; the 16 such units at gstack's pin drop by name before the draw.",
+    fix: "None for the unit: it is dropped by rule and the draw moves to the next usable position. Report the drop per arm, with the file and version behind it.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_CSO_RELEASE: {
     exit: 2,
     meaning: "Deviation (b): a /cso eval stage 1 release was asked to carry a judge-check field beyond whether each gold minimum was met and whether each gate passed (a count, a kappa value, a rate or a per-class figure), or lacked a minimum or gate the plan names.",

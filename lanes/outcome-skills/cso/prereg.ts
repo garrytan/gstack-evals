@@ -20,11 +20,13 @@ export const POST_ID = "2026-11-19-geva-561-cso-advisories-prereg";
 export const PREREG_PATH = join(import.meta.dir, "..", "..", "..", "wiki", "plans", POST_ID, "prereg.json");
 export const DEVIATIONS_POST_ID = "2026-11-21-geva-561-cso-advisories-deviations";
 
-/** The dated pre-data deviations the Captain recorded (approvals/2026-11-19-untested-parts-ship-guards-cso.md), as the
- *  deviations post lists them. Run receipts name these ids and the commit that landed each. */
+/** The dated pre-data deviations, as the deviations post lists them: a, b, CV5 and CV6 in the Captain's approvals record
+ *  (approvals/2026-11-19-untested-parts-ship-guards-cso.md), c from the Captain's decision of 2026-11-21. Run receipts
+ *  name these ids and the commit that landed each. */
 export const DEVIATIONS = {
   a: "The containment gate also scans each arm's installed gstack tree; a unit whose GHSA id, CVE id or fix-commit prefix appears there drops from every cell.",
   b: "Stage 1's judge-check release reports only whether each gold minimum was met and the pass or fail of each gate, not gold counts by class.",
+  c: "A unit whose affected package an arm's installed gstack tree holds at or past its fixed version, in a lockfile or an installed package manifest, drops from every cell; the 16 such units at the pin drop by name before the draw, and the unit gate checks every arm's install for this route.",
   CV5: "When stage 2 takes R113's interim look, its O'Brien-Fleming bounds (3.18 and 2.25 at two-sided 0.025, then 2.80 and 1.98 at 0.05 once one contrast is rejected) replace section 10's Holm thresholds at both looks.",
   CV6: "The Sol stage's R111 pilot is its paid Codex smoke, sized with its own caps in the Sol proposal; a keyless session start doesn't count, and R78's 40 Sol reports still stand.",
 } as const;
