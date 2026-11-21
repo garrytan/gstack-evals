@@ -8,7 +8,7 @@
 //   run, rows   one launch on the Docker rig, and its rows against the frozen manifest (run/cli.ts)
 //   score       packets, check-packets, judges (production labels) and sessions (scored rows)
 //   judge-check the live judge probes, the gold pass, the check labels and section 12's judge check (ohr-judge-check)
-//   read        admission, decision (section 10's table) and report (section 11's lead table)
+//   read        admission, interim (stage 2's one look at its half), decision (section 10's table) and report (section 11's lead table)
 //   dryrun, e2e, preflight: keyless proof before any paid stage
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -25,6 +25,7 @@ import { decide } from "./read/decision.ts";
 import { authoringEnd, readStops } from "./read/stops.ts";
 import { SPLIT } from "./ledger.ts";
 import type { HandRead } from "./read/guards.ts";
+import { interimLook, launchManifests, lookGate, readLook } from "./read/look.ts";
 import { leadTable, rates } from "./read/report.ts";
 import { rowsCommand, runCommand } from "./run/cli.ts";
 import { buildCommit, loadBriefs } from "./run/manifest.ts";
@@ -308,8 +309,9 @@ async function judgeCheckCommand(argv: string[], io: Io, env: Env): Promise<numb
 
 const READ_USAGE = [
   "gstack-evals ohr read admission --scored <stage 1 scored.json> --launch <stage 1 out dir>... --audit <audit record.json> --judge-check <check.json> --label-usd <dollars a session> --out <new file> [--prior <earlier admission.json>]",
-  "gstack-evals ohr read decision --scored <stage 2 scored.json> --admission <admission.json>... --judge-check <check.json> --hand-reads <file> --launch <launch out dir>... --record <ledger record dir> --authoring <sealed authoring output> --identity <age identity file> --out <new file> [--cap-stop]",
-  "gstack-evals ohr read report --scored <scored.json> --out <new file>",
+  "gstack-evals ohr read interim --scored <stage 2 first part scored.json> --launch <stage 2 first part out dir> --out <new file>",
+  "gstack-evals ohr read decision --scored <stage 2 scored.json> --admission <admission.json>... --judge-check <check.json> --hand-reads <file> --launch <launch out dir>... --record <ledger record dir> --authoring <sealed authoring output> --identity <age identity file> --out <new file> --interim <interim.json> [--cap-stop]",
+  "gstack-evals ohr read report --scored <scored.json> --out <new file> --launch <launch out dir>... --interim <interim.json>",
 ].join("\n");
 
 const passed = (p: string) => {
@@ -333,24 +335,46 @@ function read(argv: string[], io: Io): number {
     io.out("ohr read admission: " + state);
     return state === "admitted" ? 0 : 2;
   }
+  if (sub === "interim") {
+    const f = flags(rest, { one: ["--scored", "--launch", "--out"] });
+    need(f, "ohr read interim", ["--scored", "--launch", "--out"]);
+    const out = fresh("--out", one(f, "--out")!);
+    const record = interimLook({ launch: outside("--launch", one(f, "--launch")!), rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)) });
+    writeJson(out, record);
+    const r = record.read;
+    if (r.action === "continue") {
+      io.out("ohr read interim: continue; run the second part with --part second and --interim naming this record, whose numbers stay unread until the final read");
+      return 0;
+    }
+    const n = (x: number | null) => (x === null ? "undefined (every cluster differs by the same amount)" : x.toFixed(4));
+    io.out("ohr read interim: " + r.action + " at the half: estimate " + n(r.estimate) + " over " + r.C + " founder clusters, z " + n(r.z) + " against the bound " + n(r.bound) + ", conditional power " + n(r.cp));
+    io.out("ohr read interim: an estimate read at an early stop is possibly overstated; " + (r.action === "stop-new" ? "run the second half's builder briefs with --part second, then the final read" : "stage 2 ends at its half; go to the final read"));
+    return 0;
+  }
   if (sub === "decision") {
-    const f = flags(rest, { one: ["--scored", "--judge-check", "--hand-reads", "--record", "--authoring", "--identity", "--out"], many: ["--admission", "--launch"], bool: ["--cap-stop"] });
-    need(f, "ohr read decision", ["--scored", "--admission", "--judge-check", "--hand-reads", "--launch", "--record", "--authoring", "--identity", "--out"]);
+    const f = flags(rest, { one: ["--scored", "--judge-check", "--hand-reads", "--record", "--authoring", "--identity", "--out", "--interim"], many: ["--admission", "--launch"], bool: ["--cap-stop"] });
+    need(f, "ohr read decision", ["--scored", "--admission", "--judge-check", "--hand-reads", "--launch", "--record", "--authoring", "--identity", "--out", "--interim"]);
     const out = fresh("--out", one(f, "--out")!);
     const authoring = authoringEnd(outside("--authoring", one(f, "--authoring")!), ageDecrypter(resolve(one(f, "--identity")!)));
     const stops = readStops({ launches: f.get("--launch")!.map((d) => outside("--launch", d)), record: resolve(one(f, "--record")!), items: [...new Set(SPLIT.map((p) => p.item))], authoring, flag: f.has("--cap-stop") });
     for (const s of stops) io.out("ohr read decision: row 1 stop: " + s);
-    const d = decide({ rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)), admission: admissionState(f.get("--admission")!.map((p) => readJson<AdmissionReading>(p))), stops, judge_checks: passed(outside("--judge-check", one(f, "--judge-check")!)), hand_reads: readJson<HandRead[]>(outside("--hand-reads", one(f, "--hand-reads")!)) });
+    const rows = readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!));
+    const interim = readLook(outside("--interim", one(f, "--interim")!));
+    const look = lookGate({ look: interim.record, lookSha: interim.sha256, manifests: launchManifests(f.get("--launch")!.map((d) => outside("--launch", d))), rows });
+    const d = decide({ rows, admission: admissionState(f.get("--admission")!.map((p) => readJson<AdmissionReading>(p))), stops, judge_checks: passed(outside("--judge-check", one(f, "--judge-check")!)), hand_reads: readJson<HandRead[]>(outside("--hand-reads", one(f, "--hand-reads")!)), look });
     writeJson(out, d);
-    io.out("ohr read decision: row " + d.row + ", " + d.outcome);
+    io.out("ohr read decision: row " + d.row + ", " + d.outcome + (look.early ? " (stage 2 stopped at its half, " + look.action + "; the estimate is possibly overstated)" : ""));
     return 0;
   }
   if (sub === "report") {
-    const f = flags(rest, { one: ["--scored", "--out"] });
+    const f = flags(rest, { one: ["--scored", "--out", "--interim"], many: ["--launch"] });
     need(f, "ohr read report", ["--scored", "--out"]);
     const out = fresh("--out", one(f, "--out")!);
+    need(f, "ohr read report", ["--launch", "--interim"]);
     const rows = readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!));
-    writeJson(out, { lead: leadTable(rows), founder: rates(rows, "founder"), builder: rates(rows, "builder") });
+    const interim = readLook(outside("--interim", one(f, "--interim")!));
+    const look = lookGate({ look: interim.record, lookSha: interim.sha256, manifests: launchManifests(f.get("--launch")!.map((d) => outside("--launch", d))), rows });
+    writeJson(out, { look: { ...look, possibly_overstated: look.early }, lead: leadTable(rows, {}, look.level), founder: rates(rows, "founder"), builder: rates(rows, "builder") });
     io.out("ohr read report: written");
     return 0;
   }
@@ -365,7 +389,7 @@ export const SUBCOMMANDS: Record<string, { summary: string; run: Run }> = {
   rows: { summary: "a launch's rows against its frozen manifest, with the end-state counts", run: (argv, io) => rowsCommand(argv, io) },
   score: { summary: "packets, check-packets, judges (production labels) and sessions (scored rows)", run: score },
   "judge-check": { summary: "the live judge probes, the gold pass, the check labels and section 12's judge check", run: judgeCheckCommand },
-  read: { summary: "admission (A1 to A7), decision (section 10's table) and report (section 11's lead table)", run: (argv, io) => read(argv, io) },
+  read: { summary: "admission (A1 to A7), interim (stage 2's one look at its half), decision (section 10's table) and report (section 11's lead table)", run: (argv, io) => read(argv, io) },
   dryrun: { summary: "the keyless dry run over every area's seams and one ledger lease per ledger item", run: async (argv, io) => (await import("./dryrun.ts")).run(argv, io) },
   e2e: { summary: "the keyless end to end on Docker, then a planted scoring pass through score and read", run: async (argv, io) => (await import("./e2e-score.ts")).run(argv, io) },
   preflight: { summary: "section 12's no-model preflight: the pins in the local gstack, Docker, the dry run and the end to end", run: async (argv, io, env) => (await import("./preflight.ts")).run(argv, io, env) },

@@ -50,6 +50,7 @@ import { BEARER_ENV, codexPinCommand, codexPinProblems, codexReads, codexTreePro
 import { tapOffPin, type OhrRig } from "./codex-rig.ts";
 import type { ArmId, BlockParser, BriefKind, BriefMeta, ManifestEntry, ModelId, PriorSession } from "../types.ts";
 import { capProblem, entryId, freezeManifest, loadBriefs, makeManifest, type LaunchName } from "./manifest.ts";
+import type { ManifestLook } from "./half.ts";
 import { armEnvProblems, containerPinCommand, containerPinProblems, containerRoot, isSkillArm, nullPinProblem, pinProblems, type Pins } from "./pins.ts";
 import { readRows, sessionRow, type RowLine } from "./rows.ts";
 import { priorProblem, seedPrior } from "./seed.ts";
@@ -131,6 +132,8 @@ export interface RunInput {
   entries?: readonly ManifestEntry[];
   /** The local ledger the arm item's leases sit on, where a crashed attempt's spend is read back; null reads none. */
   ledger?: string | null;
+  /** Stage 2's part (pre-run change 3): the half, or the second part after the interim read. */
+  look?: ManifestLook;
 }
 
 export type SimTurnFn = (o: { kind: BriefKind; sheet: PersonSheet; transcript: Line[]; call: SimCall }) => Promise<SimOutcome>;
@@ -331,7 +334,7 @@ export async function runLaunch(o: RunInput, deps: RunDeps): Promise<RunResult> 
   const ran = new Set([...done.values()].filter((l) => l.row.stage === 2).map((l) => l.row.brief));
   let manifest;
   try {
-    manifest = makeManifest({ launch: o.launch, briefsDir: o.briefsDir, models: o.models, arms: o.arms, pins: o.pins, buildCommit: o.buildCommit, dropped: o.dropped, ran, ...(o.entries ? { entries: o.entries } : {}) });
+    manifest = makeManifest({ launch: o.launch, briefsDir: o.briefsDir, models: o.models, arms: o.arms, pins: o.pins, buildCommit: o.buildCommit, dropped: o.dropped, ran, ...(o.entries ? { entries: o.entries } : {}), ...(o.look ? { look: o.look } : {}) });
   } catch (e) {
     const m = (e as Error).message;
     throw new Error(/^E_[A-Z_]+ /.test(m) ? m : "E_OHR_MANIFEST " + m);

@@ -6,12 +6,16 @@
 // every outcome go section 10's two readings: new minus none not shown to beat no gstack by the bar, and current minus
 // none wholly below zero. The second attempt (its section 3, items 8 to 10) gives row 1 its stops from stops.ts: every
 // cap stop in a launch's stops.json or a ledger item's record, authoring that ended any way but on its quotas or on a
-// cap stop after calibration and comparison were full, and a stop the command line adds.
+// cap stop after calibration and comparison were full, and a stop the command line adds. Pre-run change 3 (rule R113)
+// reads the pooled primary at its interim look's level (read/look.ts): at the end after a read that continued, or on
+// the half after a stop, where a stop the other way or for futility closes row 4 and an early MERGE is marked possibly
+// overstated.
 import { DECISION } from "../frozen.ts";
 import type { ModelId, ScoredSession } from "../types.ts";
 import { builderRightCall, keptWhole, type KeptWholeReading, type RightCallReading } from "./builder.ts";
 import { estimate, type Estimate } from "./estimate.ts";
 import { guardrails, missingLimits, type Guardrails, type HandRead, type MissingLimits } from "./guards.ts";
+import { bound, type Look } from "./look.ts";
 import { ge, gt, le, lt } from "./stats.ts";
 
 export type Row = 1 | 2 | 3 | 4 | 5 | 6;
@@ -29,6 +33,8 @@ export interface DecisionInput {
   judge_checks: { astra: boolean; opus: boolean };
   /** G1's hand reads of every new-arm builder session the detector flagged. */
   hand_reads: readonly HandRead[];
+  /** Pre-run change 3: what the final read takes from the interim read (look.ts lookGate). */
+  look?: Look;
 }
 
 const NEW_CURRENT = { a: "new", b: "current", kind: "founder" } as const;
@@ -57,12 +63,14 @@ export interface Decision {
   builder_right_call: RightCallReading;
   guardrails: Guardrails;
   missing: MissingLimits;
+  /** The interim look the pooled primary was read under, with its bound at the clusters read; null without one. */
+  look: (Look & { bound: number | null; possibly_overstated: boolean }) | null;
 }
 
 export function decide(x: DecisionInput): Decision {
   const one = (m: ModelId) => estimate(x.rows, { ...NEW_CURRENT, models: [m] });
   const c = {
-    new_current: estimate(x.rows, NEW_CURRENT),
+    new_current: estimate(x.rows, x.look ? { ...NEW_CURRENT, level: x.look.level } : NEW_CURRENT),
     new_current_opus: one("opus"),
     new_current_sol: one("sol"),
     new_none: estimate(x.rows, { a: "new", b: "none", kind: "founder" }),
@@ -73,7 +81,8 @@ export function decide(x: DecisionInput): Decision {
 
   const r1 = { admission: x.admission, stops: x.stops, missing_limit: miss.broken, judge_check_failed: !(x.judge_checks.astra && x.judge_checks.opus) };
   const r2 = { pooled_loss: below0(nc), opus_loss: below0(c.new_current_opus), sol_loss: below0(c.new_current_sol), kept_whole_harm: kw.state === "broken", builder_right_call_loss: brc.state === "broken", guardrail_broken: g.broken };
-  const row4 = nc.estimate !== null && nc.lo !== null && ge(nc.estimate, DECISION.bar) && gt(nc.lo, 0);
+  const mayMerge = !x.look || x.look.action === "continue" || x.look.action === "stop-new";
+  const row4 = mayMerge && nc.estimate !== null && nc.lo !== null && ge(nc.estimate, DECISION.bar) && gt(nc.lo, 0);
   const row5 = nc.estimate !== null && nc.lo !== null && nc.hi !== null && lt(nc.estimate, DECISION.bar) && (gt(nc.lo, 0) || lt(nc.hi, DECISION.bar));
   const above = {
     row1: { holds: r1.admission !== "admitted" || r1.stops.length > 0 || r1.missing_limit || r1.judge_check_failed, ...r1 },
@@ -101,5 +110,6 @@ export function decide(x: DecisionInput): Decision {
     builder_right_call: brc,
     guardrails: g,
     missing: miss,
+    look: x.look ? { ...x.look, bound: nc.C >= 2 ? bound(x.look.level, nc.C) : null, possibly_overstated: x.look.early } : null,
   };
 }

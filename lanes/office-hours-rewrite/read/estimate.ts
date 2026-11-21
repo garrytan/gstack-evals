@@ -4,10 +4,11 @@
 // sections 7 and 10 that reuse it). A brief's difference is the mean over models, where both arms scored, of arm a's
 // metric minus arm b's; a cluster's difference is the mean over its briefs that have one; the estimate is the mean over
 // clusters, with section 8's paired t interval over the cluster differences. One function serves new minus current, new
-// minus none and current minus none, pooled or one model alone, on R or any other per-session metric.
+// minus none and current minus none, pooled or one model alone, on R or any other per-session metric. Pre-run change 3
+// to the second attempt reads the pooled primary at its interim look's levels instead of 0.05 (read/look.ts).
 import { PRIMARY_MODELS } from "../frozen.ts";
 import type { ArmId, BriefKind, ModelId, ScoredSession } from "../types.ts";
-import { mean, tInterval } from "./stats.ts";
+import { mean, tInterval, tQuantile } from "./stats.ts";
 
 /** A per-session number; null leaves the session out. */
 export type Metric = (s: ScoredSession) => number | null;
@@ -59,6 +60,8 @@ export interface ContrastSpec {
   where?: (s: ScoredSession) => boolean;
   /** "brief" makes each brief its own cluster (the builder right call); defaults to the row's opening cluster. */
   by?: "cluster" | "brief";
+  /** The interval's two-sided level; defaults to section 8's 0.05. */
+  level?: number;
 }
 
 export interface BriefDiff {
@@ -134,9 +137,10 @@ export function estimate(rows: readonly ScoredSession[], spec: ContrastSpec): Es
   for (const b of briefs) if (b.diff !== null) byCluster.set(b.cluster, [...(byCluster.get(b.cluster) ?? []), b]);
   const clusters = sortBy([...byCluster.entries()].map(([cluster, bs]) => ({ cluster, briefs: bs.length, diff: mean(bs.map((b) => b.diff!)), a: mean(bs.map((b) => b.a!)), b: mean(bs.map((b) => b.b!)) })), (c) => c.cluster);
   const t = tInterval(clusters.map((c) => c.diff));
+  const h = spec.level === undefined || t.mean === null || t.sd === null ? null : (tQuantile(1 - spec.level / 2, t.n - 1) * t.sd) / Math.sqrt(t.n);
   return {
     a: spec.a, b: spec.b, kind: spec.kind, models, stage, pairs, scored_pairs: scored, missing_pairs: pairs - scored, briefs, clusters,
-    C: t.n, estimate: t.mean, sd: t.sd, lo: t.lo, hi: t.hi,
+    C: t.n, estimate: t.mean, sd: t.sd, lo: h === null ? t.lo : t.mean! - h, hi: h === null ? t.hi : t.mean! + h,
     mean_a: clusters.length ? mean(clusters.map((c) => c.a)) : null,
     mean_b: clusters.length ? mean(clusters.map((c) => c.b)) : null,
   };

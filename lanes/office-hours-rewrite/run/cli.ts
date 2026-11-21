@@ -9,7 +9,9 @@
 // upstream override; a launch, model or arm the prereg does not name for that launch; an out dir that exists without
 // --resume; and caps whose sum passes the launch's frozen ledger line. runLaunch then refuses a null pin, a T8 brief
 // that cannot seed, a manifest that differs from the frozen one, an out dir that ended in a cap stop, a build whose
-// tracked files differ from HEAD, and gstack trees that are not the pins.
+// tracked files differ from HEAD, and gstack trees that are not the pins. Pre-run change 3 (rule R113) runs stage 2 in
+// two parts: --part first runs the preregistered half, and --part second runs the rest only with the interim read's
+// record (--interim) and only when that read continued or stopped for the new skill; any other launch takes no part.
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -23,6 +25,7 @@ import { openMeter } from "../../product-value/meter.ts";
 import { ARMS, EMPTY_BOUND, HOSTS, MODEL_KEYS, PINS } from "../frozen.ts";
 import { withCodex } from "./codex-rig.ts";
 import { parseBlock } from "../score/block.ts";
+import { readLook } from "../read/look.ts";
 import { simTurn } from "../sim/founder.ts";
 import type { ArmId, ModelId } from "../types.ts";
 import { runE2e } from "./e2e.ts";
@@ -40,12 +43,14 @@ interface Io {
 export const RUN_HELP = [
   "gstack-evals ohr run --launch " + LAUNCH_NAMES.join("|") + " --briefs-dir <dir> --out <dir> --item <arms item> --spend-cap <usd>",
   "    --sim-item <simulator item> --sim-spend-cap <usd> [--models <ids>] [--arms " + ARMS.join(" ") + "] [--dropped <file>]",
-  "    [--parallel <n>] [--ledger <path>] [--record <dir>] [--policy <file>] [--resume]",
+  "    [--parallel <n>] [--ledger <path>] [--record <dir>] [--policy <file>] [--resume] [--part first|second] [--interim <file>]",
   "A launch needs GSTACK_EVALS_EPHEMERAL=1 and a GSTACK_EVALS_RECEIPTS sink that does not exist yet. --spend-cap and",
   "--sim-spend-cap together may not pass the launch's frozen ledger line. --dropped names one brief id a line.",
+  "stage2 runs in two parts: --part first runs the preregistered half; --part second, with --interim naming the record",
+  "ohr read interim wrote, runs what that read allows. Each part takes its own --out.",
 ].join("\n");
 
-const VALUE = new Set(["--launch", "--briefs-dir", "--out", "--item", "--spend-cap", "--sim-item", "--sim-spend-cap", "--dropped", "--parallel", "--ledger", "--record", "--policy", "--upstream"]);
+const VALUE = new Set(["--launch", "--briefs-dir", "--out", "--item", "--spend-cap", "--sim-item", "--sim-spend-cap", "--dropped", "--parallel", "--ledger", "--record", "--policy", "--upstream", "--part", "--interim"]);
 const LIST = new Set(["--models", "--arms"]);
 const BOOL = new Set(["--resume"]);
 
@@ -75,7 +80,7 @@ function parse(argv: readonly string[]): Map<string, string[]> {
 
 /** A launch's settings after every refusal that needs no Docker. */
 export interface RunPlan {
-  input: Pick<RunInput, "launch" | "briefsDir" | "out" | "models" | "arms" | "dropped" | "cap" | "simCap" | "parallel">;
+  input: Pick<RunInput, "launch" | "briefsDir" | "out" | "models" | "arms" | "dropped" | "cap" | "simCap" | "parallel" | "look">;
   item: string;
   simItem: string;
   ledger: string | undefined;
@@ -109,6 +114,14 @@ export function planRun(argv: readonly string[], env: Env): RunPlan {
   for (const m of models) if (!named.includes(m)) refuse("--models: " + m + " is not a model the prereg runs in " + launch + " (" + named.join(", ") + ")");
   const arms = (f.get("--arms") ?? [...ARMS]) as ArmId[];
   for (const a of arms) if (!ARMS.includes(a)) refuse("--arms: " + a + " is not an arm the prereg names (" + ARMS.join(", ") + ")");
+  const part = one("--part");
+  if (launch !== "stage2" && (part || f.has("--interim"))) refuse("--part and --interim belong to stage2 alone, which runs in two parts; " + launch + " runs whole");
+  if (launch === "stage2" && part !== "first" && part !== "second") refuse("stage2 runs in two parts: pass --part first for the preregistered half, or --part second after the interim read");
+  if (part === "first" && f.has("--interim")) refuse("--part first runs the half before any interim read, so it takes no --interim");
+  if (part === "second" && !f.has("--interim")) refuse("--part second runs only after the interim read: pass --interim with the record ohr read interim wrote");
+  const read = part === "second" ? readLook(resolve(one("--interim")!)) : null;
+  if (read && (read.record.read.action === "stop-current" || read.record.read.action === "stop-futility")) refuse("the interim read " + resolve(one("--interim")!) + " says " + read.record.read.action + ", so stage 2 ends at its half and no second part runs");
+  const look: RunInput["look"] = part === "first" ? { part: "first" } : read ? { part: "second", half: read.record.half, action: read.record.read.action, interim_sha256: read.sha256 } : undefined;
   const dropped = one("--dropped") ? readFileSync(one("--dropped")!, "utf8").split("\n").map((l) => l.trim()).filter(Boolean) : [];
   const parallel = Number(one("--parallel") ?? "1");
   if (!Number.isSafeInteger(parallel) || parallel < 1) refuse("--parallel must be a whole number of at least 1");
@@ -122,7 +135,7 @@ export function planRun(argv: readonly string[], env: Env): RunPlan {
   if (!path) return refuse("every launch uses a receipts sink that does not exist before it, and GSTACK_EVALS_EPHEMERAL=1 is not set; set it and GSTACK_EVALS_RECEIPTS to a new path");
   if (existsSync(path)) refuse("the receipts sink " + path + " already exists, and every launch uses a sink that does not exist before it");
   if (insideRepo(path)) refuse("the receipts sink " + path + " is inside the repo, and the receipts quote transcripts");
-  return { input: { launch, briefsDir, out, models, arms, dropped, cap, simCap, parallel }, item: one("--item")!, simItem: one("--sim-item")!, ledger: one("--ledger"), record: one("--record"), policy: one("--policy") ?? DEFAULT_POLICY, sink: path };
+  return { input: { launch, briefsDir, out, models, arms, dropped, cap, simCap, parallel, ...(look ? { look } : {}) }, item: one("--item")!, simItem: one("--sim-item")!, ledger: one("--ledger"), record: one("--record"), policy: one("--policy") ?? DEFAULT_POLICY, sink: path };
 }
 
 /** gstack-evals ohr run: one launch on the Docker rig. */
