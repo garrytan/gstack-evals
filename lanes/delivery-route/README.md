@@ -172,8 +172,8 @@ B1e runs B1d's gstack-main arm again, built by `B1_PINS=b1e-pins.ts lanes/delive
 
 ```
 bun lanes/delivery-route/cli.ts b1e arms manifest|check [--out <dir>]
-bun lanes/delivery-route/cli.ts b1e routes --export <swe-rebench export> [--out <tsv>] [--check]
-bun lanes/delivery-route/cli.ts b1e plan | power | reuse
+bun lanes/delivery-route/cli.ts b1e routes --export <swe-rebench export> [--tree <dir>] [--out <tsv>] [--check]
+bun lanes/delivery-route/cli.ts b1e plan | power | reuse [--head <commit>]
 bun lanes/delivery-route/cli.ts b1e approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who>
 bun lanes/delivery-route/cli.ts b1e prepare|host-up|attach|recover|host-down|launch|relaunch|rerun <work> ...
 bun lanes/delivery-route/cli.ts b1e table <config.json> <out.jsonl>
@@ -184,4 +184,4 @@ The launcher commands are L1's under B1e's profile: host root ~/b1e, ledger port
 
 ## Credits
 
-The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19, and B1d installs gstack itself at 5afef04e31de. NOTICE.md has the rows.
+The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19, B1d installs gstack itself at 5afef04e31de, and B1e at 5df6b5a8cf21. NOTICE.md has the rows.
