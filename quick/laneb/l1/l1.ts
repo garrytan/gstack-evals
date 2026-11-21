@@ -213,6 +213,12 @@ export type Profile = {
    * a part that needs a second metering proxy (harness mechanics' judge proxy). The host refuses if one is unset, exactly as
    * it does for the route key, and each ships through the same route-key filter. L1 declares none. */
   proxyKeys?: (plan: Plan) => string[];
+  /** A lane's own prepare step, run in place of runner/prepare-run.ts with the same arguments and env (the Codex hooks eval's
+   * part R wraps it to swap in its Codex agent and proxy route). L1_PREPARE_RUN still wins. L1 declares none. */
+  prepareRun?: string;
+  /** The proxy config whose route for the item's model names the key host-up ships, in place of config/proxy.json (part R's
+   * OpenAI Responses route). L1 declares none. */
+  proxyConfig?: string;
 };
 function l1Parts(item: string, frozen: (f: { file: string; sha256: string }) => string, inputs: Record<string, string>): PartPlan[] {
   let tb2Parts: string | undefined;
@@ -709,7 +715,7 @@ function preparePart(work: string, p: PartPlan, def: ItemDef, arms: string) {
   const labels = [...new Set(p.rects.flatMap((x) => x.arms))];
   const env = { ...process.env, TASK_SET: def.taskSet, CELLS: p.cells ?? def.cells, ARM_MANIFESTS: P.armManifests, TASKS: tasks.join(","), ...(P.taskSetup ? { TASK_SETUP: P.taskSetup.file, TASK_SETUP_SHA256: P.taskSetup.sha256 } : {}) };
   const attempts = String(Math.max(...p.rects.map((x) => x.attempts)));
-  const r = Bun.spawnSync([process.execPath, process.env.L1_PREPARE_RUN ?? join(LANEB, "runner/prepare-run.ts"), dir, p.name.replace(/[^a-z0-9-]/g, "-"), p.model ?? def.model, labels.map((a) => P.armSpecs[a]!).join(","), arms, attempts, String(P.concurrent)], { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
+  const r = Bun.spawnSync([process.execPath, process.env.L1_PREPARE_RUN ?? P.prepareRun ?? join(LANEB, "runner/prepare-run.ts"), dir, p.name.replace(/[^a-z0-9-]/g, "-"), p.model ?? def.model, labels.map((a) => P.armSpecs[a]!).join(","), arms, attempts, String(P.concurrent)], { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
   if (r.exitCode !== 0) throw new Error("prepare-run for " + p.name + " exited " + r.exitCode);
   // The proxy can't tell the route hook's line from a copy in the task prompt (runner/proxy.ts routeMark), so a task whose
   // instruction holds it never runs. The work tree's CLAUDE.md and the rest of the context Claude Code loads by itself sit in
@@ -775,10 +781,11 @@ function hostUp(work: string) {
   if (bound && bound.run_id !== plan.run_id) refuse(plan.item + " is bound to run " + bound.run_id + ", not " + plan.run_id);
   if (!bound) itemCheck(rows, plan.item);
   if (!process.env.UBICLOUD_API_KEY && !process.env.UBICLOUD_API_TOKEN) usage("set UBICLOUD_API_KEY");
-  const proxy = readJson(join(LANEB, "config/proxy.json"));
+  const proxyName = P.proxyConfig ?? "config/proxy.json";
+  const proxy = readJson(P.proxyConfig ?? join(LANEB, "config/proxy.json"));
   const keyEnv: string | undefined = proxy.routes?.[proxy.models?.[plan.model]?.route]?.key_env;
-  if (!keyEnv) refuse("config/proxy.json has no route for " + plan.model);
-  if (!process.env[keyEnv!]) usage("set " + keyEnv + ", the key for " + plan.model + "'s route in config/proxy.json; the host passes it to each part VM's metering proxy");
+  if (!keyEnv) refuse(proxyName + " has no route for " + plan.model);
+  if (!process.env[keyEnv!]) usage("set " + keyEnv + ", the key for " + plan.model + "'s route in " + proxyName + "; the host passes it to each part VM's metering proxy");
   const extraKeys = P.proxyKeys?.(plan) ?? [];
   for (const k of extraKeys) if (!process.env[k]) usage("set " + k + ", a proxy key " + plan.item + " needs for its judge parts; the host passes it to each part VM's judge metering proxy");
   if (process.env.UBI_RECOVERY_KEY) refuse("UBI_RECOVERY_KEY is set, but the host seals part-VM recovery bundles with UBICLOUD_API_KEY, so recover could not open them; unset it");

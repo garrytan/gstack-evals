@@ -1,0 +1,46 @@
+decision comparisons (long and required against the hook): 162 tasks, paired by task; followed and loads move in steps of 0.62 points
+descriptive comparisons (own against the hook, every arm against none): 81 tasks, steps of 1.23 points
+
+within-task agreement on steps followed in B1d's published held-out rows (hook arm against each CLAUDE.md arm):
+  gstack-main vs project-md: both 10, hook only 5, other only 8, neither 37; phi 0.462
+  gstack-main vs project-md-noescape: both 9, hook only 6, other only 14, neither 31; phi 0.257
+planning phi: 0.257 (the lower); phi 0 is the independent model
+
+MDD at n=162, the decision comparisons (80% power, the 95% interval wholly on one side of 0)
+hook's true rate	below, phi 0	above, phi 0	below, phi 0.26	above, phi 0.26
+20%	11 points	14 points	10 points	12 points
+30%	14 points	16 points	12 points	13 points
+40%	15 points	16 points	13 points	14 points
+50%	16 points	16 points	14 points	14 points
+60%	16 points	15 points	14 points	13 points
+
+odds the rewrite reads "matches" (lower end above -15 points) at n=162, by true rates
+hook	rewrite	matches, phi 0	matches, phi 0.26	clearly loses, phi 0.26
+30%	30%	0.843	0.929	0.000
+30%	25%	0.531	0.650	0.000
+30%	20%	0.184	0.229	0.001
+30%	35%	0.972	0.994	0.000
+40%	40%	0.796	0.895	0.000
+40%	35%	0.471	0.589	0.000
+40%	30%	0.161	0.204	0.001
+50%	50%	0.782	0.883	0.000
+50%	45%	0.454	0.562	0.000
+50%	40%	0.155	0.190	0.001
+
+MDD at n=81, the descriptive comparisons
+hook's true rate	below, phi 0	above, phi 0	below, phi 0.26	above, phi 0.26
+20%	15 points	20 points	14 points	18 points
+30%	18 points	22 points	16 points	19 points
+40%	20 points	22 points	18 points	19 points
+50%	22 points	22 points	19 points	19 points
+60%	22 points	20 points	19 points	18 points
+
+non-fit: 27 tasks; a rewrite over-loads at 9 or more loads of 27 counted sessions
+true load rate	P(over the bound)
+10.0%	0.001
+20.0%	0.074
+25.0%	0.214
+30.0%	0.423
+33.3%	0.572
+40.0%	0.816
+50.0%	0.974

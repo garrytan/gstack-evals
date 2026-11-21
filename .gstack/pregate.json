@@ -138,6 +138,45 @@
     "lanes/outcome-skills/pfchecks/sh/**": [
       "tests/outcome-skills/h2hx-driver.test.ts"
     ],
+    "lanes/codex-hooks/cli.ts": [
+      "tests/cli.test.ts"
+    ],
+    "lanes/codex-hooks/c/cli.ts": [
+      "tests/cli.test.ts"
+    ],
+    "lanes/codex-hooks/r/cli.ts": [
+      "tests/cli.test.ts"
+    ],
+    "lanes/codex-hooks/c/analysis/judge-policy.json": [
+      "tests/codex-hooks/c/analysis/meter.test.ts"
+    ],
+    "lanes/codex-hooks/r/route-table.tsv": [
+      "tests/codex-hooks/r/report.test.ts"
+    ],
+    "lanes/codex-hooks/r/proxy.json": [
+      "tests/codex-hooks/r/rig.test.ts"
+    ],
+    "lanes/codex-hooks/r/arms/Dockerfile": [
+      "tests/codex-hooks/r/rig.test.ts"
+    ],
+    "lanes/codex-hooks/r/task-setup.Dockerfile": [
+      "tests/codex-hooks/r/rig.test.ts"
+    ],
+    "lanes/codex-hooks/r/fake-responses.ts": [
+      "tests/codex-hooks/r/proxy-responses.test.ts"
+    ],
+    "lanes/codex-hooks/r/smoke.sh": [
+      "tests/codex-hooks/r/rig.test.ts"
+    ],
+    "tests/codex-hooks/c/fixtures/**": [
+      "tests/codex-hooks/c/outcomes.test.ts",
+      "tests/codex-hooks/c/readouts.test.ts",
+      "tests/codex-hooks/c/records.test.ts",
+      "tests/codex-hooks/c/run.test.ts"
+    ],
+    "tests/codex-hooks/r/fixtures/**": [
+      "tests/codex-hooks/r/detect.test.ts"
+    ],
     "wiki/plans/2026-11-17-geva-546-day-one-usefulness-prereg/**": [
       "tests/day-one/frozen.test.ts",
       "tests/day-one/dryrun.test.ts"

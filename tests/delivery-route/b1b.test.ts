@@ -9,6 +9,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { B1B_CASES, b1bApprove, b1bCap, b1bCaseProblems, b1bCheck, b1bDone, b1bGuard, b1bReading, b1bReport, b1bRow, b1bStats, checkB1bRows, harnessDirty, loadB1bCaptured, loadsOf, paired, READINGS, reuseCheck, whyNot, type B1bRow, type Load } from "../../lanes/delivery-route/b1b.ts";
 import { B1B_BUNDLE, B1B_CAPS_USD, HOOK_SUBSTITUTIONS, ROUTING, type B1bArm } from "../../lanes/delivery-route/b1b-pins.ts";
+import { B1B_RUN } from "../../lanes/delivery-route/b1c-pins.ts";
 import { ARM_SOURCES, REPO } from "../../lanes/delivery-route/pins.ts";
 import { b1Row, type B1Row } from "../../lanes/delivery-route/table.ts";
 import { readRows } from "../../quick/laneb/runner/ledger.ts";
@@ -148,8 +149,8 @@ describe("money", () => {
 });
 
 describe("the none arm's reuse", () => {
-  test("every session-deciding tree is the same at this head as at B1's run commit", () => {
-    const r = reuseCheck("HEAD");
+  test("every session-deciding tree is the same at B1b's run commit as at B1's run commit", () => {
+    const r = reuseCheck(B1B_RUN.commit);
     expect(r.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect(r.same).toBe(true);
   });

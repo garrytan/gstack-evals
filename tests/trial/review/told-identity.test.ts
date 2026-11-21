@@ -14,7 +14,7 @@ import { TOLD_SHA256 } from "../../../src/trial/review/told.ts";
 // on purpose, with: CAPTURE_OUT=<file> CAPTURE_CONFIGS=stacks-r1,r2-none,r2-full,ceremony-cut
 // GIT_AUTHOR_DATE=2026-11-02T00:00:00Z GIT_COMMITTER_DATE=2026-11-02T00:00:00Z bun test ./tests/trial/review/told-capture.ts
 
-interface Session { arm: string; model: string; driver: { skill: { name: string; roots: string[]; home: string } | null }; prompt_sha256: string; termination: unknown; turns: number; parse: string }
+interface Session { arm: string; model: string; driver: { skill: { name: string; roots: string[]; home: string } | null }; prompt_sha256: string; termination: unknown; turns: number; parse: string; key: Record<string, string> }
 interface Config { exit: number; errors: string[]; rig: { skills: Record<string, string> }; sessions: Session[]; told: Record<string, unknown> }
 interface Capture { prompts: Record<string, string>; configs: Record<string, Config> }
 
@@ -42,6 +42,8 @@ describe("R56-1: review-units through the real command (keyless)", () => {
   // Value: protects=nothing that already ran moves: for none, gstack-full and every stacks round 1, R2 and ceremony-cut configuration, the arm specs the rig gets, each arm's install target, the run settings, each session's driver options (skill, system prompt, turn cap, session kind), its prompt, its session key and arm.json's told block are byte-identical to main at 176fdc7; fails_when=the /ship change moves any /review arm's resolution, install target or prompt; why_new=GEVA-197 step 3; seam=main in cli.ts through runReviewUnits and hostDriver; no_claim=the Docker rig and installArms, which this change does not touch
   test("every /review configuration resolves as it did at main 176fdc7, byte for byte", () => {
     const golden = JSON.parse(readFileSync(GOLDEN, "utf8")) as Capture;
+    // The judge left the session key on purpose (the judge never reaches the agent), so its part is dropped from the golden; every other byte still has to match.
+    for (const config of Object.values(golden.configs)) for (const session of config.sessions) delete session.key.judge_model;
     expect(Object.keys(golden.configs)).toEqual(["stacks-r1", "r2-none", "r2-full", "ceremony-cut"]);
     for (const name of Object.keys(golden.configs)) expect([name, JSON.stringify(captured.configs[name], null, 2)]).toEqual([name, JSON.stringify(golden.configs[name], null, 2)]);
     for (const [sha, text] of Object.entries(golden.prompts)) expect(captured.prompts[sha]).toBe(text);

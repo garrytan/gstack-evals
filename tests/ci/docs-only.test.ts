@@ -230,6 +230,7 @@ describe("the rule on this repo's own tree", () => {
     "tests/outcome-skills/sm-history.test.ts": "lists the files of a scratch repo it builds, docs folder included, not the committed one",
     "tests/outcome-skills/sm-followon-strip.test.ts": "lists the files of a scratch repo it builds, docs folder included, not the committed one",
     "lanes/decision-routing/host/history.sh": "lists untracked files inside a task image's /testbed checkout ($REPO), not this repo's docs",
+    "tests/ci/review-exclude-code.test.ts": "lists the tracked files review_exclude_paths matches to refuse code among them; a docs-only change adds no code file",
   };
   test("code that reads docs by folder or reads the root README is listed with a reason", () => {
     const lists = /readdirSync|readdir\(|opendirSync|ls-files|ls-tree|Glob|globSync|walk\(/;
