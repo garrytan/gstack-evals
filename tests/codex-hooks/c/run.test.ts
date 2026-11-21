@@ -10,7 +10,7 @@ import { unitTaskId } from "../../../src/trial/review/unit.ts";
 import { GSTACK } from "../../../lanes/codex-hooks/pins.ts";
 import { ITEMS, MODEL, SUITE, suiteUnits, type ItemName } from "../../../lanes/codex-hooks/c/pins.ts";
 import { approve, doneMark, dryRun, guard, markDone, reviewArgv, schedule } from "../../../lanes/codex-hooks/c/plan.ts";
-import { writeReadout, type UnitRef } from "../../../lanes/codex-hooks/c/readout.ts";
+import { questionCounts, writeReadout, type UnitRef } from "../../../lanes/codex-hooks/c/readout.ts";
 import { moveForRerun, runPhase, type Exec } from "../../../lanes/codex-hooks/c/run.ts";
 
 const FIX = join(import.meta.dir, "fixtures");
@@ -153,6 +153,18 @@ describe("part C's run controller and readout, against a stand-in for review-uni
       expect(after.arms["c-off"]).toMatchObject({ found: 6, scored: 6, supplied: true, reruns: 1, gaps: 0 });
       const outcomes = readFileSync(join(root, "c-pilot", "readout", "outcomes.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
       expect(outcomes.filter((o) => o.arm === "c-off" && o.unit === schedule("pilot", ids)[2]!.unit).map((o) => [o.attempt, o.class, o.code])).toEqual([[1, "infra", "E_CODEX_C_NO_ROLLOUT"], [2, "scored", null]]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Value: protects=pre-run change 1, section 6's question counts: every question the driver captured, and the ones that share one answer with a same-titled question in the same turn; a session with no questions.json asked none; fails_when=a question is lost or a same-titled pair goes uncounted; why_new=GEVA-562 pre-run change 1, section 6; seam=questionCounts; no_claim=forged question lines, which the rollout cannot tell apart
+  test("question counts", () => {
+    const dir = tmp();
+    try {
+      expect(questionCounts(dir)).toEqual({ asked: 0, same_title: 0 });
+      writeFileSync(join(dir, "questions.json"), JSON.stringify([{ call_id: "a", turn: 1, questions: [{ title: "Which?" }, { title: "Which?" }] }, { call_id: "b", turn: 2, questions: [{ title: "Which?" }] }]));
+      expect(questionCounts(dir)).toEqual({ asked: 3, same_title: 2 });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

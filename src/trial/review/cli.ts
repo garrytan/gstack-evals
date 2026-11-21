@@ -99,7 +99,7 @@ export const REVIEW_UNITS_HELP = [
   "prefix from --codex-arms <file>, which also names the Codex binary every session runs; a gstack arm needs a told_prefix, and",
   "--told-prefix, --system-prompt, --render, --reader-map, --cap-stops and --plan do not apply. <name>=none names a no-skill",
   "arm. Each arm's model input is captured keylessly before the first session (captures/). --upstream <url> sends every",
-  "model call to that base URL instead of the provider, for keyless checks only: it is refused while a provider key is set.",
+  "model call to that base URL instead of the provider, for keyless checks only: it is refused while a provider key is set, and the proxy gets placeholder keys.",
   "On --host codex the proxy's journal also keeps each request's reasoning field on its request line, so every request's effort can be read.",
 ].join("\n");
 
@@ -507,7 +507,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const call = { host, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
   const codexConfig = codexArms ? Object.fromEntries(Object.entries(codexArms.arms).filter(([, a]) => Object.keys(a.gstack_config).length).map(([name, a]) => [name, a.gstack_config])) : {};
   const gstackConfig = { ...(ceo && specs.some((a) => a.name === ENFORCED_ARM) ? { [ENFORCED_ARM]: GATE_CONFIG } : {}), ...codexConfig };
-  const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens || host === "codex" ? { voice: false } : {}), ...(Object.keys(gstackConfig).length ? { gstackConfig } : {}), ...(upstream !== null ? { upstream } : {}), ...(host === "codex" ? { requestFields: ["reasoning"] } : {}) });
+  const rig = dockerRig(call, { env: upstream !== null ? { ...env, ANTHROPIC_API_KEY: "stub-not-a-key", OPENAI_API_KEY: "stub-not-a-key", OPENROUTER_API_KEY: "stub-not-a-key" } : env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens || host === "codex" ? { voice: false } : {}), ...(Object.keys(gstackConfig).length ? { gstackConfig } : {}), ...(upstream !== null ? { upstream } : {}), ...(host === "codex" ? { requestFields: ["reasoning"] } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
     run = await runReviewUnits({ host, ...(codexArms ? { codex: codexArms } : {}), suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs, ...(bound ?? {}) }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256(host), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens: ceo ? CEO_LENS : lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));

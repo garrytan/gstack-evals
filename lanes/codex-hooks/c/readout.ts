@@ -13,7 +13,8 @@
 // scored after at most one rerun). Exposure: sessions blocked, the items blocks named, sessions with a false block or a
 // fail-open, sessions where every stop was evaluated, the pass before a block, only after one or never, sessions the
 // contract would have blocked at their first stop, and sessions whose log and rollout disagree on the blocks. Flags: the
-// sessions with each pilot flag, and the lines the Captain hears before c-main spends. Costs: mean, median and 95th
+// sessions with each pilot flag, and the lines the Captain hears before c-main spends. Questions (pre-run change 1, section
+// 6): the sessions that asked, the questions asked, and those that shared one answer with a same-titled question in a turn. Costs: mean, median and 95th
 // percentile in dollars, and whether the 95th percentile passes half the allowance (section 5.7 doubles them then). Two
 // sessions per arm, by seed, for the hand reading. It releases no found rate.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -58,6 +59,18 @@ export interface SessionReadout {
   flags: Flags;
   outcome: OutcomeRow;
   usd: number | null;
+  /** The questions the driver captured (host/questions.json), and those sharing a title with another in the same turn. */
+  questions: { asked: number; same_title: number };
+}
+
+/** Pre-run change 1, section 6: the questions a session asked and the ones that shared one answer by title. */
+export function questionCounts(hostDir: string): { asked: number; same_title: number } {
+  const f = join(hostDir, "questions.json");
+  if (!existsSync(f)) return { asked: 0, same_title: 0 };
+  const calls = JSON.parse(readFileSync(f, "utf8")) as { turn: number; questions: { title?: string }[] }[];
+  const byTurn = new Map<string, number>();
+  for (const c of calls) for (const q of c.questions) byTurn.set(c.turn + "\t" + (q.title ?? ""), (byTurn.get(c.turn + "\t" + (q.title ?? "")) ?? 0) + 1);
+  return { asked: calls.reduce((n, c) => n + c.questions.length, 0), same_title: [...byTurn.values()].filter((n) => n > 1).reduce((a, b) => a + b, 0) };
 }
 
 /** Every session attempt one item's run holds, and the planned cells it does not. */
@@ -80,6 +93,7 @@ export function readItem(root: string, item: ItemName, units: readonly UnitRef[]
       flags: pilotFlags(rollouts),
       outcome: outcome({ cell, attempt, termination: e.record.termination, allowance_stops: e.codex?.allowance_stops ?? 0, meter_id: e.meter_id, rollouts, journal }),
       usd: typeof e.cost?.all?.spent_micros === "number" ? e.cost.all.spent_micros / 1e6 : null,
+      questions: questionCounts(host),
     };
   };
   const first = readCells(join(out, "cells-attempt1.ndjson")).map((e) => read(e, 1, true));
@@ -136,6 +150,7 @@ export function summarize(item: ItemName, sessions: readonly SessionReadout[], n
         would_block: count((s) => s.exposure.would_block), log_rollout_mismatch: count((s) => s.exposure.log.blocked !== s.exposure.rollout_blocks),
       },
       flags: { read_shapes: reads, unknown_namespace: unknownNs, other_model: otherModel, fork_not_none: count((s) => s.flags.fork_not_none > 0), effort_override: count((s) => s.flags.effort_override > 0) },
+      questions: { sessions: count((s) => s.questions.asked > 0), asked: ss.reduce((n, s) => n + s.questions.asked, 0), same_title: ss.reduce((n, s) => n + s.questions.same_title, 0) },
       ...(p.phase === "pilot" && contract ? { contract_ran: ss.length > 0 && ss.every((s) => s.exposure.log.every_stop_evaluated && s.exposure.log.fail_open === 0) } : {}),
       usd: { sessions: usd.length, mean: usd.length ? usd.reduce((a, b) => a + b, 0) / usd.length : null, median: pct(usd, 0.5), p95, allowance: p.allowance_usd, doubles_allowance: p95 !== null && p95 > p.allowance_usd / 2 },
       hand_read: pick,
