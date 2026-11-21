@@ -832,5 +832,35 @@ describe("the shell forms the full review of the hand lexer left open", () => {
       }
       found(work, tx([{ command: 'N="$(cat <<EOF\nthe owner\'s first task\nEOF)"\n' + C }]), "an EOF) line");
     }));
-});
 
+  test("assignments in one command take effect left to right, and a command's own assignments reach only that command", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      refused(work, tx([{ command: C }, { command: "R=" + RUN + " F=$R/run.json; sed -i 's/a/b/' \"$F\"" }]), "a bare assignment line");
+      refused(work, tx([{ command: C }, { command: "R=" + RUN + " F=$R/run.json bash -c 'sed -i s/a/b/ \"$F\"'" }]), "assignments on a child shell's command");
+      found(work, tx([{ command: C }, { command: "R=" + RUN + " F=$R/run.json true; sed -i 's/a/b/' \"$F\"" }]), "a command's assignments end with it");
+    }));
+
+  test("a positional parameter built from a substitution is not spelled out", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, MAIN, pending(MAIN));
+      const arg = ".gstack/tmp/autoplan/main-$(date +%Y%m%d-%H%M%S)";
+      for (const [name, command] of [
+        ["$1", "cd /work/app; run_plan() { " + BIN + ' next --out "$1" --plan "$PWD/plan.md" --full; }; run_plan ' + arg],
+        ['"$@"', "cd /work/app; run_plan() { " + BIN + ' next "$@" --full; }; run_plan --out ' + arg + " --plan plan.md"],
+        ["bash -c with arguments", "cd /work/app; bash -c '" + BIN + ' next --out "$1" --plan /work/app/plan.md --full' + "' sh " + arg],
+      ] as const) found(work, txt([{ command, at: AT, done: DONE }]), name, MAIN);
+    }));
+
+  test("a function defined in eval or a child shell reads its own source when called", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      const pad = "echo " + "x".repeat(400) + "; ";
+      const edit = "edit() { python3 <<'PY'\nopen('" + RUN + "/run.json', 'w').write('{}')\nPY\n}";
+      refused(work, tx([{ command: C }, { command: pad + 'eval "' + edit + '"; edit' }]), "defined in eval, called after it");
+      refused(work, tx([{ command: C }, { command: pad + "bash -c \"" + edit + "; " + pad + "edit\"" }]), "defined and called in a child shell after padding");
+    }));
+});

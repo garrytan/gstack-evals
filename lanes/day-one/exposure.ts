@@ -231,8 +231,8 @@ const SANDBOX_ENV: [string, string][] = [
 interface Ctx {
   cwd: string;
   env: Map<string, Field>;
-  funcs: Map<string, any>;
-  args: string[];
+  funcs: Map<string, (c: Ctx) => void>;
+  args: Field[];
   stack: string[];
   depth: number;
 }
@@ -282,7 +282,7 @@ export function commandLog(transcript: string): CommandLog {
         subs(p, c);
         return { t: "", known: false };
       }
-      const v: Field | undefined = /^[1-9]\d*$/.test(name) ? (c.args[Number(name) - 1] === undefined ? undefined : { t: c.args[Number(name) - 1]!, known: true }) : name === "@" || name === "*" ? { t: c.args.join(" "), known: true } : name === "#" ? { t: String(c.args.length), known: true } : /^[A-Za-z_]\w*$/.test(name) ? c.env.get(name) : undefined;
+      const v: Field | undefined = /^[1-9]\d*$/.test(name) ? c.args[Number(name) - 1] : name === "@" || name === "*" ? { t: c.args.map((a) => a.t).join(" "), known: c.args.every((a) => a.known) } : name === "#" ? { t: String(c.args.length), known: true } : /^[A-Za-z_]\w*$/.test(name) ? c.env.get(name) : undefined;
       if (!p.exp) return v ?? { t: "", known: false };
       if (!DEFAULTS.has(p.exp.op)) {
         subs(p.exp, c);
@@ -319,7 +319,7 @@ export function commandLog(transcript: string): CommandLog {
     };
     const fields = (w: any, c: Ctx): Field[] => {
       const only = w.parts.length === 1 ? (w.parts[0].type === "DblQuoted" && w.parts[0].parts.length === 1 ? w.parts[0].parts[0] : w.parts[0]) : null;
-      if (only?.type === "ParamExp" && only.param?.value === "@" && !only.exp && !only.length && !only.slice && !only.index) return c.args.map((t) => ({ t, known: true }));
+      if (only?.type === "ParamExp" && only.param?.value === "@" && !only.exp && !only.length && !only.slice && !only.index) return [...c.args];
       return [piece(w.parts, c, false, true)];
     };
     const redirect = (r: any, c: Ctx): string | null => {
@@ -336,11 +336,14 @@ export function commandLog(transcript: string): CommandLog {
     const call = (x: any, c: Ctx, stdin: string | null) => {
       if (++steps > STEPS) throw new Unreadable();
       const words = x.args.flatMap((w: any) => fields(w, c)) as Field[];
-      const assigns: [string, Field][] = x.assigns.map((a: any) => [a.name.value, a.value ? piece(a.value.parts, c, false, true) : (subs(a.array, c), { t: "", known: !a.array })]);
-      if (!words.length) {
-        for (const [n, v] of assigns) c.env.set(n, v);
-        return;
+      const own: Ctx = words.length ? { ...c, env: new Map(c.env) } : c;
+      const assigns: [string, Field][] = [];
+      for (const a of x.assigns) {
+        const v: Field = a.value ? piece(a.value.parts, own, false, true) : (subs(a.array, own), { t: "", known: !a.array });
+        own.env.set(a.name.value, v);
+        assigns.push([a.name.value, v]);
       }
+      if (!words.length) return;
       const ws = words.map((w) => w.t);
       const order = ++seq;
       let k = 0;
@@ -374,9 +377,9 @@ export function commandLog(transcript: string): CommandLog {
         if (c.stack.includes(cmd)) return;
         const saved = { args: c.args, depth: c.depth };
         if (++c.depth > DEPTH) throw new Unreadable();
-        c.args = args;
+        c.args = argFields;
         c.stack.push(cmd);
-        scoped(() => stmt(body, c));
+        scoped(() => body(c));
         c.stack.pop();
         Object.assign(c, saved);
         return;
@@ -400,7 +403,7 @@ export function commandLog(transcript: string): CommandLog {
         if (script === undefined || script === null) return;
         const sub = child(c, new Map());
         for (const [n, v] of assigns) sub.env.set(n, v);
-        sub.args = i >= 0 ? args.slice(i + 3) : [];
+        sub.args = i >= 0 ? argFields.slice(i + 3) : [];
         read(script, sub);
       } else if (name === "gstack-autoplan") {
         const flag = (f: string) => {
@@ -437,7 +440,7 @@ export function commandLog(transcript: string): CommandLog {
     const command = (s: any, c: Ctx): void => {
       const x = s.cmd;
       if (x?.type === "FuncDecl") {
-        c.funcs.set(x.name.value, x.body);
+        c.funcs.set(x.name.value, (cc: Ctx) => stmt(x.body, cc));
         return;
       }
       let stdin: string | null = null;
@@ -471,7 +474,7 @@ export function commandLog(transcript: string): CommandLog {
             subs(x.loop, c);
             return list(x.do, c);
           }
-          const items = x.loop.inPos?.line ? x.loop.items.flatMap((w: any) => fields(w, c)) : c.args.map((t) => ({ t, known: true }));
+          const items = x.loop.inPos?.line ? x.loop.items.flatMap((w: any) => fields(w, c)) : [...c.args];
           for (const v of items) {
             c.env.set(x.loop.name.value, v);
             list(x.do, c);
