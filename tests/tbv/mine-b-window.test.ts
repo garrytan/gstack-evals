@@ -49,7 +49,7 @@ function fakeGh(answers: Record<string, unknown>) {
     "if (readFileSync(log, 'utf8').trim().split('\\n').length > 40) { process.stdout.write('{}'); process.exit(3); }",
     "const v = (k) => (args.find((a) => a.startsWith(k + '=')) ?? '').slice(k.length + 1);",
     "const q = v('query');",
-    "const kind = q.includes('node(id:$id)') ? 'runs:' + v('cursor') : q.includes('pullRequest(number:$number)') ? 'pr:' + v('number') : q.includes('pullRequests(first:50,') ? 'stubs:' + v('cursor') : 'full:' + v('cursor');",
+    "const kind = q.includes('node(id:$id)') ? 'runs:' + v('cursor') : q.includes('object(oid:$oid)') ? 'suites:' + v('oid') + ':' + v('cursor') : q.includes('pullRequest(number:$number)') && !q.includes('checkSuites') ? 'prlight:' + v('number') : q.includes('pullRequest(number:$number)') ? 'pr:' + v('number') : q.includes('pullRequests(first:50,') ? 'stubs:' + v('cursor') : 'full:' + v('cursor');",
     "const a = JSON.parse(readFileSync(" + JSON.stringify(join(dir, "answers.json")) + ", 'utf8'))[kind];",
     "process.stdout.write(JSON.stringify(a === undefined ? { errors: [{ type: 'UNEXPECTED', message: kind }] } : a));",
   ].join("\n"));
@@ -62,7 +62,7 @@ function fakeGh(answers: Record<string, unknown>) {
     const p = Bun.spawnSync([process.execPath, "-e", code], { env: { ...process.env, PATH: dir + ":" + (process.env.PATH ?? "") } });
     return JSON.parse(p.stdout.toString().trim().split("\n").at(-1) || "{}");
   };
-  return { calls, out, mine, kinds: () => calls().map((c) => { const q = c.find((a) => a.startsWith("query=")) ?? ""; return q.includes("node(id:$id)") ? "runs" : q.includes("pullRequest(number:$number)") ? "pr" : q.includes("pullRequests(first:50,") ? "stubs" : "full"; }) };
+  return { calls, out, mine, kinds: () => calls().map((c) => { const q = c.find((a) => a.startsWith("query=")) ?? ""; return q.includes("node(id:$id)") ? "runs" : q.includes("object(oid:$oid)") ? "suites" : q.includes("pullRequest(number:$number)") && !q.includes("checkSuites") ? "prlight" : q.includes("pullRequest(number:$number)") ? "pr" : q.includes("pullRequests(first:50,") ? "stubs" : "full"; }) };
 }
 const read = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 
@@ -184,3 +184,56 @@ test("mine-b refuses a repository outside the two source B repositories, a windo
     expect(existsSync(g.out)).toBe(false);
   }
 });
+
+/** A pull request GitHub refuses whole (RESOURCE_LIMITS_EXCEEDED: many commits, each with check runs), its fields without
+ * the commits' check suites, and one commit's suites asked by oid. */
+const refused = { errors: [{ type: "RESOURCE_LIMITS_EXCEEDED", message: "limit" }, { type: "RESOURCE_LIMITS_EXCEEDED", message: "limit" }] };
+const light = (n: number, o: Record<string, unknown> = {}) => {
+  const node = full(n, o) as Record<string, any>;
+  return { data: { repository: { pullRequest: { ...node, commits: { ...node.commits, nodes: node.commits.nodes.map((c: any) => ({ commit: { oid: c.commit.oid, message: c.commit.message, authoredDate: c.commit.authoredDate, committedDate: c.commit.committedDate } })) } } } } };
+};
+const suitesOf = (n: number, k = 1) => ({ data: { repository: { object: { checkSuites: { totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [suite(n, k)] } } } } });
+const WINDOW_FLAGS = ["--repo", "garrytan/gstack", "--merged-after", P, "--merged-before", at(86400)];
+
+test("a pull request GitHub refuses whole with RESOURCE_LIMITS_EXCEEDED comes in pieces, and its record is the one the whole query gives", () => {
+  const whole = fakeGh(WINDOW);
+  expect(whole.mine(WINDOW_FLAGS).rc).toBe(0);
+  const oid = "3".repeat(40);
+  const pieces = fakeGh({ ...WINDOW, "pr:3": refused, "prlight:3": light(3), ["suites:" + oid + ":"]: suitesOf(3) });
+  const r = pieces.mine(WINDOW_FLAGS);
+  expect(r.rc).toBe(0);
+  expect(read(pieces.out)).toEqual(read(whole.out));
+  expect(pieces.kinds()).toEqual(["stubs", "stubs", "pr", "prlight", "suites", "pr"]);
+  const ask = pieces.calls()[4]!;
+  expect(ask).toContain("oid=" + oid);
+  expect(ask.some((a) => a.startsWith("cursor="))).toBe(false);
+  expect(pieces.calls()[3]!.find((a) => a.startsWith("query="))).toContain("commits(first:100){totalCount nodes{commit{oid message authoredDate committedDate}}}");
+});
+
+test("the pieces keep the paging and truncation rules: a suite past 20 runs is paged, and more commits than the first page is a skipped stub", () => {
+  const oid = "3".repeat(40);
+  const paged = fakeGh({ ...WINDOW, "pr:3": refused, "prlight:3": light(3), ["suites:" + oid + ":"]: suitesOf(3, 30), "runs:r3-20": runsPage(3, 30, 20, 30, false) });
+  expect(paged.mine(WINDOW_FLAGS).rc).toBe(0);
+  expect(read(paged.out).prs[0].commits[0].checks.map((c: { name: string }) => c.name)).toEqual(runs(0, 30).map((x) => x.name));
+  const many = light(3);
+  many.data.repository.pullRequest.commits.totalCount = 101;
+  const cut = fakeGh({ ...WINDOW, "pr:3": refused, "prlight:3": many, ["suites:" + oid + ":"]: suitesOf(3) });
+  expect(cut.mine(WINDOW_FLAGS).rc).toBe(0);
+  expect([read(cut.out).prs.map((p: { number: number }) => p.number), read(cut.out).skipped.map((s: { number: number }) => s.number)]).toEqual([[5], [3]]);
+});
+
+test("any other error on a pull request, RESOURCE_LIMITS_EXCEEDED beside another type, or an error on a piece still fails closed", () => {
+  const oid = "3".repeat(40);
+  for (const answers of [
+    { "pr:3": { errors: [{ type: "MAX_NODE_LIMIT_EXCEEDED", message: "nodes" }] } },
+    { "pr:3": { errors: [{ type: "RESOURCE_LIMITS_EXCEEDED", message: "limit" }, { type: "NOT_FOUND", message: "gone" }] } },
+    { "pr:3": refused, "prlight:3": refused },
+    { "pr:3": refused, "prlight:3": light(3), ["suites:" + oid + ":"]: refused },
+    { "pr:3": refused, "prlight:3": { data: { repository: { pullRequest: null } } } },
+  ]) {
+    const g = fakeGh({ ...WINDOW, ...answers });
+    expect(g.mine(WINDOW_FLAGS).code).toBe("E_TBV_INPUT");
+    expect(existsSync(g.out)).toBe(false);
+  }
+});
+

@@ -255,6 +255,10 @@ const STUBS_QUERY = `query($owner:String!,$name:String!,$cursor:String){reposito
  }}}`;
 const PR_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){${NODE}
  }}}`;
+/** PR_QUERY without the commits' check suites, for a pull request GitHub refuses whole with RESOURCE_LIMITS_EXCEEDED (88 and
+ * 129 commits, each with check runs, in this repo's window on 2026-11-21). Each commit's suites then come by SUITES_QUERY,
+ * so the record is the one PR_QUERY gives. */
+const PR_LIGHT_QUERY = PR_QUERY.replace(" checkSuites(first:10){totalCount pageInfo{hasNextPage endCursor} nodes{id " + RUNS + "}}", "");
 
 const FILES_QUERY = `query($owner:String!,$name:String!,$number:Int!,$cursor:String){repository(owner:$owner,name:$name){pullRequest(number:$number){files(first:100,after:$cursor){totalCount pageInfo{hasNextPage endCursor} nodes{path additions deletions}}}}}`;
 const SUITES_QUERY = `query($owner:String!,$name:String!,$oid:GitObjectID!,$cursor:String){repository(owner:$owner,name:$name){object(oid:$oid){... on Commit{checkSuites(first:100,after:$cursor){totalCount pageInfo{hasNextPage endCursor} nodes{id ${RUNS}}}}}}}`;
@@ -263,13 +267,15 @@ const RUNS_QUERY = `query($id:ID!,$cursor:String){node(id:$id){... on CheckSuite
 
 /** One gh api graphql call. A reply that carries an errors array fails closed even when gh exits 0 and data came back, since
  * GitHub's resource limit nulls connections and still returns the page, so mine-b keeps no partial page. */
-function graphql(vars: string[]): any {
+function graphql(vars: string[], piecewise?: () => any): any {
   const p: { exitCode: number; stdout: Buffer; stderr: Buffer } = Bun.spawnSync(["gh", "api", "graphql", ...vars]);
   let body: any = null;
   try {
     body = JSON.parse(p.stdout.toString());
   } catch {}
-  if (Array.isArray(body?.errors) && body.errors.length) fail("E_TBV_INPUT", "gh api graphql answered with " + body.errors.length + " errors (" + [...new Set(body.errors.map((e: any) => e?.type ?? e?.message))].join(", ") + "); mine-b keeps no partial page");
+  const types = Array.isArray(body?.errors) ? body.errors.map((e: any) => e?.type ?? e?.message) : [];
+  if (piecewise && types.length && types.every((t: unknown) => t === "RESOURCE_LIMITS_EXCEEDED")) return piecewise();
+  if (types.length) fail("E_TBV_INPUT", "gh api graphql answered with " + types.length + " errors (" + [...new Set(types)].join(", ") + "); mine-b keeps no partial page");
   if (p.exitCode !== 0) fail("E_TBV_INPUT", "gh api graphql failed: " + p.stderr.toString().slice(0, 300));
   return body?.data;
 }
@@ -368,7 +374,14 @@ export async function run(argv: string[], io: Io): Promise<number> {
     const wanted: number[] = [];
     walkPages(STUBS_QUERY, owner!, name!, (node) => (inWindow(node) ? wanted.push(node.number) : lineage.push(lineageOf(node))));
     for (const n of wanted) {
-      const node = graphql(["-f", "query=" + PR_QUERY, "-f", "owner=" + owner, "-f", "name=" + name, "-F", "number=" + n])?.repository?.pullRequest;
+      const ask = (query: string) => ["-f", "query=" + query, "-f", "owner=" + owner, "-f", "name=" + name, "-F", "number=" + n];
+      const pieces = () => {
+        const pr = graphql(ask(PR_LIGHT_QUERY))?.repository?.pullRequest;
+        const suites = (oid: string) => graphql(["-f", "query=" + SUITES_QUERY, "-f", "owner=" + owner, "-f", "name=" + name, "-f", "oid=" + oid])?.repository?.object?.checkSuites;
+        const commits = pr?.commits && { ...pr.commits, nodes: nodesOf(pr.commits).map((c) => ({ ...c, commit: { ...c.commit, checkSuites: suites(c.commit.oid) } })) };
+        return { repository: { pullRequest: pr && { ...pr, commits } } };
+      };
+      const node = graphql(ask(PR_QUERY), pieces)?.repository?.pullRequest;
       if (!node || node.number !== n) fail("E_TBV_INPUT", "gh api graphql answered with no pull request #" + n + "; rerun mine-b");
       whole(node);
     }
