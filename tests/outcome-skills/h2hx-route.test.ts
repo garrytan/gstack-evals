@@ -91,7 +91,8 @@ describe("h2hx part P route (particle-1 through the proxy to OpenRouter)", () =>
     expect(msg).toHaveLength(2);
     expect(msg[0]!.url).toBe("https://openrouter.ai/api/v1/messages");
     expect(msg[0]!.body!.provider).toMatchObject({ only: ["particle-ai"], allow_fallbacks: false, data_collection: "deny" });
-    const transcript = [a, b].map((r) => JSON.stringify({ type: "assistant", message: { id: r.body.id, content: [] } })).join("\n") + "\n" + JSON.stringify({ type: "user" }) + "\n";
+    const synthetic = JSON.stringify({ type: "assistant", message: { id: "6f1c0d2e-8a4b-4c3d-9e5f-0a1b2c3d4e5f", model: "<synthetic>", content: [{ type: "text", text: "API Error: 402" }] } });
+    const transcript = [a, b].map((r) => JSON.stringify({ type: "assistant", message: { id: r.body.id, content: [] } })).join("\n") + "\n" + JSON.stringify({ type: "user" }) + "\n" + synthetic + "\n";
     expect(answerIds(transcript)).toEqual(["gen-1", "gen-2"]);
     expect(await checkServedBy(answerIds(transcript), t.lookup, t.route)).toEqual({ checked: 2, served_by: ["Particle AI"] });
   });

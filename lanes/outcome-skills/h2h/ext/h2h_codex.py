@@ -31,6 +31,11 @@ records differ.
   last of them with an async question pending, which then gets no reply and counts as unanswered.
 - Ends. A completed exec is a completed turn; a turn.failed event is error_result (an upstream end), with refusal set
   when its error names one of Codex's policy codes; an exec that ends with no turn result is error (infra).
+- Reservation-bound refusals. The metering proxy answers 429 only for E_H2H_RESERVATION_BOUND (an upstream give-up is
+  a 502), and Codex runs with request_max_retries 0, so its turn.failed then names "last status: 429". Such a turn waits
+  the proxy's retry-after (RESERVATION_RETRY_AFTER_S) and resumes the thread with the continuation text, at most
+  RESERVATION_RETRIES times a turn and only while the wall deadline allows; each retry is an exec of kind "retry",
+  counted in the turn's reservation_retries. A 429 past that bound ends the turn by the rule above.
 
 Records under out, beside h2h_turns' own: codex-events.jsonl (every exec's JSONL events, each with its phase and exec
 number), codex-stderr.log, codex-sessions/ (every rollout), codex-config.toml (the config the session ran) and
@@ -42,6 +47,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -60,6 +66,9 @@ ASYNC_QUESTION = "request_user_input_async"
 SYNC_QUESTION = "request_user_input"
 POLICY_CODES = ("cyber_policy", "bio_policy", "misalignment_policy_violation")
 MAX_REPLIES = 20
+RESERVATION_RETRIES = 3
+RESERVATION_RETRY_AFTER_S = 20
+RESERVATION_429 = re.compile(r"last status: 429\b")
 PROVIDER_ID = "h2h_proxy"
 DOCKER_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
 NODE_LINK = '[ -e /usr/local/bin/node ] && exit 0; n=$(command -v node) || exit 0; ln -s "$n" /usr/local/bin/node && echo "linked $n"'
@@ -325,7 +334,7 @@ class CodexTurns(Turns):
         c[key] += n
 
     async def turn(self, phase: str, text: str, resume, slot: dict) -> dict:
-        info = {"phase": phase, "termination": None, "session_id": resume, "num_turns": 0, "results": [], "refusal": False, "final": "", "wall_s": 0.0}
+        info = {"phase": phase, "termination": None, "session_id": resume, "num_turns": 0, "results": [], "refusal": False, "final": "", "wall_s": 0.0, "reservation_retries": 0}
         left = int(self.limits["max_turns"]) - self.summary["turns_used"]
         if left <= 0 or time.time() >= self.deadline:
             info["termination"] = "turn_ceiling" if left <= 0 else "wall_limit"
@@ -344,6 +353,11 @@ class CodexTurns(Turns):
                 if e["killed"]:
                     info["termination"] = e["killed"]
                     break
+                if e["failed"] and RESERVATION_429.search(e["failed"]) and info["reservation_retries"] < RESERVATION_RETRIES and time.time() + RESERVATION_RETRY_AFTER_S < self.deadline:
+                    info["reservation_retries"] += 1
+                    await asyncio.sleep(RESERVATION_RETRY_AFTER_S)
+                    message, kind = (self.cfg["continuation"], "retry") if self.thread else (message, kind)
+                    continue
                 if e["failed"]:
                     info["termination"] = "error_result"
                     info["refusal"] = any(c in e["failed"] for c in POLICY_CODES)

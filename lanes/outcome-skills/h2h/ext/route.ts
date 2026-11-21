@@ -73,18 +73,23 @@ export function extLimits(part: Part, allowanceUsd?: number, x: ExtPrereg = read
   return { session_cap_usd: cap, wall_limit_sec: l.wall_sec, max_turns: l.max_turns };
 }
 
-/** The answer ids of a Claude Code session, in order, from its SDK message log (assistant messages' message.id). */
+/** The model Claude Code names on the assistant messages it writes itself rather than receives. */
+export const SYNTHETIC_MODEL = "<synthetic>";
+
+/** The answer ids of a Claude Code session, in order, from its SDK message log (assistant messages' message.id). A message
+ * Claude Code writes itself (model "<synthetic>", such as the API error after an allowance stop) has no generation record
+ * and is left out. */
 export function answerIds(transcript: string): string[] {
   const ids: string[] = [];
   for (const line of transcript.split("\n")) {
     if (!line.trim()) continue;
-    let m: { type?: string; message?: { id?: unknown } };
+    let m: { type?: string; message?: { id?: unknown; model?: unknown } };
     try {
       m = JSON.parse(line);
     } catch {
       continue;
     }
-    const id = m.type === "assistant" ? m.message?.id : undefined;
+    const id = m.type === "assistant" && m.message?.model !== SYNTHETIC_MODEL ? m.message?.id : undefined;
     if (typeof id === "string" && !ids.includes(id)) ids.push(id);
   }
   return ids;

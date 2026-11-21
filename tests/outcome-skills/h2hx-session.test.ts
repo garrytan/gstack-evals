@@ -321,7 +321,7 @@ const PY = process.env.REAL_OUTCOME_PYTHON ?? join(homedir(), ".capy/work/real/v
 test.skipIf(!existsSync(PY))("h2h_turns.py reads every answer's generation record through the slot before it closes, sub-agents' included", async () => {
   const d = mkdtempSync(join(W, "gen-"));
   put(join(d, "home"), {
-    ".claude/projects/p/s1.jsonl": [{ type: "assistant", message: { id: "gen-1" } }, { type: "user" }, { type: "assistant", message: { id: "gen-1" } }].map((x) => JSON.stringify(x)).join("\n") + "\n",
+    ".claude/projects/p/s1.jsonl": [{ type: "assistant", message: { id: "gen-1" } }, { type: "user" }, { type: "assistant", message: { id: "gen-1" } }, { type: "assistant", message: { id: "synth-1", model: "<synthetic>" } }].map((x) => JSON.stringify(x)).join("\n") + "\n",
     ".claude/projects/p/s1/subagents/a.jsonl": JSON.stringify({ type: "assistant", message: { id: "gen-2" } }) + "\n",
   });
   const seen: string[] = [];
@@ -353,4 +353,5 @@ test.skipIf(!existsSync(PY))("h2h_turns.py reads every answer's generation recor
   expect(rows.map((r) => [r.id, r.status])).toEqual([["gen-1", 200], ["gen-2", 404]]);
   expect(seen.filter((s) => s.includes("gen-2")).length).toBe(5);
   expect(seen[0]).toBe("/slot1/openrouter/v1/generation?id=gen-1 Bearer slot-token");
+  expect(seen.some((s) => s.includes("synth-1"))).toBe(false);
 });

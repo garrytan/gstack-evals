@@ -291,7 +291,10 @@ class Turns(PfSession):
                     break
         finally:
             if cfg.get("generations"):
-                self.generations(slot)
+                try:
+                    self.generations(slot)
+                except Exception as e:
+                    self.summary["generations_error"] = f"{type(e).__name__}: {e}"[:300]
             out["slot"]["close"] = self.slots.close(slot, "agent_finished")
         try:
             self.step("tree", (), TREE_TAR, repo, work)
@@ -305,7 +308,9 @@ class Turns(PfSession):
         """Part P (the config's generations key): before the slot closes, reads each answer's OpenRouter generation record by
         its id (an assistant message id in the home's Claude Code session logs, sub-agents' included) through the slot's free
         generation route, and writes one line per id to generations.jsonl for ext/session.ts's served-by check. A record not
-        found yet is asked again up to GEN_TRIES times; whatever was read last is written, and nothing here stops the close."""
+        found yet is asked again up to GEN_TRIES times; whatever was read last is written, and nothing here stops the close
+        (run() records any error in the summary as generations_error). A message Claude Code wrote itself (model
+        "<synthetic>") has no generation record and is skipped."""
         ids = []
         try:
             text = self.sh('find "$1"/.claude/projects -name "*.jsonl" -exec cat {} + 2>/dev/null', self.cfg["home"]).stdout.decode(errors="replace")
@@ -317,7 +322,7 @@ class Turns(PfSession):
                 m = json.loads(line)
             except ValueError:
                 continue
-            i = (m.get("message") or {}).get("id") if isinstance(m, dict) and m.get("type") == "assistant" and isinstance(m.get("message"), dict) else None
+            i = m["message"].get("id") if isinstance(m, dict) and m.get("type") == "assistant" and isinstance(m.get("message"), dict) and m["message"].get("model") != "<synthetic>" else None
             if isinstance(i, str) and i not in ids:
                 ids.append(i)
         with (self.out / "generations.jsonl").open("w") as f:

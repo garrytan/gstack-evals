@@ -10,6 +10,7 @@
 //   ask         request_user_input_async with one question, then DONE after the reply
 //   asksync     request_user_input with one question, then DONE after Codex's own answer
 //   fail        response.failed with error code cyber_policy
+//   bound       the metering proxy's 429 E_H2H_RESERVATION_BOUND refusal, then DONE after the next user message
 //   hang        no answer until the client goes away
 //   cmd:<sh>    a code-mode exec cell that runs <sh> through tools.exec_command, then DONE (the rest of the message's
 //               first line after the tag is the command)
@@ -21,6 +22,7 @@
 // bun stub-responses.ts [--port N]; it prints "stub-responses listening <port>" when ready.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { problem, RESERVATION_RETRY_AFTER_S } from "../../../../src/runner/proxy/metering-proxy";
 
 const arg = (k: string) => (process.argv.includes(k) ? process.argv[process.argv.indexOf(k) + 1] : undefined);
 const dir = process.env.LOG_DIR;
@@ -40,7 +42,7 @@ const textOf = (i: any): string => (Array.isArray(i?.content) ? i.content.map((c
 const isUser = (i: any) => i?.type === "message" && i.role === "user" && !textOf(i).startsWith("<environment_context>") && !textOf(i).startsWith("<skill>");
 
 /** The script's next output item for one request body, or null for hang. */
-export function next(body: any): Item | Item[] | "fail" | null {
+export function next(body: any): Item | Item[] | "fail" | "bound" | null {
   const input: any[] = Array.isArray(body?.input) ? body.input : [];
   const users = input.map((x, i) => [x, i] as const).filter(([x]) => isUser(x));
   const last = users.at(-1);
@@ -53,6 +55,7 @@ export function next(body: any): Item | Item[] | "fail" | null {
   if (script === "nodone") return message("Still working on it.");
   if (script === "hang") return null;
   if (script === "fail") return reply ? message("Fixed.\nDONE") : "fail";
+  if (script === "bound") return reply ? message("Fixed.\nDONE") : "bound";
   const arg = (m?.[2] ?? "").trim();
   if (script === "tdd" && !reply && steps < 3) {
     const [test, src] = arg.split("|");
@@ -92,6 +95,7 @@ if (import.meta.main) {
         return new Response(null, { status: 499 });
       }
       if (item === "fail") return sse([{ type: "response.created", response: { id } }, { type: "response.failed", response: { id, status: "failed", error: { code: "cyber_policy", message: "This request was flagged under cyber_policy." }, usage } }]);
+      if (item === "bound") return problem("E_H2H_RESERVATION_BOUND", 429, "only calls still in flight fill the slot's allowance; retry once one settles", "rate_limit_error", { "retry-after": String(RESERVATION_RETRY_AFTER_S), "x-should-retry": "true" });
       const items = Array.isArray(item) ? item : [item];
       return sse([{ type: "response.created", response: { id } }, ...items.map((it, i) => ({ type: "response.output_item.done", output_index: i, item: it })), { type: "response.completed", response: { id, status: "completed", usage } }]);
     },
