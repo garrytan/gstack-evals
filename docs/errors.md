@@ -455,6 +455,13 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CODEX_C_NO_ROLLOUT](#e_codex_c_no_rollout) | 2 | U20 |
 | [E_CODEX_C_NO_RESPONSE](#e_codex_c_no_response) | 2 | U20 |
 | [E_CODEX_C_DRIFT](#e_codex_c_drift) | 2 | U20 |
+| [E_CH_C_STATES](#e_ch_c_states) | 2 | U20 |
+| [E_CH_C_BLIND](#e_ch_c_blind) | 2 | U20 |
+| [E_CH_C_REPLY](#e_ch_c_reply) | 2 | U20 |
+| [E_CH_C_FROZEN](#e_ch_c_frozen) | 2 | U20 |
+| [E_CH_C_CHECK](#e_ch_c_check) | 2 | U20 |
+| [E_CH_C_NO_RECORD](#e_ch_c_no_record) | 2 | U20 |
+| [E_CH_C_JUDGE_GAP](#e_ch_c_judge_gap) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3531,6 +3538,62 @@ Codex hooks eval part C (prereg section 2, pre-run change 1 section 10): the ses
 Fix: Read the row's reasons in outcomes.jsonl. Rerun once with codex-hooks c rerun only when the image and the codex-arms file are the frozen ones; if the record still drifts, take the rows to the Captain before any further spend.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_STATES
+
+Codex hooks eval, part C analysis: the states file breaks the record contract in lanes/codex-hooks/c/analysis/record.ts. A line is not JSON, names a unit or arm the run does not cover, disagrees with its session's other line, or has findings the review parser would not give; or the judgments name a state the states file does not have.
+
+Fix: Read the listed lines, fix the rig's writer and write the states file again. Judge and score the same states file.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_BLIND
+
+Codex hooks eval, part C judging: a batch would break blinding or its binding. A packet would name an arm, a state or the contract's hold; the key would sit inside the batch; the batch directory or key already exists; or a key, packet or batch.json changed since the batch was written, or was built from another states file.
+
+Fix: For a leak, the Captain decides how the text is masked. Otherwise write the batch again into a new directory with a new key path, from the states file the run scores.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_REPLY
+
+Codex hooks eval, part C judging: a judge reply file does not fit its batch. It names another batch or digest, answers a packet twice, leaves items the join needs unanswered, answers items it should not, or a second or third read comes from a judge that already read.
+
+Fix: Use the reply files the run wrote for this batch. Never edit a reply by hand; judge again into a fresh directory if a file is lost.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_FROZEN
+
+Codex hooks eval, part C analysis: a frozen input does not match the preregistration. The suite, #108's judge brief or R2's severity map hashes to another digest, or a contrast has more clusters than the frozen sign-flip limit.
+
+Fix: Restore the file from main at the digest the preregistration names. A real change goes through a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_CHECK
+
+Codex hooks eval, part C judging: the judge check or confirmation check cannot be read as asked. Gold labels need two replies from two labellers, or the route that passed is not the route judged.json was judged on.
+
+Fix: Run the gold step once for the batch so both labellers' replies exist, and analyze the judgments of the route that passed both checks.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_NO_RECORD
+
+Codex hooks eval, part C analysis: an arm, unit and pass the run covers has no line in the states file. The analysis counts it as a session not scored, and more than 7 of an arm's 66 make that arm INCOMPLETE.
+
+Fix: Nothing to retry in the analysis. The rig's record says why the session is missing.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CH_C_JUDGE_GAP
+
+Codex hooks eval, part C analysis: a judge refused a state's packet twice (extraction or the primary's matching), so the state has no judgment. The analysis counts its session as not scored, toward the rule that more than 7 of an arm's 66 make that arm INCOMPLETE.
+
+Fix: Nothing to retry: the run's one retry was spent. The unjudged.json beside the replies names the packet and the reason.
+
+Exit 2. Side effects: The run finished and its spend is settled in the ledger. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
