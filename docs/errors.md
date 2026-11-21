@@ -458,6 +458,11 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_DROP_INSTALL_DEP](#e_cso_drop_install_dep) | 2 | U20 |
 | [E_CSO_RELEASE](#e_cso_release) | 2 | U20 |
 | [E_CSO_SCORE_INPUT](#e_cso_score_input) | 2 | U20 |
+| [E_CSO_JUDGE_ROUTE](#e_cso_judge_route) | 2 | U20 |
+| [E_CSO_JUDGE_TRANSPORT](#e_cso_judge_transport) | 2 | U20 |
+| [E_CSO_PACKET](#e_cso_packet) | 2 | U20 |
+| [E_CSO_CHECK_INPUT](#e_cso_check_input) | 2 | U20 |
+| [E_CSO_ANCHOR](#e_cso_anchor) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3556,6 +3561,46 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 The /cso eval scorer was handed input it can't score: prereg.json lacks a scoring constant or its redaction list is malformed, a session was scored against another unit, a session with assistant text came with no judge result, or the labels don't match the counted findings one for one.
 
 Fix: Score each session against its own unit record and its own pass A and pass B results; never fill a missing label by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_JUDGE_ROUTE
+
+A /cso eval judge or labeller route names a model with no client, a price row that is missing or not pinned to google-vertex, or a gold pair that is not two labellers.
+
+Fix: Judge routes come from prereg.json judge.production, gold_labellers and fallback through JUDGE_MODELS (lanes/outcome-skills/cso/judge/client.ts); add a model there only with a dated plan change.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_JUDGE_TRANSPORT
+
+A /cso eval judge or labeller call came back with an HTTP status other than 200 from its transport, so it has no reply to parse.
+
+Fix: Read the metering proxy's log for that call. A malformed reply is retried once and then is a judge gap; a transport failure is the run driver's to retry or stop.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_PACKET
+
+A /cso eval pass B packet could not be built: prereg.json lacks scoring.excerpt_lines or judge.max_input_tokens.
+
+Fix: prereg.json changes only through a dated pre-data change post.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_CHECK_INPUT
+
+A /cso eval judge check set is malformed: a report id is listed twice, or anchors are more than anchor_share_max of the check set as sent.
+
+Fix: Build the check set once from the stage 0 and stage 1 reports and at most the anchors the share cap allows.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ANCHOR
+
+A /cso eval anchor or format variant can't be written for a unit: no pre-fix hunk lies in a file of the audited tree, no weakness family is free of the advisory's CWE ids, or no line of the fix file sits 30 lines from every hunk.
+
+Fix: Use another stage 1 unit for the format variants, in check_seed order, and record the unit that couldn't host one.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
