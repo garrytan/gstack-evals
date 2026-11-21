@@ -17,6 +17,7 @@ Do gstack's routing hook and its /review contract help GPT-6.1 Sol in Codex CLI,
 | r/plans.ts, r/money.ts | The items and their parts on L1's host and part machinery; the approval, done mark, launch guard, one rerun and the dry run |
 | r/detect.ts | The load detector (section 4.5) on a session's copied rollouts, what the session's own hook log named, and section 4.6's reasons and split; tested on stub-driven sessions real Codex 0.170 wrote (tests/codex-hooks/r/fixtures) |
 | r/table.ts | One row per session: outcome by section 4.7, cost, tokens, wall time, questions, safety stops, the root thread's model and Codex version from its rollout, the loads, destructive-check denies, r-none's read audit, and whether an allowance stop was a refused reservation or spend reaching $5 |
+| r/smoke.sh, r/fake-responses.ts | The keyless end-to-end smoke: a fake Responses upstream, the metering proxy with a scratch ledger, Harbor, the Codex agent and Codex 0.170 in a real SWE-rebench task image, the verifier, then the session table |
 | r/report.ts | The reading (section 4.8) with section 1's routing decision, and the pilot readout (section 9), which gives no load rate |
 | r/cli.ts | `gstack-evals codex-hooks r <command>` |
 
@@ -35,6 +36,7 @@ bun lanes/codex-hooks/cli.ts r dry-run                          # one lease per 
 bun lanes/codex-hooks/cli.ts r table <config.json> <out.jsonl>
 bun lanes/codex-hooks/cli.ts r report <table.jsonl> --item r-pilot [--hand <tsv>]   # the pilot readout; --hand: trial, prove_it, verify (yes or no)
 bun lanes/codex-hooks/cli.ts r report <table.jsonl> --item r-main     # the reading and the decision
+WORK=<dir r prepare made> [TASK=<task>] [ARM=r-on] lanes/codex-hooks/r/smoke.sh   # one session end to end, no key
 ```
 
 Paid, on L1's host and part machinery, each after the Captain records the item's cap:
