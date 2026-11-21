@@ -97,6 +97,7 @@ export function scanIds(rootIn: string, units: readonly UnitIds[]): IdScan {
       level = next;
     }
   } finally {
+    spawnSync("chmod", ["-R", "u+rwX", scratch]);
     rmSync(scratch, { recursive: true, force: true });
   }
   const seen = new Set<string>();
