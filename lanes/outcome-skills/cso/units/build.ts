@@ -13,7 +13,7 @@ import { ECOSYSTEM_LANG, fileClass } from "../../h2h/breadth/frame.ts";
 import { homeEntries, treeSha256 } from "../../h2h/arms/hash.ts";
 import { classify, type Lang } from "../../statemachines/langs.ts";
 import type { ReasonCode } from "../../../../src/errors/codes.ts";
-import { csoFail, type CsoPrereg } from "../prereg.ts";
+import { CsoError, csoFail, type CsoPrereg } from "../prereg.ts";
 import type { KnownOpenAdvisory, PreFixHunk, UnitRecord } from "../types.ts";
 import { cveIds, cweFamilies, cweIds, type AdvisoryJson, type Candidate, type RepoAdvisories } from "./advisory.ts";
 import { NAMED_DROPS } from "./deps.ts";
@@ -63,6 +63,33 @@ export function fetchUnit(work: string, repo: string, fix: string, parent: strin
   const first = bare(dir, ["rev-parse", "--verify", "-q", fix + "^1"]).stdout.trim();
   if (first !== parent) return { why: "the fix's first parent is " + (first || "none") + ", not the frame's " + parent };
   return { dir };
+}
+
+/** Section 3's session tree from the blobless clone, with gate 2's named repair: a checkout whose lazy blob fetch fails
+ *  re-clones that one repository in full once and checks out again; a second failure is the fetch gate's drop
+ *  (E_CSO_DROP_FETCH_LAZY). Any other failure still refuses. */
+export function checkoutTree(work: string, repo: string, fix: string, parent: string, out: string, remote: (repo: string) => string = githubRemote): { tree: ReturnType<typeof sessionTree>; refetched: boolean } | { why: string } {
+  const dir = join(work, "git", repo.replace("/", "__") + ".git");
+  const checkout = (): ReturnType<typeof sessionTree> | string => {
+    try {
+      return sessionTree(dir, parent, out);
+    } catch (e) {
+      if (e instanceof CsoError && e.message.includes("checking out " + parent)) return e.message;
+      throw e;
+    }
+  };
+  const first = checkout();
+  if (typeof first !== "string") return { tree: first, refetched: false };
+  rmSync(out, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  bare(dir, ["init", "-q", "--bare"]);
+  bare(dir, ["remote", "add", "origin", remote(repo)]);
+  const f = bare(dir, ["fetch", "-q", "origin", fix]);
+  const again = f.status === 0 ? checkout() : "the full fetch of " + fix + " failed: " + f.stderr.trim().slice(-200);
+  if (typeof again !== "string") return { tree: again, refetched: true };
+  rmSync(out, { recursive: true, force: true });
+  return { why: "the checkout of " + parent + " failed in the blobless clone (" + first.slice(-160) + ") and again after a full re-clone (" + again.slice(-160) + ")" };
 }
 
 /** Gate 1's reading: the fix commit's committer date, UTC, as YYYY-MM-DD. */
@@ -213,7 +240,7 @@ export function buildUnits(inputs: readonly UnitInput[], o: BuildOptions): Build
   for (const { c, advisory } of inputs) {
     if (res.filled >= o.need) break;
     const base = { unit: c.unit, part: c.part, index: c.index };
-    const drop = (gate: CsoGate | "install_id" | "install_dep", reason: string) => void res.gates.push({ ...base, usable: false, gate, code: GATE_CODES[gate], reason: GATE_CODES[gate] + " " + reason });
+    const drop = (gate: CsoGate | "install_id" | "install_dep", reason: string, code: ReasonCode = GATE_CODES[gate]) => void res.gates.push({ ...base, usable: false, gate, code, reason: code + " " + reason });
     if (idDrop.has(c.unit)) { drop("install_id", "an arm's installed gstack tree names this unit's id (deviation (a))"); continue; }
     if (named.has(c.unit)) { drop("install_dep", "named drop: " + named.get(c.unit)); continue; }
     if (depDrop.has(c.unit)) { drop("install_dep", "an arm's installed gstack tree holds the affected package at or past its fix (deviation (c))"); continue; }
@@ -231,7 +258,9 @@ export function buildUnits(inputs: readonly UnitInput[], o: BuildOptions): Build
     const key = answerKey(dir, fix.parent, fix.commit, langs);
     if (!key.code_files.length) { drop("answer_key", key.fix_files.length ? "the fix's source changes at the parent are only whitespace, blank lines or comments" : "no non-test source file of the fix exists at the parent"); continue; }
     const out = join(work, "trees", c.unit);
-    const t = sessionTree(dir, fix.parent, out);
+    const co = checkoutTree(work, c.row.repo, fix.commit, fix.parent, out, o.remote);
+    if ("why" in co) { drop("fetch", co.why, "E_CSO_DROP_FETCH_LAZY"); continue; }
+    const t = co.tree;
     const scan = scanIds(out, [{ unit: c.unit, ghsa: c.row.ghsa, cves: cveIds(advisory), fix_commit: fix.commit }]);
     if (scan.hits.length) { drop("containment", "the session tree holds " + scan.hits.map((h) => h.needle + " at " + h.where + " " + h.path).slice(0, 5).join(", ")); rmSync(out, { recursive: true, force: true }); continue; }
     fixes.add(fix.commit);

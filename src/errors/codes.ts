@@ -3878,6 +3878,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CSO_DROP_FETCH_LAZY: {
+    exit: 2,
+    meaning: "Section 3, gate 2's named repair: the session tree's checkout failed in the blobless clone (a lazy blob fetch from the promisor remote), and failed again after one full re-clone of that repository. The unit is not usable and takes no position.",
+    fix: "None for the unit. The build records the drop and goes on; read both failures in the gate row's reason.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_CSO_DROP_FETCH: {
     exit: 2,
     meaning: "Section 3, gate 2: the repository did not clone, or the fix commit or its first parent is missing from it, or the frame's parent is not the fix's first parent. The unit is not usable and takes no position.",
