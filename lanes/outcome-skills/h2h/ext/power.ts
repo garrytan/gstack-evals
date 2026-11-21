@@ -8,7 +8,7 @@ import { mdd, POWER, pyRound } from "../analysis/power.ts";
 
 /** Section 13's rows: part, class and n, with the family size whose strictest Holm step it reads. */
 export const POWER_ROWS: readonly { label: string; n: number; m: number }[] = [
-  { label: "S, O, 100", n: 100, m: 10 }, { label: "S, B, 60", n: 60, m: 10 }, { label: "P, O, 100", n: 100, m: 12 }, { label: "P, B, 60", n: 60, m: 12 }, { label: "L, 100", n: 100, m: 3 },
+  { label: "S, O, 100", n: 100, m: 10 }, { label: "S, B, 60", n: 60, m: 10 }, { label: "P, O, 100", n: 100, m: 12 }, { label: "P, B, 60", n: 60, m: 12 }, { label: "L, 100", n: 100, m: 3 }, { label: "L, 80", n: 80, m: 3 },
 ];
 export const NO_HARM_ROWS: readonly [number, number][] = [[100, 0.2], [100, 0.3], [100, 0.5], [60, 0.2]];
 

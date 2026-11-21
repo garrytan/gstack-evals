@@ -9,11 +9,11 @@ captain: GEVA-2
 date: 2026-11-21
 status: open
 attachments:
-  - 1ba3a9f1a8eb83b77b514c3b963b5ddbd08a8f621791c462578f76e622302c70  l-frame.json
-  - b6719ee436a7d9cb713bcea854822ba1cc928ff556cbfe842e7b8dbcf5d29187  l-order.json
-  - 1e7437d2fc2afde9bdbe003ee4db25559e3d456c38a0b0e9c5bd37a9fc8040c8  power.py
-  - d5ef78edcf31880656f54de9427c3cc8c814951412b9d5c2a9521dcd951a368d  power.txt
-  - ae468c8183aacf0b65b5b6e4d23dafaf3d0c0d59bdaa2430a3f7ab0581505eda  prereg.json
+  - 8978da75ed9c7bcd6b2cbdf2c323c98a083fb543a08a8bfcde732d631ab86163  l-frame.json
+  - 5817453ebe0f4c873e882e355b8d97ff7fd6169f09a181143a34a339bcb5939d  l-order.json
+  - e99460ee1a64b33241b180fcf436a211b7db56371d29f7de0eb45ee0e1ecbcde  power.py
+  - 30c33a0251195ab430d7ff11228337bd06c975724efe0be8bde2e75fe2749933  power.txt
+  - def0b02ba1665813bd20844fe7d4e4a857fc467a4079d24f5f70be4e6194965a  prereg.json
   - a06a4ac09b102c2b659e04a9d95b8f6924f23ee2a6e3007637fce22e3a82b2c6  su-units.json
 links:
   - 2026-11-15-geva-538-skill-pack-h2h-prereg
@@ -157,13 +157,13 @@ agent-skills' Codex docs say to invoke a skill with @ or by naming it; Codex 0.1
 
 **Part L** uses fresh units: none of them is among the 100 O units the head-to-head counted. Three pools, all through the base plan's gates (exclusion list, permissive licence list with its second read, told-mode screen, feature screen, oracle with 3 base and 3 fixed runs, containment over every Part L home):
 
-1. The MultiLang units that passed every gate in the head-to-head's walk and never ran there: its 10 reserves (positions 112 to 119, 121 and 122) and the 8 bug units that passed between stage 0's bug unit (position 123) and its feature unit (position 132). Its 12 stage 1 units and 2 stage 0 units are left out: they ran gstack with the sentence on Opus, and the stage 1 results have been opened. The head-to-head's draw and gate files were lost with its runner; its custody log names 5 of the reserves (cc65__cc65-2791, google__starlark-go-599, react-hook-form__react-hook-form-12990, TecharoHQ__anubis-881, jhlywa__chess.js-546). The other 13 come from the walk logs kept on that run's holding VM, read before Part L's walk; if those logs don't name them, pool 1 is the 5 named units. Pool 1's images and walk records were destroyed with the runner, so each pool 1 unit is rebuilt and passes the oracle (3 and 3) and containment again, as parts S and P's units do.
+1. The MultiLang units that passed every gate in the head-to-head's walk and never ran there: its 10 reserves (positions 112 to 119, 121 and 122) and the 8 bug units that passed between stage 0's bug unit (position 123) and its feature unit (position 132). Its 12 stage 1 units and 2 stage 0 units are left out: they ran gstack with the sentence on Opus, and the stage 1 results have been opened. The head-to-head's draw and gate files were lost with its runner; its custody log names 5 of the reserves (cc65__cc65-2791, google__starlark-go-599, react-hook-form__react-hook-form-12990, TecharoHQ__anubis-881, jhlywa__chess.js-546). The other 13 were sought in that run's walk logs, copied from its holding VM on 2026-11-21 (manifest sha256 174b8d5be8ec5016ef7377b86e2c2af8ce0f7dc85e996bd90ed823ef30f6e31f; o-walk.out sha256 begins aabe271e). The log gives only counts per draw line, which fix one more unit (apache__lucene-14932, position 128, the only row its line covers) and narrow the other 12 to seven windows of 2 to 12 candidate rows, with no line naming a unit. So, by the rule frozen here and the Captain's ruling, pool 1 is these 6 units; l-frame.json lists the 12 windows as candidates that are never walked. Pool 1's images and walk records were destroyed with the runner, so each pool 1 unit is rebuilt and passes the oracle (3 and 3) and containment again, as parts S and P's units do.
 2. The 56 MultiLang rows the walk skipped only because their repository already had 3 units, walked through the same gates. They come from 8 repositories, so Part L's cap of 3 holds pool 2 to at most 22 units.
 3. The SWE-rebench leaderboard tasks in this repository's pinned pool (quick/laneb/tasks/swerebench-r3a4.json) created 2026-03 to 2026-05, 110 tasks, converted by the state machines harness's SWE-rebench part from their Harbor packages, with the object-level check of section 3. The state machines eval already ran 29 of them through its oracle and kept 24; those verdicts are reused read-only.
 
 At most 3 units a repository within Part L. One seeded order over the union (a new draw seed minted from random bytes before any draw and recorded in prereg.json), newest month first, then seeded within a month. Positions count only units that pass every gate. Part L's pilot is stratified so the SWE-rebench path is tried: the first 4 positions from pools 1 and 2 and the first 2 from pool 3 form the pilot and leave the order. Of the rest, positions 1 to 100 are the counted units (n = 100) and 101 to 105 are reserves used only to replace a unit that drops before any model run. If fewer than 111 units pass, the counted units are whatever is left after the pilot and the reserves, the MDDs are restated, and if that is under 60, Part L is reported as underpowered, its readings are descriptive, and nothing ships on it. Strata reported: pool, language (Python is new here), bug or feature, and created July 2026 or later (none of the SWE-rebench pool is).
 
-Planning supply: pool 1 gives 5 to 18; the head-to-head's walk kept about 1 in 4.5 resolved rows and the cap allows at most 22, so pool 2 gives about 12; the state machines eval kept 24 of 29 SWE-rebench tasks, and after the licence, exclusion and told-mode screens pool 3 may give 60 to 80. About 77 to 110 in all, so n = 100 is possible but not certain; the restated MDDs cover a shortfall, and under 60 counted units Part L is descriptive only.
+Planning supply: pool 1 gives at most 6; the head-to-head's walk kept about 1 in 4.5 resolved rows and the cap allows at most 22, so pool 2 gives about 12; the state machines eval kept 24 of 29 SWE-rebench tasks, and after the licence, exclusion and told-mode screens pool 3 may give 60 to 80. About 78 to 98 in all, so n = 100 is unlikely and the counted units will probably number somewhat under 100; section 13 gives the MDD at n = 80 as well as 100, and under 60 counted units Part L is descriptive only.
 
 The halves for the interim look (section 11) and every run order come from a run-order seed (order_seed, minted the same way), never from the draw order, so each half mixes pools.
 
@@ -263,6 +263,7 @@ From the base plan's power function (exact McNemar, 80% power, design effect 1.2
 | P, O, 100 | 0.05/12 | 18 | 22 | 26 |
 | P, B, 60 | 0.05/12 | none fits | 28 | 33 |
 | L, 100 | 0.05/3 | 16 | 20 | 23 |
+| L, 80 | 0.05/3 | 18 | 22 | 25 |
 
 In the head-to-head, gstack and no pack disagreed on only about 10% of units, where no MDD fits; then the 95% interval is the reading, and it was about 7 points either side on O. The tests-added co-primary has far more room: the head-to-head's gstack changed a test file in 79 of 100 sessions and the task-text sentence arm in 28, a discordant share near 0.5, so a drop of 20 points or more is detectable at n = 100. The no-harm criteria (2) and (3) pass with probability about 0.85, 0.50 and 0.15 at true differences of 0, -5 and -10 points when 20% of units disagree, 0.80, 0.50 and 0.20 at 30%, and 0.74, 0.50 and 0.26 at 50% (normal approximation, n = 100, design effect 1.2; at n = 60, 0.79, 0.50 and 0.21 at 20%). The line ratio's spread in the head-to-head (log standard deviation 0.74 on 53 units) puts a 30% difference within reach at about 50 units both arms fix.
 

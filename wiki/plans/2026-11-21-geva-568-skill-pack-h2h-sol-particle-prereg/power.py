@@ -44,7 +44,7 @@ def no_harm(n, d, true, deff=1.2, floor=-0.05, z=1.959964):
 
 fmt = lambda x: "none fits" if x is None else str(round(100 * x))
 print("part, class, n | strictest Holm step | MDD at discordant 0.2 | 0.3 | 0.4")
-for label, n, m in (("S, O, 100", 100, 10), ("S, B, 60", 60, 10), ("P, O, 100", 100, 12), ("P, B, 60", 60, 12), ("L, 100", 100, 3)):
+for label, n, m in (("S, O, 100", 100, 10), ("S, B, 60", 60, 10), ("P, O, 100", 100, 12), ("P, B, 60", 60, 12), ("L, 100", 100, 3), ("L, 80", 80, 3)):
     print(label, "|", "0.05/%d" % m, "|", " | ".join(fmt(mdd(n, d, 0.05 / m)) for d in (0.2, 0.3, 0.4)))
 print("no-harm pass probability | n | discordant share | true 0 points | true -5 points | true -10 points")
 for n, d in ((100, 0.2), (100, 0.3), (100, 0.5), (60, 0.2)):

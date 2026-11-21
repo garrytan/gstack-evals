@@ -45,14 +45,25 @@ describe("part L's frame and order", () => {
     expect(frame.units.some((u) => counted.has(u.id))).toBe(false);
   });
 
-  test("pool 1 is incomplete, so the committed order is provisional and a walk refuses it", () => {
+  test("pool 1 is short of its count but closed by the plan's rule, so the committed order reads for a walk", () => {
     expect(frame.pools[1]).toMatchObject({ expected: 18, recovered: 6, complete: false });
-    expect(frame.complete).toBe(false);
+    expect(frame.pools[1].closed).toMatch(/pool 1 is these 6 units/);
+    expect(frame.complete).toBe(true);
     const order = JSON.parse(readFileSync(L_ORDER_PATH, "utf8"));
     expect(order).toEqual(lOrder(frame, readFileSync(L_FRAME_PATH, "utf8")));
     expect(order.draw_seed).toBe(x.draw_seed);
     expect(order.months[0] > order.months[order.months.length - 1]).toBe(true);
-    expect(() => readLOrder()).toThrow(/^E_H2HX_UNITS_POOL.*pool 1: 6 of 18/);
+    expect(readLOrder().order.order).toHaveLength(172);
+  });
+
+  test("a pool short of its count with no closing rule leaves the order provisional, and a walk refuses it", () => {
+    const d = mkdtempSync(join(tmpdir(), "h2hx-l-"));
+    const { closed: _, ...open } = frame.pools[1];
+    const f = { ...frame, complete: false, pools: { ...frame.pools, 1: open } };
+    const text = JSON.stringify(f);
+    writeFileSync(join(d, "f.json"), text);
+    writeFileSync(join(d, "o.json"), JSON.stringify(lOrder(f, text)));
+    expect(() => readLOrder(join(d, "f.json"), join(d, "o.json"))).toThrow(/^E_H2HX_UNITS_POOL.*pool 1: 6 of 18/);
   });
 
   test("a complete frame's order reads, and an order that is not the frame's refuses", () => {

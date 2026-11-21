@@ -11,7 +11,8 @@
 // surviving record names. Pool 2 replays the cap rule over the walk's drawn units and must give the walk's recorded count;
 // any drawn unit the records lack can only add capped rows, so a replay that matches the count is exact. Pool 1 is whatever
 // the records name; the rest of it is listed as missing with the order windows it sits in, never guessed. A frame with a
-// pool short of its count is incomplete, and its order is provisional (readLOrder refuses it for a walk).
+// pool short of its count is incomplete, and its order is provisional (readLOrder refuses it for a walk), unless the plan's
+// frozen rule closes that pool at its recovered units (PoolStatus.closed).
 // The order: base draw.ts seededOrder over the union with the extension's draw_seed (months newest first, ids sorted, then
 // shuffled within a month by one seededRandom stream). The walk counts positions over units that pass every gate, holds at
 // most 3 units a repository (pilot, counted and reserve units alike), puts the first 4 usable units of pools 1 and 2 and the
@@ -33,7 +34,8 @@ export type Pool = 1 | 2 | 3;
 
 export interface LUnit { id: string; pool: Pool; repo: string; month: string; language: string; entry: Entry | null; licence: string | null; source: string; reused?: { verdict: string; from: string } }
 export interface Window { from_index: number; to_index: number; positions: number[]; role: "reserve" | "passed_unassigned"; need: number; candidates: string[] }
-export interface PoolStatus { expected: number; recovered: number; complete: boolean; how: string; missing?: Window[] }
+/** closed: the plan's frozen rule that closes a pool short of its count (section 5), so its recovered units are the pool. */
+export interface PoolStatus { expected: number; recovered: number; complete: boolean; how: string; missing?: Window[]; closed?: string }
 export interface LFrame { schema: typeof L_FRAME_SCHEMA; draw_seed: number; sources: Record<string, string>; pools: Record<Pool, PoolStatus>; complete: boolean; units: LUnit[] }
 export interface LOrder { schema: typeof L_ORDER_SCHEMA; draw_seed: number; frame_sha256: string; complete: boolean; months: string[]; order: string[] }
 
@@ -167,7 +169,7 @@ export function lFrameFrom(o: { x?: ExtPrereg; units: LUnit[]; pools: Record<Poo
     const n = o.units.filter((u) => u.pool === p).length;
     if (n !== o.pools[p].recovered) fail("E_H2HX_UNITS_INPUT", "pool " + p + " lists " + n + " units, not its status's " + o.pools[p].recovered);
   }
-  return { schema: L_FRAME_SCHEMA, draw_seed: x.draw_seed, sources: o.sources, pools: o.pools, complete: Object.values(o.pools).every((s) => s.complete), units: [...o.units].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) };
+  return { schema: L_FRAME_SCHEMA, draw_seed: x.draw_seed, sources: o.sources, pools: o.pools, complete: Object.values(o.pools).every((s) => s.complete || !!s.closed), units: [...o.units].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) };
 }
 
 /** The seeded order over the frame's union, as l-order.json holds it. frameText is the frame file's bytes. */
@@ -190,7 +192,7 @@ export function readLOrder(framePath: string = L_FRAME_PATH, orderPath: string =
   const order = JSON.parse(readFileSync(orderPath, "utf8")) as LOrder;
   const want = lOrder(frame, readFileSync(framePath, "utf8"));
   if (order.schema !== L_ORDER_SCHEMA || order.frame_sha256 !== want.frame_sha256 || order.order.join(",") !== want.order.join(",")) fail("E_H2HX_UNITS_INPUT", orderPath + " is not the seeded order of " + framePath);
-  if (!frame.complete) fail("E_H2HX_UNITS_POOL", "part L's frame is incomplete (" + Object.entries(frame.pools).filter(([, s]) => !s.complete).map(([p, s]) => "pool " + p + ": " + s.recovered + " of " + s.expected).join("; ") + "), so its order is provisional and no walk may use it");
+  if (!frame.complete) fail("E_H2HX_UNITS_POOL", "part L's frame is incomplete (" + Object.entries(frame.pools).filter(([, s]) => !s.complete && !s.closed).map(([p, s]) => "pool " + p + ": " + s.recovered + " of " + s.expected).join("; ") + "), so its order is provisional and no walk may use it");
   return { frame, order };
 }
 

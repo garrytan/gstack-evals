@@ -243,11 +243,15 @@
     "repo_cap": 3,
     "min_counted": 60,
     "pools": {
-     "1": "the head-to-head's 10 reserves (positions 112-119, 121, 122) and the 8 bug units that passed between stage 0's bug unit (123) and feature unit (132); 5 named in its custody log, the other 13 from the walk logs on its holding VM read before the walk, else pool 1 is the 5 named units; each rebuilt and re-gated",
+     "1": "6 units: the 5 reserves the head-to-head's custody log names and apache__lucene-14932, fixed by its walk log's counts; the other 12 are listed in l-frame.json as candidate windows and never walked",
      "2": "the 56 MultiLang rows the head-to-head's walk skipped only for the repository cap, walked through the same gates",
      "3": "quick/laneb/tasks/swerebench-r3a4.json tasks created 2026-03-01 to 2026-05-31 (110), converted by the state machines harness's SWE-rebench part, with the object-level history check"
     },
-    "order": "newest created month first, then seeded by draw_seed within a month; positions count only units that pass every gate"
+    "order": "newest created month first, then seeded by draw_seed within a month; positions count only units that pass every gate",
+    "walk_logs": {
+     "manifest_sha256": "174b8d5be8ec5016ef7377b86e2c2af8ce0f7dc85e996bd90ed823ef30f6e31f",
+     "copied": "2026-11-21, from the head-to-head's holding VM by its own thread, into the eval Captain's drive"
+    }
    }
   }
  },

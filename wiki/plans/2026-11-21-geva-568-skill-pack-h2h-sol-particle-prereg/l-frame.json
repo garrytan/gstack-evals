@@ -150,7 +150,8 @@
       "jestjs__jest-15714"
      ]
     }
-   ]
+   ],
+   "closed": "Plan section 5 and the Captain's ruling of 2026-11-21: the 13 ids beyond the custody log's 5 come from the head-to-head's walk logs, and otherwise pool 1 is the units the surviving records fix. The walk logs fix 1 more (apache__lucene-14932), so pool 1 is these 6 units; the missing windows stay listed as candidates and are never walked."
   },
   "2": {
    "expected": 56,
@@ -165,7 +166,7 @@
    "how": "The pinned pool's tasks created 2026-03 to 2026-05. 29 carry the state machines eval's oracle verdict (24 kept)."
   }
  },
- "complete": false,
+ "complete": true,
  "units": [
   {
    "id": "MudBlazor__MudBlazor-12775",

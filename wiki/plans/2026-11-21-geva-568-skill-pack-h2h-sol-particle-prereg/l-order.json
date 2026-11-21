@@ -1,8 +1,8 @@
 {
  "schema": "h2hx-l-order.v1",
  "draw_seed": 4246445583,
- "frame_sha256": "1b6199b20e8d9375cf883080f5227ff82596844ad9b3e4157c869d40461fcf7b",
- "complete": false,
+ "frame_sha256": "8978da75ed9c7bcd6b2cbdf2c323c98a083fb543a08a8bfcde732d631ab86163",
+ "complete": true,
  "months": [
   "2026-07",
   "2026-06",
