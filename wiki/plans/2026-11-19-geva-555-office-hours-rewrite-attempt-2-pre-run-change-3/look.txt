@@ -1,0 +1,34 @@
+look.py, seed 20261117, 4000 simulated runs a point; sizing.py cbed977cd397 and power.py 8ea44fae5037 unchanged
+Part A. Two-look bounds for the plan's two-sided 95% interval (alpha 0.05, 0.025 a side, no multiplicity correction), looks at information 0.5 and 1.0, correlation sqrt(0.5)
+O'Brien-Fleming (bounds C/sqrt(t)): interim 2.7965, final 1.9774, spending 0.00517 then 0.04483
+Lan-DeMets O'Brien-Fleming spending on the two-sided alpha, 2 - 2 Phi(z(0.025) / sqrt(t)): 0.00557 at 0.5, 0.05 at 1.0; interim 2.7718, final 1.9793
+Lan-DeMets O'Brien-Fleming spending on each side's 0.025, 2 - 2 Phi(z(0.0125) / sqrt(t)) (gsDesign sfLDOF): 0.001525 a side at 0.5; interim 2.9626, final 1.9686
+R113's bounds 2.80 and 1.98: two-sided alpha 0.04969; nominal two-sided levels 0.005110 and 0.047704
+the same levels on the plan's t statistic, 15 and 31 degrees of freedom: interim 3.2754, final 2.0617 (the plan's fixed read: 2.0395)
+Part B. Error rate under no effect: share of runs whose lower bound is above zero (one side), and that read MERGE, by read
+p0 0.25 rho 0.500 | fixed t 2.0395: 0.0257 MERGE 0.0003 | bounds 2.80 and 1.98 on the t statistic: 0.0307 MERGE 0.0020 | t bounds 3.2754 and 2.0617: 0.0238 MERGE 0.0008
+p0 0.25 rho 0.843 | fixed t 2.0395: 0.0182 MERGE 0.0000 | bounds 2.80 and 1.98 on the t statistic: 0.0243 MERGE 0.0000 | t bounds 3.2754 and 2.0617: 0.0177 MERGE 0.0000
+p0 0.40 rho 0.500 | fixed t 2.0395: 0.0232 MERGE 0.0018 | bounds 2.80 and 1.98 on the t statistic: 0.0307 MERGE 0.0065 | t bounds 3.2754 and 2.0617: 0.0225 MERGE 0.0030
+p0 0.40 rho 0.843 | fixed t 2.0395: 0.0195 MERGE 0.0000 | bounds 2.80 and 1.98 on the t statistic: 0.0262 MERGE 0.0000 | t bounds 3.2754 and 2.0617: 0.0190 MERGE 0.0000
+p0 0.55 rho 0.500 | fixed t 2.0395: 0.0232 MERGE 0.0020 | bounds 2.80 and 1.98 on the t statistic: 0.0293 MERGE 0.0053 | t bounds 3.2754 and 2.0617: 0.0227 MERGE 0.0040
+p0 0.55 rho 0.843 | fixed t 2.0395: 0.0217 MERGE 0.0000 | bounds 2.80 and 1.98 on the t statistic: 0.0285 MERGE 0.0000 | t bounds 3.2754 and 2.0617: 0.0213 MERGE 0.0000
+Part C. p0 0.40, founder rows (rows 1 to 3 assumed to pass), the plan's fixed read against the look at the t bounds 3.2754 and 2.0617; futility when conditional power at a 0.15 lift is under 0.10; spend at $12.64 a brief on Opus and Sol (stage 2 central $1,011.20)
+rho 0.500 d 0.00 | fixed: lower bound > 0 0.027 MERGE 0.002 spend $1011 | look: lower bound > 0 0.027 MERGE 0.003, stops for new 0.002, for current 0.001, futility 0.277, continues 0.720, mean spend $870
+rho 0.500 d 0.09 | fixed: lower bound > 0 0.417 MERGE 0.103 spend $1011 | look: lower bound > 0 0.411 MERGE 0.117, stops for new 0.033, for current 0.000, futility 0.041, continues 0.926, mean spend $979
+rho 0.500 d 0.10 | fixed: lower bound > 0 0.519 MERGE 0.157 spend $1011 | look: lower bound > 0 0.512 MERGE 0.177, stops for new 0.051, for current 0.000, futility 0.025, continues 0.924, mean spend $981
+rho 0.500 d 0.15 | fixed: lower bound > 0 0.833 MERGE 0.487 spend $1011 | look: lower bound > 0 0.829 MERGE 0.504, stops for new 0.141, for current 0.000, futility 0.005, continues 0.855, mean spend $959
+rho 0.500 d 0.20 | fixed: lower bound > 0 0.968 MERGE 0.810 spend $1011 | look: lower bound > 0 0.967 MERGE 0.824, stops for new 0.320, for current 0.000, futility 0.001, continues 0.679, mean spend $898
+rho 0.500 d 0.25 | fixed: lower bound > 0 0.999 MERGE 0.970 spend $1011 | look: lower bound > 0 0.999 MERGE 0.972, stops for new 0.553, for current 0.000, futility 0.000, continues 0.447, mean spend $816
+rho 0.843 d 0.00 | fixed: lower bound > 0 0.015 MERGE 0.000 spend $1011 | look: lower bound > 0 0.015 MERGE 0.000, stops for new 0.000, for current 0.000, futility 0.046, continues 0.954, mean spend $988
+rho 0.843 d 0.09 | fixed: lower bound > 0 0.796 MERGE 0.042 spend $1011 | look: lower bound > 0 0.781 MERGE 0.051, stops for new 0.015, for current 0.000, futility 0.000, continues 0.985, mean spend $1006
+rho 0.843 d 0.10 | fixed: lower bound > 0 0.862 MERGE 0.078 spend $1011 | look: lower bound > 0 0.852 MERGE 0.088, stops for new 0.025, for current 0.000, futility 0.000, continues 0.975, mean spend $1002
+rho 0.843 d 0.15 | fixed: lower bound > 0 0.990 MERGE 0.451 spend $1011 | look: lower bound > 0 0.988 MERGE 0.465, stops for new 0.108, for current 0.000, futility 0.000, continues 0.892, mean spend $973
+rho 0.843 d 0.20 | fixed: lower bound > 0 1.000 MERGE 0.834 spend $1011 | look: lower bound > 0 0.999 MERGE 0.839, stops for new 0.281, for current 0.000, futility 0.000, continues 0.719, mean spend $912
+rho 0.843 d 0.25 | fixed: lower bound > 0 1.000 MERGE 0.976 spend $1011 | look: lower bound > 0 1.000 MERGE 0.976, stops for new 0.532, for current 0.000, futility 0.000, continues 0.468, mean spend $823
+Part D. MDD at 80% power (the deciding look's lower bound above zero), fixed read against the look
+p0 0.25 rho 0.500  fixed 0.14  look 0.14
+p0 0.25 rho 0.843  fixed 0.09  look 0.09
+p0 0.40 rho 0.500  fixed 0.15  look 0.15
+p0 0.40 rho 0.843  fixed 0.10  look 0.10
+p0 0.55 rho 0.500  fixed 0.15  look 0.15
+p0 0.55 rho 0.843  fixed 0.09  look 0.10

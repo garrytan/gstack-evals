@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
+import { readItem } from "../../src/runner/ledger/record.ts";
 import { openWire, type Wire } from "../../lanes/office-hours-rewrite/wire.ts";
 
 const D = 1_000_000;
@@ -58,6 +59,82 @@ describe("the wire's build commit (pre-run change 4's build rule)", () => {
     expect(JSON.parse(readFileSync(join(W, "wire", "run.json"), "utf8")).build_commit).toBe("a".repeat(40));
     expect((await thrown(() => open("b".repeat(40))))?.code).toBe("E_OHR_BUILD_COMMIT");
     await (await open("a".repeat(40))).close("wire test");
+  });
+});
+
+describe("the wire's relaunches on one ledger item (the second attempt's section 5.2)", () => {
+  const item = "ohr-wire-relaunch";
+  const setup = () => {
+    const W = mkdtempSync(join(tmpdir(), "ohr-wire-relaunch-"));
+    const record = join(W, "record");
+    recordApproval(record, { action: "init", item, cap_micros: 20 * D, quotes: [{ words: "wire test on a temporary ledger, not an approval", by: "tests/ohr/wire.test.ts", source: "section 5.2" }], admission: "warn" });
+    const open = (dir: string, runId?: string) => openWire({ dir: join(W, dir), item, capMicros: 20 * D, label: item, runId, record, ledger: join(W, "ledger.sqlite"), env: KEYS, io: { out: () => {}, err: () => {} }, upstream: upstream((m) => m) });
+    return { W, record, open };
+  };
+  const ask = (w: Wire) => w.call({ model: "opus", prompt: "Reply with the one word ok.", maxTokens: 2000, effort: "medium", label: "d1001a:author:1" });
+  test("a relaunch reserves the spend cap less what the item has committed, and spent() starts from the ledger", async () => {
+    const { record, open } = setup();
+    const a = await open("wire");
+    await ask(a);
+    await a.close("wire test");
+    const committed = readItem(record, item).committed_micros;
+    expect(committed).toBeGreaterThan(0);
+    const b = await open("wire");
+    expect(readItem(record, item).open!.reserved_micros).toBe(20 * D - committed);
+    expect(Math.round(b.spent() * D)).toBe(committed);
+    await b.close("wire test");
+  });
+  test("runId continues a run whose dir was lost, and a dir whose run.json names another run is refused", async () => {
+    const { W, record, open } = setup();
+    const a = await open("wire");
+    await ask(a);
+    await a.close("wire test");
+    expect((await thrown(() => open("other")))?.code).toBe("E_ITEM_BOUND");
+    expect((await thrown(() => open("wire", item + "-elsewhere")))?.code).toBe("E_OHR_RESUME");
+    const b = await open("lost", a.runId);
+    expect(b.runId).toBe(a.runId);
+    expect(Math.round(b.spent() * D)).toBe(readItem(record, item).leases[0]!.close!.spent_micros);
+    await ask(b);
+    const spent = b.spent();
+    await b.close("wire test");
+    const end = readItem(record, item).committed_micros;
+    expect(Math.round(spent * D)).toBe(end);
+    expect(JSON.parse(readFileSync(join(W, "lost", "run.json"), "utf8")).spent_micros).toBe(end);
+  });
+  test("a close on a cap stop records it on the item, and no later launch opens a lease there", async () => {
+    const { record, open } = setup();
+    const a = await open("wire");
+    await ask(a);
+    await a.close("wire test", "ohr author: authoring's cap stop (test)");
+    expect(readItem(record, item).leases[0]!.close!.cap_stop).toBe("ohr author: authoring's cap stop (test)");
+    expect((await thrown(() => open("wire")))?.code).toBe("CAP_STOP");
+    expect((await thrown(() => open("lost", a.runId)))?.code).toBe("CAP_STOP");
+  });
+  test("spent() holds this launch's calls of unknown outcome at their reservation, as the close commits them", async () => {
+    const W = mkdtempSync(join(tmpdir(), "ohr-wire-unknown-"));
+    const record = join(W, "record");
+    recordApproval(record, { action: "init", item, cap_micros: 20 * D, quotes: [{ words: "wire test on a temporary ledger, not an approval", by: "tests/ohr/wire.test.ts", source: "pre-run change 1" }], admission: "warn" });
+    const noUsage = (async (_u: string | URL | Request, init?: RequestInit) => Response.json({ id: "msg_1", type: "message", role: "assistant", model: JSON.parse(String(init?.body)).model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn" })) as typeof fetch;
+    const w = await openWire({ dir: join(W, "wire"), item, capMicros: 20 * D, label: item, record, ledger: join(W, "ledger.sqlite"), env: KEYS, io: { out: () => {}, err: () => {} }, upstream: noUsage });
+    await thrown(() => ask(w));
+    const spent = w.spent();
+    expect(spent).toBeGreaterThan(0);
+    await w.close("wire test");
+    expect(Math.round(spent * D)).toBe(readItem(record, item).committed_micros);
+  });
+});
+
+describe("the wire's spend by brief (the second attempt's section 5.2)", () => {
+  test("spentOn sums the calls labelled for one brief, every attempt of it included, and the brief's calls add up to the settled spend", async () => {
+    await withWire({}, async (w) => {
+      const ask = (label: string) => w.call({ model: "opus", prompt: "Reply with the one word ok, for " + label + ".", maxTokens: 2000, effort: "medium", label });
+      for (const label of ["d1001b.2:author:1", "d1001b:generic:opus", "d2001a:author:1"]) await ask(label);
+      const one = w.spentOn("d1001b"), two = w.spentOn("d2001a");
+      expect(one).toBeGreaterThan(two);
+      expect(two).toBeGreaterThan(0);
+      expect(w.spentOn("d1001b.2")).toBe(0);
+      expect(one + two).toBeCloseTo(w.spent(), 9);
+    });
   });
 });
 

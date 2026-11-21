@@ -1,17 +1,15 @@
-// Value: protects=pre-run change 1 item 4d's pilot gate: the Wilson interval against published worked examples, the line from pilot.py's formula, and the two-step read against pilot.txt's table.
+// Value: protects=the second attempt's projection read (its section 5.5, descriptive since the Captain's ruling of 2026-11-18): the Jeffreys 0.95 quantile against scipy's beta.ppf, as sizing.py takes it, the projection formula at the top-up bound of 30, its room and its scale. The 16 and 32 draw pilot read of pre-run change 1, item 4d, is gone with the pilot it read, and so are its tests.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { CHANGE_1, PILOT } from "../../../lanes/office-hours-rewrite/frozen.ts";
-import { PLANNING, line, pilotRead, readAt, wilson90 } from "../../../lanes/office-hours-rewrite/author/pilot.ts";
+import { PROJECTION, TOP_UP_BOUND } from "../../../lanes/office-hours-rewrite/frozen.ts";
+import { ATTEMPT_1, jeffreys, plus, predicted, projection, readProjection, roomLeft, type Counts } from "../../../lanes/office-hours-rewrite/author/pilot.ts";
+import { betaQuantile } from "../../../lanes/office-hours-rewrite/read/stats.ts";
 import { wilson } from "../../../lanes/autoplan-audit/stats.ts";
 
-const pilotTxt = readFileSync(join(import.meta.dir, "..", "..", "..", CHANGE_1, "..", "pilot.txt"), "utf8");
-const r3 = (x: number) => x.toFixed(3);
+const NONE: Counts = { first: [0, 0], partners: {}, matched_draws: [0, 0], unpaired: { T7: [0, 0], T8: [0, 0], builder: [0, 0] } };
+const NO_OPEN = { pairs: {}, unpaired: { T7: 0, T8: 0, builder: 0 } };
 
 describe("Wilson score interval", () => {
-  // Newcombe (1998), Statistics in Medicine 17:857-872, Table I, method 3 (score interval without continuity correction).
-  test("matches Newcombe's 1998 worked examples at 95%", () => {
+  test("matches Newcombe's 1998 worked examples at 95% (Statistics in Medicine 17:857-872, Table I, method 3)", () => {
     const cases: [number, number, number, number][] = [[81, 263, 0.2553, 0.3662], [15, 148, 0.0624, 0.1605], [0, 20, 0, 0.1611], [1, 29, 0.0061, 0.1718]];
     for (const [k, n, lo, hi] of cases) {
       const [l, h] = wilson(k, n, 1.959964);
@@ -19,65 +17,58 @@ describe("Wilson score interval", () => {
       expect(h).toBeCloseTo(hi, 4);
     }
   });
-  test("the pilot's 90% interval gives pilot.txt's bounds at n = 4", () => {
-    expect(PILOT.z).toBe(1.6448536269514722);
-    expect(pilotTxt).toContain("Wilson bounds at n = 4: 0/4 upper " + r3(wilson90(0, 4)[1]) + "; 4/4 lower " + r3(wilson90(4, 4)[0]));
+});
+
+describe("the Jeffreys quantile (section 5.5)", () => {
+  test("matches scipy 1.18.1's stats.beta.ppf(0.95, k + 0.5, n - k + 0.5), the jm of sizing.py, to 9 places", () => {
+    const cases: [number, number, number][] = [[0, 0, 0.9938441703], [0, 1, 0.7714801862], [10, 15, 0.8342189907], [2, 41, 0.1285263637], [5, 41, 0.2246124471], [1, 2, 0.9026918183], [0, 20, 0.0904764265]];
+    expect(PROJECTION.quantile).toBe(0.95);
+    for (const [k, n, q] of cases) expect(jeffreys(k, n)).toBeCloseTo(q, 9);
+  });
+  test("closed forms: the arcsine law at Beta(0.5, 0.5), p^(1/a) at Beta(a, 1) and 1 - (1 - p)^(1/b) at Beta(1, b)", () => {
+    expect(betaQuantile(0.95, 0.5, 0.5)).toBeCloseTo(Math.sin((0.95 * Math.PI) / 2) ** 2, 12);
+    expect(betaQuantile(0.95, 2, 1)).toBeCloseTo(Math.sqrt(0.95), 12);
+    expect(betaQuantile(0.3, 1, 4)).toBeCloseTo(1 - 0.7 ** 0.25, 12);
+  });
+  test("refuses a p outside (0, 1) or a shape that is not positive", () => {
+    expect(() => betaQuantile(1, 1, 1)).toThrow("E_OHR_READ_INPUT");
+    expect(() => betaQuantile(0.5, 0, 1)).toThrow("E_OHR_READ_INPUT");
   });
 });
 
-describe("the yield line", () => {
-  test("at the planning inputs it is pilot.txt's 0.244", () => {
-    expect(pilotTxt).toContain("yield threshold: " + r3(line(PLANNING.draw_usd, PLANNING.first_pass)!) + " ");
-    expect(r3(line(PLANNING.draw_usd, PLANNING.first_pass)!)).toBe("0.244");
+describe("the projection (section 5.5)", () => {
+  test("a pair of type t costs (c1 / f + m * D * c2 + (1 - m) * 30 * c2) / m, and an unpaired brief of kind u cu / y", () => {
+    const c: Counts = { first: [7, 9], partners: { T2: [3, 5] }, matched_draws: [12, 3], unpaired: { T7: [1, 6], T8: [0, 0], builder: [4, 10] } };
+    const { first: c1, second: c2, unpaired: cu } = PROJECTION.usd;
+    const f = jeffreys(7, 9), m = jeffreys(3, 5);
+    expect(TOP_UP_BOUND).toBe(30);
+    expect(projection(c, { pairs: { T2: 2 }, unpaired: { T7: 0, T8: 0, builder: 0 } }, 1)).toBeCloseTo((2 * (c1 / f + m * 4 * c2 + (1 - m) * 30 * c2)) / m, 10);
+    expect(projection(c, { pairs: {}, unpaired: { T7: 3, T8: 0, builder: 1 } }, 1)).toBeCloseTo((3 * cu) / jeffreys(1, 6) + cu / jeffreys(4, 10), 10);
+    expect(projection(c, { pairs: { T2: 2 }, unpaired: { T7: 3, T8: 0, builder: 1 } }, 2.5)).toBeCloseTo(2.5 * projection(c, { pairs: { T2: 2 }, unpaired: { T7: 3, T8: 0, builder: 1 } }, 1), 10);
   });
-  test("is None when first twins and unpaired briefs alone use up the cap, as pilot.py prints", () => {
-    expect(line(1.04, 0.3)).toBeNull();
-    expect(pilotTxt).toContain("line at a measured 1.04 a draw and a first-pass rate of 0.30: None");
-    expect(line(1.04, 0)).toBeNull();
+  test("at the first attempt's counts within the bound, T8 at T7's, it is $127.524047: sizing.txt's $127.52, and what sizing.py's projection gives under scipy at the bound of 30", () => {
+    const open = { pairs: { T1: 4, T2: 3, T3: 3, T4: 3, T5: 4, T6: 3 }, unpaired: { T7: 3, T8: 5, builder: 21 } };
+    expect(projection({ ...ATTEMPT_1, unpaired: { ...ATTEMPT_1.unpaired, T8: ATTEMPT_1.unpaired.T7 } }, open, 1)).toBeCloseTo(127.524047, 6);
   });
-  test("a higher cost per draw raises the line", () => {
-    expect(line(1.2, PLANNING.first_pass)!).toBeGreaterThan(line(PLANNING.draw_usd, PLANNING.first_pass)!);
+  test("plus adds the run's counts to the first attempt's, type by type and kind by kind", () => {
+    const run: Counts = { first: [4, 5], partners: { T1: [0, 2], T6: [1, 1] }, matched_draws: [3, 1], unpaired: { T7: [1, 8], T8: [2, 8], builder: [3, 8] } };
+    expect(plus(ATTEMPT_1, run)).toEqual({ first: [14, 20], partners: { T1: [0, 3], T2: [1, 1], T3: [1, 1], T4: [1, 2], T5: [1, 1], T6: [3, 3] }, matched_draws: [53, 7], unpaired: { T7: [3, 49], T8: [2, 8], builder: [8, 49] } });
+    expect(plus(NONE, NONE).partners).toEqual({ T1: [0, 0], T2: [0, 0], T3: [0, 0], T4: [0, 0], T5: [0, 0], T6: [0, 0] });
   });
-});
-
-describe("the read", () => {
-  const L = line(PLANNING.draw_usd, PLANNING.first_pass)!;
-  test("planted counts at 16 draws: 1 stops, 2 to 6 are open, 7 goes", () => {
-    expect(readAt(1, 16, L)).toBe("stop");
-    for (const k of [2, 3, 4, 5, 6]) expect(readAt(k, 16, L)).toBe("open");
-    expect(readAt(7, 16, L)).toBe("go");
+  test("its room is the cap less the committed spend less 8 drafts at $3.50: $337.83 after a $43.17 pilot under the $409 cap, as sizing.txt prints", () => {
+    expect(roomLeft(409, 43.17).toFixed(2)).toBe("337.83");
+    expect([PROJECTION.held, predicted("first"), predicted("second"), predicted("unpaired")]).toEqual([8, 0.887, 0.093, 0.545]);
   });
-  test("a lower bound exactly at the line goes; an upper bound exactly at it does not stop", () => {
-    const [lo, hi] = wilson90(7, 16);
-    expect(readAt(7, 16, lo)).toBe("go");
-    expect(readAt(1, 16, wilson90(1, 16)[1])).toBe("open");
-    expect(hi).toBeGreaterThan(lo);
-  });
-  test("no line reads stop", () => {
-    expect(readAt(16, 16, null)).toBe("stop");
-  });
-  test("the two-step pilot reproduces pilot.txt's part B at every yield", () => {
-    const pmf = (k: number, n: number, p: number) => { let c = 1; for (let i = 0; i < k; i++) c = (c * (n - i)) / (i + 1); return c * p ** k * (1 - p) ** (n - k); };
-    const rows = pilotTxt.split("B. Frozen two-step pilot")[1]!.trim().split("\n").slice(2).map((l) => l.trim().split(/\s+/).map(Number));
-    expect(rows).toHaveLength(8);
-    for (const [y, go, stop, open] of rows as number[][]) {
-      let g = 0, s = 0, o = 0;
-      for (let k1 = 0; k1 <= PILOT.first_read; k1++) {
-        const p1 = pmf(k1, PILOT.first_read, y!);
-        const first = pilotRead([{ k: k1, n: PILOT.first_read }], L);
-        if (first.verdict === "go") g += p1;
-        else if (first.verdict === "stop") s += p1;
-        else for (let k2 = 0; k2 <= PILOT.second_read - PILOT.first_read; k2++) {
-          const p2 = p1 * pmf(k2, PILOT.second_read - PILOT.first_read, y!);
-          const v = pilotRead([{ k: k1, n: PILOT.first_read }, { k: k1 + k2, n: PILOT.second_read }], L).verdict;
-          if (v === "go") g += p2; else if (v === "stop") s += p2; else o += p2;
-        }
-      }
-      expect([r3(g), r3(s), r3(o)]).toEqual([r3(go!), r3(stop!), r3(open!)]);
-    }
-  });
-  test("an open first read asks for the second; an open second read halts open", () => {
-    expect(pilotRead([{ k: 4, n: 16 }], L).verdict).toBe("more");
-    expect(pilotRead([{ k: 4, n: 16 }, { k: 8, n: 32 }], L).verdict).toBe("open");
+  test("a read is over only when the projection passes the room, and costs scale by spend over what the first attempt's figures predict", () => {
+    const counts: Counts = { ...NONE, partners: { T3: [1, 2] } };
+    const open = { ...NO_OPEN, pairs: { T3: 1 } };
+    const at = (cap: number, spend = 1) => readProjection({ counts, open, spend, predicted: 1, cap, committed: 10, drafts: 3 });
+    const p = at(409).projection;
+    expect(at(p + 10 + 28 + 0.01).over).toBe(false);
+    expect(at(p + 10 + 28 - 0.01).over).toBe(true);
+    const edge = at(p + 10 + 28);
+    expect(edge.over).toBe(edge.projection > edge.room);
+    expect(at(409, 3).projection).toBeCloseTo(3 * p, 10);
+    expect(readProjection({ counts, open, spend: 0, predicted: 0, cap: 409, committed: 0, drafts: 0 }).scale).toBe(1);
   });
 });

@@ -11,6 +11,7 @@ import { readUnit, type SmUnit } from "../../statemachines/unit.ts";
 import { browserExtra, type BUnitExtra } from "../breadth/oracle-b.ts";
 import { H2hError, h2hFail } from "../prereg.ts";
 import { ALL_ARMS, type H2hScore, type H2hSession } from "../types.ts";
+import { EXT_ARMS } from "../ext/prereg.ts";
 import { dropAtPaths, lineCounts, newTestPaths } from "./rules.ts";
 import { openTree } from "./tree.ts";
 
@@ -58,10 +59,10 @@ function scoreWithRetry(fn: ScoreFirst, i: ScoreInput): { record: OutcomeRecord 
 
 const verifiedOf = (r: OutcomeRecord | null) => !!r && r.codes.strict !== "E_SM_TEST_PATCH_CONFLICT" && r.strict.outcome === "clean_fix";
 
-/** Scores one session from its record dir against the unit's sm-unit.v1 dir. */
+/** Scores one session from its record dir against the unit's sm-unit.v1 dir. The extension's arms (ext/prereg.ts EXT_ARMS) score by the same rules. */
 export function scoreSession(session: H2hSession, recordDir: string, unitDir: string, o: ScoreOptions = {}): ScoredSession {
   if (session?.schema !== "h2h-session.v1") h2hFail("E_H2H_SCORE_INPUT", "the session record is not h2h-session.v1");
-  if (!(ALL_ARMS as readonly string[]).includes(session.arm)) h2hFail("E_H2H_SCORE_INPUT", "unknown arm " + JSON.stringify(session.arm));
+  if (!([...ALL_ARMS, ...EXT_ARMS] as readonly string[]).includes(session.arm)) h2hFail("E_H2H_SCORE_INPUT", "unknown arm " + JSON.stringify(session.arm));
   const u = readUnit(unitDir) as SmUnit & { h2h?: BUnitExtra };
   if (u.id !== session.unit) h2hFail("E_H2H_SCORE_INPUT", "the session is for " + session.unit + ", the unit dir holds " + u.id);
   const blank: H2hScore = {

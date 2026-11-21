@@ -182,6 +182,35 @@ bun lanes/delivery-route/cli.ts b1e report <table.jsonl> --item <b1e-smoke|b1e-i
 
 The launcher commands are L1's under B1e's profile: host root ~/b1e, ledger port 9951, ARMS holding gstack-main.tar and none.tar. Before host-up, launch and relaunch, B1e reruns both reuse checks at the run commit and the checkout's head and refuses a checkout with uncommitted harness changes. It has no all-in guard; each item's ledger cap bounds its spend.
 
+## B1f: a rewritten description against the hook
+
+B1f asks whether rewriting prove-it's description, with gstack's routing hook off, gets Opus 5.5 to follow prove-it's steps as often as the hook does, without loading prove-it on feature requests it doesn't fit. It installs gstack v1.102.1.0 the way a user does, with B1's prove-it beside it, in four arms that differ only in how prove-it can be found: hook (gstack's default), own (routing off, prove-it's own description), long and required (routing off, a rewritten description), plus B1's none arm. The plan, the decision rules, the task sets and the frozen numbers are in [its preregistration](../../wiki/plans/2026-11-21-capy-b1f-description-rewrite-prereg/README.md). B1's to B1d's files stay as merged.
+
+| File | What it does |
+|---|---|
+| b1f-pins.ts | Frozen values: gstack's tag, sha and the blobs of its route files, the hook registrations, the five arms and their rates, the description lengths and digests, the task sets, reserve and supply sample, the items, caps, all-in stop, margin and over-loading bound |
+| b1f-build.sh | Builds the four gstack tars from one gstack setup: the hook tree, own with routing off, and long and required with prove-it's file swapped |
+| arms/b1f/prove-it-long.md, arms/b1f/prove-it-required.md | B1's gstack-shaped prove-it with only its description line rewritten |
+| b1f.ts | The arm checks, the keyless route table, the plan, caps and launch guard, the session rows (steps followed, loads, what the hook named, routing off, the arm's tar), the pilot check with its supply sample, the main report with each rewrite's decision, the power table and six keyless scripted sessions |
+
+```
+lanes/delivery-route/b1f-build.sh
+bun lanes/delivery-route/cli.ts b1f arms manifest|check [--out <dir>]
+bun lanes/delivery-route/cli.ts b1f routes --export <SWE-rebench export> [--out <tsv>] [--check]
+bun lanes/delivery-route/cli.ts b1f sessions run --out <dir> [--cut tests/delivery-route/fixtures/b1f-sessions]
+bun lanes/delivery-route/cli.ts b1f plan | power | reuse [--head <commit>]
+bun lanes/delivery-route/cli.ts b1f approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who>
+bun lanes/delivery-route/cli.ts b1f prepare <work> --item <item>
+bun lanes/delivery-route/cli.ts b1f host-up|attach|recover|host-down <work>
+bun lanes/delivery-route/cli.ts b1f launch|relaunch|rerun <work> --part <part>
+bun lanes/delivery-route/cli.ts b1f guard <work>
+bun lanes/delivery-route/cli.ts b1f done --ledger <jsonl> --item <item>
+bun lanes/delivery-route/cli.ts b1f table <config.json> <out.jsonl>
+bun lanes/delivery-route/cli.ts b1f report <table.jsonl> --item <b1f-pilot|b1f-main> [--out <dir>]
+```
+
+The launcher commands are L1's under B1f's profile: host root ~/b1f, ledger port 9952, and ARMS holding the built tars: L1's prepare, relaunch and rerun read ARMS, while `arms`, `routes` and `sessions run` read B1F_ARMS_DIR (default ~/.capy/work/b1f/arms, also b1f-build.sh's default output). The launch guard reads B1F_LEDGERS and B1F_CREW, and refuses when the run commit's or the checkout's harness differs from B1's run (`b1f reuse`), when the checkout holds uncommitted harness changes, when b1f-main starts before b1f-pilot is marked done, or when the projections pass an item's cap or the $700 all-in stop. A relaunch is never refused on money: when spend so far already passes its item's cap or the $700 all-in stop, the guard prints `B1F_LAUNCH OVERSHOOT` and the reasons for the Captain, and the relaunch runs its salvage. The ledger still refuses any session past its item's cap, so a relaunch can pass only the all-in stop. A fresh launch past either still refuses. `routes` needs the built hook and own trees and an export holding each task's instruction.md; `sessions run` needs Docker, the hm-session image and the built tars. None of them makes a model call.
+
 ## Credits
 
 The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19. B1d installs gstack itself at 5afef04e31de, and B1e at 5df6b5a8cf21, at build time; neither commits gstack's code. NOTICE.md has rows for the bytes this repo vendors.

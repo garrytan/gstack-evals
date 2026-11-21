@@ -1,0 +1,62 @@
+# Token shape of the keyless Claude Code 2.1.314 captures (cc/turns-*.request.jsonl), counted with tiktoken 0.12.0's
+# o200k_base, the tokenizer GPT-6.1 Sol's input is counted in. Run: uv run --with tiktoken==0.12.0 python cc-analyze.py
+import json, os, hashlib, copy
+import tiktoken
+enc = tiktoken.get_encoding('o200k_base')
+tok = lambda s: len(enc.encode(s, disallowed_special=()))
+M = os.path.expanduser('~/.capy/work/ohr2/money'); C = os.path.expanduser('~/.capy/work/ohr2/codex')
+pin = open(f'{C}/current/office-hours/SKILL.md').read()
+pin_body = pin.split('\n---\n', 1)[1] if pin.startswith('---') else pin
+def btext(b):
+    if isinstance(b, str): return b
+    if b.get('type') == 'text': return b['text']
+    if b.get('type') == 'tool_result':
+        c = b.get('content'); return c if isinstance(c, str) else ''.join(x.get('text', '') for x in c)
+    return json.dumps(b)
+def mtext(m):
+    c = m['content']; return c if isinstance(c, str) else ''.join(btext(b) for b in c)
+def strip(x):
+    x = copy.deepcopy(x)
+    def walk(o):
+        if isinstance(o, dict):
+            o.pop('cache_control', None); [walk(v) for v in o.values()]
+        elif isinstance(o, list): [walk(v) for v in o]
+    walk(x); return x
+def cc_marks(b):
+    s = json.dumps(b); return s.count('"cache_control"')
+out = {}
+for arm in ('none', 'current'):
+    rs = [json.loads(l) for l in open(f'{M}/cc/turns-{arm}.request.jsonl') if l.strip()]
+    paths = sorted(set(r['path'] for r in rs))
+    main = [r['body'] for r in rs if r['path'].endswith('/messages') and r['body'].get('tools')]
+    other = [r for r in rs if not (r['path'].endswith('/messages') and r['body'].get('tools'))]
+    print(f'{arm}: {len(rs)} requests, paths {paths}, main-model requests {len(main)}, others {len(other)}')
+    rows = []
+    for k, b in enumerate(main):
+        sys_t = sum(tok(btext(x)) for x in b.get('system', [])) if isinstance(b.get('system'), list) else tok(b.get('system') or '')
+        tools_t = tok(json.dumps(b['tools']))
+        msg_t = [tok(mtext(m)) for m in b['messages']]
+        r = {'request': k + 1, 'system_tokens': sys_t, 'system_blocks': len(b.get('system', [])), 'tools': len(b['tools']), 'tools_tokens': tools_t, 'messages': len(b['messages']), 'message_tokens': sum(msg_t), 'total': sys_t + tools_t + sum(msg_t), 'cache_control_marks': cc_marks(b), 'model': b.get('model'), 'max_tokens': b.get('max_tokens'), 'thinking': b.get('thinking')}
+        if k == 0:
+            r['message_detail'] = [(m['role'], len(mtext(m).encode()), tok(mtext(m)), mtext(m)[:70]) for m in b['messages']]
+            r['tool_names'] = [t.get('name') for t in b['tools']]
+            whole = '\n'.join(mtext(m) for m in b['messages'])
+            r['pin_body_in_first_request'] = pin_body.strip() in whole
+            sk = [t for t in b['tools'] if t.get('name') == 'Skill']
+            r['skill_tool_tokens'] = tok(json.dumps(sk)) if sk else 0
+            r['system_detail'] = [(len(btext(x).encode()), tok(btext(x)), btext(x)[:60]) for x in b.get('system', [])]
+        if k:
+            p = main[k - 1]
+            r['growth'] = r['total'] - rows[-1]['total']
+            r['prefix_append_only_ignoring_cache_control'] = strip(b['messages'][:len(p['messages'])]) == strip(p['messages'])
+            r['prefix_append_only_exact'] = b['messages'][:len(p['messages'])] == p['messages']
+            r['same_system_tools'] = strip(b.get('system')) == strip(p.get('system')) and strip(b['tools']) == strip(p['tools'])
+            r['new_messages'] = [(m['role'], tok(mtext(m)), mtext(m)[:50]) for m in b['messages'][len(p['messages']):]]
+            if not r['prefix_append_only_ignoring_cache_control']:
+                for j, (a, c) in enumerate(zip(strip(p['messages']), strip(b['messages']))):
+                    if a != c: r['first_changed_message'] = (j, mtext(a)[:80], mtext(c)[:80]); break
+        rows.append(r)
+    out[arm] = {'rows': rows, 'other_requests': [(o['path'], (o['body'] or {}).get('model'), tok(json.dumps(o['body'])) if o['body'] else 0) for o in other]}
+    for r in rows: print(json.dumps(r)[:1500])
+    print('other requests', out[arm]['other_requests'])
+json.dump(out, open(f'{M}/cc/summary.json', 'w'), indent=1)

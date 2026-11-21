@@ -39,13 +39,20 @@
 //   never into the work dir: every event of every exec (transcript.ndjson), the settings, effort, thread and each exec's
 //   command line (init.json), calls[] (calls.json), the tool questions (questions.json), the user simulator's event log
 //   (usersim.ndjson) and the CLI's stderr (cli-stderr.log).
+// - Before the first exec the adapter reads, in the agent's environment, what init.json records about the host: the CLI's
+//   own --version line, the sha256 of $CODEX_HOME/hooks.json (null when there is none) and, for an arm that names
+//   gstack-config, each switch as `gstack-config get <key>` prints it. init.json also carries the caller's arm record
+//   (gstack's pin, the arm tree's digest, the sha256 of the arm's prompt-input capture) and the extra settings. After the
+//   last exec, whatever ended the session, every regular rollout file under $CODEX_HOME/sessions (the root thread's and any
+//   sub-agent's) is copied to codex-sessions/ beside the records, at its path under sessions/, and init.json lists them.
 // - A turn that completes is a completed session unless it leaves something to answer. A failed turn or an error naming
 //   a proxy refusal maps as on Claude Code (CAP_STOP a cap stop, E_KEY_REJECTED rejected credentials, the rest a
 //   missing cell); any other failed turn is a provider failure and a missing cell, UPSTREAM. A CLI that exits without a
 //   turn result, or is killed, is an arm failure (harness_crash); the timeout is a timeout. A rollout the adapter cannot
 //   read after a completed turn is the evaluator's failure, a missing cell, E_INFRA_FAILURE, so no question is lost.
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import type { SidecarTask } from "../../skill-eval/contract/sidecar.ts";
 import type { ContractTask } from "../../skill-eval/contract/tasks.ts";
@@ -108,6 +115,20 @@ export interface CodexOptions {
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
   /** More -c settings after the adapter's own, as TOML scalars; one that names an adapter setting is refused. */
   settings?: Record<string, string | number | boolean>;
+  /** Pass --dangerously-bypass-hook-trust, so hooks in $CODEX_HOME/hooks.json run without Codex's trust prompt; recorded in init.json. */
+  hookTrust?: boolean;
+  /** The Codex CLI to run in the agent's environment, when a run pins one beside the image's default; unset, CODEX_BIN. Recorded in init.json. */
+  bin?: string;
+  /** gstack-config's path in the agent's environment and the switches init.json records as its `get <key>` prints them; unset, init.json records switches as null. */
+  switches?: { bin: string; keys: readonly string[] };
+  /** What init.json records about the arm beside the host's own facts: gstack's pin, the arm tree's digest and the sha256 of the arm's prompt-input capture, each null where the arm has none. */
+  arm?: CodexArmRecord;
+}
+
+export interface CodexArmRecord {
+  gstack: { repo: string; sha: string; version: string } | null;
+  tree_sha256: string | null;
+  prompt_input_sha256: string | null;
 }
 
 /** The agent env the adapter adds: the slot's bearer, by the name the provider definition reads, and the session kind. */
@@ -134,12 +155,12 @@ export function codexConfig(o: Pick<CodexOptions, "provider" | "proxy">): Record
 }
 
 /** The argv after the CLI's name: the session's first exec, or with thread a resume of it; the message follows on stdin. */
-export function codexArgs(o: Pick<CodexOptions, "model" | "provider" | "proxy" | "effort" | "settings">, thread: string | null = null): string[] {
+export function codexArgs(o: Pick<CodexOptions, "model" | "provider" | "proxy" | "effort" | "settings" | "hookTrust">, thread: string | null = null): string[] {
   const own = { ...codexConfig(o), ...(o.effort === null ? {} : { model_reasoning_effort: o.effort }) };
   const clash = Object.keys(o.settings ?? {}).filter((k) => k in own || k === "model_reasoning_effort");
   if (clash.length) throw new Error("E_INTERNAL: extra Codex settings may not replace the adapter's own: " + clash.join(", "));
   const settings = Object.entries({ ...own, ...o.settings }).flatMap(([k, v]) => ["-c", k + "=" + JSON.stringify(v)]);
-  return ["exec", "--json", "--strict-config", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "--color", "never", "-m", o.model, ...settings, ...(thread ? ["resume", thread] : []), "-"];
+  return ["exec", "--json", "--strict-config", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", ...(o.hookTrust ? ["--dangerously-bypass-hook-trust"] : []), "--color", "never", "-m", o.model, ...settings, ...(thread ? ["resume", thread] : []), "-"];
 }
 
 export interface CodexQuestion {
@@ -185,12 +206,12 @@ export const ROLLOUT_READ_MS = 60_000;
 /** The most rollout bytes the evaluator holds; a larger rollout counts as unreadable instead of filling its memory. */
 const ROLLOUT_MAX_BYTES = 256 * 1024 * 1024;
 
-/** A session's rollout as the agent's session holds it, or null when it cannot be read within ms or runs past ROLLOUT_MAX_BYTES. Only regular files count, never a symlink, FIFO or device the agent left under a rollout's name. */
-export const readRollout = (session: AgentSession, thread: string, ms = ROLLOUT_READ_MS): Promise<string | null> =>
+/** A command's exit code and stdout in the agent's session, or null when it cannot be spawned, runs past ms or prints more than maxBytes. */
+export const sessionRead = (session: AgentSession, argv: string[], ms = ROLLOUT_READ_MS, maxBytes = ROLLOUT_MAX_BYTES): Promise<{ code: number | null; out: Buffer } | null> =>
   new Promise((done) => {
     let child: ReturnType<AgentSession["spawn"]>;
     try {
-      child = session.spawn(["sh", "-c", 'n=0; for f in "${CODEX_HOME:-$HOME/.codex}"/sessions/*/*/*/rollout-*-"$1".jsonl; do if [ -f "$f" ] && [ ! -h "$f" ]; then cat -- "$f" || exit 1; n=1; fi; done; [ "$n" = 1 ]', "sh", thread]);
+      child = session.spawn(argv);
     } catch {
       return done(null);
     }
@@ -198,16 +219,16 @@ export const readRollout = (session: AgentSession, thread: string, ms = ROLLOUT_
       child.kill("SIGKILL");
       done(null);
     }, ms);
-    let text = "";
+    const chunks: Buffer[] = [];
     let bytes = 0;
     child.stdout?.on("data", (d: Buffer) => {
       bytes += d.length;
-      if (bytes > ROLLOUT_MAX_BYTES) {
+      if (bytes > maxBytes) {
         clearTimeout(timer);
         child.kill("SIGKILL");
         return done(null);
       }
-      text += d.toString("utf8");
+      chunks.push(d);
     });
     child.on("error", () => {
       clearTimeout(timer);
@@ -215,10 +236,52 @@ export const readRollout = (session: AgentSession, thread: string, ms = ROLLOUT_
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      done(code === 0 ? text : null);
+      done({ code, out: Buffer.concat(chunks) });
     });
     child.stdin?.end();
   });
+
+/** A session's rollout as the agent's session holds it, or null when it cannot be read within ms or runs past ROLLOUT_MAX_BYTES. Only regular files count, never a symlink, FIFO or device the agent left under a rollout's name. */
+export const readRollout = async (session: AgentSession, thread: string, ms = ROLLOUT_READ_MS): Promise<string | null> => {
+  const r = await sessionRead(session, ["sh", "-c", 'n=0; for f in "${CODEX_HOME:-$HOME/.codex}"/sessions/*/*/*/rollout-*-"$1".jsonl; do if [ -f "$f" ] && [ ! -h "$f" ]; then cat -- "$f" || exit 1; n=1; fi; done; [ "$n" = 1 ]', "sh", thread], ms);
+  return r && r.code === 0 ? r.out.toString("utf8") : null;
+};
+
+/** A rollout's path under $CODEX_HOME, as Codex names it: sessions/<yyyy>/<mm>/<dd>/rollout-<time>-<thread>.jsonl. */
+export const ROLLOUT_PATH = /^sessions\/\d{4}\/\d{2}\/\d{2}\/rollout-[A-Za-z0-9_.:-]+\.jsonl$/;
+
+/** The host facts init.json records, read in the agent's session before the first exec. */
+export async function hostFacts(session: AgentSession, o: Pick<CodexOptions, "bin" | "switches">): Promise<{ codex_version: string | null; hooks_json_sha256: string | null; switches: Record<string, string | null> | null }> {
+  const line = (r: { code: number | null; out: Buffer } | null) => (r && r.code === 0 ? r.out.toString("utf8").trim() || null : null);
+  const version = line(await sessionRead(session, [o.bin ?? CODEX_BIN, "--version"], ROLLOUT_READ_MS, 4096));
+  const hooks = await sessionRead(session, ["sh", "-c", 'f="${CODEX_HOME:-$HOME/.codex}/hooks.json"; if [ -f "$f" ] && [ ! -h "$f" ]; then cat -- "$f"; elif [ -e "$f" ] || [ -h "$f" ]; then exit 1; else exit 3; fi']);
+  const switches: Record<string, string | null> = {};
+  for (const key of o.switches?.keys ?? []) switches[key] = line(await sessionRead(session, [o.switches!.bin, "get", key], ROLLOUT_READ_MS, 4096));
+  return { codex_version: version, hooks_json_sha256: hooks?.code === 0 ? createHash("sha256").update(hooks.out).digest("hex") : null, switches: o.switches ? switches : null };
+}
+
+/** Copies every regular rollout file under the session's $CODEX_HOME/sessions to out at its path under sessions/; returns the paths copied and a line for each that failed. */
+export async function copyRollouts(session: AgentSession, out: string): Promise<{ copied: string[]; failed: string[] }> {
+  const list = await sessionRead(session, ["sh", "-c", 'cd "${CODEX_HOME:-$HOME/.codex}" 2>/dev/null || exit 0; [ -d sessions ] || exit 0; find sessions -type f -name "rollout-*.jsonl"']);
+  if (!list || list.code !== 0) return { copied: [], failed: ["the rollout list could not be read"] };
+  const copied: string[] = [];
+  const failed: string[] = [];
+  for (const path of list.out.toString("utf8").split("\n").filter(Boolean).sort()) {
+    if (!ROLLOUT_PATH.test(path)) {
+      failed.push(path + ": not a rollout path");
+      continue;
+    }
+    const r = await sessionRead(session, ["sh", "-c", 'f="${CODEX_HOME:-$HOME/.codex}/$1"; [ -f "$f" ] && [ ! -h "$f" ] && cat -- "$f"', "sh", path]);
+    if (!r || r.code !== 0) {
+      failed.push(path + ": unreadable");
+      continue;
+    }
+    mkdirSync(join(out, dirname(path)), { recursive: true });
+    writeFileSync(join(out, path), r.out);
+    copied.push(path);
+  }
+  return { copied, failed };
+}
 
 export interface CodexDriver extends AgentDriver {
   env: Record<string, string>;
@@ -250,8 +313,10 @@ export function codexDriver(o: CodexOptions): CodexDriver {
       let left = timeoutMs;
       let message = task.prompt;
       let termination: Termination = { kind: "completed" };
+      const host = await hostFacts(session, o);
+      let rollouts: { copied: string[]; failed: string[] } | null = null;
       const records = () => {
-        writeFileSync(join(o.out, "init.json"), JSON.stringify({ model: o.model, provider: o.provider, reasoning_effort: o.effort, thread_id: thread, argv: first, resume_argv: resumes }, null, 2) + "\n");
+        writeFileSync(join(o.out, "init.json"), JSON.stringify({ model: o.model, provider: o.provider, reasoning_effort: o.effort, hook_trust: o.hookTrust === true, bin: o.bin ?? CODEX_BIN, codex_version: host.codex_version, hooks_json_sha256: host.hooks_json_sha256, switches: host.switches, gstack: o.arm?.gstack ?? null, arm_tree_sha256: o.arm?.tree_sha256 ?? null, prompt_input_sha256: o.arm?.prompt_input_sha256 ?? null, settings: o.settings ?? {}, thread_id: thread, argv: first, resume_argv: resumes, rollouts }, null, 2) + "\n");
         writeFileSync(join(o.out, "questions.json"), JSON.stringify(questions, null, 2) + "\n");
       };
       for (let turn = 1; ; turn++) {
@@ -259,7 +324,7 @@ export function codexDriver(o: CodexOptions): CodexDriver {
           termination = { kind: "timeout" };
           break;
         }
-        const argv = [CODEX_BIN, ...codexArgs(o, thread)];
+        const argv = [o.bin ?? CODEX_BIN, ...codexArgs(o, thread)];
         if (thread) resumes.push(argv);
         else first = argv;
         records();
@@ -337,6 +402,9 @@ export function codexDriver(o: CodexOptions): CodexDriver {
         if (termination.kind !== "completed" || !("reply" in next)) break;
         message = next.reply;
       }
+      rollouts = await copyRollouts(session, join(o.out, "codex-sessions"));
+      if (rollouts.failed.length) appendFileSync(stderrLog, "adapter: rollout copy: " + rollouts.failed.join("; ") + "\n");
+      records();
       const { turns, calls, outputs } = parseCodex(events);
       const use = skillUse(calls, o.skill, outputs);
       writeFileSync(join(o.out, "calls.json"), JSON.stringify({ calls, opened: use.opened, files_read: use.files }, null, 2) + "\n");

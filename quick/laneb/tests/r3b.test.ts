@@ -322,6 +322,7 @@ describe("the outcome on a complete grid", () => {
     const o = gridOutcome(g, opus, { sims: 2, repoOf: new Map(tasks().map((t, i) => [t, "repo" + (i % 7)])) });
     expect(o.verdict).toBe("KEEP");
     const text = o.lines.join("\n");
+    // pregate-literal: cap=62 this test's own number, not the office-hours rewrite ledger's cap
     expect(text).toContain("cross-model overlap (report only): 62 of Opus 5.5's 71 admitted tasks are also unsolved by GPT-6.1 Sol (81 admitted), against about 28.8 if the two failed independently on the 200 screen tasks");
     expect(text).toContain("repository-clustered interval (report only):");
     expect(text).toContain("over 7 repositories");
@@ -393,6 +394,7 @@ describe("analyze on a pulled work dir", () => {
     expect(i.out).toContain("R3b outcome for GPT-6.1 Sol: none (incomplete: recheck: 2 of 10 trials are infra, two or more). FIX-METHOD (harness limits)");
   });
 
+  // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
   test("the infra bound: 15 of a part's 140 is incomplete, 14 is not; 22 of the none cell's 210 is incomplete, 21 is not", () => {
     const part = (n: number) => cli("analyze", work(opus, { gridTrial: (i, k, arm) => ({ infra: k === 2 && arm === "none" && i < n }) }));
     expect(part(14).code).toBe(0);
@@ -401,8 +403,10 @@ describe("analyze on a pulled work dir", () => {
     expect(p.out).toContain("incomplete: grid-2: 15 of 140 trials are infra, over 10%");
     const cell = (n: number) => cli("analyze", work(opus, { gridTrial: (i, k, arm) => ({ infra: arm === "none" && i < (k === 3 ? n - 14 : 7) }) }));
     expect(cell(21).code).toBe(0);
+    // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
     const c = cell(22);
     expect(c.code).toBe(4);
+    // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
     expect(c.out).toContain("incomplete: 22 of 210 none grid trials are infra, over 10%");
   });
 

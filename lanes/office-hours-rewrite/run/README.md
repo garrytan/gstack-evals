@@ -16,6 +16,14 @@ The arm sessions of the office-hours rewrite eval (prereg sections 2, 3, 4, 8, 1
   proxy, the real simulator turn, parser and rows). It prints SKIP when Docker does not answer. The rig needs both pin
   commits in a local repository: a gstack checkout, or a clone under <state>/sources/ (for example a link from
   ~/.capy/work/gstack-evals/sources/gstack to a full gstack clone).
+- `home-watch.ts`: pre-run change 5's F1 and G1 on every Sol session: the harness's snapshots of Codex's home before and
+  after every exec and after copy-out, their diffs against the frozen allow list, the rollout prefix check, the
+  event-stream flags, and the collaboration mode of every turn.
+- `codex.ts`: the Sol driver (pre-run change 2): the shared Codex adapter with the closing loop, the pinned Codex CLI,
+  the HOME check, the per-reply tool-item cap and the rollouts copied out after the session.
+- `codex-rig.ts`: the Sol arms' half of the rig: the Codex installs, one arm image per arm and the model tap.
+- `tap.ts`: the model tap in front of the proxy that logs the model each Sol response reports.
+- `half.ts`: stage 2's preregistered half for the one interim look (pre-run change 3).
 - `seams.ts`: the dry-run seams, run by tests/ohr/run/seams.test.ts.
 
 ## Reused and copied
@@ -40,7 +48,13 @@ Copied and adapted, because the shapes differ:
 - The end state "refusal" is never written, since no provider marker apart from those reaches the driver.
 - A skill arm that prints a SESSION_KIND other than interactive retries once, then scores missing with
   E_OHR_SESSION_KIND; no print reads null and is scored as it ends.
-- session_kind is read from the first main-agent tool result that prints it.
+- session_kind is the SESSION_KIND line the skill's start step printed as Claude Code loaded it, read from
+  host/claude-session.jsonl between A8's head and tail (pre-run change 5), else the first main-agent tool result that
+  prints one.
+- served_model is the models the scored attempt's replies report: Claude Code's transcript for Opus and particle-1, and
+  the model tap for Sol, because Codex's own records name the model it asked for. cli_version is the version the
+  transcript's init line names. rows flags either when it is not the pin, except that a model drift halt already names
+  the model in its own code.
 - Each launch uses two ledger items (arms through the rig's lease, simulator through the meter), because one item
   allows one open lease; the launch refuses caps whose sum passes the frozen line (E_OHR_CAP_LINE).
 - Stage 2's order sorts the comparison ids and shuffles them with SEED; each brief's models follow MODELS order and the
@@ -61,6 +75,10 @@ Copied and adapted, because the shapes differ:
   (E_OHR_T8_SEED).
 - The seeded profile is written into the work repo's state root before the trial starts.
 - The container's pin check runs sha256sum when the container stops; the host tree is checked once at rig open.
+- A Claude Code container's end step also copies Claude Code's own session files (HOME's .claude/projects/*/*.jsonl)
+  to host/claude-session.jsonl beside the transcript, for A8; the SDK stream never carries the skill expansion. A failed
+  read writes nothing, so A8 finds no copy and fails that session. Sol containers copy nothing: their transcript holds
+  the <skill> item.
 - The arm env is checked on the driver's env and on the container's env names.
 - Manifest-level drops come in as a list; the reserve rule fills them, and a brief with a stage 2 session cannot drop.
 - --models and --arms filters are allowed, and become part of the frozen manifest.

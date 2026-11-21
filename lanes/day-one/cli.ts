@@ -19,7 +19,7 @@
 // Every refusal is E_USAGE with a fix line, before anything is built or spent. Every path that holds sealed plaintext
 // (units, a stage's out and receipts, the judge's out, the validation's draw and labels, the probe's out) must sit on a
 // RAM-backed mount (section 16).
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
@@ -344,6 +344,12 @@ function checkRows(out: string, tags: readonly string[]): { rows: Row[]; selecte
   return { rows, selected, checkers };
 }
 
+/** The digest of the check rows under the tags: each row's id with the checker's parsed verdicts, so a validation receipt binds the rows it scored. */
+export const checkStagesSha256 = (out: string, tags: readonly string[]): string =>
+  createHash("sha256")
+    .update(JSON.stringify(checkRows(out, tags).rows.map((r) => [r.id, r.check?.parse ?? null]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))))
+    .digest("hex");
+
 const stageRows = (out: string, prefixes: readonly string[]): Row[] => readdirSync(out).filter((d) => prefixes.some((p) => d.startsWith(p))).flatMap((d) => (existsSync(join(out, d, "rows.ndjson")) ? (readNd(join(out, d, "rows.ndjson")) as Row[]) : []));
 
 function readings(f: Map<string, string[]>, io: Io): number {
@@ -395,7 +401,10 @@ function readings(f: Map<string, string[]>, io: Io): number {
   else if (!Array.isArray(validation.tags) || validation.tags.length === 0) blocked.push("the checker validation names no check stages it scored");
   else if (!validation.tags.every((t: string) => tagsOf(f).includes(t))) blocked.push("the checker validation scored " + validation.tags.join(", ") + ", not this reading's check stages");
   else if (typeof validation.checker_sha256 !== "string" || checkers.some((c) => c !== validation.checker_sha256)) blocked.push("the checker validation scored checker " + (validation.checker_sha256 ?? "none") + ", and this reading's check stages ran " + [...new Set(checkers.map((c) => c ?? "none"))].join(", "));
-  if (receipt("--fixtures-receipt", FIXTURES_RECEIPT)?.passed !== true) blocked.push("the fixtures with the real checker have no passing receipt");
+  else if (validation.rows_sha256 !== checkStagesSha256(out, validation.tags)) blocked.push("the checker validation scored other check rows than this reading's check stages hold under its tags");
+  const fixtures = receipt("--fixtures-receipt", FIXTURES_RECEIPT);
+  if (fixtures?.passed !== true) blocked.push("the fixtures with the real checker have no passing receipt");
+  else if (typeof fixtures.checker_sha256 !== "string" || checkers.some((c) => c !== fixtures.checker_sha256)) blocked.push("the fixtures with the real checker ran checker " + (fixtures.checker_sha256 ?? "none") + ", and this reading's check stages ran " + [...new Set(checkers.map((c) => c ?? "none"))].join(", "));
   io.out(JSON.stringify(read(builds, arms, blocked), null, 2));
   return 0;
 }
@@ -496,7 +505,7 @@ function validateScore(f: Map<string, string[]>, io: Io): number {
   const armsShort = ["n", "d", "r", "a"].filter((a) => (perArm[a] ?? 0) < VALIDATION.per_arm);
   const admitted = pairs.length >= VALIDATION.verdicts && k !== null && k >= VALIDATION.kappa && armsShort.length === 0;
   const checker = checkers.every((c) => c !== null && c === checkers[0]) ? checkers[0]! : null;
-  const receipt = { schema: "day-one.validation.v1", tags, checker_sha256: checker, builds: labels.length, per_arm: perArm, pairs: pairs.length, kappa: k, admitted };
+  const receipt = { schema: "day-one.validation.v1", tags, checker_sha256: checker, rows_sha256: checkStagesSha256(out, tags), builds: labels.length, per_arm: perArm, pairs: pairs.length, kappa: k, admitted };
   writeFileSync(join(out, "validation.json"), JSON.stringify(receipt, null, 2) + "\n");
   io.out(JSON.stringify(receipt));
   if (!admitted) io.err("E_DAYONE_VALIDATION day-one validate: " + pairs.length + " verdicts, kappa " + k + (armsShort.length ? ", under " + VALIDATION.per_arm + " builds for " + armsShort.join(", ") : "") + "; no category 2 number counts");

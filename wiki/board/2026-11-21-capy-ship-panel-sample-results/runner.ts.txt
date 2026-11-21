@@ -1,0 +1,177 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// Call runner for the /ship review panel judged sample (GEVA-559; prereg wiki/plans/2026-11-19-geva-559-ship-panel-judged-sample-prereg).
+// It sends one item per call with the frozen system text from prompts.md and the item's packet (packets.py), to the judge
+// (Gemini 4 Carbon on OpenRouter, google-vertex only, data collection denied) or a labeller (Opus 5.5 on Anthropic's API,
+// GPT-6.2 Astra on OpenAI's API), with the settings in prompts.md. Every send reserves its maximum cost on a ledger lease
+// first and settles at the provider's usage. An answer that is not exactly one JSON object with the call's fields gets one
+// retry with the same input; a second failure makes the item unscorable for that call. It changes no rule of the prereg.
+// Usage: bun runner.ts --role judge|opus|astra --call a1|a2|b --index <index.json>[,<index.json>] --roles gold,batch
+//          --lease <id> --out <public dir> --private-out <private dir> [--ledger <path>] [--parallel 4] [--dry-run]
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { openLocalLedger } from "../../src/runner/ledger/local.ts";
+import { ledgerPath } from "../../src/runner/ledger/paths.ts";
+
+const RUN_ID = "geva-559-ship-panel-sample";
+const PROMPTS = join(import.meta.dir, "../../wiki/plans/2026-11-19-geva-559-ship-panel-judged-sample-prereg/prompts.md");
+const MAX_OUT = 16000;
+const MODELS = {
+  judge: { provider: "openrouter", id: "google/gemini-4-carbon", in: 2, out: 10 },
+  opus: { provider: "anthropic", id: "claude-opus-5-5", in: 4, out: 20 },
+  astra: { provider: "openai", id: "gpt-6.2-astra", in: 8, out: 40 },
+} as const;
+type Role = keyof typeof MODELS;
+type Call = "a1" | "a2" | "b";
+
+const args = new Map<string, string>();
+for (let i = 2; i < process.argv.length; i++) {
+  const a = process.argv[i]!;
+  if (a === "--dry-run") args.set("dry-run", "1");
+  else args.set(a.replace(/^--/, ""), process.argv[++i] ?? "");
+}
+const need = (k: string) => { const v = args.get(k); if (!v) throw new Error("E_USAGE --" + k + " is required"); return v; };
+
+/** The frozen system texts, read from prompts.md: each call's first blockquote after "System text:", and for the labellers
+ * the paragraph prompts.md adds before the answer line. */
+export function systemText(call: Call, labeller: boolean, md = readFileSync(PROMPTS, "utf8")): string {
+  const head = { a1: "## Call A1", a2: "## Call A2", b: "## Call B" }[call];
+  const sec = md.slice(md.indexOf(head), md.indexOf("\n## ", md.indexOf(head) + 4));
+  const quotes: string[] = [];
+  let cur: string[] | null = null;
+  for (const l of sec.split("\n")) {
+    if (l.startsWith(">")) { cur ??= []; cur.push(l.replace(/^> ?/, "")); }
+    else if (cur) { quotes.push(cur.join("\n")); cur = null; }
+  }
+  if (cur) quotes.push(cur.join("\n"));
+  const sys = quotes[0]!;
+  if (!labeller || call === "a2") return sys;
+  const a1sec = md.slice(md.indexOf("## Call A1"), md.indexOf("\n## ", md.indexOf("## Call A1") + 4));
+  const a1quotes = a1sec.split("\n\n").filter((p) => p.startsWith(">"));
+  let extra = a1quotes[a1quotes.length - 1]!.replace(/^> ?/gm, "").trim();
+  if (call === "b") extra = extra.replace("what happened to these lines afterwards", "the later pull request's full commit messages");
+  const paras = sys.split("\n\n");
+  const answer = paras.pop()!;
+  return [...paras, extra, answer].join("\n\n");
+}
+
+const ENUMS: Record<Call, Record<string, (v: unknown) => boolean>> = {
+  a1: { item: (v) => typeof v === "string", one_finding: (v) => typeof v === "boolean", class: (v) => ["blocker", "should", "nit", "not_defect", "cant_tell"].includes(v as string), reason: (v) => typeof v === "string" },
+  a2: { item: (v) => typeof v === "string", same_first: (v) => Array.isArray(v) && v.every((x) => typeof x === "string"), same_later: (v) => Array.isArray(v) && v.every((x) => typeof x === "string"), reason: (v) => typeof v === "string" },
+  b: { item: (v) => typeof v === "string", corrects: (v) => ["yes", "no", "cant_tell"].includes(v as string), class: (v) => v === null || ["blocker", "should", "nit", "cant_tell"].includes(v as string), visible: (v) => v === null || ["yes", "no", "cant_tell"].includes(v as string), raised: (v) => typeof v === "string", reason: (v) => typeof v === "string" },
+};
+
+/** One JSON object with exactly the call's fields and nothing around it (surrounding whitespace aside), naming the item. */
+export function parseAnswer(call: Call, item: string, text: string): { ok: true; answer: Record<string, unknown> } | { ok: false; why: string } {
+  let v: unknown;
+  try { v = JSON.parse(text.trim()); } catch { return { ok: false, why: "not one JSON object" }; }
+  if (!v || typeof v !== "object" || Array.isArray(v)) return { ok: false, why: "not a JSON object" };
+  const o = v as Record<string, unknown>;
+  const want = Object.keys(ENUMS[call]);
+  const keys = Object.keys(o);
+  if (keys.length !== want.length || !want.every((k) => k in o)) return { ok: false, why: "fields " + keys.join(",") + " are not " + want.join(",") };
+  for (const k of want) if (!ENUMS[call][k]!(o[k])) return { ok: false, why: "field " + k + " has a value outside its schema" };
+  if (o.item !== item) return { ok: false, why: "item " + String(o.item) + " is not " + item };
+  return { ok: true, answer: o };
+}
+
+function body(role: Role, system: string, packet: string): Record<string, unknown> {
+  const m = MODELS[role];
+  if (m.provider === "openrouter") return { model: m.id, messages: [{ role: "system", content: system }, { role: "user", content: packet }], provider: { order: ["google-vertex"], only: ["google-vertex"], allow_fallbacks: false, data_collection: "deny" }, reasoning: { effort: "high" }, max_tokens: MAX_OUT, usage: { include: true } };
+  if (m.provider === "anthropic") return { model: m.id, max_tokens: MAX_OUT, system, messages: [{ role: "user", content: packet }], output_config: { effort: "high" } };
+  return { model: m.id, input: [{ role: "system", content: system }, { role: "user", content: packet }], max_output_tokens: MAX_OUT, reasoning: { effort: "high" }, store: false };
+}
+
+async function send(role: Role, b: Record<string, unknown>): Promise<{ status: number; json: any; text: string }> {
+  const m = MODELS[role];
+  const url = m.provider === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions" : m.provider === "anthropic" ? "https://api.anthropic.com/v1/messages" : "https://api.openai.com/v1/responses";
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (m.provider === "openrouter") headers.authorization = "Bearer " + process.env.OPENROUTER_API_KEY;
+  else if (m.provider === "anthropic") { headers["x-api-key"] = process.env.ANTHROPIC_API_KEY ?? ""; headers["anthropic-version"] = "2023-06-01"; }
+  else headers.authorization = "Bearer " + process.env.OPENAI_API_KEY;
+  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(b), signal: AbortSignal.timeout(900_000) });
+  const raw = await res.text();
+  let json: any = null;
+  try { json = JSON.parse(raw); } catch { json = null; }
+  return { status: res.status, json, text: raw };
+}
+
+/** The answer text and token usage from a provider reply. */
+function readReply(role: Role, j: any): { text: string; usage: { input: number; output: number; reasoning: number; cache_read: number; cache_write: number }; providerCost: number | null; servedBy: string | null } {
+  const m = MODELS[role];
+  if (m.provider === "openrouter") {
+    const u = j?.usage ?? {};
+    return { text: j?.choices?.[0]?.message?.content ?? "", usage: { input: u.prompt_tokens ?? 0, output: u.completion_tokens ?? 0, reasoning: u.completion_tokens_details?.reasoning_tokens ?? 0, cache_read: u.prompt_tokens_details?.cached_tokens ?? 0, cache_write: 0 }, providerCost: typeof u.cost === "number" ? u.cost : null, servedBy: j?.provider ?? null };
+  }
+  if (m.provider === "anthropic") {
+    const u = j?.usage ?? {};
+    const text = (j?.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("");
+    return { text, usage: { input: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), output: u.output_tokens ?? 0, reasoning: 0, cache_read: u.cache_read_input_tokens ?? 0, cache_write: u.cache_creation_input_tokens ?? 0 }, providerCost: null, servedBy: "anthropic" };
+  }
+  const u = j?.usage ?? {};
+  const text = j?.output_text ?? (j?.output ?? []).filter((o: any) => o.type === "message").flatMap((o: any) => o.content ?? []).filter((c: any) => c.type === "output_text").map((c: any) => c.text).join("");
+  return { text, usage: { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, reasoning: u.output_tokens_details?.reasoning_tokens ?? 0, cache_read: u.input_tokens_details?.cached_tokens ?? 0, cache_write: 0 }, providerCost: null, servedBy: "openai" };
+}
+
+const micros = (usd: number) => Math.ceil(usd * 1e6);
+
+async function main() {
+  const role = need("role") as Role, call = need("call") as Call;
+  if (!(role in MODELS) || !["a1", "a2", "b"].includes(call)) throw new Error("E_USAGE bad --role or --call");
+  const labeller = role !== "judge";
+  const roles = new Set(need("roles").split(","));
+  const items = need("index").split(",").flatMap((f) => JSON.parse(readFileSync(f, "utf8")) as any[])
+    .filter((x) => roles.has(x.role) && (call === "b" ? x.part === "B" : x.part === "A"));
+  const system = systemText(call, labeller);
+  const m = MODELS[role];
+  const file = { a1: "a1", a2: "a2", b: "b" }[call] + (labeller ? "_lab" : "") + ".txt";
+  if (args.has("dry-run")) {
+    console.log(JSON.stringify({ role, call, model: m.id, items: items.length, system_sha: new Bun.CryptoHasher("sha256").update(system).digest("hex"), system }, null, 1));
+    return;
+  }
+  const lease = need("lease");
+  const local = openLocalLedger(ledgerPath(args.get("ledger")));
+  const parallel = Number(args.get("parallel") ?? 4);
+  let next = 0, stop: string | null = null;
+  const summary = { sent: 0, usable: 0, unscorable: 0, retried: 0, micros: 0 };
+  async function one(x: any) {
+    const outDir = join(x.public ? need("out") : need("private-out"), role, call);
+    mkdirSync(outDir, { recursive: true });
+    const rec = join(outDir, x.id + ".json");
+    if (existsSync(rec)) { const r = JSON.parse(readFileSync(rec, "utf8")); if (r.final) return; }
+    const packet = readFileSync(join(x.dir, file), "utf8");
+    const b = body(role, system, packet);
+    const attempts: any[] = [];
+    let answer: Record<string, unknown> | null = null;
+    for (let attempt = 1; attempt <= 2 && !answer && !stop; attempt++) {
+      const inTok = Math.ceil((system.length + packet.length) / 3) + 200;
+      const max = micros((inTok * m.in + MAX_OUT * m.out) / 1e6);
+      const ik = RUN_ID + ":" + role + ":" + call + ":" + x.id + ":" + attempt;
+      const r = await local.reserve({ idempotency_key: ik, lease_id: lease, cell: { run_id: RUN_ID, arm: role, task: call + ":" + x.id, model: m.id, trial: 1, attempt, meter_id: ik }, max_micros: max });
+      if (!r.ok) { stop = r.code + " " + r.message; break; }
+      if (r.reservation.state !== "reserved") { attempts.push({ attempt, note: "reservation already " + r.reservation.state + "; not resent" }); break; }
+      const t0 = Date.now();
+      let res: { status: number; json: any; text: string } | null = null;
+      try { res = await send(role, b); } catch (e) { res = null; attempts.push({ attempt, error: String(e) }); }
+      if (!res) { await local.settle(r.reservation.reservation_id, { kind: "unknown" }); summary.sent++; continue; }
+      const rd = res.json ? readReply(role, res.json) : null;
+      const cost = rd ? (rd.providerCost ?? (rd.usage.input * m.in + rd.usage.output * m.out) / 1e6) : 0;
+      const spent = res.status === 200 && rd ? micros(cost) : 0;
+      const usage = rd && res.status === 200 ? rd.usage : { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 };
+      const s = await local.settle(r.reservation.reservation_id, { kind: "spent", spent_micros: spent, usage });
+      if (!s.ok) throw new Error(s.code + " " + s.message);
+      summary.sent++; summary.micros += spent;
+      const parsed = res.status === 200 && rd ? parseAnswer(call, x.id, rd.text) : { ok: false as const, why: "HTTP " + res.status };
+      attempts.push({ attempt, status: res.status, ms: Date.now() - t0, served_by: rd?.servedBy ?? null, usage, cost_usd: spent / 1e6, text: rd?.text ?? null, error_body: res.status === 200 ? null : res.text.slice(0, 2000), parse: parsed.ok ? "ok" : parsed.why });
+      if (parsed.ok) answer = parsed.answer;
+      if (attempt === 1 && !parsed.ok) summary.retried++;
+    }
+    const final = !!answer || attempts.filter((a) => a.status !== undefined || a.error).length >= 2;
+    if (answer) summary.usable++; else if (final) summary.unscorable++;
+    writeFileSync(rec, JSON.stringify({ run: RUN_ID, role, model: m.id, call, item: x.id, part: x.part, stratum: x.stratum ?? null, order: x.order, item_role: x.role, final, answer, attempts }, null, 1));
+  }
+  await Promise.all(Array.from({ length: parallel }, async () => { while (next < items.length && !stop) await one(items[next++]); }));
+  console.log(JSON.stringify({ role, call, model: m.id, items: items.length, ...summary, usd: summary.micros / 1e6, stop }));
+  if (stop) process.exit(3);
+}
+
+if (import.meta.main) await main();

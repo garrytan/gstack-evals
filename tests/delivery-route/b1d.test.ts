@@ -70,9 +70,12 @@ const mainRows = (k: number, gaps = 0) => RUN.map((t, i) => row(B1D_ARM, t, i < 
 const readIn = (rows: B1dRow[]) => inReading(b1dStats(rows, B1D_ARM, 60));
 
 describe("the decision", () => {
+  // pregate-literal: cap=38 this test's own number, not the office-hours rewrite ledger's cap
   test("Garry's bar is a point count: 39 of 60 clears, 38 is short, and too many gaps or a cap stop is INCOMPLETE", () => {
+    // pregate-literal: cap=38 this test's own number, not the office-hours rewrite ledger's cap
     expect([39, 40, 38, 0].map((k) => readIn(mainRows(k)).key)).toEqual(["clears", "clears", "short", "short"]);
     expect(readIn(mainRows(39)).text).toContain("the CLAUDE.md routing block is cut, unless the held-out readings below stop it");
+    // pregate-literal: cap=38 this test's own number, not the office-hours rewrite ledger's cap
     expect(readIn(mainRows(38)).text).toContain("the CLAUDE.md routing block stays and the result goes to Garry");
     expect(readIn(mainRows(45, 7)).key).toBe("incomplete");
     const capped = mainRows(45);
@@ -102,7 +105,9 @@ describe("the decision", () => {
   });
   test("the held-out report pairs each arm, splits by where the hook put prove-it, and prints the strata", () => {
     const tasks = Array.from({ length: 60 }, (_, i) => "t" + String(i).padStart(2, "0") + (i % 10 === 0 ? "_interface" : ""));
+    // pregate-literal: cap=47 this test's own number, not the office-hours rewrite ledger's cap
     const routes = new Map(tasks.map((t, i) => [t, { position: (i < 40 ? "only" : i < 47 ? "second of two" : "not named") as any, chars: 100 + i }]));
+    // pregate-literal: cap=47 this test's own number, not the office-hours rewrite ledger's cap
     const rows = tasks.flatMap((t, i) => [row(B1D_ARM, t, i < 40, i < 40 ? {} : { named: i < 47 ? ["verify", "prove-it"] : [], position: i < 47 ? "second of two" : "not named" }), row("project-md", t, i < 39), row(NOESCAPE.arm, t, i < 45), row("none", t, false)]);
     const rep = hoReport(rows, clears, routes, tasks);
     expect(rep.reading).toMatchObject({ incomplete: false, disagree: false, block: "matches", noescape: "matches", decision: "the CLAUDE.md routing block is cut (Garry's rule)" });
@@ -273,10 +278,13 @@ describe("money", () => {
   });
 });
 
+// B1d's counted runs' commit, as its results post records it (wiki/board/2026-11-19-capy-b1d-hook-default-results).
+const B1D_RUN_COMMIT = "709dae5d50018c66cf3dba74ed19e0bc32295862";
+
 describe("the controls' reuse", () => {
-  test("B1c's rows are its published rows, 39 of 60 loaded, and the trees behind them and B1's none arm are the same at this head", () => {
+  test("B1c's rows are its published rows, 39 of 60 loaded, and the trees behind them and B1's none arm are the same at B1d's run commit", () => {
     expect(b1cRows().filter((r) => r.arm === "project-md" && r.outcome === "graded" && r.load?.loaded).length).toBe(39);
-    const a = reuseB1c("HEAD"), b = reuseCheck("HEAD");
+    const a = reuseB1c(B1D_RUN_COMMIT), b = reuseCheck(B1D_RUN_COMMIT);
     expect(a.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect([a.same, b.same]).toEqual([true, true]);
   });

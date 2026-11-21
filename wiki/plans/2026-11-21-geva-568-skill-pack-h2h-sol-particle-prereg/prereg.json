@@ -1,0 +1,459 @@
+{
+ "schema": "h2h-ext-prereg.v1",
+ "post": "2026-11-21-geva-568-skill-pack-h2h-sol-particle-prereg",
+ "base": "2026-11-15-geva-538-skill-pack-h2h-prereg",
+ "base_rule": "Everything in the base post's prereg.json holds unless this file changes it: texts.task, texts.question_reply, texts.continuation, done_rule, continuation_cap, disallowed_tools, exclusion, licences, the base O and B2 units and their image digests, and the analysis test, adjustment, interval and row-state rules.",
+ "draw_seed": 4246445583,
+ "bootstrap_seed": 2522220913,
+ "order_seed": 2879427729,
+ "seed_use": {
+  "draw_seed": "section 5: Part L's seeded order over the pool union, newest month first, then seeded within a month",
+  "bootstrap_seed": "section 9: every repository-clustered bootstrap (10,000 resamples) in this plan",
+  "order_seed": "sections 5 and 11: the run order of units in every part (which also sets the halves for Part S's look) and of a unit's sessions across arms"
+ },
+ "minted_at": "2026-11-21T07:55:39.163Z",
+ "mint_command": "node -e 'const c=require(\"crypto\");const b=c.randomBytes(12);console.log(JSON.stringify({minted_at:new Date().toISOString(),draw_seed:b.readUInt32BE(0),bootstrap_seed:b.readUInt32BE(4),order_seed:b.readUInt32BE(8)}))'",
+ "mint_rule": "Minted once from crypto random bytes as unsigned 32-bit integers before any draw. Never re-minted.",
+ "sentence": "Make the smallest change that fixes the issue, and nothing more.",
+ "parts": {
+  "S": {
+   "model": "gpt-6.2-sol",
+   "host": "codex",
+   "reasoning_effort": "low",
+   "codex": {
+    "version": "0.170.0",
+    "npm": "@openai/codex@0.170.0",
+    "platform_tgz": "@openai/codex@0.170.0-linux-x64",
+    "platform_tgz_sha256": "67c4bccce8e6c3a2b9ae0e586750e0efac7e0b8cd85e6b4734ad474317d2cc32",
+    "binary": "package/vendor/x86_64-unknown-linux-musl/bin/codex",
+    "link_name": "sol-agent",
+    "arg0_names_to_avoid": [
+     "codex",
+     "codex.js",
+     "codex.exe",
+     "codex-linux-sandbox",
+     "apply_patch",
+     "applypatch"
+    ],
+    "exec_flags": [
+     "--json",
+     "--dangerously-bypass-hook-trust"
+    ]
+   },
+   "arms": [
+    "s-none",
+    "s-gstack",
+    "s-gstack-line",
+    "s-superpowers",
+    "s-agent-skills",
+    "s-gsd",
+    "s-tstack"
+   ],
+   "o_only": [
+    "s-gstack-line"
+   ],
+   "left_out": {
+    "pstack": "harness/pstack at the pin holds only a claude-code folder; no Codex install",
+    "ponystack": "a Claude Code plugin; no Codex install"
+   },
+   "agents_md": {
+    "s-gstack-line": "Make the smallest change that fixes the issue, and nothing more.\n"
+   },
+   "agents_md_sha256": "f62ebe89fbdcc840a1da59b744bdccdffb6453f6622cda86d87f6b7dffbfcd3e",
+   "entries": {
+    "s-none": {
+     "bug": [
+      ""
+     ],
+     "feature": [
+      ""
+     ]
+    },
+    "s-gstack": {
+     "bug": [
+      ""
+     ],
+     "feature": [
+      "$autoplan "
+     ]
+    },
+    "s-gstack-line": {
+     "bug": [
+      ""
+     ],
+     "feature": [
+      "$autoplan "
+     ]
+    },
+    "s-superpowers": {
+     "bug": [
+      ""
+     ],
+     "feature": [
+      ""
+     ]
+    },
+    "s-agent-skills": {
+     "bug": [
+      "$agent-skills:test-driven-development "
+     ],
+     "feature": [
+      "$agent-skills:spec-driven-development ",
+      "$agent-skills:incremental-implementation Implement every task."
+     ]
+    },
+    "s-gsd": {
+     "bug": [
+      "$gsd-debug "
+     ],
+     "feature": [
+      "$gsd-quick "
+     ]
+    },
+    "s-tstack": {
+     "bug": [
+      "Full send: "
+     ],
+     "feature": [
+      "Full send: "
+     ]
+    }
+   },
+   "limits": {
+    "allowance_usd": 15,
+    "wall_sec": 5400,
+    "max_turns": 300
+   },
+   "family": "s-gstack minus each of s-none, s-superpowers, s-agent-skills, s-gsd and s-tstack, in O and in B (10)",
+   "holm_m": 10,
+   "question_reply_cap_per_turn": 20,
+   "refused_tree_names": [
+    ".codex",
+    ".agents",
+    "AGENTS.override.md"
+   ]
+  },
+  "P": {
+   "model": "particle-ai/particle-1",
+   "host": "claude-code",
+   "route": {
+    "via": "openrouter",
+    "provider_only": [
+     "Particle AI"
+    ],
+    "data_collection": "deny",
+    "allow_fallbacks": false
+   },
+   "arms": [
+    "p-none",
+    "p-gstack",
+    "p-superpowers",
+    "p-agent-skills",
+    "p-gsd",
+    "p-pstack",
+    "p-tstack",
+    "p-gstack-pony",
+    "p-gstack-oneline"
+   ],
+   "o_only": [
+    "p-gstack-pony",
+    "p-gstack-oneline"
+   ],
+   "base_arm": {
+    "p-none": "none",
+    "p-gstack": "gstack",
+    "p-superpowers": "superpowers",
+    "p-agent-skills": "agent-skills",
+    "p-gsd": "gsd",
+    "p-pstack": "pstack",
+    "p-tstack": "tstack",
+    "p-gstack-pony": "gstack-pony",
+    "p-gstack-oneline": "gstack-oneline"
+   },
+   "pins": "the base post's pins, gstack at 3805969159bc7e595cde9dc0f3c267129cef9c16",
+   "limits": {
+    "allowance_usd": 5,
+    "wall_sec": 5400,
+    "max_turns": 300
+   },
+   "family": "p-gstack minus each of p-none, p-superpowers, p-agent-skills, p-gsd, p-pstack and p-tstack, in O and in B (12)",
+   "holm_m": 12
+  },
+  "L": {
+   "model": "claude-opus-5-5",
+   "host": "claude-code",
+   "arms": [
+    "l-none",
+    "l-gstack",
+    "l-gstack-md",
+    "l-gstack-task"
+   ],
+   "claude_md": {
+    "l-gstack": "## gstack\n\nUse the /browse skill from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.\n",
+    "l-gstack-md": "## gstack\n\nUse the /browse skill from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.\nMake the smallest change that fixes the issue, and nothing more.\n",
+    "l-gstack-task": "## gstack\n\nUse the /browse skill from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.\n"
+   },
+   "task_suffix": {
+    "l-gstack-task": "\n\nMake the smallest change that fixes the issue, and nothing more."
+   },
+   "entries": {
+    "l-none": {
+     "bug": [
+      ""
+     ],
+     "feature": [
+      ""
+     ]
+    },
+    "l-gstack": {
+     "bug": [
+      ""
+     ],
+     "feature": [
+      "/autoplan "
+     ]
+    },
+    "l-gstack-md": {
+     "bug": [
+      ""
+     ],
+     "feature": [
+      "/autoplan "
+     ]
+    },
+    "l-gstack-task": {
+     "bug": [
+      ""
+     ],
+     "feature": [
+      "/autoplan "
+     ]
+    }
+   },
+   "limits": {
+    "allowance_usd": 25,
+    "wall_sec": 5400,
+    "max_turns": 300
+   },
+   "units": {
+    "n": 100,
+    "reserve": 5,
+    "pilot": 6,
+    "pilot_rule": "the first 4 positions from pools 1 and 2 and the first 2 from pool 3 form the pilot and leave the order; positions 1 to 100 of the rest are counted, 101 to 105 reserves",
+    "repo_cap": 3,
+    "min_counted": 60,
+    "pools": {
+     "1": "6 units: the 5 reserves the head-to-head's custody log names and apache__lucene-14932, fixed by its walk log's counts; the other 12 are listed in l-frame.json as candidate windows and never walked",
+     "2": "the 56 MultiLang rows the head-to-head's walk skipped only for the repository cap, walked through the same gates",
+     "3": "quick/laneb/tasks/swerebench-r3a4.json tasks created 2026-03-01 to 2026-05-31 (110), converted by the state machines harness's SWE-rebench part, with the object-level history check"
+    },
+    "order": "newest created month first, then seeded by draw_seed within a month; positions count only units that pass every gate",
+    "walk_logs": {
+     "manifest_sha256": "174b8d5be8ec5016ef7377b86e2c2af8ce0f7dc85e996bd90ed823ef30f6e31f",
+     "copied": "2026-11-21, from the head-to-head's holding VM by its own thread, into the eval Captain's drive"
+    }
+   }
+  }
+ },
+ "gstack": {
+  "S": {
+   "repo": "garrytan/gstack",
+   "tag": "v1.102.1.0",
+   "sha": "29bff55dd8a14b32ff282d5a37097e3a53e3250a",
+   "install": "./setup --host codex"
+  },
+  "L": {
+   "repo": "garrytan/gstack",
+   "tag": "v1.102.1.0",
+   "sha": "29bff55dd8a14b32ff282d5a37097e3a53e3250a"
+  },
+  "P": {
+   "repo": "garrytan/gstack",
+   "sha": "3805969159bc7e595cde9dc0f3c267129cef9c16",
+   "version": "1.99.4.0"
+  }
+ },
+ "gstack_config": {
+  "telemetry": "off",
+  "env": {
+   "GSTACK_TELEMETRY_SOURCE": "eval"
+  }
+ },
+ "tests_added": {
+  "rule": "the extracted change (before the strict reading) adds at least one line that is not blank and not a whole-line comment (trimmed text starting with // , /* or * in rust, java, c, cpp, csharp, go, js, ts; # in python) to a test file: a TEST_PATH match, a hidden-test-patch file, or, for rust, a line inside an in-source test module (TEST_MODULES) of the new file rebuilt from base; deleted files add nothing; planning paths never count",
+  "module": "src/grade/regression-test.ts regressionTest",
+  "recount_module": "src/grade/regression-test.ts testFileChanged",
+  "published_check": {
+   "recount": {
+    "none": 79,
+    "gstack": 79,
+    "gstack-oneline": 28,
+    "agent-skills": 88,
+    "superpowers": 83
+   },
+   "frozen_rule": {
+    "none": 80,
+    "gstack": 79,
+    "gstack-oneline": 28,
+    "agent-skills": 89,
+    "superpowers": 84
+   },
+   "of": 100,
+   "class": "O"
+  }
+ },
+ "sentence_family": {
+  "contrasts": [
+   "l-gstack-md minus l-gstack",
+   "l-gstack-task minus l-gstack",
+   "s-gstack-line minus s-gstack (O)",
+   "p-gstack-oneline minus p-gstack (O)"
+  ],
+  "coprimaries": [
+   "less code: paired log ratio of non-test lines on units both arms fixed, below 1",
+   "fixes kept: verified-correct difference",
+   "tests added: difference in share of sessions that added tests"
+  ],
+  "holm_within": 3,
+  "holds": "(1) Holm-adjusted p < 0.05 with ratio < 1; (2) and (3) each point difference >= -0.05 and 95% interval not wholly below 0",
+  "min_point_diff": -0.05
+ },
+ "interim": {
+  "part": "S",
+  "at": "half of Part S's units in order_seed run order: the first 50 O and 30 B2 units, all arms",
+  "bounds": "two-look O'Brien-Fleming, two-sided, at the alpha of each contrast's Holm step",
+  "bounds_table": {
+   "0.05/10": [
+    3.972,
+    2.809
+   ],
+   "0.05/9": [
+    3.924,
+    2.775
+   ],
+   "0.05/8": [
+    3.87,
+    2.737
+   ],
+   "0.05/7": [
+    3.808,
+    2.693
+   ],
+   "0.05/6": [
+    3.735,
+    2.641
+   ],
+   "0.05/5": [
+    3.648,
+    2.58
+   ],
+   "0.05/4": [
+    3.539,
+    2.502
+   ],
+   "0.05/3": [
+    3.394,
+    2.4
+   ],
+   "0.05/2": [
+    3.183,
+    2.25
+   ],
+   "0.05/1": [
+    2.797,
+    1.977
+   ]
+  },
+  "deciding": [
+   "s-gstack minus s-none, O",
+   "s-gstack minus s-none, B",
+   "s-gstack minus each pack, O and B",
+   "s-gstack-line: less-code ratio crosses and both no-harm criteria already pass"
+  ],
+  "other_parts": "Parts P and L: no efficacy look; cap and gap stops only",
+  "other_looks": "none"
+ },
+ "pilot": {
+  "o_units": 6,
+  "b2_units": 4,
+  "l_units": 6,
+  "cap_rule": "a tenth of the arm's re-priced counted budget; the driver opens a pilot session only while the arm's settled pilot spend is under its cap; an arm whose settled spend reaches its cap before its pilot sessions all run is left out under R111",
+  "ceiling": "no pack fixes 6 of 6 O pilot units where the known rate for the model is 80% or more",
+  "floor": "no pack fixes 0 of 6",
+  "su_units": "O stage 1 feature units at positions 100 and 120, bug units at 10, 20, 30, 40; B2 stage 1 units at 6, 12, 18, 24; next by position replaces a dropped unit; smoke takes the first bug, first feature and first B2 of these"
+ },
+ "pilot_caps_usd": {
+  "s-none": 9.6,
+  "s-gstack": 10.2,
+  "s-gstack-line": 5.9,
+  "s-superpowers": 9.7,
+  "s-agent-skills": 14,
+  "s-gsd": 14,
+  "s-tstack": 13.6,
+  "p-none": 2.9,
+  "p-gstack": 3.1,
+  "p-superpowers": 2.9,
+  "p-agent-skills": 4.2,
+  "p-gsd": 4.2,
+  "p-pstack": 4.2,
+  "p-tstack": 4.1,
+  "p-gstack-pony": 1.8,
+  "p-gstack-oneline": 1.3,
+  "l-none": 4,
+  "l-gstack": 4,
+  "l-gstack-md": 4,
+  "l-gstack-task": 4
+ },
+ "items": [
+  {
+   "id": "h2hx-s-pilot",
+   "what": "20 smoke and 66 pilot Sol sessions",
+   "central_usd": 63,
+   "cap_usd": 175
+  },
+  {
+   "id": "h2hx-s-main",
+   "what": "1,060 Sol sessions",
+   "central_usd": 770,
+   "cap_usd": 1130
+  },
+  {
+   "id": "h2hx-p-pilot",
+   "what": "25 smoke and 82 pilot particle-1 sessions",
+   "central_usd": 23,
+   "cap_usd": 61
+  },
+  {
+   "id": "h2hx-p-main",
+   "what": "1,320 particle-1 sessions",
+   "central_usd": 287,
+   "cap_usd": 417
+  },
+  {
+   "id": "h2hx-l-pilot",
+   "what": "8 smoke and 24 pilot Opus sessions",
+   "central_usd": 13,
+   "cap_usd": 168
+  },
+  {
+   "id": "h2hx-l-main",
+   "what": "400 Opus sessions",
+   "central_usd": 160,
+   "cap_usd": 366
+  },
+  {
+   "id": "h2hx-vms",
+   "what": "runner, Part L walk builder and the rebuild of parts S and P's units",
+   "central_usd": 350,
+   "cap_usd": 450
+  },
+  {
+   "id": "h2hx-crew",
+   "what": "this thread's model use",
+   "central_usd": 400,
+   "cap_usd": 650
+  }
+ ],
+ "approved_all_in_cap_usd": 3450,
+ "unit_images": "parts S and P rebuild each head-to-head unit's image from its frozen recipe and re-run the base oracle (3 base fail, 3 fixed pass) before use; both digests recorded; a unit that fails drops for every arm of both parts"
+}

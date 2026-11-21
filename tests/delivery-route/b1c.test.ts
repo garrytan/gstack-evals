@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { B1C_CASES, b1bControls, b1cApprove, b1cCap, b1cCaseProblems, b1cCheck, b1cDone, b1cGuard, b1cMain, b1cPlan, b1cReading, b1cReport, b1cRow, b1cStats, bandOdds, checkB1cRows, harnessDirty, loadB1cCaptured, placementReading, powerLines, READINGS, reuseB1b, whyNot, type B1cRow } from "../../lanes/delivery-route/b1c.ts";
 import { B1C, B1C_CAPS_USD, B1C_SPEC, PLACEMENT } from "../../lanes/delivery-route/b1c-pins.ts";
 import { B1B_ARMS } from "../../lanes/delivery-route/b1b-pins.ts";
+import { B1C_RUN } from "../../lanes/delivery-route/b1d-pins.ts";
 import { paired, reuseCheck, type Load } from "../../lanes/delivery-route/b1b.ts";
 import { ARM_SOURCES, drawnTasks, loadBundle, REPO, sha256 } from "../../lanes/delivery-route/pins.ts";
 import { b1Row, type B1Row } from "../../lanes/delivery-route/table.ts";
@@ -99,7 +100,9 @@ describe("the decision", () => {
   test("B1b's controls are its published rows: hook 58 of 60 loaded, claude-md 20 of 60", () => {
     expect(["hook", "claude-md"].map((a) => controls.filter((r) => r.arm === a && r.outcome === "graded" && r.load?.loaded).length)).toEqual([58, 20]);
   });
+  // pregate-literal: cap=41 this test's own number, not the office-hours rewrite ledger's cap
   test("every band at its edges: matches down to 55 of 60, middle from 54 to 42, clearly loses from 41", () => {
+    // pregate-literal: cap=41 this test's own number, not the office-hours rewrite ledger's cap
     expect([58, 55, 54, 42, 41, 20].map((k) => read(rows(k)))).toEqual(["matches", "matches", "middle", "middle", "clearly-loses", "clearly-loses"]);
     expect(read(rows(58, 7))).toBe("incomplete");
     const capped = rows(58);
@@ -112,6 +115,7 @@ describe("the decision", () => {
     expect(placementReading({ lo: 0.1, hi: 0.5 })).toContain("loads more");
     expect(placementReading({ lo: -0.5, hi: -0.1 })).toContain("loads less");
     expect(placementReading({ lo: -0.1, hi: 0.1 })).toContain("not shown");
+    // pregate-literal: cap=41 this test's own number, not the office-hours rewrite ledger's cap
     const rep = b1cReport(rows(41));
     expect(rep.reading?.key).toBe("clearly-loses");
     expect(rep.lines.find((l) => l.includes("control, B1b hook"))).toBe("  control, B1b hook (the hook line): loaded 58/60, followed 36/60");
@@ -164,7 +168,8 @@ describe("money", () => {
     expect(g.ok).toBe(false);
     expect(g.why[0]).toMatch(/^all-in \$150\.01 passes the \$150\.00 stop$/);
   });
-  test("the launch command's guard reads the work dir's ledger mirror before B1C_LEDGERS, and refuses a bad or missing crew file", async () => {
+  // The guard refuses before it reads a ledger on a head whose harness differs from B1's (tests/delivery-route/reuse-guard.test.ts).
+  test.skipIf(!reuseCheck("HEAD").same)("the launch command's guard reads the work dir's ledger mirror before B1C_LEDGERS, and refuses a bad or missing crew file", async () => {
     const root = mkdtempSync(join(tmpdir(), "b1c-guard-")), work = join(root, "work"), ledgers = join(root, "ledgers"), crew = join(root, "crew.json"), mirror = join(work, "host/ledger.jsonl");
     const saved = { B1C_LEDGERS: process.env.B1C_LEDGERS, B1C_CREW: process.env.B1C_CREW, LEDGER: process.env.LEDGER };
     const guard = () => b1cMain(["guard", work]);
@@ -190,8 +195,8 @@ describe("money", () => {
 });
 
 describe("the controls' reuse", () => {
-  test("every session-deciding tree is the same at this head as at B1b's run commit, and at B1's for the none arm", () => {
-    const a = reuseB1b("HEAD"), b = reuseCheck("HEAD");
+  test("every session-deciding tree is the same at B1c's run commit as at B1b's, and at B1's for the none arm", () => {
+    const a = reuseB1b(B1C_RUN.commit), b = reuseCheck(B1C_RUN.commit);
     expect(a.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect([a.same, b.same]).toEqual([true, true]);
   });

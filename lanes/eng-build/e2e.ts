@@ -67,7 +67,7 @@ const unitImage = built.eb.image.id;
 
 const repo = join(W, "repos", id);
 mkdirSync(repo, { recursive: true });
-const git = (dir: string, args: string[]) => spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", ...args], { encoding: "utf8" });
+const git = (dir: string, args: string[]) => spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "maintenance.auto=false", ...args], { encoding: "utf8" });
 spawnSync("sh", ["-c", 'git -C "$1" archive "$2" | tar -x -C "$3"', "sh", fx.repo, fx.sha.base!, repo]);
 git(repo, ["init", "-q", "-b", "main"]);
 git(repo, ["add", "-A"]);

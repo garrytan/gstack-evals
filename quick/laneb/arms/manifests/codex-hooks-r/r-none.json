@@ -1,0 +1,49 @@
+{
+  "arm": "r-none",
+  "spec": "r-none:tar=r-none:session_kind=unattended:strip_snapshot=true:closing_line=hm-status",
+  "codex": "0.170.0",
+  "gstack": null,
+  "routing": null,
+  "switches": {},
+  "prove_it": null,
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu",
+  "tar": {
+    "file": "r-none.tar",
+    "bytes": 10240,
+    "sha256": "f62c63eb30ec31a2b49dab82c7f65e7e59d8bc2b7f8b76f5ae2a30597ddb1d6b"
+  },
+  "tree": {
+    "files": 0,
+    "symlinks": 0,
+    "dirs": 1,
+    "digest": "b46cf28d4aac04c6e3215ba4c55a8797faf09447acfbec8febc8869d190cdc1b"
+  },
+  "prompt_input": {
+    "sha256": "927efb820a575adefae17f2b118fae66267876f609f6c2f677f9244cdababb42",
+    "skills": 0,
+    "prove_it_line": null
+  },
+  "build": {
+    "markers": [
+      ".completeness-intro-seen",
+      ".telemetry-prompted",
+      ".proactive-prompted",
+      ".activated",
+      ".first-loop-tip-shown",
+      ".feature-prompted-model-overlay",
+      ".writing-style-prompted",
+      ".question-tuning-prompted",
+      ".redact-prepush-prompted",
+      ".declared-setup-prompted"
+    ],
+    "seed": {
+      "telemetry": "off",
+      "update_check": "false",
+      "artifacts_sync_mode": "off",
+      "artifacts_sync_mode_prompted": "true",
+      "codex_reviews": "disabled",
+      "routing_declined": "true",
+      "proactive": "core"
+    }
+  }
+}

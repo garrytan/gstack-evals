@@ -6,13 +6,18 @@
 // contrast the first twin takes. The comparison set is five skins of the eight founder types (T1 to T6 as pairs, T7 and
 // T8 unpaired) plus 24 builders, one per goal and skin but one; calibration and reserves are two pairs, T7, T8 and two
 // builders each. Anti-patterns go round a seeded order of the list over the comparison openings first, so each appears in
-// at least one. The slots run in one seeded order (seed 20261117). Draws are numbered as they are made: Sol writes odd
-// draws and Argon even ones, and a pair's second twin comes from the pair's family.
+// at least one. The slots run in one seeded order (seed 20261117).
+// The second attempt (its sections 4 and 5.1) computes that schedule in full, so every slot keeps its inputs, and drops 8
+// comparison founder slots (frozen.DROPPED_SLOTS); each kept slot carries its seeded position p in the full list. A
+// slot's drafts follow a fixed sequence: its k-th first-twin or unpaired draft is draw 1000 * (p + 1) + k, so a draw
+// depends only on the slot and its numbers and never on concurrency or a restart, and stays clear of the first
+// attempt's draws, which never reached 1000. Sol writes it when p + k is odd and Argon when it is even; a second twin
+// comes from its partner's family.
 import { seededRandom, shuffle } from "../../product-value/stats.ts";
 import { authorOf, otherFamily, modelOf } from "../../office-hours-founder/author/draws.ts";
 import { sha256 } from "../../office-hours-founder/author/files.ts";
-import { BUILDER_GOALS, PAIRED_TYPES, SEED, UNPAIRED_TYPES } from "../frozen.ts";
-import type { BuilderGoal, Fact, FounderType, SetName } from "../types.ts";
+import { BUILDER_GOALS, DROPPED_SLOTS, PAIRED_TYPES, SEED, UNPAIRED_TYPES } from "../frozen.ts";
+import type { AuthorFamily, BuilderGoal, Fact, FounderType, SetName } from "../types.ts";
 import { ANTI_PATTERNS, SKINS } from "./prompts.ts";
 
 export { authorOf, otherFamily, modelOf };
@@ -34,14 +39,16 @@ export interface Slot {
   anti_pattern: string | null;
   /** The first twin's side of the hidden contrast (pairs only; 0 otherwise). */
   side: 0 | 1;
+  /** The slot's 0-based position in the first attempt's full seeded list of 76. */
+  p: number;
 }
 
 const RESERVE_SKIN = 6;
 
-/** The 76 slots in seeded draw order. */
-export function schedule(): Slot[] {
+/** The first attempt's 76 slots in seeded draw order. */
+export function fullSchedule(): Slot[] {
   const rng = seededRandom(SEED);
-  const out: Omit<Slot, "anti_pattern" | "side">[] = [];
+  const out: Omit<Slot, "anti_pattern" | "side" | "p">[] = [];
   const add = (set: SetName, skin: number, skinIndex: number, type: FounderType | BuilderGoal) => {
     const kind: SlotKind = (BUILDER_GOALS as readonly string[]).includes(type) ? "builder" : (PAIRED_TYPES as readonly string[]).includes(type) ? "pair" : "founder";
     const s = SKINS[skinIndex]!;
@@ -57,8 +64,16 @@ export function schedule(): Slot[] {
   const patterns = shuffle(ANTI_PATTERNS.map((a) => a.id), rng);
   const founders = [...shuffle(out.filter((s) => s.set === "comparison" && s.kind !== "builder"), rng), ...out.filter((s) => s.set !== "comparison" && s.kind !== "builder")];
   const pattern = new Map(founders.map((s, k) => [s.slot, patterns[k % patterns.length]!]));
-  return shuffle(out, rng).map((s) => ({ ...s, anti_pattern: pattern.get(s.slot) ?? null, side: s.kind === "pair" && rng() < 0.5 ? 1 : 0 }));
+  return shuffle(out, rng).map((s, p) => ({ ...s, anti_pattern: pattern.get(s.slot) ?? null, side: s.kind === "pair" && rng() < 0.5 ? 1 : 0, p }));
 }
+
+/** The second attempt's 68 slots: the full schedule less the dropped 8, in the same order. */
+export const schedule = (): Slot[] => fullSchedule().filter((s) => !DROPPED_SLOTS.includes(s.slot));
+
+/** A slot's k-th first-twin or unpaired draft's draw number. */
+export const drawOf = (p: number, k: number): number => 1000 * (p + 1) + k;
+/** Who writes a slot's k-th first-twin or unpaired draft. */
+export const familyOf = (p: number, k: number): AuthorFamily => ((p + k) % 2 === 1 ? "sol" : "argon");
 
 /** A brief's facts in its seeded order: sorted by sha256 of the seed, the brief id and the fact id. */
 export const factOrder = (brief: string, facts: readonly Fact[]): Fact[] => [...facts].sort((a, b) => (sha256(SEED + "\n" + brief + "\n" + a.id) < sha256(SEED + "\n" + brief + "\n" + b.id) ? -1 : 1));

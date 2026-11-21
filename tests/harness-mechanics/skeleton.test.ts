@@ -58,6 +58,7 @@ describe("pins", () => {
     expect(lists.judgePilot).toEqual(lists.calibration.slice(0, 12));
   });
 
+  // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
   test("the caps sum to 3,544.387061 with D15's Stage 4 caps and crew cap (3,074.387061 before it), the planned line counts every item before Stage 4 at its settled and fits under 3,000, and each model's allowance is section 22's or its deviation's", () => {
     expect(ledgerCapsUsd()).toBe(2494.387061);
     expect(capsTotalUsd()).toBe(3544.387061);

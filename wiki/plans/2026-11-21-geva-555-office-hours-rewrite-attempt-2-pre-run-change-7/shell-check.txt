@@ -1,0 +1,17 @@
+# Keyless shell check, 2026-11-21, trial image gstack-evals-trial:c5c0dd796fcdd755, no network, no key
+
+$ codex --version
+codex-cli 0.170.0
+
+$ grep -n PATH= /etc/profile; command -v bun
+5:  PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+7:  PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games"
+/usr/local/bin/bun
+
+$ PATH=/opt/codex-0.170.0/codex-path:$PATH, then a plain bash -lc that reports login_shell and whether that directory is still on PATH
+login=yes
+path=dropped
+
+$ the same with bash -c
+login=no
+path=kept

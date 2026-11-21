@@ -137,6 +137,7 @@ describe("ledger", () => {
   });
   test("a lock is never replaced, even one whose pid is dead on this machine, and a release keeps a lock it no longer owns", () => {
     const p = join(mkdtempSync(join(tmpdir(), "ledger-")), "l.jsonl");
+    // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
     writeFileSync(`${p}.lock`, JSON.stringify({ pid: 2 ** 22 + 1, host: hostname(), token: "dead" }));
     expect(() => lockLedger(p)).toThrow("remove it by hand");
     expect(JSON.parse(readFileSync(`${p}.lock`, "utf8")).token).toBe("dead");
