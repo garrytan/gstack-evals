@@ -215,7 +215,7 @@ Money runs on the Lane B ledger, one item per run, each opened with its approval
 | b1e-in | 60 | 28.80 | 30.00 | 14.88 | 90 | 90 |
 | b1e-fresh | 120 | 47.40 | 30.00 | 14.88 | 110 | 110 |
 
-Dollars, at B1d's planning rates (gstack-main 0.48, none 0.31 a session; B1d measured 0.42 for gstack-main in-sample, VM included). Each formula cap is ceil10(1.35 x expected + the open-session reserve + VM share) (b1e.ts b1eCap; plan.txt). The recorded caps sum to 230; expected paid spend is about 78 with VMs. The brief's figure was about 60 a set and 150 in all at caps; the formula's reserve and VM share, which never settle as model spend, make the difference. The thread's own model use has its own limit of 80, outside these caps.
+Dollars, at B1d's planning rates (gstack-main 0.48, none 0.31 a session; B1d measured 0.42 for gstack-main in-sample, VM included). Each formula cap is ceil10(1.35 x expected + the open-session reserve + VM share) (b1e.ts b1eCap; plan.txt). The recorded caps sum to 230. Expected model spend is about 78. The VM share of about 37 is the reserve for the host's TTL and the part VMs' 4-hour blocks; B1d's VMs and host settled 1.74 for its 60 in-sample sessions. The brief's figure was about 60 a set and 150 in all at caps; the formula's reserve and VM share, which never settle as model spend, make the difference. The thread's own model use has its own limit of 80, outside these caps.
 
 ## Pilots
 
