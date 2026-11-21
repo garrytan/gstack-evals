@@ -104,6 +104,15 @@ describe("cso sessions: the record", () => {
   test("every opened path, repository-relative, in first-seen order, helper handles included", () => {
     expect(openedPaths(recs, "/work/repo")).toEqual(["src/a.ts", "lib", "src/b.ts", "@cso-path//0123456789abcdef0123456789abcdef"]);
   });
+  test("helper reads through shell variables count as opened, each one in a command, as in stage 0's Opus sessions", () => {
+    const bash = (command: string) => ({ type: "AssistantMessage", parent_tool_use_id: null, content: [{ type: "tool_use", id: "v" + command.length, name: "Bash", input: { command } }] });
+    const v = [
+      bash("G=~/.claude/skills/gstack/bin/gstack-cso-launcher; R=1795273710354-cc00549a7600619a; $G read $R packages/happy-dom/src/fetch/Fetch.ts 2>&1 | grep -n -i redirect | head -60"),
+      bash('L=~/.claude/skills/gstack/bin/gstack-cso-launcher; R=1795273710354-cc00549a7600619a; $L read $R lib/a.js | sed -n 1,9p; $L read "$R" "lib/b.js"'),
+      bash("X=/usr/bin/foo; $X read 1795273710354-cc00549a7600619a lib/c.js"),
+    ];
+    expect(openedPaths(v, "/work/repo")).toEqual(["packages/happy-dom/src/fetch/Fetch.ts", "lib/a.js", "lib/b.js"]);
+  });
   test("model id and harness version come from the session's own init record, never the plan", () => {
     expect(sessionIdentity(recs)).toEqual({ model_id: "claude-opus-5-5-20261101", harness_version: "2.1.325" });
     expect(() => sessionIdentity(recs.slice(1))).toThrow(/^E_CSO_SESSION /);

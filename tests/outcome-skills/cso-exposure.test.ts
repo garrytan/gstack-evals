@@ -86,7 +86,7 @@ describe("cso exposure", () => {
     const P = "R=" + R0 + "; L=" + L + "; ";
     const recs = [
       ...LOADED,
-      ...call(L + ' start --repo /work/repo 2>&1 | head -100; echo "exit: ${PIPESTATUS[0]}"', JSON.stringify({ schemaVersion: 3, runId: R0, status: "running", source: { root: "<REDACTED-internal.user_path>" } }, null, 2) + "\nexit: 0"),
+      ...call(L + ' start --repo /work/repo 2>&1 | head -100; echo "exit: ${PIPESTATUS[0]}"', '{\n  "schemaVersion": 3,\n  "runId": "' + R0 + '",\n  "repoId": "ddc5e473a09bd156b4eb7c42",\n  "exclusions": [\n    "test/node_modules/module2/index.js: excluded: host dependencies, metadata, state, or agent configuration",\nexit: 0'),
       ...call(P + '$L inspect $R > /tmp/cso_inspect.json 2>&1; echo "exit $?"', "exit 0"),
       ...call(P + '$L read $R lib/resolver-compat.js > /tmp/cso_rc.txt 2>&1; grep -n "isPathAllowed" /tmp/cso_rc.txt | head -40', "105:  isPathAllowed(path) {"),
       ...call(
@@ -97,6 +97,14 @@ describe("cso exposure", () => {
     expect(csoExposure(recs).exposure).toEqual({ loaded: true, procedure_ran: true, run_id: R0, completeness: "partial", findings_submitted: 0, tooling_errors: 0, host_reads_after_start: 0, scope: "daily/default" });
     const braced = [...LOADED, ...call(L + " start --repo .", startOut), ...call('G="' + L + '"; R=' + RUN + '; "$G" read "${R}" src/a.ts | head', "x"), ...call(L + " finish " + RUN, "{}")];
     expect(csoExposure(braced).exposure.procedure_ran).toBe(true);
+  });
+  test("a start whose JSON the model cut short still names its run by its runId line; a refusal or a stray id does not", () => {
+    const cut = '{\n  "schemaVersion": 3,\n  "runId": "' + RUN + '",\n  "repoId": "r",\n  "status": "running",\nexit=0';
+    const ran = (startOut: string, error = false) => csoExposure([...LOADED, ...call(L + " start --repo /work/repo 2>&1 | head -100", startOut, error), ...call(L + " inspect " + RUN, inspectOut), ...call(L + " finish " + RUN, "{}")]).exposure;
+    expect(ran(cut)).toMatchObject({ procedure_ran: true, run_id: RUN, scope: "daily/default" });
+    expect(ran(cut, true)).toMatchObject({ procedure_ran: false, run_id: null });
+    expect(ran('{"ok":false,"error":{"code":"INVALID_ARGUMENT","message":"bad"}}')).toMatchObject({ procedure_ran: false, run_id: null });
+    expect(ran("note " + RUN + " seen")).toMatchObject({ procedure_ran: false, run_id: null });
   });
   test("a variable bound to anything but the launcher does not resolve to it, an assignment is not a call, and a binding ends with its command", () => {
     const recs = [
