@@ -339,6 +339,20 @@ describe("tighter parsing", () => {
     expect(has(check(prereg(swap("## Judge check", "<!-- unclosed\n## Judge check"))), 'practice 5: no "## Judge check" section')).toBe(true);
   });
 
+  test("a fenced <!-- does not hide the real sections after it", () => {
+    expect(check(prereg("```\n<!-- a template note\n```\n\n" + PASSING_PREREG))).toEqual([]);
+  });
+
+  test("an inline-code <!-- does not open a comment that swallows a fence opener", () => {
+    const template = PASSING_PREREG.replace(/^# [^\n]*\n\n/, "");
+    for (const fenced of ["-->\n" + template, template + "-->\n"]) {
+      const problems = check(prereg("# Plan\n\nWrite `<!--` to hide a note.\n\n```markdown\n" + fenced + "```\n"));
+      for (const missing of ['practice 1: no "## Decision" section', 'practice 3: no "## Pilots" section', 'practice 5: no "## Judge check" section', 'practice 6: no "## Interim look" section']) {
+        expect(has(problems, missing)).toBe(true);
+      }
+    }
+  });
+
   test("a file with Windows line endings gets the line-ending problem, not missing sections", () => {
     const problems = check({ [PREREG]: post(PREREG_ID, "plan", PASSING_PREREG, "Preregistration: does the hook help?").replaceAll("\n", "\r\n") });
     expect(has(problems, "use LF line endings")).toBe(true);

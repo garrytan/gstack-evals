@@ -348,16 +348,30 @@ function bodyLines(text: string): string[] {
   const lines = text.split("\n");
   const close = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
   let fence = "";
-  const body = lines.slice(close + 1).join("\n").replace(/<!--[\s\S]*?(?:-->|$)/g, "");
-  return body.split("\n").filter((l) => {
+  let comment = false;
+  return lines.slice(close + 1).flatMap((l) => {
     const f = l.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-    if (!fence) {
-      if (!f || (f[1][0] === "`" && f[2].includes("`"))) return true;
-      fence = f[1];
-      return false;
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = "";
+      return [];
     }
-    if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = "";
-    return false;
+    if (comment) {
+      if (l.includes("-->")) comment = false;
+      return [];
+    }
+    if (f && !(f[1][0] === "`" && f[2].includes("`"))) {
+      fence = f[1];
+      return [];
+    }
+    const masked = l.replace(/`[^`]*`/g, (m) => " ".repeat(m.length));
+    let kept = "";
+    let at = 0;
+    for (const m of masked.matchAll(/<!--.*?(-->|$)/g)) {
+      kept += l.slice(at, m.index);
+      at = m.index + m[0].length;
+      if (!m[1]) comment = true;
+    }
+    return [kept + l.slice(at)];
   });
 }
 
