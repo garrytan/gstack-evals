@@ -8,12 +8,14 @@
 //   CSO_HOME     the arm's installed home (cso and untold; none runs with no home)
 //   CSO_STAGE    the stage the records name (stage0, stage1, repilot or stage2; stage2 by default)
 //   CSO_OUT      where session dirs go; CSO_WORK/sessions by default
+//   CSO_READOUT_KEY  the readout key's path (stage1 and repilot, whose session dirs are sealed to it)
 // Harbor runs from PATH (the venv that holds claude-agent-sdk). Sol's Codex runner is a stub until the Captain's go.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SessionImage } from "../statemachines/image.ts";
 import type { CsoArmRecord } from "./arms.ts";
 import type { CsoRunner } from "./cli.ts";
+import { readKey, sealedStage } from "./analysis/readout.ts";
 import { csoFail } from "./prereg.ts";
 import { buildCsoImage, runCsoSession } from "./run.ts";
 import type { CsoArm, CsoModel, CsoStage, UnitRecord } from "./types.ts";
@@ -36,6 +38,7 @@ export function csoRunner(env: Record<string, string | undefined> = process.env)
       for (const k of ["CSO_CONTROL", "CSO_PROXY", "CSO_WORK", ...(arm === "none" ? [] : ["CSO_HOME"])]) need(env, k);
       const stage = (env.CSO_STAGE ?? "stage2") as CsoStage;
       if (!STAGES.includes(stage)) csoFail("E_CSO_RERUN_PRECONDITION", "CSO_STAGE " + JSON.stringify(stage) + " is not one of " + STAGES.join(", "));
+      if (sealedStage(stage)) readKey(need(env, "CSO_READOUT_KEY"));
       armRecord(need(env, "CSO_WORK"), arm);
     },
     async run({ arm, model, unit, allowance_usd, cap_left_usd }) {
@@ -48,7 +51,7 @@ export function csoRunner(env: Record<string, string | undefined> = process.env)
       const n = index++;
       const out = join(env.CSO_OUT ?? join(work, "sessions"), stage, unit, arm + "-" + model + "-" + n);
       const home = { dir: arm === "none" ? null : need(env, "CSO_HOME"), home_tree_sha256: armRecord(work, arm).home_tree_sha256 };
-      const { record } = await runCsoSession({ unit: rec, tree, image, arm, model: model as CsoModel, stage, index: n, home, control: need(env, "CSO_CONTROL"), proxy: need(env, "CSO_PROXY"), out, allowance: allowance_usd, capLeftUsd: cap_left_usd });
+      const { record } = await runCsoSession({ unit: rec, tree, image, arm, model: model as CsoModel, stage, index: n, home, control: need(env, "CSO_CONTROL"), proxy: need(env, "CSO_PROXY"), out, allowance: allowance_usd, capLeftUsd: cap_left_usd, seal: sealedStage(stage) ? readKey(need(env, "CSO_READOUT_KEY")) : null });
       return { cost_usd: record.cost_usd };
     },
   };

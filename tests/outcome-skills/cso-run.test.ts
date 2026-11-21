@@ -2,11 +2,12 @@
 // Plan sections 4, 8 and 9: the /cso session runner (cso/run.ts) against a stub Harbor that drops each attempt's summary and
 // transcript where h2h_agent writes them. Harbor's argv and the attempt's config, overlay and manifest; a completed session
 // and its record with exposure and resolved handles; one whole-session retry naming meta.rerun, then a gap; a retry the
-// spend cap can't cover; the finalize halts and their POST /stop; and a home that no longer hashes to its arm record.
+// spend cap can't cover; the finalize halts and their POST /stop; a home that no longer hashes to its arm record; and a
+// stage 1 or re-pilot session sealed to the readout key, whose dir then holds no transcript, log or outcome in plain.
 // No Docker, no key, no model call.
 import { afterAll, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { homeTreeSha256 } from "../../lanes/outcome-skills/h2h/arms/hash.ts";
@@ -14,6 +15,7 @@ import { pathId } from "../../lanes/outcome-skills/cso/exposure.ts";
 import { loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
 import { CSO_BASE_IMAGE, CSO_RERUN, csoRunCopy, runCsoSession, treePaths, type CsoSessionInput } from "../../lanes/outcome-skills/cso/run.ts";
 import { csoRunner } from "../../lanes/outcome-skills/cso/rerunner.ts";
+import { isSealedRow, openBytes, openRow, readKey } from "../../lanes/outcome-skills/cso/analysis/readout.ts";
 import type { UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
 
 const p = loadCsoPrereg();
@@ -181,4 +183,67 @@ test("loaded reads Claude Code's session log, where the expanded /cso command bl
   const bare = stub([{ summary: completed() }]);
   writeFileSync(join(bare.dir, "a1", "sdk-messages.jsonl"), sdk.map((r) => JSON.stringify(r)).join("\n") + "\n");
   expect((await runCsoSession(input({ harbor: bare.bin }))).record.exposure.loaded).toBe(false);
+});
+
+const sealKeyFile = () => {
+  const k = join(tmp(), "readout.key");
+  writeFileSync(k, "ab".repeat(32));
+  chmodSync(k, 0o600);
+  return k;
+};
+const files = (d: string): string[] => readdirSync(d).flatMap((e) => (statSync(join(d, e)).isDirectory() ? files(join(d, e)) : [join(d, e)]));
+const leaks = ["Finding 1", "holds a key", RUN, "/cso", "DONE", "spent_micros", "procedure_ran", "h2h_agent"];
+const scan = (out: string) => {
+  for (const f of files(out)) {
+    expect([f, f.endsWith(".sealed") || f.endsWith("/session.json")]).toEqual([f, true]);
+    const t = readFileSync(f, "utf8");
+    for (const l of leaks) expect([f, l, t.includes(l)]).toEqual([f, l, false]);
+  }
+};
+
+test("a stage 1 session writes its record as one sealed row and seals every other file in its dir; stage 0 stays plain", async () => {
+  const key = readKey(sealKeyFile());
+  const i = input({ harbor: stub([{ summary: completed() }]).bin, stage: "stage1", seal: key });
+  const { record } = await runCsoSession(i);
+  scan(i.out);
+  const rows = readFileSync(join(i.out, "session.json"), "utf8").trim().split("\n");
+  expect(rows.length).toBe(1);
+  const row = JSON.parse(rows[0]!);
+  expect(isSealedRow(row)).toBe(true);
+  expect(openRow(row, key, "session.json")).toEqual(JSON.parse(JSON.stringify(record)));
+  expect(openBytes(readFileSync(join(i.out, "sdk-messages.jsonl.sealed"), "utf8"), key, "t").toString("utf8")).toBe(transcript.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  expect(files(i.out).some((f) => f.includes("/a1/") && f.endsWith("harbor.log.sealed"))).toBe(true);
+  expect(() => openRow(row, Buffer.alloc(32, 1), "session.json")).toThrow(/^E_CSO_READOUT_KEY/);
+  const plain = input({ harbor: stub([{ summary: completed() }]).bin });
+  await runCsoSession(plain);
+  expect(JSON.parse(readFileSync(join(plain.out, "session.json"), "utf8")).texts[0]).toContain("Finding 1");
+  expect(existsSync(join(plain.out, "sdk-messages.jsonl"))).toBe(true);
+});
+
+test("a stage 1 or re-pilot session with no readout key is refused before Harbor, and a halted one is sealed all the same", async () => {
+  const s = stub([{ summary: completed() }]);
+  for (const stage of ["stage1", "repilot"] as const) {
+    const i = input({ harbor: s.bin, stage });
+    await expect(runCsoSession(i)).rejects.toThrow(/^E_CSO_SESSION .*sealed to the readout key/);
+    expect(existsSync(i.out)).toBe(false);
+  }
+  expect(existsSync(join(s.dir, "jobs.txt"))).toBe(false);
+  const bad = { ...completed(), slot: { id: "ses_9", close: { ...close(1), finalized: false } } };
+  const i = input({ harbor: stub([{ summary: bad }]).bin, stage: "repilot", seal: readKey(sealKeyFile()) });
+  await expect(runCsoSession(i)).rejects.toThrow(/^E_CSO_FINALIZE_HALT/);
+  expect(existsSync(join(i.out, "session.json"))).toBe(false);
+  expect(files(i.out).length).toBeGreaterThan(0);
+  scan(i.out);
+});
+
+test("rerun's runner needs CSO_READOUT_KEY for stage 1 and the re-pilot, and not for stage 0", () => {
+  const work = tmp();
+  mkdirSync(join(work, "arms"));
+  writeFileSync(join(work, "arms", "none.json"), JSON.stringify({ home_tree_sha256: "f".repeat(64) }));
+  const env = { CSO_CONTROL: "http://127.0.0.1:9", CSO_PROXY: "127.0.0.1:8", CSO_WORK: work };
+  const pre = (e: Record<string, string>) => () => csoRunner(e).preflight!({ arm: "none", model: "opus" });
+  expect(pre({ ...env, CSO_STAGE: "stage1" })).toThrow(/^E_CSO_RERUN_PRECONDITION CSO_READOUT_KEY is not set/);
+  expect(pre({ ...env, CSO_STAGE: "repilot", CSO_READOUT_KEY: join(work, "missing.key") })).toThrow(/^E_CSO_READOUT_KEY/);
+  expect(pre({ ...env, CSO_STAGE: "stage1", CSO_READOUT_KEY: sealKeyFile() })).not.toThrow();
+  expect(pre({ ...env, CSO_STAGE: "stage0" })).not.toThrow();
 });

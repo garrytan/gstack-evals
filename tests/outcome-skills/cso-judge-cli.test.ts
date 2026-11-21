@@ -2,7 +2,8 @@
 // The judging commands end to end on a temporary work dir, keyless: judge (passes A and B, --check and --probe) on a fake
 // transport, then score, stage0, analyze and readout over the files they wrote. judge --check runs through the real
 // metering proxy on a stubbed upstream and leaves no count or kappa in plain, in its output or in any file of its out dir.
-// judge, score and readout on stage 1 seal every stage 1 row and kept reply to the readout key, and stage 0's rows stay plain.
+// judge, score and readout on stage 1 seal every stage 1 row, kept packet and kept reply to the readout key, the runner's
+// stage 1 session rows come in sealed, and stage 0's rows stay plain.
 import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,7 +12,7 @@ import { COMMANDS } from "../../lanes/outcome-skills/cso/cli.ts";
 import { judgeCmd, readRows } from "../../lanes/outcome-skills/cso/cli-judge.ts";
 import type { Transport } from "../../lanes/outcome-skills/cso/judge/client.ts";
 import { JUDGE_ITEM } from "../../lanes/outcome-skills/cso/judge/meter.ts";
-import { isSealedRow, openCheck, openRow, readKey } from "../../lanes/outcome-skills/cso/analysis/readout.ts";
+import { isSealedRow, openCheck, openRow, readKey, sealRow } from "../../lanes/outcome-skills/cso/analysis/readout.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import type { CsoArm, CsoModel, CsoStage, SessionRecord, UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
 
@@ -29,7 +30,8 @@ for (const a of ["none", "cso", "untold"]) put(join(work, "arms", a + ".json"), 
 const cells: [CsoModel, CsoArm][] = [["opus", "none"], ["opus", "cso"], ["opus", "untold"], ["particle", "none"], ["particle", "cso"]];
 const sess = (unit: string, model: CsoModel, arm: CsoArm, stage: CsoStage): SessionRecord => ({ schema: "cso-session.v1", unit, arm, model, stage, model_id: "m", harness: "claude-code", harness_version: "x", end: "completed", reason: null, attempts: 1, continuations: 0, done_seen: true, texts: [arm === "none" ? "No issues found.\nDONE" : "src/parse.js:41 joins the request path without normalizing it.\nDONE"], opened: ["src/parse.js"], helper: { snapshot_root: null, handles: {} }, exposure: { loaded: arm !== "none", procedure_ran: arm === "cso", run_id: arm === "cso" ? "r" : null, completeness: "complete", findings_submitted: 1, tooling_errors: 0, host_reads_after_start: 0, scope: arm === "cso" ? "daily/default" : null }, cost_usd: arm === "cso" ? 3 : 1, wall_sec: 1, turns: 1, tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 } });
 const sessions = [...units.flatMap((u) => cells.map(([m, a]) => sess(u, m, a, "stage0"))), ...units.flatMap((u) => cells.map(([m, a]) => sess(u, m, a, "stage1")))];
-put(join(dir, "sessions.jsonl"), sessions.map((s) => JSON.stringify(s)).join("\n") + "\n");
+const KEY = Buffer.from("cd".repeat(32), "hex");
+put(join(dir, "sessions.jsonl"), sessions.map((s) => (s.stage === "stage1" ? sealRow(s, KEY) : JSON.stringify(s))).join("\n") + "\n");
 
 const FINDING = { text: "src/parse.js:41 joins the request path without normalizing it", source: "final", citations: [{ path: "src/parse.js", start: 41, end: 41, symbol: null }] };
 const lab = { location: "yes", class: "yes", same_defect: "yes", grounding: "yes", file_level: "yes", known: null, validity: "supported", quotes: {} };
@@ -98,7 +100,7 @@ describe("cso judging commands", () => {
     expect(plain.filter((r) => r.named).length).toBe(6);
     expect(readRows<{ named: boolean }>(join(j, "scores.jsonl"), k).filter((r) => r.named).length).toBe(12);
     expect(() => readRows(join(j, "scores.jsonl"), Buffer.alloc(32, 1))).toThrow(/^E_CSO_READOUT_KEY/);
-    const replies = walk(join(j, "replies"));
+    const replies = [...walk(join(j, "replies")), ...walk(join(j, "requests"))];
     expect(replies.length).toBeGreaterThan(0);
     for (const f of replies) expect(isSealedRow(JSON.parse(readFileSync(f, "utf8")))).toBe(true);
     const s0 = await capture(() => COMMANDS.stage0!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(j, "scores.jsonl")]));
@@ -135,7 +137,7 @@ describe("cso judging commands", () => {
     expect(JSON.parse(r.out).items.length).toBe(6);
     expect(existsSync(join(dir, "j", "s1.sealed"))).toBe(true);
     const outcome = ["named", "hits", "findings", "labels", "same_defect", "validity", "supported", "rate"];
-    for (const f of walk(join(dir, "j"))) {
+    for (const f of [...walk(join(dir, "j")), join(dir, "sessions.jsonl")]) {
       for (const l of readFileSync(f, "utf8").split("\n").filter((x) => x.trim())) {
         const v = JSON.parse(l);
         if (isSealedRow(v) || v.schema === "cso-sealed.v1") continue;

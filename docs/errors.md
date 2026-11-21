@@ -488,6 +488,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_READOUT_KEY](#e_cso_readout_key) | 2 | U20 |
 | [E_CSO_READOUT_OUT](#e_cso_readout_out) | 2 | U20 |
 | [E_CSO_PROVIDER_DRIFT](#e_cso_provider_drift) | 2 | U20 |
+| [E_CSO_EXPORT](#e_cso_export) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3828,6 +3829,14 @@ A /cso eval judge or labeller call through OpenRouter (Gemini 4 Carbon or Argon)
 Fix: Stop the judge send and ask the Captain. Never accept a reply from another provider, and never unpin the route.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_EXPORT
+
+The /cso eval export refused: --run is not a directory, --out already exists or overlaps --run, the readout key sits under --run, a file in the run holds the key's bytes, or a run file would collide with MANIFEST.sha256 or scored-texts.jsonl.
+
+Fix: Export a finished run dir to a new dir outside it, with the readout key kept in the sealed store outside the run; move any file that holds the key out of the run first.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
