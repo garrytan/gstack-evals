@@ -152,7 +152,7 @@ The checks a cut needs, read the same way as a "Why null?":
 ## Limits and threats
 
 - The in-sample set is in gstack's own regression test for the matcher change, so its count is fitted. The fresh set exists for that reason, and the cut rests on both.
-- The fresh tasks come from the same screened pool as B1's, so they are the same kind of task. 35 of the 60 share a repository with one of B1's 60. The preregistration's 37 also counted B1's two calibration tasks; against B1's 60 drawn tasks the overlap is 35.
+- The fresh tasks come from the same screened pool as B1's, so they are the same kind of task. 35 of the 60 share a repository with one of B1's 60, comparing owner and repository names without regard to case (PyPSA and pypsa are one repository). The preregistration's 37 also counted B1's two smoke tasks; against B1's 60 drawn tasks the overlap is 35.
 - The in-sample controls are non-concurrent: B1c ran on 2026-11-18 and B1d on 2026-11-19, with the same model id and rig. A change on the provider's side under the same model id would not show. The fresh arms ran side by side.
 - gstack's other changes between 5afef04 and 5df6b5a8 are part of the arm, so the +21.7 against B1d measures the move between the two pins as a whole, not the matcher alone.
 - The block and the hook were not run side by side on the fresh set; the bar of 39 is B1c's in-sample count for the block.
