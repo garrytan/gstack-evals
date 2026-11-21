@@ -1,9 +1,9 @@
 ---
-id: 2026-11-21-geva-568-skill-pack-h2h-prerun-change
+id: 2026-11-21-capy-skill-pack-h2h-prerun-change
 kind: plan
 title: "Skill-pack head-to-head extension: harness fixes made before any paid session"
 summary: "Six runner fixes made before any paid call. Each makes the code follow a rule the preregistration froze; no number, cap, unit list or decision rule moves."
-author: GEVA-568
+author: capy
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-21
