@@ -3751,6 +3751,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_OHR_ROLLOUT_UNREADABLE: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval (pre-run change 5, F1): Codex's rollout of a Sol session could not be read after a turn or copied out after the session, on both attempts. The session scores missing, and the report lists it by name apart from other infra misses.",
+    fix: "Read host/codex/cli-stderr.log and host/codex/home-watch.ndjson in the attempt's directory. A steady failure goes to the eval's owner.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: true,
+    owner: "U20",
+  },
   E_OHR_INFRA_MISSING: {
     exit: 2,
     meaning: "Office-hours rewrite eval (section 8): an upstream, provider or harness failure ended the session after its one retry, or the ledger never admitted it. The session scores missing.",

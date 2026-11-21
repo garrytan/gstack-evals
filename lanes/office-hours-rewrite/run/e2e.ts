@@ -299,6 +299,17 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
     check("Sol " + arm + ": the transcript reads as Claude Code's, its question as assistant text", solFile(arm, "transcript.ndjson").includes(JSON.stringify(SOL_ASK)) && solFile(arm, "transcript.ndjson").split(NL).filter((x) => x.includes('"type":"result"')).length === 3, solFile(arm, "transcript.ndjson").split(NL).filter(Boolean).length + " lines");
     check("Sol " + arm + ": " + (arm === "none" ? "no session kind and no gstack read" : "the container printed SESSION_KIND: interactive with the seeded state root"), arm === "none" ? r?.session_kind === null && l!.attempts.every((a) => a.contained !== null && a.contained.length === 0) : r?.session_kind === "interactive" && /SLUG: idea\b/.test(solFile(arm, "transcript.ndjson")), String(r?.session_kind));
   }
+  for (const arm of ARMS) {
+    const r = solRow(arm)?.row;
+    const log = solFile(arm, "codex/home-watch.ndjson").split(NL).filter(Boolean).map((x) => JSON.parse(x) as { snapshot?: string; ok?: boolean; entries?: unknown[]; diff?: string; flags?: string[] });
+    const snaps = log.filter((x) => x.snapshot);
+    const execs = solFile(arm, "codex/exec-argv.ndjson").split(NL).filter(Boolean).length;
+    const want = [...Array.from({ length: execs }, (_, i) => ["before exec " + (i + 1), "after exec " + (i + 1)]).flat(), "after copy-out"];
+    check("Sol " + arm + ": the watch logged a whole snapshot of Codex's home before and after every exec and after copy-out (pre-run change 5, F1)", execs > 0 && JSON.stringify(snaps.map((x) => x.snapshot)) === JSON.stringify(want) && snaps.every((x, i) => x.ok && (i === 0 || (x.entries?.length ?? 0) > 0)), snaps.map((x) => x.snapshot + (x.ok ? " ok " : " FAILED ") + (x.entries?.length ?? 0) + " entries").join("; ") + "; " + log.filter((x) => x.diff).length + " diffs");
+    check("Sol " + arm + ": nothing is flagged (F1)", Array.isArray(r?.rollout_flags) && r!.rollout_flags!.length === 0, r ? (r.rollout_flags ?? ["null"]).join("; ") || "0 flags" : "no row");
+    const modes = solFile(arm, "rollout.jsonl").split(NL).filter(Boolean).map((x) => JSON.parse(x)).filter((d) => d.type === "turn_context").map((d) => d.payload?.collaboration_mode?.mode);
+    check("Sol " + arm + ": every turn's turn_context reads collaboration mode default (G1)", Array.isArray(r?.non_default_turns) && r!.non_default_turns!.length === 0 && modes.length > 0 && modes.every((m) => m === "default"), modes.length + " turn_context records: " + modes.join(", ") + (r?.non_default_turns?.length ? "; " + r.non_default_turns.join("; ") : ""));
+  }
   const tapped = rigSeen.tap && existsSync(rigSeen.tap) ? readFileSync(rigSeen.tap, "utf8").split(NL).filter(Boolean).map((x) => JSON.parse(x)) : [];
   check("the tap logged every Sol response with the model it reports, the dated pin", tapped.filter((x) => x.path.endsWith("/responses")).length === sol.length && tapped.every((x) => x.responses.every((m: any) => m.model === CODEX.model + "-2026-11-01")), tapped.length + " tap lines for " + sol.length + " Sol requests");
   const asked = new Set(jl.filter((x: any) => x.kind === "request" && x.provider === "openai").map((x: any) => x.reservation_id));

@@ -161,6 +161,12 @@ export interface AttemptRead {
   cli_version: string | null;
   micros: number;
   sim_micros: number;
+  /** Pre-run change 5, F1 on a Sol attempt (run/home-watch.ts): every flag on trusting its rollout; null or absent on Claude Code. */
+  rollout_flags?: string[] | null;
+  /** Pre-run change 5, G1 on a Sol attempt: every turn whose turn_context did not record collaboration mode default. */
+  non_default_turns?: string[] | null;
+  /** The adapter could not read the Sol session's rollout after a turn, or the rollout was not copied out. */
+  rollout_unreadable?: boolean;
 }
 
 export type Outcome =
@@ -186,6 +192,7 @@ export function attemptOutcome(a: AttemptRead, arm: ArmId): Outcome {
   if (safety) return { state: "safety-stop", code: "E_OHR_SAFETY_STOP", why: "a provider safety stop: " + safety };
   if (arm === "none" && a.gstack_reads.length) return { state: "contaminated", code: "E_OHR_GSTACK_READ", why: "the none arm read " + a.gstack_reads.join(", ") };
   if (t.kind === "missing" && t.code === "E_LEDGER_UNAVAILABLE") return { state: "missing", code: "E_OHR_INFRA_MISSING", why: "the ledger never admitted the session" };
+  if (a.rollout_unreadable) return { state: "retry", as: "infra", code: "E_OHR_ROLLOUT_UNREADABLE", why: "Codex's rollout of the session could not be read or copied out" };
   if (arm !== "none" && a.session_kind !== null && a.session_kind !== "interactive") return { state: "retry", as: "infra", code: "E_OHR_SESSION_KIND", why: "the skill printed SESSION_KIND: " + a.session_kind };
   if (a.contained === null || (arm !== "none" && a.pin === null)) return { state: "retry", as: "infra", code: "E_OHR_INFRA_MISSING", why: "the containment probe or the container's pin check could not run" };
   if (a.loop.ended === "block") return { state: "block", code: null, why: "a block in reply " + a.loop.replies + " after " + a.loop.closings + " closing message" + (a.loop.closings === 1 ? "" : "s") };

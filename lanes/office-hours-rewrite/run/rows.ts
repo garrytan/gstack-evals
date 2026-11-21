@@ -28,6 +28,13 @@ export interface RowLine {
 
 export const END_STATES: readonly EndState[] = ["block", "no-block", "safety-stop", "refusal", "missing", "contaminated"];
 
+/** F1's flags and G1's turns over every attempt of a Sol session, each line naming its attempt; null on Claude Code. */
+function solChecks(entry: ManifestEntry, attempts: readonly AttemptRead[]): Pick<SessionRow, "rollout_flags" | "non_default_turns"> {
+  if (HOSTS[entry.model] !== "codex") return { rollout_flags: null, non_default_turns: null };
+  const all = (f: (a: AttemptRead) => string[] | null | undefined) => attempts.flatMap((a, i) => (f(a) ?? ["no record from the Sol driver"]).map((l) => "attempt " + (i + 1) + ": " + l));
+  return { rollout_flags: all((a) => a.rollout_flags), non_default_turns: all((a) => a.non_default_turns) };
+}
+
 /** The row of a session that ended: the scored attempt is the last. */
 export function sessionRow(o: { entry: ManifestEntry; end: { state: EndState; code: string | null }; attempts: readonly AttemptRead[]; transcript: string | null; state_root: string | null }): SessionRow {
   const scored = o.attempts.at(-1)!;
@@ -37,6 +44,7 @@ export function sessionRow(o: { entry: ManifestEntry; end: { state: EndState; co
     ...o.entry, end: o.end.state, code: o.end.code,
     block: (o.end.state === "block" && parse?.kind === "block") || (o.end.state === "no-block" && parse?.kind === "no-block") ? parse : null,
     founder_turns: scored.loop.founder_turns, closings: scored.loop.closings, founder_done: scored.loop.founder_done, replies: scored.loop.replies,
+    ...solChecks(o.entry, o.attempts),
     session_kind: scored.session_kind, served_model: scored.served_model, cli_version: scored.cli_version, guard_failures: o.attempts.reduce((s, a) => s + a.loop.guard_failures, 0), gstack_reads: scored.gstack_reads,
     usd: sum((a) => a.micros), sim_usd: sum((a) => a.sim_micros), attempts: o.attempts.length, transcript: o.transcript, state_root: o.state_root,
   };
@@ -59,6 +67,10 @@ export function rowProblems(l: RowLine): string[] {
   if (r.closings < 0 || r.closings > CLOSING_SENDS) p.push(r.closings + " closing messages, and at most " + CLOSING_SENDS + " go");
   if ((r.end === "block" || r.end === "no-block") && r.code !== "E_OHR_ARM_STOP" && r.closings === 0) p.push("a scored block or no-block needs a closing message");
   if (r.arm === "none" && r.end !== "contaminated" && r.gstack_reads.length) p.push("a none-arm row with gstack reads must read contaminated");
+  const sol = MODELS.includes(r.model) && HOSTS[r.model] === "codex";
+  if (sol && (!Array.isArray(r.rollout_flags) || !Array.isArray(r.non_default_turns))) p.push("a Sol row needs its rollout flags and non-default turns (pre-run change 5)");
+  if (!sol && (r.rollout_flags != null || r.non_default_turns != null)) p.push("only a Sol row carries rollout flags and non-default turns");
+  if (r.code === "E_OHR_ROLLOUT_UNREADABLE" && (!sol || r.end !== "missing")) p.push("only a missing Sol row reads E_OHR_ROLLOUT_UNREADABLE");
   if (entryId(r) !== l.id) p.push("id " + l.id + " does not name the row's session " + entryId(r));
   if (MODELS.includes(r.model)) {
     const pin = HOSTS[r.model] === "codex" ? { model: CODEX.model, cli: CODEX.version } : { model: MODEL_KEYS[r.model], cli: CLAUDE_CODE_VERSION };
@@ -84,7 +96,7 @@ export function readRows(out: string, onTorn?: (torn: { text: string; at: number
 }
 
 /** A session the frozen manifest schedules and the launch never ran: missing (E_OHR_UNRUN), with nothing logged. */
-export const unrunRow = (e: ManifestEntry): SessionRow => ({ ...e, end: "missing", code: "E_OHR_UNRUN", block: null, founder_turns: [], closings: 0, founder_done: false, replies: 0, session_kind: null, served_model: null, cli_version: null, guard_failures: 0, gstack_reads: [], usd: 0, sim_usd: 0, attempts: 0, transcript: null, state_root: null });
+export const unrunRow = (e: ManifestEntry): SessionRow => ({ ...e, end: "missing", code: "E_OHR_UNRUN", block: null, founder_turns: [], closings: 0, founder_done: false, replies: 0, session_kind: null, served_model: null, cli_version: null, guard_failures: 0, gstack_reads: [], rollout_flags: null, non_default_turns: null, usd: 0, sim_usd: 0, attempts: 0, transcript: null, state_root: null });
 
 /** Every session a launch's frozen manifest schedules, in its order: the session's row, or an unrun row. A row the manifest does not schedule is refused. */
 export function scheduledRows(out: string): SessionRow[] {

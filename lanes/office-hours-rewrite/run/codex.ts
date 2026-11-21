@@ -35,6 +35,7 @@ import type { AgentDriver, AgentOutcome } from "../../../src/trial/trial.ts";
 import type { Termination, TokenUsage } from "../../../src/types.ts";
 import { AGENT_TURNS_PER_REPLY, ARM_ENV, CODEX, CODEX_LINK, CODEX_RENDERED, CODEX_SETTINGS, CODEX_SKILL_FILES, PINS, RENDER_GAP } from "../frozen.ts";
 import type { SkillArm } from "../types.ts";
+import { copyFlags, homeWatch, nonDefaultTurns, streamFlags, type RolloutGuard } from "./home-watch.ts";
 
 const sha256 = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
 type Rec = Record<string, any>;
@@ -50,6 +51,8 @@ export interface SolOptions {
   maxToolItems?: number;
   /** Problems the HOME check found before the first exec, or null when it could not run. */
   onHome?: (problems: string[] | null) => void;
+  /** F1 and G1 on the attempt (run/home-watch.ts), once the rollouts are copied out (pre-run change 5). */
+  onGuard?: (guard: RolloutGuard) => void;
 }
 
 /** CODEX_SETTINGS beyond the adapter's own: less the effort, which the adapter writes, and the keys the adapter already sets, which must hold the frozen values. */
@@ -89,33 +92,41 @@ export function homeProblems(printed: string, skillArm: boolean): string[] {
 }
 
 const TOOL_ITEMS = new Set(["command_execution", "file_change", "mcp_tool_call", "web_search", "collab_tool_call", "todo_list", "image_view"]);
-async function readAll(session: AgentSession, argv: string[]): Promise<string> {
+async function readAll(session: AgentSession, argv: string[]): Promise<{ bytes: Buffer; code: number | null }> {
   const child = session.spawn(argv, {});
-  let text = "";
-  child.stdout?.on("data", (d: Buffer) => (text += d.toString("utf8")));
+  const chunks: Buffer[] = [];
+  child.stdout?.on("data", (d: Buffer) => chunks.push(d));
   child.stdin?.end();
-  await new Promise<void>((resolve) => child.on("close", () => resolve()));
-  return text;
+  const code = await new Promise<number | null>((resolve) => {
+    child.on("error", () => resolve(null));
+    child.on("close", (c) => resolve(c));
+  });
+  return { bytes: Buffer.concat(chunks), code };
 }
 
-/** Every rollout of the session into out/rollouts, and the main one (the adapter's thread) as out/rollout.jsonl and out/transcript.ndjson. */
-async function copyOut(session: AgentSession, out: string): Promise<void> {
+/** Every rollout of the session into out/rollouts, and the main one (the adapter's thread) as out/rollout.jsonl and out/transcript.ndjson; what was copied, whole, for the watch. */
+async function copyOut(session: AgentSession, out: string): Promise<{ thread: string | null; copied: { name: string; bytes: Buffer }[] }> {
   let thread: string | null = null;
   try {
     thread = JSON.parse(readFileSync(join(out, "codex", "init.json"), "utf8")).thread_id ?? null;
   } catch {
-    return;
+    return { thread: null, copied: [] };
   }
-  const files = (await readAll(session, ["sh", "-c", 'ls "$HOME"/.codex/sessions/*/*/*/rollout-*.jsonl 2>/dev/null'])).split("\n").map((l) => l.trim()).filter(Boolean);
+  const files = (await readAll(session, ["sh", "-c", 'ls "$HOME"/.codex/sessions/*/*/*/rollout-*.jsonl 2>/dev/null'])).bytes.toString("utf8").split("\n").map((l) => l.trim()).filter(Boolean);
   mkdirSync(join(out, "rollouts"), { recursive: true });
+  const copied: { name: string; bytes: Buffer }[] = [];
   for (const f of files) {
-    const text = await readAll(session, ["cat", f]);
-    writeFileSync(join(out, "rollouts", posix.basename(f)), text);
+    const { bytes, code } = await readAll(session, ["cat", f]);
+    if (code !== 0) continue;
+    const text = bytes.toString("utf8");
+    writeFileSync(join(out, "rollouts", posix.basename(f)), bytes);
+    copied.push({ name: posix.basename(f), bytes });
     if (thread && f.endsWith("-" + thread + ".jsonl")) {
-      writeFileSync(join(out, "rollout.jsonl"), text);
+      writeFileSync(join(out, "rollout.jsonl"), bytes);
       writeFileSync(join(out, "transcript.ndjson"), codexTranscript(text));
     }
   }
+  return { thread, copied };
 }
 
 export function solDriver(o: SolOptions): AgentDriver & { env: Record<string, string> } {
@@ -128,13 +139,19 @@ export function solDriver(o: SolOptions): AgentDriver & { env: Record<string, st
       o.onHome?.(home.exitCode === 0 ? homeProblems(home.stdout, o.skillArm) : null);
       let capped = false;
       let toolItems = 0;
+      let execs = 0;
+      mkdirSync(join(o.out, "codex"), { recursive: true });
+      const watch = homeWatch(session, join(o.out, "codex", "home-watch.ndjson"));
       const lane: AgentSession = {
         ...session,
         spawn(argv, env) {
           if (argv[0] !== CODEX_BIN) return session.spawn(argv, env);
+          const exec = ++execs;
+          watch.snap("before exec " + exec, false);
           const actual = codexLaunch(argv.slice(1));
           appendFileSync(join(o.out, "codex", "exec-argv.ndjson"), JSON.stringify(actual) + "\n");
           const child = session.spawn(actual, env);
+          child.on("close", () => watch.snap("after exec " + exec, true));
           let reply = 0;
           let rest = "";
           child.stdout?.on("data", (d: Buffer) => {
@@ -159,7 +176,17 @@ export function solDriver(o: SolOptions): AgentDriver & { env: Record<string, st
         },
       };
       const outcome = await codexDriver({ ...adapter(o), skill: null, out: join(o.out, "codex"), nextUser: o.nextUser }).run(lane, task, timeoutMs);
-      await copyOut(session, o.out);
+      const { thread, copied } = await copyOut(session, o.out);
+      watch.snap("after copy-out", false);
+      const events = existsSync(join(o.out, "codex", "transcript.ndjson")) ? readFileSync(join(o.out, "codex", "transcript.ndjson"), "utf8") : "";
+      const texts = copied.map((c) => ({ name: c.name, text: c.bytes.toString("utf8") }));
+      const t = outcome.termination;
+      o.onGuard?.({
+        flags: [...watch.flags, ...copyFlags(watch.last(), thread, copied), ...streamFlags(events, texts.map((c) => c.text))],
+        non_default_turns: nonDefaultTurns(texts),
+        rollout_unreadable: (t.kind === "missing" && t.code === "E_INFRA_FAILURE") || (thread !== null && !copied.some((c) => c.name.endsWith("-" + thread + ".jsonl"))),
+        snapshots: watch.snapshots,
+      });
       return { ...outcome, agent_turns: toolItems, ...(capped ? { termination: { kind: "turn_cap" } as Termination } : {}) };
     },
   };

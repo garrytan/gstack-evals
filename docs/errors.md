@@ -442,6 +442,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_NO_BLOCK](#e_ohr_no_block) | 2 | U20 |
 | [E_OHR_ARM_STOP](#e_ohr_arm_stop) | 2 | U20 |
 | [E_OHR_SESSION_KIND](#e_ohr_session_kind) | 2 | U20 |
+| [E_OHR_ROLLOUT_UNREADABLE](#e_ohr_rollout_unreadable) | 2 | U20 |
 | [E_OHR_INFRA_MISSING](#e_ohr_infra_missing) | 2 | U20 |
 | [E_OHR_UNRUN](#e_ohr_unrun) | 2 | U20 |
 | [E_OHR_T8_SEED](#e_ohr_t8_seed) | 2 | U20 |
@@ -3424,6 +3425,14 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 Office-hours rewrite eval (section 4 step 2, admission A7): a skill session printed a SESSION_KIND other than interactive, a harness fault. The session takes its one retry and then scores missing.
 
 Fix: Check that the arm environment leaves GSTACK_SESSION_KIND, OPENCLAW_SESSION, GSTACK_HEADLESS, CI and GITHUB_ACTIONS unset.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_ROLLOUT_UNREADABLE
+
+Office-hours rewrite eval (pre-run change 5, F1): Codex's rollout of a Sol session could not be read after a turn or copied out after the session, on both attempts. The session scores missing, and the report lists it by name apart from other infra misses.
+
+Fix: Read host/codex/cli-stderr.log and host/codex/home-watch.ndjson in the attempt's directory. A steady failure goes to the eval's owner.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
 

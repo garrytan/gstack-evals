@@ -47,6 +47,7 @@ import { pool, type Meter } from "../../product-value/meter.ts";
 import { pvOutcome } from "../../product-value/parse.ts";
 import { AGENT_TURNS_PER_REPLY, ALLOWANCE, CODEX, HOSTS, MODEL_KEYS, SESSION_MINUTES, SIM_ALLOWANCE, type Pin } from "../frozen.ts";
 import { BEARER_ENV, codexPinCommand, codexPinProblems, codexReads, codexTreeProblems, gapProblems, solDriver } from "./codex.ts";
+import type { RolloutGuard } from "./home-watch.ts";
 import { tapModels, tapOffPin, type OhrRig } from "./codex-rig.ts";
 import type { ArmId, BlockParser, BriefKind, BriefMeta, ManifestEntry, ModelId, PriorSession, SkillArm } from "../types.ts";
 import { capProblem, entryId, freezeManifest, loadBriefs, makeManifest, type LaunchName } from "./manifest.ts";
@@ -215,7 +216,7 @@ export function ohrProbed(sandbox: Sandbox, o: { docker: string; home: string; p
 export const solLaunch: Launch = async (o) => {
   const model = CODEX.model;
   const codex = (o.rig as OhrRig).codex;
-  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], served_model: null, cli_version: null, micros: 0 };
+  const none = { gstack_reads: [], contained: [], pin: [], overflow: false, safety: null, session_kind: null, off_pin: [], served_model: null, cli_version: null, micros: 0, rollout_flags: [], non_default_turns: [], rollout_unreadable: false };
   if (!codex) return { ...none, termination: { kind: "infra", incident: "the rig has no Codex installs for a Sol session" } };
   let binding: Awaited<ReturnType<HostRig["bind"]>>;
   try {
@@ -230,8 +231,9 @@ export const solLaunch: Launch = async (o) => {
   const home = base.homePath(o.dir);
   let found: { contained: string[] | null; pin: string[] | null } = { contained: null, pin: null };
   let homeFound: string[] | null = null;
+  let guard: RolloutGuard | null = null;
   const sandbox = ohrProbed(base, { docker: o.docker, home, pin: null, root: null, check: { command: codexPinCommand(home, arm), problems: (s) => codexPinProblems(s, arm) }, bearer: BEARER_ENV, onProbe: (p) => (found = p) });
-  const agent = solDriver({ proxy: { baseUrl: codex.baseUrl, slot: binding.slot, token: binding.token }, home, skillArm, out: join(o.dir, "host"), nextUser: o.nextUser, onHome: (p) => (homeFound = p) });
+  const agent = solDriver({ proxy: { baseUrl: codex.baseUrl, slot: binding.slot, token: binding.token }, home, skillArm, out: join(o.dir, "host"), nextUser: o.nextUser, onHome: (p) => (homeFound = p), onGuard: (g) => (guard = g) });
   const envProblems = armEnvProblems(agent.env);
   mkdirSync(join(o.dir, "tasks"), { recursive: true });
   let termination: Termination;
@@ -250,8 +252,12 @@ export const solLaunch: Launch = async (o) => {
   const rollouts = existsSync(rolloutDir) ? readdirSync(rolloutDir).map((f) => readFileSync(join(rolloutDir, f), "utf8")) : [];
   const read = pvOutcome(termination, transcript).outcome;
   const contained = found.contained === null || homeFound === null ? null : [...found.contained, ...(homeFound as string[]), ...envProblems.map((e) => "agent env: " + e)];
-  return { termination, gstack_reads: skillArm ? [] : [...gstackReads(transcript), ...codexReads(rollouts)], contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: tapOffPin(codex.tapLog, binding.slot, model), served_model: servedModel(tapModels(codex.tapLog, binding.slot)), cli_version: cliVersion(transcript), micros: meter.micros };
+  return { termination, gstack_reads: skillArm ? [] : [...gstackReads(transcript), ...codexReads(rollouts)], contained, pin: found.pin, overflow: read.state === "infra" && read.reason === "context overflow", safety: safetyStop(transcript), session_kind: sessionKindOf(transcript), off_pin: tapOffPin(codex.tapLog, binding.slot, model), served_model: servedModel(tapModels(codex.tapLog, binding.slot)), cli_version: cliVersion(transcript), micros: meter.micros, ...guardRead(guard, o.dir) };
 };
+
+/** F1 and G1 on a Sol attempt (pre-run change 5); with no report from the driver, a copied rollout is a flag, since nothing watched it. */
+const guardRead = (g: RolloutGuard | null, dir: string): Pick<AttemptRead, "rollout_flags" | "non_default_turns" | "rollout_unreadable"> =>
+  g ? { rollout_flags: g.flags, non_default_turns: g.non_default_turns, rollout_unreadable: g.rollout_unreadable } : { rollout_flags: existsSync(join(dir, "host", "rollout.jsonl")) ? ["a rollout with no report from the watch"] : [], non_default_turns: [], rollout_unreadable: false };
 
 /** The start step's output in Claude Code's session file, or null when the file is missing or holds no whole head and tail around one. */
 const loadedStart = (file: string, arm: SkillArm): string | null => (existsSync(file) ? startOutput(readFileSync(file, "utf8"), arm) : null);

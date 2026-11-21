@@ -16,6 +16,9 @@ The arm sessions of the office-hours rewrite eval (prereg sections 2, 3, 4, 8, 1
   proxy, the real simulator turn, parser and rows). It prints SKIP when Docker does not answer. The rig needs both pin
   commits in a local repository: a gstack checkout, or a clone under <state>/sources/ (for example a link from
   ~/.capy/work/gstack-evals/sources/gstack to a full gstack clone).
+- `home-watch.ts`: pre-run change 5's F1 and G1 on every Sol session: the harness's snapshots of Codex's home before and
+  after every exec and after copy-out, their diffs against the frozen allow list, the rollout prefix check, the
+  event-stream flags, and the collaboration mode of every turn.
 - `seams.ts`: the dry-run seams, run by tests/ohr/run/seams.test.ts.
 
 ## Reused and copied

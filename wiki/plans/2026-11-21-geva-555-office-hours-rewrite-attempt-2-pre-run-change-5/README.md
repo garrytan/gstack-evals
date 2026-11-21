@@ -2,7 +2,7 @@
 id: 2026-11-21-geva-555-office-hours-rewrite-attempt-2-pre-run-change-5
 kind: plan
 title: "Pre-run change 5 to the second office-hours rewrite eval: both gstack pins move to the content change's final head and its merge base"
-summary: "Moves both gstack pins to the content change's final head 8fcca8a5 and its merge base 85867942, and records what follows for A8, the Codex layout, the Sol launch and the markers."
+summary: "Moves both gstack pins to 8fcca8a5 and its merge base 85867942 with what follows for A8, Codex and the markers, and adds F1 and G1: a watch on Sol's rollout and its collaboration mode."
 author: GEVA-555
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -25,6 +25,7 @@ attachments:
   - a5cd62fa2898b5e897a10cfd6e9d7f463fc0a8e8e6aaf1d82a9be4e646af0982  b-check.sh
   - 5c64a1381a918e3627d0e8ccc648e3ad907661243f3f81f778893ed771ff2f00  b-check.txt
   - d8f839464e4bc7b9a2f55962474ca00b0daed472ab12e724708925281c386f23  e2e.txt
+  - bea858d46535c02cad61b14767f4e57df3b9f0d18d5b48be3c0e98b1d85bd308  e2e-f1.txt
   - 23aee1480055492c648927cd606fab957369691b8f0fe6e502e481161c2d2058  layout.json
   - 6e61e177c53cb38f38615758e5e9aae20c4dba4b02ffd72c3a69ad6d95521848  layout.sh
   - 75020b7a58c5e9020d0bfd25e5feb14aaca899a9b6a4614cc320606eb9a61d7f  pin-current.tsv
@@ -44,8 +45,11 @@ attachments:
 - Seven new-pin detection markers that stopped matching are replaced from the new pin's text (section 7).
 - The briefs pass the screen built from the moved pins: 94 of 94 (section 6).
 - The keyless end to end at this change passed all 63 checks, on both hosts and both pins (section 8).
+- F1: the harness snapshots Codex's home before and after every Sol exec and checks that nothing but Codex's own frozen writes touched it and that each rollout only grew. Event-stream naming of Codex's home is flagged too. Flagged sessions count as fails in a sensitivity row the report always prints, and an unreadable rollout scores missing with its own code and is listed by cell (section 10).
+- G1: every Sol turn's turn_context must record collaboration mode default; any other turn is reported with its cell (section 11).
+- The keyless end to end with F1 and G1 is in section 12.
 
-This change governs where it and the plan or an earlier change differ. It is made before any arm session has run. It changes no model, judge, measure, threshold, item cap, ledger item, stop rule or decision row.
+This change governs where it and the plan or an earlier change differ. It is made before any arm session has run. It changes no model, judge, measure, threshold, item cap, ledger item, stop rule or decision row. F1 adds a sensitivity row beside the primary and its own missing code for an unreadable rollout; neither changes how the primary scores a session.
 
 ## 1. Why the pins move
 
@@ -213,9 +217,67 @@ The first end to end at the moved pins, run before these decisions were built, p
 
 Every paid run after authoring runs at the commit on the results branch that last changes the newest pre-run change (pre-run change 2, section 11). When this post lands, this is the newest pre-run change.
 
+## 10. F1: trusting Sol's rollout
+
+The eval's owner decided F1 and G1 on 2026-11-21. Codex keeps each session's rollout under its own home, $HOME/.codex, and the Sol arm's transcript, its questions and its scored block all come from that file. The agent runs in the same container as the same user, so it could change the file. F1 checks that it did not, and reports every session where the check cannot say so.
+
+**The watch.** The harness, never the agent, runs a snapshot of Codex's home through its own shell step: before every exec, after every exec, and after the rollouts are copied out (run/home-watch.ts, called from run/codex.ts). A snapshot lists every entry under $HOME/.codex with its type, inode, size, ctime, mtime and path, the sha256 of every rollout, and the sha256 of each rollout's first N bytes, where N is its size at the previous snapshot. It runs with a fixed PATH and absolute tool paths. A user cannot set ctime back, so a file that was touched shows even when its bytes and mtime are put back. Every snapshot and every diff goes to host/codex/home-watch.ndjson beside the trial. Consecutive snapshots are diffed into creates, modifies, truncations, deletes and moves, a move being the same inode under a new path.
+
+**The rules.** A Sol attempt is flagged when:
+
+- anything changes under Codex's home between two execs, when Codex is not running;
+- across an exec, a delete, move or truncation happens anywhere under Codex's home, or a create or modify happens that is not a live rollout's own create or append and is not in the frozen allow list below;
+- a live rollout after an exec does not start with the bytes hashed at the snapshot before it (the prefix check), or a rollout is gone;
+- a directory's entries change in an exec with no allowed create inside it. This catches a rollout deleted and written back, even on a disk that hands the new file the old inode number;
+- a snapshot fails or prints no closing record (fail closed);
+- the rollout bytes copied out are not the bytes the last snapshot hashed, or the session's own rollout is not there exactly once;
+- in the exec --json events the adapter holds, a command, MCP arguments or a file_change path names Codex's home, its sessions or a rollout, and the same for a tool call's input in the rollouts. Running or reading the skill install by its path (.codex/skills/..., with no "..") is no flag, because every Sol skill arm runs gstack's helpers from there. A write there still shows in the snapshots.
+
+A flag never changes how the session scores in the primary. The session row carries every flag, each line naming its attempt, and is null on Claude Code rows.
+
+**The frozen allow list** (frozen.ts CODEX_HOME_ALLOW). Codex's own writes to its state files cannot be told from the agent's without knowing which process made them. So the list holds exactly the kinds and paths that the three Sol sessions of the keyless end to end showed across their nine execs, paths relative to $HOME/.codex and * within one path segment. Codex made no delete, move or truncation there.
+
+- Created folders: the home itself, tmp, tmp/arg0-linux, .tmp, .tmp/git-*, .tmp/git-*/objects, .tmp/git-*/refs, sessions, sessions/*, sessions/*/*, sessions/*/*/*, shell_snapshots and thread-writer-locks.
+- Created files: .sandbox_migration, installation_id, .tmp/plugins.sync.lock, .tmp/git-*/HEAD, thread-writer-locks/.coordination.lock, and for each of goals_1, logs_2, memories_1, queue_1, state_5 and thread_history_1 the .sqlite file with its -wal and -shm files.
+- Folders whose entries change on every exec: .tmp, shell_snapshots, thread-writer-locks and tmp/arg0-linux.
+- Modified files: logs_2.sqlite, state_5.sqlite-wal, thread_history_1.sqlite-wal, and the six -shm files.
+- Beside the list: a rollout's own create (sessions/*/*/*/rollout-*.jsonl, a regular file) and its appends, which the prefix check guards.
+
+**Residual gaps.** The watch cannot see:
+
+- an append to a live rollout during an exec that looks like Codex's own;
+- a file created and removed inside one exec in a folder Codex changes on every exec (the four above), or in the home, sessions or a date folder during the exec that creates them;
+- a change to an allow-listed file inside an exec, or a delete and rewrite of one, since Codex writes those files itself;
+- a rewrite of the rollout inside the exec that creates it, since no earlier bytes exist to compare. The other rules still apply to the rest of the home;
+- a file the agent makes under a date folder with a rollout's name: it reads as a live rollout, and only the session's own thread must have exactly one;
+- anything outside $HOME/.codex, and anything a leftover process does after the last snapshot, which comes after the rollouts are copied;
+- writes a real paid session makes that the keyless sessions did not, such as a database checkpoint into a main .sqlite file. Those are flagged, so the gap fails closed: they count as fails in the sensitivity row, and stage 1 shows any such flag.
+
+**Where this departs from the decision as given.** The decision suggested a watcher logging every event for the whole session. Here the harness snapshots Codex's home at every exec boundary instead. A continuous watcher out of the agent's reach would need a root process with its capabilities back, or an inotify tool, inside a container that drops every capability and runs as the agent's own user, which means changing the arm image or the shared sandbox. Any process the harness starts in the container today runs as that user, and the agent could stop it. The snapshots need neither change and run keyless. What they cannot see is listed above. The decision also flags any change to a file other than the live rollouts; Codex changes its own state files in every exec, so the allow list lets exactly those through, and that is a gap too.
+
+**An unreadable rollout.** When the adapter cannot read the rollout after a turn, or the session's rollout is not copied out, the attempt retries once and then scores missing with its own code, E_OHR_ROLLOUT_UNREADABLE, instead of E_OHR_INFRA_MISSING. ohr read report lists every Sol cell missing on an unreadable rollout by name, apart from the Sol cells missing with E_OHR_INFRA_MISSING.
+
+**The sensitivity row.** ohr read report always prints, beside the primary (new minus current, pooled), a sensitivity row that scores every flagged Sol session as a fail on R1, R2, R3 and R, with the count and cells it flagged. It is there with zero flags too, so a zero is visible. A flagged session that reads missing or contaminated stays out, as it does in the primary.
+
+## 11. G1: Plan mode
+
+Every Sol turn's turn_context in the rollout must record collaboration mode default (record type turn_context, payload.collaboration_mode.mode). A turn that records another mode, a turn_context with no mode, a started turn with no turn_context, or a rollout with none, is reported. The session row lists those turns, each naming its attempt, rollout and turn id, and ohr read report names their cells. G1 changes no score.
+
+## 12. The keyless end to end with F1 and G1
+
+The keyless end to end ran again on 2026-11-21 with F1 and G1 built: 72 checks passed and none failed. The run's log is e2e-f1.txt.
+
+- By host and pin: on Opus, 13 checks for current, 14 for new and 4 for none, as in section 8; on Sol, 8 each for current, new and none, and 5 across its three arms; and 12 for the rig as a whole. The 9 new checks are the three below for each Sol arm.
+- The watch logged 7 snapshots in each Sol session, before and after each of its three execs and after copy-out, every one whole, with 6 diffs. The none arm starts with no Codex home and ends with 41 entries; each skill arm starts with its 120-entry install and ends with 152.
+- No Sol session was flagged.
+- All 9 Sol turns recorded collaboration mode default, 3 in each session.
+
+The allow list in section 10 was read from an earlier run of the same end to end with the watch on and an allow list that held only the rollout rules. That run showed the Codex writes listed there and no change between execs.
+
 ## Attachments
 
 - pin-current.tsv and pin-new.tsv: every pinned file at each moved pin, with its bytes and sha256.
 - layout.sh and layout.json: the layout check in section 4 and what it printed.
 - e2e.txt: the keyless end to end in section 8, as it printed, with the home directory written as ~.
+- e2e-f1.txt: the keyless end to end in section 12, as it printed, with the home directory written as ~.
 - b-check.sh, b-check-probe.sh, b-check-stub.ts, b-check-argv.ts, b-check-report.py, b-check-tui.py and b-check.txt: the launch check in section 5, and what it printed.

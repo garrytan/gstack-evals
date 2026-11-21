@@ -27,7 +27,7 @@ import { authoringEnd, readStops } from "./read/stops.ts";
 import { SPLIT } from "./ledger.ts";
 import type { HandRead } from "./read/guards.ts";
 import { interimLook, launchManifests, lookGate, readLook } from "./read/look.ts";
-import { leadTable, rates } from "./read/report.ts";
+import { leadTable, rates, sensitivity, solTrust } from "./read/report.ts";
 import { rowsCommand, runCommand } from "./run/cli.ts";
 import { buildCommit, loadBriefs } from "./run/manifest.ts";
 import { readRows, scheduledRows } from "./run/rows.ts";
@@ -400,7 +400,10 @@ function read(argv: string[], io: Io): number {
     const rows = readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!));
     const interim = readLook(outside("--interim", one(f, "--interim")!));
     const look = lookGate({ look: interim.record, lookSha: interim.sha256, manifests: launchManifests(f.get("--launch")!.map((d) => outside("--launch", d))), rows });
-    writeJson(out, { look: { ...look, possibly_overstated: look.early }, lead: leadTable(rows, {}, look.level), founder: rates(rows, "founder"), builder: rates(rows, "builder") });
+    const sol = solTrust(f.get("--launch")!.flatMap((d) => scheduledRows(outside("--launch", d))));
+    const sens = sensitivity(rows, new Set(sol.flagged.map((x) => x.cell)), look.level);
+    writeJson(out, { look: { ...look, possibly_overstated: look.early }, lead: leadTable(rows, {}, look.level), sensitivity: sens, sol, founder: rates(rows, "founder"), builder: rates(rows, "builder") });
+    io.out("ohr read report: sensitivity row with " + sens.flagged + " flagged Sol sessions scored as fails; " + sol.unreadable.length + " Sol cells missing on an unreadable rollout" + (sol.unreadable.length ? " (" + sol.unreadable.join(", ") + ")" : "") + "; " + sol.non_default.length + " Sol sessions with a non-default turn" + (sol.non_default.length ? " (" + sol.non_default.map((x) => x.cell).join(", ") + ")" : ""));
     io.out("ohr read report: written");
     return 0;
   }
