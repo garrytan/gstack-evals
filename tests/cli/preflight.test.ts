@@ -228,13 +228,13 @@ describe("preflight's ledger, key and host steps", () => {
     expect(r.out + r.err).not.toContain("sk-should-never-print");
   });
 
-  // Value: protects=an interactive task on --host codex is E_INTERACTIVE_HOST naming the ids and both fixes; a real host takes a gstack-base call past the arm check (GST-272 installs it) and still refuses it outside --isolation docker; fails_when=codex accepts an interactive task, a gstack base is still refused as unbuilt, or a base runs under process isolation; why_new=new step, then U10's readiness check, then GST-272; seam=hostReadiness; no_claim=the install itself, which tests/arms and the Docker tier cover
-  test("an interactive task on codex is E_INTERACTIVE_HOST; a real host takes a gstack base but only under Docker", async () => {
+  // Value: protects=an interactive task on --host codex passes preflight, since the Codex adapter now answers its questions (it was E_INTERACTIVE_HOST until the adapter could); a real host takes a gstack-base call past the arm check (GST-272 installs it) and still refuses it outside --isolation docker; fails_when=codex still refuses an interactive task, a gstack base is still refused as unbuilt, or a base runs under process isolation; why_new=new step, then U10's readiness check, then GST-272, then interactive tasks on Codex; seam=preflight, hostReadiness; no_claim=the install itself, which tests/arms and the Docker tier cover
+  test("an interactive task on codex passes preflight; a real host takes a gstack base but only under Docker", async () => {
     const { repo, args } = await lockedLearn();
     writeFileSync(join(repo.root, "test/fixtures/skill-evals/learn/tasks.ext.json"), JSON.stringify({ schema_version: 1, tasks: { "prune-stale": { interactive: true } } }));
     const r = await run(args("codex", "gpt-6.1-sol"));
-    expect(r.err).toContain("E_INTERACTIVE_HOST --host codex runs only non-interactive tasks in v1; these tasks are declared interactive: prune-stale");
-    expect(r.err).toContain("E_INTERACTIVE_HOST fix: Use --host claude, or --tasks-only show,search,stats,export,add,prune-conflict,cross-project,empty,no-code-change");
+    expect(r.out + r.err).toContain("ok contract: 10 tasks (1 safety, 1 interactive)");
+    expect(r.err).not.toContain("E_INTERACTIVE_HOST");
     const real = await run(args("claude", "claude-opus-5-5"), KEYS);
     expect(real.err).not.toContain("GST-272");
     expect(real.err).toContain("E_ISOLATION_COUNTED a real host run is counted (it leases from a ledger line item under a rig admission), so it runs under --isolation docker only");

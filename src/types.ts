@@ -258,6 +258,8 @@ export interface TrialRecord {
   files_read: string[];
   /** One entry per question the run asked: its classifier category, or null when the classifier names none. */
   asked: (Category | null)[];
+  /** Questions the run asked through its host's question tool that got no answer (a Codex tool question in a task with no user replies); absent where the adapter records none (Claude Code, older records). */
+  unanswered?: number;
   usage: TokenUsage | null;
   cost_micros: number | null;
   wall_ms: number | null;

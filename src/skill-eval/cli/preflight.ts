@@ -152,10 +152,6 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
   const judged = tasks.some((t) => ext[t.id]?.judge !== undefined);
   report.passed.push("contract: " + tasks.length + " tasks (" + tasks.filter((t) => t.safety).length + " safety, " + interactive.length + " interactive)" + (contract.ext ? " with " + show(contract.ext.path) : ""));
 
-  if (call.host === "codex" && interactive.length) {
-    const others = tasks.filter((t) => !interactive.includes(t.id)).map((t) => t.id);
-    stop("E_INTERACTIVE_HOST", "--host codex runs only non-interactive tasks in v1; these tasks are declared interactive: " + interactive.join(", "), "Use --host claude, or " + (others.length ? "--tasks-only " + others.join(",") : "drop the interactive tasks (no task would be left)") + ". Do not --resume.");
-  }
   const subjects = call.models.map((m) => ({ model: m, provider: providerOf(call.policy, m) }));
   const offHost = subjects.filter((s) => s.provider && !HOST_PROVIDERS[call.host].includes(s.provider));
   if (offHost.length) stop("E_USAGE", "--host " + call.host + " runs " + HOST_PROVIDERS[call.host].join(" and ") + " models; " + offHost.map((s) => s.model + " is " + s.provider).join(", "));

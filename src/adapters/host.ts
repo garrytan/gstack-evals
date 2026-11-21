@@ -25,15 +25,18 @@ export interface HostDriverOptions {
   interactive: boolean;
   skill: (SkillRef & { dir: string | null }) | null;
   out: string;
-  /** The persona's free-form answers for a task with a persona; Claude Code only, since Codex runs no interactive task. */
+  /** The persona's free-form answers for a task with a persona. */
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
+  /** Codex only, and every Codex session needs it: model_reasoning_effort, or null for a model Codex's catalog lacks (its driver's effort). */
+  effort?: string | null;
   /** Plugin roots in the agent's HOME for the session (Claude Code only). */
   plugins?: string[];
   /** The cell's cross-family voice through the Codex CLI (Claude Code only). */
   codex?: { provider: CodexProvider; model: string };
-  /** The session's system prompt, its turn cap and its GSTACK_SESSION_KIND (Claude Code only; see its driver). */
+  /** The session's system prompt and its turn cap (Claude Code only; see its driver). */
   systemPrompt?: SystemPrompt;
   maxTurns?: number;
+  /** GSTACK_SESSION_KIND for the agent env, on either host; unset, none. */
   sessionKind?: "unattended";
   /** Claude Code only: GSTACK_SKILL_GATE_DEADLINE_MS for the agent env, and settings printed at session start (driver.ts). */
   skillGateDeadlineMs?: number;
@@ -59,5 +62,6 @@ export function hostDriver(o: HostDriverOptions): AgentDriver {
     return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(o.skillGateDeadlineMs ? { skillGateDeadlineMs: o.skillGateDeadlineMs } : {}), ...(o.disable1mContext ? { disable1mContext: true } : {}), ...(o.query ? { query: o.query } : {}), ...(o.settings ? { settings: o.settings } : {}), ...(o.capStops ? { capStops: o.capStops } : {}), ...(o.backgroundWaitMs !== undefined ? { backgroundWaitMs: o.backgroundWaitMs } : {}), ...(o.followUp ? { followUp: o.followUp } : {}), ...(o.stopHook ? { stopHook: o.stopHook } : {}) });
   }
   if (o.provider === "anthropic") throw new Error("E_INTERNAL: Codex cannot run the anthropic model " + o.model);
-  return codexDriver({ model: o.model, provider: o.provider, proxy: o.proxy, interactive: o.interactive, skill: o.skill, out: o.out });
+  if (o.effort === undefined) throw new Error("E_INTERNAL: a Codex session needs its reasoning effort, and none was passed for " + o.model);
+  return codexDriver({ model: o.model, provider: o.provider, proxy: o.proxy, effort: o.effort, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}) });
 }

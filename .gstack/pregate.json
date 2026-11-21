@@ -302,7 +302,8 @@
     "lanes/delivery-route/arms/**": [
       "tests/delivery-route/plan.test.ts",
       "tests/delivery-route/sessions.test.ts",
-      "tests/delivery-route/b1b.test.ts"
+      "tests/delivery-route/b1b.test.ts",
+      "tests/delivery-route/b1c.test.ts"
     ],
     "quick/laneb/arms/manifests/b1/**": [
       "tests/delivery-route/plan.test.ts"
@@ -314,7 +315,8 @@
       "tests/delivery-route/b1b.test.ts"
     ],
     "wiki/board/2026-11-18-geva-548-delivery-route-results/**": [
-      "tests/delivery-route/b1b.test.ts"
+      "tests/delivery-route/b1b.test.ts",
+      "tests/delivery-route/b1c.test.ts"
     ],
     "quick/laneb/arms/manifests/b1b/**": [
       "tests/delivery-route/b1b.test.ts"
@@ -541,6 +543,18 @@
     ],
     "lanes/eng-planted/readings/generic/**": [
       "tests/ep/readings/judge.test.ts"
+    ],
+    "wiki/plans/2026-11-18-capy-b1c-project-route-prereg/**": [
+      "tests/delivery-route/b1c.test.ts"
+    ],
+    "wiki/board/2026-11-18-capy-b1b-prose-route-results/**": [
+      "tests/delivery-route/b1c.test.ts"
+    ],
+    "quick/laneb/arms/manifests/b1c/**": [
+      "tests/delivery-route/b1c.test.ts"
+    ],
+    "tests/delivery-route/fixtures/b1c-sessions/**": [
+      "tests/delivery-route/b1c.test.ts"
     ]
   },
   "guards": [

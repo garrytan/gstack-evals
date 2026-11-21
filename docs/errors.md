@@ -931,9 +931,9 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_INTERACTIVE_HOST
 
-A task declared interactive was sent to --host codex, which runs only non-interactive tasks in v1.
+No longer raised. It named a task declared interactive sent to --host codex while the Codex adapter ran non-interactive tasks only; the adapter now answers a Codex session's questions, so --host codex runs every task. The code stays so older run records still read.
 
-Fix: Use --host claude, or --tasks-only with the other ids. The message names the interactive task ids. Do not --resume.
+Fix: Nothing to fix now: start a new run on --host codex. Do not --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U7.
 

@@ -356,8 +356,8 @@ export const CODES = {
   },
   E_INTERACTIVE_HOST: {
     exit: 2,
-    meaning: "A task declared interactive was sent to --host codex, which runs only non-interactive tasks in v1.",
-    fix: "Use --host claude, or --tasks-only with the other ids. The message names the interactive task ids. Do not --resume.",
+    meaning: "No longer raised. It named a task declared interactive sent to --host codex while the Codex adapter ran non-interactive tasks only; the adapter now answers a Codex session's questions, so --host codex runs every task. The code stays so older run records still read.",
+    fix: "Nothing to fix now: start a new run on --host codex. Do not --resume.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
