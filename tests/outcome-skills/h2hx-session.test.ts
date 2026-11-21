@@ -16,7 +16,8 @@ import type { ExtPlanned } from "../../lanes/outcome-skills/h2h/ext/plan.ts";
 import { analyzeExt, type ExtScore, type ExtSession, type ExtTests } from "../../lanes/outcome-skills/h2h/ext/analysis.ts";
 import { readExtPrereg } from "../../lanes/outcome-skills/h2h/ext/prereg.ts";
 import { runExtStage, type ExtRunnerDeps } from "../../lanes/outcome-skills/h2h/ext/runner.ts";
-import { checkExtHome, extClaudeConfig, extClaudeRunCopy, extHome, firstInput, rolloutVersion, runExtSession, type ExtHome, type ExtSessionInput, type ExtSessionRecord } from "../../lanes/outcome-skills/h2h/ext/session.ts";
+import { checkExtHome, extClaudeConfig, extClaudeRunCopy, extHome, fileLookup, firstInput, rolloutVersion, runExtSession, type ExtHome, type ExtSessionInput, type ExtSessionRecord } from "../../lanes/outcome-skills/h2h/ext/session.ts";
+import { checkServedBy, particleRoute } from "../../lanes/outcome-skills/h2h/ext/route.ts";
 import { extTests } from "../../lanes/outcome-skills/h2h/ext/tests.ts";
 import { readRecords } from "../../lanes/outcome-skills/h2h/analysis/commands.ts";
 import { readPrereg } from "../../lanes/outcome-skills/h2h/prereg.ts";
@@ -359,40 +360,84 @@ describe("x-run's stage runner", () => {
 });
 
 const PY = process.env.REAL_OUTCOME_PYTHON ?? join(homedir(), ".capy/work/real/venv/bin/python");
-test.skipIf(!existsSync(PY))("h2h_turns.py reads every answer's generation record through the slot before it closes, sub-agents' included", async () => {
+const GEN404 = JSON.parse(readFileSync(join(import.meta.dir, "../fixtures/openrouter-generation-404.json"), "utf8"));
+
+/** Runs h2h_turns.py's generations() over the home's session logs against a stub generation route, on a fake clock whose
+ *  sleep only advances it. Returns the rows it wrote, every request the stub saw, and the clock at the end. */
+async function runGenerations(logs: Record<string, string>, answer: (id: string, asked: number) => Response): Promise<{ rows: any[]; seen: string[]; clock: number; file: string }> {
   const d = mkdtempSync(join(W, "gen-"));
-  put(join(d, "home"), {
-    ".claude/projects/p/s1.jsonl": [{ type: "assistant", message: { id: "gen-1" } }, { type: "user" }, { type: "assistant", message: { id: "gen-1" } }, { type: "assistant", message: { id: "synth-1", model: "<synthetic>" } }].map((x) => JSON.stringify(x)).join("\n") + "\n",
-    ".claude/projects/p/s1/subagents/a.jsonl": JSON.stringify({ type: "assistant", message: { id: "gen-2" } }) + "\n",
-  });
+  put(join(d, "home"), logs);
   const seen: string[] = [];
+  const asked = new Map<string, number>();
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (req) => {
     const u = new URL(req.url);
     seen.push(u.pathname + u.search + " " + req.headers.get("authorization"));
-    const id = u.searchParams.get("id");
-    return id === "gen-2" ? new Response("not yet", { status: 404 }) : Response.json({ data: { id: "gen-of-" + id, provider_name: "Particle AI" } }, { headers: { "x-h2h-generation-id": "gen-of-" + id } });
+    const id = u.searchParams.get("id")!;
+    asked.set(id, (asked.get(id) ?? 0) + 1);
+    return answer(id, asked.get(id)!);
   } });
+  let clock = NaN;
   try {
     const script = [
       "import json, sys",
       "sys.path.insert(0, sys.argv[1])",
       "import h2h_turns",
-      "h2h_turns.GEN_WAIT_S = 0",
+      "class Clock:",
+      "    t = 0.0",
+      "    def monotonic(self): return self.t",
+      "    def sleep(self, s): self.t += s",
+      "h2h_turns.time = Clock()",
       "t = object.__new__(h2h_turns.Turns)",
       "from pathlib import Path",
       "t.cfg = {'home': sys.argv[2] + '/home', 'exec_prefix': []}",
       "t.out = Path(sys.argv[2])",
       "t.summary = {}",
       "t.generations({'base_url': sys.argv[3], 'token': 'slot-token'})",
+      "print('CLOCK', h2h_turns.time.t)",
     ].join("\n");
     const p = Bun.spawn([PY, "-c", script, join(import.meta.dir, "../../lanes/outcome-skills/h2h/sessions"), d, "http://127.0.0.1:" + server.port + "/slot1/openrouter"], { env: { PATH: process.env.PATH!, PYTHONDONTWRITEBYTECODE: "1" }, stdout: "pipe", stderr: "pipe" });
     expect(await p.exited, await new Response(p.stderr).text()).toBe(0);
+    clock = Number((await new Response(p.stdout).text()).match(/^CLOCK (\S+)$/m)?.[1]);
   } finally {
     server.stop(true);
   }
-  const rows = readFileSync(join(d, "generations.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const file = join(d, "generations.jsonl");
+  return { rows: readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l)), seen, clock, file };
+}
+
+const record = (id: string) => Response.json({ data: { id: "gen-of-" + id, provider_name: "Particle AI" } }, { headers: { "x-h2h-generation-id": "gen-of-" + id } });
+const notFound = () => new Response(GEN404.body, { status: 404, headers: { "content-type": "application/json", "x-h2h-generation-id": GEN404.generation_id } });
+
+test.skipIf(!existsSync(PY))("h2h_turns.py reads every answer's generation record through the slot before it closes, sub-agents' included", async () => {
+  const { rows, seen } = await runGenerations({
+    ".claude/projects/p/s1.jsonl": [{ type: "assistant", message: { id: "gen-1" } }, { type: "user" }, { type: "assistant", message: { id: "gen-1" } }, { type: "assistant", message: { id: "synth-1", model: "<synthetic>" } }].map((x) => JSON.stringify(x)).join("\n") + "\n",
+    ".claude/projects/p/s1/subagents/a.jsonl": JSON.stringify({ type: "assistant", message: { id: "gen-2" } }) + "\n",
+  }, (id) => (id === "gen-2" ? new Response("not yet", { status: 404 }) : record(id)));
   expect(rows.map((r) => [r.id, r.status, r.generation_id]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))).toEqual([["gen-1", 200, "gen-of-gen-1"], ["gen-2", 404, null]]);
-  expect(seen.filter((s) => s.includes("gen-2")).length).toBe(5);
+  expect(seen.filter((s) => s.includes("gen-1")).length).toBe(1);
   expect(seen).toContain("/slot1/openrouter/v1/generation?id=gen-1 Bearer slot-token");
   expect(seen.some((s) => s.includes("synth-1"))).toBe(false);
+});
+
+test.skipIf(!existsSync(PY))("a generation record OpenRouter writes late is re-asked every 10 s and passes when it appears on the third re-ask", async () => {
+  const { rows, seen, clock, file } = await runGenerations({
+    ".claude/projects/p/s1.jsonl": [GEN404.answer_id, "msg_ready0123456789abcd"].map((id) => JSON.stringify({ type: "assistant", message: { id } })).join("\n") + "\n",
+  }, (id, asked) => (id === GEN404.answer_id && asked < 4 ? notFound() : record(id)));
+  expect(seen.filter((s) => s.includes(GEN404.answer_id)).length).toBe(4);
+  expect(seen.filter((s) => s.includes("msg_ready")).length).toBe(1);
+  expect(clock).toBe(30);
+  expect(rows.map((r) => [r.id, r.status])).toEqual([[GEN404.answer_id, 200], ["msg_ready0123456789abcd", 200]]);
+  const g = fileLookup(file);
+  expect(await checkServedBy(g.ids, g.lookup, particleRoute(readExtPrereg()))).toEqual({ checked: 2, served_by: ["Particle AI"] });
+});
+
+test.skipIf(!existsSync(PY))("a generation record that never appears is asked for 180 s after the first pass, then written as OpenRouter's 404 and refused", async () => {
+  const { rows, seen, clock, file } = await runGenerations({
+    ".claude/projects/p/s1.jsonl": JSON.stringify({ type: "assistant", message: { id: GEN404.answer_id } }) + "\n",
+  }, () => notFound());
+  expect(seen.length).toBe(1 + 18);
+  expect(clock).toBe(180);
+  expect(rows).toEqual([{ id: GEN404.answer_id, status: 404, text: GEN404.body, generation_id: GEN404.generation_id }]);
+  const g = fileLookup(file);
+  await expect(checkServedBy(g.ids, g.lookup, particleRoute(readExtPrereg()))).rejects.toThrow(new RegExp("^E_H2HX_ROUTE_RECORD no generation record for answer " + GEN404.answer_id + " \\(generation " + GEN404.generation_id + ", status 404\\)"));
 });

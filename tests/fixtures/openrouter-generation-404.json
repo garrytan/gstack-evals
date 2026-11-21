@@ -1,0 +1,14 @@
+{
+  "source": "Recorded 2026-11-21 through the metering proxy's free generation route in a real part P smoke session (particle-ai/particle-1 on OpenRouter, pinned to Particle AI): the answer's id, the generation id the proxy recorded from its X-Generation-Id header, and OpenRouter's 404 answer about a minute after the answer was served. A hand lookup at 17:31Z read the record (provider_name Particle AI, model particle-ai/particle-1-20261027, finish_reason tool_calls, cancelled false).",
+  "answer_id": "msg_UsuQ1FRct0yCF3cWaCN6",
+  "generation_id": "gen-1795281858-UsuQ1FRct0yCF3cWaCN6",
+  "status": 404,
+  "body": "{\"error\":{\"message\":\"Generation gen-1795281858-UsuQ1FRct0yCF3cWaCN6 not found\",\"code\":404}}",
+  "record_later": {
+    "id": "gen-1795281858-UsuQ1FRct0yCF3cWaCN6",
+    "provider_name": "Particle AI",
+    "model": "particle-ai/particle-1-20261027",
+    "finish_reason": "tool_calls",
+    "cancelled": false
+  }
+}
