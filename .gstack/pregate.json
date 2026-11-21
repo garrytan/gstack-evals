@@ -621,6 +621,9 @@
     ],
     "tests/delivery-route/fixtures/b1d-sessions/**": [
       "tests/delivery-route/b1d.test.ts"
+    ],
+    "tests/scoring/fixtures/**": [
+      "tests/scoring/codex-transcript.test.ts"
     ]
   },
   "guards": [

@@ -7,7 +7,7 @@
 // Codex 0.170.0), whatever stopped it; LedgerCapStop is a cap stop; anything else is infrastructure. The model and CLI version
 // come from the session's own record: Claude Code's init message (model, claude_code_version), and Codex's session_meta
 // cli_version and turn_context model. Passes with a regression test read testFilesInDiff on the graded diff; followed,
-// followed_b2 and followed_as_merged read the detector on the SDK log, or on codexRecs of the rollouts (scorer.ts).
+// followed_b2 and followed_as_merged read the detector on the SDK log, or on codexTranscript of the rollouts (scorer.ts).
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readSessionRows, sessionsByTrial, type SessionRow } from "../../quick/laneb/analysis/analyze.ts";
@@ -17,7 +17,7 @@ import { namedOf } from "../delivery-route/b1d.ts";
 import { detect as codexLoads, readHookLog } from "../codex-hooks/r/detect.ts";
 import type { SkillLines } from "../codex-hooks/r/arms.ts";
 import { readThread, safetyStop as cxSafety, type Thread } from "../codex-hooks/r/table.ts";
-import { codexRecs, detectBoth, testFilesInDiff, type Detection } from "./scorer.ts";
+import { codexTranscript, detectB2, testFilesInDiff, type Detection } from "./scorer.ts";
 import { ARM_DEFS, B2, CODEX, HOSTS, LINE, MODELS, PROVE_IT, REPO, repoOf, SKILL, SOL_EFFORT, type Arm, type Host } from "./pins.ts";
 import { AGENT as CODEX_AGENT } from "./prepare-run.ts";
 
@@ -96,8 +96,8 @@ function rewardOf(result: any): number | null {
 const tokensOf = (usage: any) => (usage ? ["input_tokens", "cache_creation_input_tokens", "cache_creation_1h_input_tokens", "cache_read_input_tokens", "output_tokens"].reduce((x, k) => x + (Number(usage[k]) || 0), 0) : null);
 /** Section 6.2 on a graded diff. */
 export function regression(patch: string, pass: boolean) {
-  const files = testFilesInDiff(patch);
-  return { test_files: files, touches_test: files.length > 0, regression_test: pass && files.length > 0, root_only: files.length > 0 && files.every((f) => !f.includes("/")) };
+  const t = testFilesInDiff(patch);
+  return { test_files: t.files, touches_test: t.files.length > 0, regression_test: pass && t.files.length > 0, root_only: t.root_only };
 }
 
 /** Skill loads in Claude Code's SDK log: Skill calls (and Reads of a skill's SKILL.md) whose result is no error. prove-it's
@@ -178,13 +178,13 @@ export function claudeRow(dir: string, ctx: { part: string | null; sessions: Map
   const cc = join(b.ev, "claude-projects");
   const main = existsSync(cc) ? readdirSync(cc).flatMap((x) => (statSync(join(cc, x)).isDirectory() ? readdirSync(join(cc, x)).filter((f) => f.endsWith(".jsonl")).map((f) => join(cc, x, f)) : [])) : [];
   const transcript = main.length === 1 ? readFileSync(main[0]!, "utf8") : null;
-  const det = recs.length ? detectBoth(recs, b.patch) : null;
+  const det = recs.length ? detectB2(recs, b.patch) : null;
   const loads = claudeLoads(recs, ctx.home);
   const hookLog = readText(join(b.ev, "gstack-hooks", "hooks", "skill-route.log"));
   return {
     schema: "b2-session/1", host: "claude", label: b.d.label, arm: b.d.arm, part: ctx.part, task: b.task, repo: b.repo, trial: b.trial,
     model, cli_version: cli, sdk_version: null, effort: null, ...o, pass, reward: b.reward, ...regression(b.patch, pass),
-    followed: det ? det.b1.followed : null, followed_b2: det ? det.b2.followed : null, followed_as_merged: det ? det.b1.followed_as_merged : null, detect: det?.b2 ?? null, unreadable_items: null,
+    followed: det ? det.followed : null, followed_b2: det ? det.followed_b2 ?? null : null, followed_as_merged: det ? det.followed_as_merged : null, detect: det, unreadable_items: null,
     steps_seen: transcript === null ? null : ccSteps(transcript), line_seen: sdk.includes(LINE) || (transcript ?? "").includes(LINE), skills_listed: Array.isArray(init?.skills) ? init.skills.map(String) : [], prove_it_loads: loads.prove_it, gstack_loads: loads.others,
     routing_named: b.d.gstack ? namedOf(hookLog) : null, start_seen: claudeStartSeen(sdk),
     questions: recs.filter((r) => r.type === "AssistantMessage").flatMap((r) => (Array.isArray(r.content) ? (r.content as any[]) : [])).filter((x) => x?.name === "AskUserQuestion").length,
@@ -209,15 +209,15 @@ export function codexRow(dir: string, ctx: { part: string | null; sessions: Map<
   const time = b.exc === "AgentTimeoutError";
   const o = outcomeOf(b, responded, other, b.allowance ? "allowance stop" : time ? "time limit stop" : "");
   const pass = o.outcome === "graded" && b.reward !== null && b.reward >= 1;
-  let det: { b1: Detection; b2: Detection } | null = null, unreadable: number | null = null;
-  if (texts.length) { const c = codexRecs(texts); unreadable = c.unreadable; det = detectBoth(c.recs, b.patch, "/testbed"); }
+  let det: Detection | null = null, unreadable: number | null = null;
+  if (texts.length) { const c = codexTranscript(texts); unreadable = c.unreadable_items; det = detectB2(c.recs, b.patch, c.cwd ?? "/testbed"); }
   const loads = texts.length ? codexLoads(b.ev, skillLines()) : null;
   const hook = b.d.gstack ? readHookLog(b.ev, root?.id ?? loads?.root ?? null) : null;
   const events = readText(join(b.ev, "codex-events.jsonl")) ?? "";
   return {
     schema: "b2-session/1", host: "codex", label: b.d.label, arm: b.d.arm, part: ctx.part, task: b.task, repo: b.repo, trial: b.trial,
     model: root?.models[0] ?? null, cli_version: root?.cli_version ?? null, sdk_version: null, effort: efforts, ...o, pass, reward: b.reward, ...regression(b.patch, pass),
-    followed: det ? det.b1.followed : null, followed_b2: det ? det.b2.followed : null, followed_as_merged: det ? det.b1.followed_as_merged : null, detect: det?.b2 ?? null, unreadable_items: unreadable,
+    followed: det ? det.followed : null, followed_b2: det ? det.followed_b2 ?? null : null, followed_as_merged: det ? det.followed_as_merged : null, detect: det, unreadable_items: unreadable,
     steps_seen: loads ? loads.steps_arrived || loads.loads["prove-it"].loaded : null, line_seen: texts.some((x) => x.includes(LINE)), skills_listed: codexListed(texts), prove_it_loads: loads?.loads["prove-it"].loaded ? 1 : 0, gstack_loads: codexGstackLoads(texts),
     routing_named: hook && hook.position !== "log missing" ? hook.named : null, start_seen: codexStartSeen(texts),
     questions: Number(b.summary?.result?.questions ?? 0), cost_usd: b.cost, tokens: tokensOf(b.summary?.session?.usage), wall_s: typeof b.summary?.wall_s === "number" ? b.summary.wall_s : null,

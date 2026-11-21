@@ -9,6 +9,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { B1B_CASES, b1bApprove, b1bCap, b1bCaseProblems, b1bCheck, b1bDone, b1bGuard, b1bReading, b1bReport, b1bRow, b1bStats, checkB1bRows, harnessDirty, loadB1bCaptured, loadsOf, paired, READINGS, reuseCheck, whyNot, type B1bRow, type Load } from "../../lanes/delivery-route/b1b.ts";
 import { B1B_BUNDLE, B1B_CAPS_USD, HOOK_SUBSTITUTIONS, ROUTING, type B1bArm } from "../../lanes/delivery-route/b1b-pins.ts";
+import { B1B_RUN } from "../../lanes/delivery-route/b1c-pins.ts";
 import { ARM_SOURCES, REPO } from "../../lanes/delivery-route/pins.ts";
 import { b1Row, type B1Row } from "../../lanes/delivery-route/table.ts";
 import { readRows } from "../../quick/laneb/runner/ledger.ts";
@@ -148,10 +149,15 @@ describe("money", () => {
 });
 
 describe("the none arm's reuse", () => {
-  test("every session-deciding tree is the same at this head as at B1's run commit", () => {
-    const r = reuseCheck("HEAD");
+  // B1b ran at B1B_RUN.commit, where every tree matched B1's run. The Codex harness (GST-3174) and B2's scorer changed files a
+  // B1 session runs (l1.ts, launch.sh, proxy.ts, detect.ts) after that, so a B1b launch at this head must be refused.
+  test("every session-deciding tree was the same at B1b's run commit as at B1's, and a launch at this head is refused", () => {
+    const r = reuseCheck(B1B_RUN.commit);
     expect(r.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect(r.same).toBe(true);
+    const head = reuseCheck("HEAD");
+    expect(head.same).toBe(false);
+    expect(head.lines.filter((l) => l.startsWith("DIFFERENT ")).map((l) => l.split(" ")[1])).toEqual(expect.arrayContaining(["quick/laneb/runner", "quick/laneb/l1", "lanes/delivery-route/detect.ts"]));
   });
   test("the launch guard's dirty check refuses an uncommitted change to a harness path and passes a clean one", () => {
     const repo = mkdtempSync(join(tmpdir(), "b1b-dirty-"));
