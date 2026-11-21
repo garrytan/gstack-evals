@@ -51,6 +51,9 @@ export interface Release {
   allowance_doubled: Record<string, boolean>;
 }
 export interface Sealed { schema: "cso-stage1-outcomes.v1"; outcomes: Record<string, unknown>[]; judge_detail: { route: string; detail: unknown }[] }
+/** One route's judge check as judge --check seals it (deviation (b)): the check with its detail, every report's labels, the
+ *  format variants and the gold fill. */
+export interface SealedCheck { schema: "cso-judge-check.v1"; check: JudgeCheck; reports: unknown[]; formats: unknown[]; fill: unknown }
 
 const allowanceKey = (m: CsoModel) => (m === "particle" ? "particle-1" : m);
 
@@ -162,7 +165,7 @@ export function readKey(path: string): Buffer {
 }
 
 /** Encrypts the sealed outcomes to a new file (mode 0600) and returns the file's sha256. */
-export function seal(sealed: Sealed, key: Buffer, out: string): string {
+export function seal(sealed: Sealed | SealedCheck, key: Buffer, out: string): string {
   if (existsSync(out)) csoFail("E_CSO_READOUT_OUT", out + " already exists; a sealed file is never overwritten");
   const iv = randomBytes(12);
   const c = createCipheriv("aes-256-gcm", key, iv);
@@ -178,7 +181,7 @@ export function seal(sealed: Sealed, key: Buffer, out: string): string {
 }
 
 /** Opens a sealed file after stage 2's analysis, checking its sha256 against the run record first. */
-export function unseal(file: string, key: Buffer, sha256: string): Sealed {
+export function unseal<T extends Sealed | SealedCheck = Sealed>(file: string, key: Buffer, sha256: string): T {
   const text = readFileSync(file, "utf8");
   if (createHash("sha256").update(text).digest("hex") !== sha256) csoFail("E_CSO_READOUT_OUT", file + " does not match the recorded sha256");
   const env = JSON.parse(text) as { schema: string; iv: string; tag: string; ciphertext: string };
@@ -187,8 +190,24 @@ export function unseal(file: string, key: Buffer, sha256: string): Sealed {
   dc.setAAD(Buffer.from(SEALED));
   dc.setAuthTag(Buffer.from(env.tag, "base64"));
   try {
-    return JSON.parse(Buffer.concat([dc.update(Buffer.from(env.ciphertext, "base64")), dc.final()]).toString("utf8")) as Sealed;
+    return JSON.parse(Buffer.concat([dc.update(Buffer.from(env.ciphertext, "base64")), dc.final()]).toString("utf8")) as T;
   } catch (e) {
     return csoFail("E_CSO_READOUT_KEY", file + " does not open with this key: " + (e as Error).message);
   }
+}
+
+/** Seals one route's check to the readout key and writes its sha256 beside it (<out>.sha256); returns the digest. */
+export function sealCheck(c: SealedCheck, key: Buffer, out: string): string {
+  const sha = seal(c, key, out);
+  writeFileSync(out + ".sha256", sha + "\n", { flag: "wx" });
+  return sha;
+}
+
+/** Opens a sealed check against the digest written beside it (E_CSO_READOUT_OUT when the digest file is missing or the
+ *  file is not a sealed check). */
+export function openCheck(file: string, key: Buffer): SealedCheck {
+  if (!existsSync(file + ".sha256")) csoFail("E_CSO_READOUT_OUT", file + ".sha256 does not exist; a sealed check opens only against its recorded digest");
+  const c = unseal<SealedCheck>(file, key, readFileSync(file + ".sha256", "utf8").trim());
+  if (c.schema !== "cso-judge-check.v1") csoFail("E_CSO_READOUT_OUT", file + " is not a sealed judge check");
+  return c;
 }

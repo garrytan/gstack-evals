@@ -65,6 +65,8 @@ export interface ReportResult {
   id: string; arm: CsoArm | null; model: CsoModel | null; anchor: "oracle" | "stock" | null;
   production: { named: boolean | null; validity: Validity[]; refused: boolean };
   gold: [GoldResult, GoldResult];
+  /** How many findings the production pass A listed, counted findings and the rest. */
+  findings_total?: number;
 }
 /** One format-variant unit: the production named label for the table row and the prose paragraph, and for each near miss. */
 export interface FormatResult { unit: string; table: boolean | null; prose: boolean | null; near_class: boolean | null; near_lines: boolean | null }
@@ -232,7 +234,8 @@ export async function runReport(id: string, meta: Pick<ReportResult, "arm" | "mo
   const passA = run.judged && Array.isArray(run.judged.findings) ? run.judged.findings.slice(0, scoringRules(p).first_k) : [];
   const gold: GoldResult[] = [];
   for (const c of clients.gold) gold.push(await goldReport(c, u, st, s, passA, tree, p));
-  return { id, ...meta, production: { named: prod.named, validity: prod.validity, refused: run.refused }, gold: [gold[0]!, gold[1]!] };
+  const total = run.judged && Array.isArray(run.judged.findings) ? run.judged.findings.length : 0;
+  return { id, ...meta, production: { named: prod.named, validity: prod.validity, refused: run.refused }, gold: [gold[0]!, gold[1]!], findings_total: total };
 }
 
 /** Anchor sources for runReport: one oracle and one stock report per unit. */
@@ -281,3 +284,11 @@ export function goldFill(c: JudgeCheck, pools: { anchors: readonly AnchorCandida
   return { anchors, findings, still_short: [...new Set(still)] };
 }
 
+
+/** The extra findings goldFill draws from when validity gold falls short, read as the plan leaves it open: pass A findings
+ *  past the first first_k of check-set reports, one id per finding ("<report id>#<position from 1>"), which goldFill
+ *  takes in check_seed order. */
+export function extraFindingPool(reports: readonly ReportResult[], p: CsoPrereg): string[] {
+  const k = scoringRules(p).first_k;
+  return reports.flatMap((r) => Array.from({ length: Math.max((r.findings_total ?? 0) - k, 0) }, (_, i) => r.id + "#" + (k + i + 1)));
+}

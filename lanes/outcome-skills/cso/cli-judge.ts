@@ -3,8 +3,9 @@
 // holds the unit build's units/<unit>.json and trees/<unit>/ and the arms' arms/<arm>.json; session, judged and score
 // files are JSON lines. judge sends through the metering proxy on a cso-judge lease (judge/meter.ts): --probe checks each
 // route with one call, the default pass judges every session not yet judged, and --check runs section 7's check on the
-// stage 0 and stage 1 reports with anchors and format variants. Its check file holds counts and kappas, so it stays in
-// the run's private export until readout seals it. stage0, analyze and readout read only files.
+// stage 0 and stage 1 reports with anchors and format variants. Under deviation (b) the check's detail is sealed to the
+// readout key and only judgeRelease's booleans print; analyze and readout open the sealed check with the same key.
+// stage0, analyze and readout read only files.
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { flags, type Command } from "./cli.ts";
@@ -12,14 +13,14 @@ import { csoFail, loadCsoPrereg, type CsoPrereg } from "./prereg.ts";
 import type { CsoArm, CsoModel, SessionRecord, UnitRecord } from "./types.ts";
 import type { CsoArmRecord } from "./arms.ts";
 import { judgeRelease, type JudgeCheck } from "./analysis/release.ts";
-import { readKey, readout, seal } from "./analysis/readout.ts";
+import { openCheck, readKey, readout, seal, sealCheck } from "./analysis/readout.ts";
 import { secondaries } from "./analysis/secondaries.ts";
 import { stage0Readout } from "./analysis/stage0.ts";
 import { analyze, type AnalysisInput } from "./analysis/verdicts.ts";
 import { readTree, type TreeIndex } from "./score/checks.ts";
 import { scoreSession, type CsoScore, type Judged } from "./score/outcomes.ts";
 import { scoredText } from "./score/text.ts";
-import { anchorSources, checkSetOrder, goldFill, judgeCheck, judgeSession, runFormatVariants, runReport, type FormatResult, type ReportResult } from "./judge/check.ts";
+import { anchorSources, checkSetOrder, extraFindingPool, goldFill, judgeCheck, judgeSession, runFormatVariants, runReport, type FormatResult, type ReportResult } from "./judge/check.ts";
 import { judgeRoutes, routeClients, type Transport } from "./judge/client.ts";
 import { openJudgeMeter, probe } from "./judge/meter.ts";
 
@@ -81,17 +82,18 @@ async function score(argv: string[]): Promise<number> {
   return 0;
 }
 
-const JUDGE_HELP = "Usage: gstack-evals cso judge --work <dir> --sessions <file> --out <dir> --run <id> [--route <name>] [--check | --probe] [--record <path>] [--ledger <path>]\nSends through the metering proxy on one cso-judge lease. --probe: one call down each judge and labeller route (exit 1 if any\nfails). Default: passes A and B on every session not yet in <out>/judged.jsonl. --check: section 7's check on the stage 0\nand stage 1 reports, with anchors and format variants, written to <out>/check-<route>.json.";
+const JUDGE_HELP = "Usage: gstack-evals cso judge --work <dir> --sessions <file> --out <dir> --run <id> [--route <name>] [--check --key <path> | --probe] [--record <path>] [--ledger <path>]\nSends through the metering proxy on one cso-judge lease. --probe: one call down each judge and labeller route (exit 1 if any\nfails). Default: passes A and B on every session not yet in <out>/judged.jsonl. --check: section 7's check on the stage 0\nand stage 1 reports, with anchors and format variants, sealed to the readout key in <out>/check-<route>.sealed (digest beside it);\nonly the release booleans print.";
 
 /** gstack-evals cso judge; a transport replaces the metered one in tests. */
-export async function judgeCmd(argv: string[], o: { transport?: Transport } = {}): Promise<number> {
-  const f = flags(argv, ["--work", "--sessions", "--out", "--run", "--route", "--record", "--ledger"], ["--check", "--probe"], JUDGE_HELP);
+export async function judgeCmd(argv: string[], o: { transport?: Transport; env?: Record<string, string | undefined>; fetch?: typeof fetch } = {}): Promise<number> {
+  const f = flags(argv, ["--work", "--sessions", "--out", "--run", "--route", "--record", "--ledger", "--key"], ["--check", "--probe"], JUDGE_HELP);
   if (!f) return 0;
   if (f.has("--check") && f.has("--probe")) csoFail("E_USAGE", "--check and --probe are separate runs");
+  const sealKey = f.has("--check") ? readKey(f.need("--key")) : null;
   const p = loadCsoPrereg(), out = resolve(f.need("--out"));
   const route = judgeRoutes(p).find((r) => r.route === (f.one("--route") ?? "production")) ?? csoFail("E_USAGE", "--route is one of " + judgeRoutes(p).map((r) => r.route).join(", "));
   mkdirSync(out, { recursive: true });
-  const meter = o.transport ? null : await openJudgeMeter({ run_id: f.need("--run"), out, record: f.one("--record"), ledger: f.one("--ledger") });
+  const meter = o.transport ? null : await openJudgeMeter({ run_id: f.need("--run"), out, record: f.one("--record"), ledger: f.one("--ledger"), env: o.env, fetch: o.fetch });
   const transport = o.transport ?? meter!.transport;
   try {
     if (f.has("--probe")) {
@@ -123,15 +125,16 @@ export async function judgeCmd(argv: string[], o: { transport?: Transport } = {}
     }
     const check = judgeCheck(route.route, reports, formats, p);
     const stage0 = [...new Set(sessions.filter((s) => s.stage === "stage0").map((s) => s.unit))].sort();
-    const fill = goldFill(check, { anchors: stage0.flatMap((u) => [{ id: "oracle " + u, kind: "oracle" as const }, { id: "stock " + u, kind: "stock" as const }]), findings: [] }, p);
-    writeNew(join(out, "check-" + route.route + ".json"), JSON.stringify({ check, reports, formats, fill }, null, 1) + "\n");
+    const fill = goldFill(check, { anchors: stage0.flatMap((u) => [{ id: "oracle " + u, kind: "oracle" as const }, { id: "stock " + u, kind: "stock" as const }]), findings: extraFindingPool(reports, p) }, p);
+    const file = join(out, "check-" + route.route + ".sealed");
+    const sha = sealCheck({ schema: "cso-judge-check.v1", check, reports, formats, fill }, sealKey!, file);
     console.log(JSON.stringify(judgeRelease([check])[0]));
-    if (fill.anchors.length || fill.findings.length || fill.still_short.length) console.log("gold fill: " + JSON.stringify(fill));
+    console.log("sealed check " + file + " sha256 " + sha);
     return 0;
   } finally {
     if (meter) {
       const c = await meter.close();
-      console.log("lease " + meter.lease_id + " settled: " + meter.sent() + " calls, " + c.spent_micros + " micros spent, " + c.unknown_micros + " unknown");
+      console.error("lease " + meter.lease_id + " settled: " + meter.sent() + " calls, " + c.spent_micros + " micros spent, " + c.unknown_micros + " unknown");
     }
   }
 }
@@ -173,16 +176,16 @@ export function judgeByModel(checks: readonly JudgeCheck[], p: CsoPrereg): Analy
   return { opus: of("opus"), particle: of("particle"), sol: of("sol") };
 }
 
-const readChecks = (paths: string[]): JudgeCheck[] => paths.map((x) => (JSON.parse(readFileSync(x, "utf8")) as { check: JudgeCheck }).check);
+const readChecks = (paths: string[], key: Buffer | null): JudgeCheck[] => paths.map((x) => openCheck(x, key ?? csoFail("E_USAGE", "--check needs --key, the readout key it was sealed to")).check);
 const readIds = (path: string): string[] => readRows<string | { unit: string }>(path).map((u) => (typeof u === "string" ? u : u.unit));
 
-const ANALYZE_HELP = "Usage: gstack-evals cso analyze --work <dir> --sessions <file> --scores <file> --units <stage 2 ids> --check <file>... [--headroom-admitted] [--headroom-failed] [--left-out <model>]...\nSection 10's rows, verdicts and secondaries on stage 2, printed as JSON.";
+const ANALYZE_HELP = "Usage: gstack-evals cso analyze --work <dir> --sessions <file> --scores <file> --units <stage 2 ids> --check <sealed file>... --key <path> [--headroom-admitted] [--headroom-failed] [--left-out <model>]...\nSection 10's rows, verdicts and secondaries on stage 2, printed as JSON.";
 async function analyzeCmd(argv: string[]): Promise<number> {
-  const f = flags(argv, ["--work", "--sessions", "--scores", "--units"], ["--headroom-admitted", "--headroom-failed"], ANALYZE_HELP, ["--check", "--left-out"]);
+  const f = flags(argv, ["--work", "--sessions", "--scores", "--units", "--key"], ["--headroom-admitted", "--headroom-failed"], ANALYZE_HELP, ["--check", "--left-out"]);
   if (!f) return 0;
   const p = loadCsoPrereg(), w = new Work(resolve(f.need("--work")));
   const i: AnalysisInput = {
-    units: readIds(f.need("--units")).map((u) => w.unit(u)), sessions: readRows<SessionRecord>(f.need("--sessions")), scores: readRows<CsoScore>(f.need("--scores")), judge: judgeByModel(readChecks(f.all("--check")), p),
+    units: readIds(f.need("--units")).map((u) => w.unit(u)), sessions: readRows<SessionRecord>(f.need("--sessions")), scores: readRows<CsoScore>(f.need("--scores")), judge: judgeByModel(readChecks(f.all("--check"), f.has("--key") ? readKey(f.need("--key")) : null), p),
     left_out: Object.fromEntries(f.all("--left-out").map((m) => [m, true])), headroom_admitted: f.has("--headroom-admitted"), headroom_failed: f.has("--headroom-failed"),
   };
   const a = analyze(i, p);
@@ -190,7 +193,7 @@ async function analyzeCmd(argv: string[]): Promise<number> {
   return 0;
 }
 
-const READOUT_HELP = "Usage: gstack-evals cso readout --sessions <file> --scores <file> --units <stage 1 ids> --check <file>... --key <path> --sealed <out> --spent <usd> --judging-per-session <usd> --vm <usd> --vm-stage2 <usd>\nSection 12's stage 1 readout: prints the release and seals every per-arm outcome and the judge detail to a new file.";
+const READOUT_HELP = "Usage: gstack-evals cso readout --sessions <file> --scores <file> --units <stage 1 ids> --check <sealed file>... --key <path> --sealed <out> --spent <usd> --judging-per-session <usd> --vm <usd> --vm-stage2 <usd>\nSection 12's stage 1 readout: prints the release and seals every per-arm outcome and the judge detail to a new file.";
 async function readoutCmd(argv: string[]): Promise<number> {
   const f = flags(argv, ["--sessions", "--scores", "--units", "--key", "--sealed", "--spent", "--judging-per-session", "--vm", "--vm-stage2"], [], READOUT_HELP, ["--check"]);
   if (!f) return 0;
@@ -200,7 +203,7 @@ async function readoutCmd(argv: string[]): Promise<number> {
   };
   const p = loadCsoPrereg();
   const key = readKey(f.need("--key"));
-  const r = readout({ units: readIds(f.need("--units")), sessions: readRows<SessionRecord>(f.need("--sessions")), scores: readRows<CsoScore>(f.need("--scores")), checks: readChecks(f.all("--check")), spent_usd: num("--spent"), judging_per_session_usd: num("--judging-per-session"), vm_usd: num("--vm"), vm_stage2_usd: num("--vm-stage2") }, p);
+  const r = readout({ units: readIds(f.need("--units")), sessions: readRows<SessionRecord>(f.need("--sessions")), scores: readRows<CsoScore>(f.need("--scores")), checks: readChecks(f.all("--check"), key), spent_usd: num("--spent"), judging_per_session_usd: num("--judging-per-session"), vm_usd: num("--vm"), vm_stage2_usd: num("--vm-stage2") }, p);
   const sha = seal(r.sealed, key, resolve(f.need("--sealed")));
   console.log(JSON.stringify({ ...r.release, sealed_sha256: sha }, null, 1));
   return 0;

@@ -1,13 +1,17 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The judging commands end to end on a temporary work dir, keyless: judge (passes A and B, --check and --probe) on a fake
-// transport, then score, stage0, analyze and readout over the files they wrote.
+// transport, then score, stage0, analyze and readout over the files they wrote. judge --check runs through the real
+// metering proxy on a stubbed upstream and leaves no count or kappa in plain, in its output or in any file of its out dir.
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { COMMANDS } from "../../lanes/outcome-skills/cso/cli.ts";
 import { judgeCmd } from "../../lanes/outcome-skills/cso/cli-judge.ts";
 import type { Transport } from "../../lanes/outcome-skills/cso/judge/client.ts";
+import { JUDGE_ITEM } from "../../lanes/outcome-skills/cso/judge/meter.ts";
+import { openCheck, readKey } from "../../lanes/outcome-skills/cso/analysis/readout.ts";
+import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import type { CsoArm, CsoModel, CsoStage, SessionRecord, UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "cso-cli-"));
@@ -40,6 +44,20 @@ const fake: Transport = async (r) => {
   const body = r.provider === "openai" ? { output: [{ type: "message", content: [{ type: "output_text", text }] }] } : r.provider === "anthropic" ? { content: [{ type: "text", text }], stop_reason: "end_turn" } : { choices: [{ message: { content: text }, finish_reason: "stop" }] };
   return { status: 200, body };
 };
+const keyPath = join(dir, "key");
+writeFileSync(keyPath, "cd".repeat(32));
+chmodSync(keyPath, 0o600);
+const record = join(dir, "record");
+recordApproval(record, { action: "init", item: JUDGE_ITEM, cap_micros: 50_000_000, quotes: [{ words: "cso cli tests on a temporary ledger", by: "cso tests", source: "tests/outcome-skills/cso-judge-cli.test.ts" }], admission: "warn" });
+const DRY_ENV = { ANTHROPIC_API_KEY: "dry-run", OPENAI_API_KEY: "dry-run", OPENROUTER_API_KEY: "dry-run" };
+const usage = { anthropic: { input_tokens: 50, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, openai: { input_tokens: 50, input_tokens_details: { cached_tokens: 0 }, output_tokens: 20, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 70 }, openrouter: { prompt_tokens: 50, completion_tokens: 20 } };
+const upstream = (async (url: any, init?: any) => {
+  const u = String(url), body = JSON.parse(String(init?.body ?? "{}"));
+  const provider = u.includes("anthropic") ? "anthropic" : u.includes("openrouter") ? "openrouter" : "openai";
+  const r = await fake({ provider, route: "", body });
+  return Response.json({ ...(r.body as object), id: "x", model: body.model, ...(provider === "openrouter" ? { provider: "Google" } : {}), ...(provider === "openai" ? { status: "completed" } : {}), usage: usage[provider] });
+}) as typeof fetch;
+const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
 const capture = async (f: () => Promise<number>) => {
   const log = console.log, err = console.error, out: string[] = [];
   console.log = (...a: unknown[]) => out.push(a.join(" "));
@@ -69,25 +87,35 @@ describe("cso judging commands", () => {
     expect(s0.code).toBe(0);
     expect(s0.out.split("\n").filter((l) => l.startsWith("PASS")).length).toBe(5);
   });
-  test("judge --check writes the route's check file and prints only its release", async () => {
-    const r = await capture(() => judgeCmd(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--out", join(dir, "c"), "--run", "t", "--check"], { transport: fake }));
+  test("judge --check seals its detail to the readout key and leaves no count or kappa in plain", async () => {
+    const out = join(dir, "c");
+    const r = await capture(() => judgeCmd(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--out", out, "--run", "check", "--check", "--key", keyPath, "--record", record, "--ledger", join(dir, "ledger.sqlite")], { env: DRY_ENV, fetch: upstream }));
     expect(r.code).toBe(0);
-    const file = JSON.parse(readFileSync(join(dir, "c", "check-production.json"), "utf8"));
-    expect(file.reports.length).toBe(24);
-    expect(file.reports.filter((x: { anchor: string | null }) => x.anchor).length).toBe(4);
-    expect(file.formats.length).toBe(2);
-    expect(r.out.split("\n")[0]).not.toMatch(/[0-9]/);
+    const [release, sealedLine, ...rest] = r.out.split("\n");
+    expect(rest).toEqual([]);
+    expect(release).not.toMatch(/[0-9]/);
+    expect(JSON.parse(release!).named_route).toMatch(/^(pass|fail)$/);
+    expect(sealedLine).toBe("sealed check " + join(out, "check-production.sealed") + " sha256 " + readFileSync(join(out, "check-production.sealed.sha256"), "utf8").trim());
+    const files = walk(out);
+    expect(files.some((f) => f.includes("replies"))).toBe(true);
+    for (const f of files) {
+      const t = readFileSync(f, "utf8");
+      for (const k of ['"kappa_named_all"', '"kappa_validity"', '"gold_classes"', '"gold_reports"', '"gold_findings"', '"per_arm_disagreement"', '"validity_classes"', '"overcap_gold_drops"', '"production"', '"fill"']) expect(t).not.toContain(k);
+    }
+    const c = openCheck(join(out, "check-production.sealed"), readKey(keyPath));
+    expect(c.reports.length).toBe(24);
+    expect((c.reports as { anchor: string | null }[]).filter((x) => x.anchor).length).toBe(4);
+    expect(c.formats.length).toBe(2);
+    expect(Object.keys(c.check.detail as object)).toContain("kappa_named_all");
+    expect(() => openCheck(join(out, "check-production.sealed"), Buffer.alloc(32, 1))).toThrow(/^E_CSO_READOUT_KEY/);
   });
   test("readout seals stage 1 and prints the release; analyze prints rows and verdicts", async () => {
-    const keyPath = join(dir, "key");
-    writeFileSync(keyPath, "cd".repeat(32));
-    chmodSync(keyPath, 0o600);
     put(join(dir, "stage1.json"), JSON.stringify(units));
-    const r = await capture(() => COMMANDS.readout!(["--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "scores.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.json"), "--key", keyPath, "--sealed", join(dir, "s1.sealed"), "--spent", "100", "--judging-per-session", "0.12", "--vm", "40", "--vm-stage2", "20"]));
+    const r = await capture(() => COMMANDS.readout!(["--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "scores.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.sealed"), "--key", keyPath, "--sealed", join(dir, "s1.sealed"), "--spent", "100", "--judging-per-session", "0.12", "--vm", "40", "--vm-stage2", "20"]));
     expect(r.code).toBe(0);
     expect(JSON.parse(r.out).items.length).toBe(6);
     expect(existsSync(join(dir, "s1.sealed"))).toBe(true);
-    const a = await capture(() => COMMANDS.analyze!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "scores.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.json")]));
+    const a = await capture(() => COMMANDS.analyze!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "scores.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.sealed"), "--key", keyPath]));
     expect(JSON.parse(a.out).verdicts.map((v: { step: number }) => v.step)).toEqual([1, 1]);
   });
 });
