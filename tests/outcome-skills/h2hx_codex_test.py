@@ -265,6 +265,40 @@ def test_one_exec_is_killed_at_the_response_ceiling(base_url, log):
         h2h_codex.CEILING_POLL_S = saved
 
 
+def test_a_rollout_read_that_stalls_past_the_wall_deadline_ends_wall_limit(base_url, log):
+    import time
+    import h2h_codex
+    saved = h2h_codex.CEILING_POLL_S
+    h2h_codex.CEILING_POLL_S = 0.3
+
+    def drive(name, stall):
+        cfg, d = session(name, base_url, ["[fx:loop:3] Fix the parser."], limits={"wall_sec": 12, "max_turns": 20})
+        t = CodexTurns(cfg)
+        real, seen = t.rollout, []
+
+        def read(timeout=None):
+            seen.append(timeout)
+            if stall and len(seen) == 1:
+                time.sleep(max(t.deadline - time.time(), 0) + 1)
+            return real() if timeout is None else real(timeout)
+
+        t.rollout = read
+        return asyncio.run(run_session(t)), seen
+
+    try:
+        s, seen = drive("stall", True)
+        t = s["turns"][0]
+        assert t["termination"] == "wall_limit" and t["drive"]["execs"][0]["killed"] == "wall_limit", t
+        assert seen[0] is not None and seen[0] <= 12, seen
+        s, seen = drive("no-stall", False)
+        t = s["turns"][0]
+        assert t["termination"] == "completed" and [x["killed"] for x in t["results"]] == [None] and s["turns_used"] == 4, (t, s["turns_used"])
+        timed = [x for x in seen if x is not None]
+        assert timed and all(0 < x <= 12 for x in timed), seen
+    finally:
+        h2h_codex.CEILING_POLL_S = saved
+
+
 def test_a_failed_generations_lookup_still_closes_the_slot(base_url, log):
     closed = []
 
@@ -424,7 +458,7 @@ def test_agent_dispatch():
         h2h_agent.CodexTurns, h2h_agent.Turns, h2h_agent.egress.apply, h2h_agent.subprocess.run = saved
 
 
-TESTS = [test_done_in_one_turn, test_continuations_to_the_cap, test_async_question_gets_the_reply_on_the_same_thread, test_question_at_the_turn_ceiling_gets_no_reply, test_sync_question_is_counted_unanswered, test_two_scripted_turns_resume_one_thread, test_ci_unset_and_env_reaches_tools, test_commands_run_in_a_non_login_shell_that_keeps_path, test_policy_failure_is_a_refusal, test_reservation_bound_429_is_retried_in_the_turn, test_reservation_retry_respects_the_turn_ceiling, test_one_exec_is_killed_at_the_response_ceiling, test_a_failed_generations_lookup_still_closes_the_slot, test_wall_limit_kills_codex, test_hooks_run_under_the_trust_bypass, test_pack_config_is_kept_and_a_clash_refuses_before_the_slot, test_home_rules_and_wrong_binary_refuse]
+TESTS = [test_done_in_one_turn, test_continuations_to_the_cap, test_async_question_gets_the_reply_on_the_same_thread, test_question_at_the_turn_ceiling_gets_no_reply, test_sync_question_is_counted_unanswered, test_two_scripted_turns_resume_one_thread, test_ci_unset_and_env_reaches_tools, test_commands_run_in_a_non_login_shell_that_keeps_path, test_policy_failure_is_a_refusal, test_reservation_bound_429_is_retried_in_the_turn, test_reservation_retry_respects_the_turn_ceiling, test_one_exec_is_killed_at_the_response_ceiling, test_a_rollout_read_that_stalls_past_the_wall_deadline_ends_wall_limit, test_a_failed_generations_lookup_still_closes_the_slot, test_wall_limit_kills_codex, test_hooks_run_under_the_trust_bypass, test_pack_config_is_kept_and_a_clash_refuses_before_the_slot, test_home_rules_and_wrong_binary_refuse]
 
 
 def main() -> int:

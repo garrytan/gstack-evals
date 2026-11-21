@@ -325,7 +325,11 @@ class CodexTurns(Turns):
                     self.kill(proc)
                     break
                 self.thread = self.thread or exec_result(list(events))["thread_id"]
-                text = self.rollout() if stop_at is not None else None
+                text = self.rollout(min(60.0, max(self.deadline - time.time(), 0.0))) if stop_at is not None else None
+                if time.time() >= self.deadline:
+                    killed = "wall_limit"
+                    self.kill(proc)
+                    break
                 if text is not None and model_responses(text) >= stop_at:
                     killed = "turn_ceiling"
                     self.kill(proc)
@@ -335,11 +339,11 @@ class CodexTurns(Turns):
         self.thread = self.thread or r["thread_id"]
         return {"exec": n, "phase": phase, "kind": kind, "exit": proc.returncode, "killed": killed, "wall_s": round(time.time() - started, 1), **{k: r[k] for k in ("thread_id", "completed", "failed", "last_error", "agent_messages", "usage")}, "final": r["final"]}
 
-    def rollout(self) -> str | None:
+    def rollout(self, timeout: float = 60) -> str | None:
         if not self.thread:
             return None
         try:
-            res = self.sh(ROLLOUT, self.codex["home"], self.thread, timeout=60)
+            res = self.sh(ROLLOUT, self.codex["home"], self.thread, timeout=timeout)
         except subprocess.TimeoutExpired:
             return None
         return res.stdout.decode(errors="replace") if res.returncode == 0 else None
