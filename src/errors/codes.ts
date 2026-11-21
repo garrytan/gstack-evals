@@ -3493,6 +3493,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_B1_AS_MERGED_UNREAD: {
+    exit: 2,
+    meaning: "The delivery route report's as-merged table (lanes/delivery-route/analyze.ts asMerged) was given a session row whose detection has no followed_as_merged field, such as a row written before deviation D1. The table refuses it rather than count the row as not followed. The message names the trial.",
+    fix: "Rescore the named session with lanes/delivery-route/detect.ts so its row carries followed_as_merged, then read the report again. Never fill the field by hand.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
   E_OHR_READ_INPUT: {
     exit: 2,
     meaning: "Office-hours rewrite eval (lanes/office-hours-rewrite/read): the readings refused their input. Two scored rows share a stage, brief, model and arm; one brief's rows disagree on its kind, cluster, set or traction flag; a G1 hand read names a session that is not a new-arm builder session or a detector hit has no hand read; an admission or decision input is missing a flag; or a statistic was asked for outside its range. The message names the row or flag.",
