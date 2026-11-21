@@ -2,9 +2,10 @@
 // B1e (lanes/delivery-route/b1e.ts): the bar on each set, every row of the decision table and its R48 verdict, the fresh draw
 // and route table against their pins, the smoke rule, the plans and the caps against the crew's formula.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { barReading, b1eCap, b1ePlan, decision, freshTasks, R48, routeRows } from "../../lanes/delivery-route/b1e.ts";
+import { barReading, b1dInRows, b1eApprove, b1eCap, b1eMain, b1ePlan, decision, freshTasks, partProblems, R48, routeRows } from "../../lanes/delivery-route/b1e.ts";
 import { routeCounts, smokeOf, type Stat } from "../../lanes/delivery-route/b1d.ts";
 import { GSTACK_ARM as B1D_GSTACK } from "../../lanes/delivery-route/b1d-pins.ts";
 import { B1E_BUNDLE, B1E_CAPS_USD, B1E_ITEMS, B1E_SMOKE, COVERAGE, FRESH, GSTACK_ARM } from "../../lanes/delivery-route/b1e-pins.ts";
@@ -57,5 +58,28 @@ describe("b1e pins", () => {
     expect([b1ePlan("b1e-smoke").sessions, b1ePlan("b1e-in").sessions, b1ePlan("b1e-fresh").sessions]).toEqual([4, 60, 120]);
     for (const i of B1E_ITEMS) expect(b1eCap(i).cap).toBe(B1E_CAPS_USD[i]);
     expect(() => b1ePlan("b1d-in")).toThrow("E_USAGE");
+  });
+});
+
+describe("b1e guards", () => {
+  test("approve records only an item's own cap, named, on an empty ledger", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "b1e-")), "ledger.jsonl");
+    expect(() => b1eApprove(p, "b1d-in", 90, "x")).toThrow("E_USAGE");
+    expect(() => b1eApprove(p, "b1e-in", 90, " ")).toThrow("E_USAGE");
+    expect(() => b1eApprove(p, "b1e-in", B1E_CAPS_USD["b1e-in"] + 1, "x")).toThrow("E_USAGE");
+    b1eApprove(p, "b1e-in", B1E_CAPS_USD["b1e-in"], "x");
+    expect(() => b1eApprove(p, "b1e-in", B1E_CAPS_USD["b1e-in"], "x")).toThrow("already holds rows");
+  });
+  test("launch refuses a work dir that plans another lane's item", async () => {
+    const w = mkdtempSync(join(tmpdir(), "b1e-w-"));
+    writeFileSync(join(w, "plan.json"), JSON.stringify({ item: "b1d-in", git_head: "HEAD" }));
+    await expect(b1eMain(["launch", w, "--part", "b1d-in-1"])).rejects.toThrow("E_USAGE");
+  });
+  test("a report refuses rows from another run's parts, B1d's in-sample table included", () => {
+    const b1d = b1dInRows(), row = b1d[0]!;
+    expect(partProblems(b1d, "b1e-in").length).toBe(b1d.length);
+    expect(partProblems([{ ...row, part: "b1e-in-2" }, { ...row, part: "b1e-in-2-a2" }], "b1e-in")).toEqual([]);
+    expect(partProblems([{ ...row, part: "b1e-fresh-1" }], "b1e-in").length).toBe(1);
+    expect(partProblems([{ ...row, part: "smoke-opus" }], "b1e-smoke")).toEqual([]);
   });
 });

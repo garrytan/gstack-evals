@@ -101,6 +101,11 @@ function launchCheck(work: string) {
   if (dirty.length) throw new Error("E_B1_LAUNCH " + plan.item + ": the checkout holds uncommitted changes to harness paths (" + dirty.join("; ") + "); take it to the Captain before launching");
 }
 
+/** Rows whose part is not one of the item's planned parts (an attempt 2 part is its part plus -a2), so another run's table is refused. */
+export function partProblems(rows: B1dRow[], item: B1eItem): string[] {
+  const names = new Set(b1ePlan(item).parts.map((p) => p.name));
+  return rows.filter((r) => !names.has(String(r.part).replace(/-a2$/, ""))).map((r) => r.trial + " came from part " + r.part + ", not a part of " + item);
+}
 // ---- Readings and the decision.
 const loaded = (r: any) => !!r.load?.loaded, followed = (r: any) => !!r.detect?.followed;
 export type BarReading = { key: "incomplete" | "clears" | "short"; text: string };
@@ -242,13 +247,13 @@ export async function b1eMain(argv: string[]): Promise<number> {
     const it = opt("item") ?? "";
     if (!rest[0] || rest[0].startsWith("--") || !isB1eItem(it)) return usage(USAGE);
     const rows = read(rest[0]), tasks = it === "b1e-smoke" ? [...B1E_SMOKE] : it === "b1e-in" ? drawnTasks(loadBundle()).run : freshTasks(), arms: B1eArm[] = it === "b1e-in" ? [B1D_ARM] : [...B1E_ARMS];
-    const bad = checkB1dRows(rows, tasks, arms);
+    const bad = [...checkB1dRows(rows, tasks, arms), ...partProblems(rows, it)];
     if (bad.length) { for (const b of bad) console.error("E_USAGE b1e report: " + b); return 2; }
     let lines: string[];
     if (it === "b1e-smoke") lines = ["== B1e pilot: the two smoke tasks, both arms", ...B1E_ARMS.map((a) => statLine(b1dStats(rows, a, tasks.length))), ...splitLines(rows), ...pilotCheck(rows, routeRows(), tasks, B1E_ARMS).lines];
     else if (it === "b1e-in") lines = inReport(rows).lines;
     else {
-      const inRows = read(opt("in") ?? usage("b1e report --item b1e-fresh needs --in <in-sample table.jsonl>")), inBad = checkB1dRows(inRows, drawnTasks(loadBundle()).run, [B1D_ARM]);
+      const inRows = read(opt("in") ?? usage("b1e report --item b1e-fresh needs --in <in-sample table.jsonl>")), inBad = [...checkB1dRows(inRows, drawnTasks(loadBundle()).run, [B1D_ARM]), ...partProblems(inRows, "b1e-in")];
       if (inBad.length) { for (const b of inBad) console.error("E_USAGE b1e report --in: " + b); return 2; }
       lines = freshReport(rows, barReading(b1dStats(inRows, B1D_ARM, B1.tasks), "in-sample")).lines;
     }

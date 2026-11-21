@@ -5,9 +5,10 @@
 # L1 and harness mechanics arms ran) with Lane B's seeded long-time user. B1's prove-it skill then goes beside it byte for
 # byte, and the tree is tarred again in the pinned builder image.
 #
-#   lanes/delivery-route/b1d-build.sh [out-dir]     default out-dir: ~/.capy/work/b1d/arms
+#   lanes/delivery-route/b1d-build.sh [out-dir]     default out-dir: ~/.capy/work/<pins name>/arms (~/.capy/work/b1d/arms)
 #
-# B1_PINS names the pins file beside this script (default b1d-pins.ts); B1e builds its arm with B1_PINS=b1e-pins.ts.
+# B1_PINS names the pins file beside this script (default b1d-pins.ts); B1e builds its arm with B1_PINS=b1e-pins.ts, and
+# the default out-dir follows it (~/.capy/work/b1e/arms).
 #
 # Output, outside git: <out>/gstack-main.tar and .tar.gz, the tree at <out>/trees/gstack-main, <out>/fetch-pin.json,
 # <out>/gstack-main.gstack-config.tsv, <out>/gstack-main.loadout.lock.json and <out>/build.log. The manifest comes after:
@@ -20,7 +21,8 @@ DF=$ROOT/quick/laneb/arms
 PINS=${B1_PINS:-b1d-pins.ts}
 pin() { (cd "$ROOT" && bun -e 'const { GSTACK_ARM, PROVE_IT } = await import("./lanes/delivery-route/" + process.argv[2]); const v = { ...GSTACK_ARM, prove_it: PROVE_IT.path, source: PROVE_IT.source }; process.stdout.write(String(v[process.argv[1]]))' "$1" "$PINS"); }
 SHA=$(pin sha) REPO=$(pin repo) LOADOUT=$(pin loadout) DEST=$(pin prove_it) SRC=$ROOT/lanes/delivery-route/arms/$(pin source)
-OUT=$(mkdir -p "${1:-$HOME/.capy/work/b1d/arms}" && cd "${1:-$HOME/.capy/work/b1d/arms}" && pwd)
+DEFAULT_OUT=$HOME/.capy/work/${PINS%-pins.ts}/arms
+OUT=$(mkdir -p "${1:-$DEFAULT_OUT}" && cd "${1:-$DEFAULT_OUT}" && pwd)
 BUILDER=$(sed -n 's/^ARG BUILDER_IMAGE=//p' "$DF/Dockerfile")
 in_builder() { docker run --rm --network none -u "$(id -u):$(id -g)" -v "$OUT:/out" -w /out "$BUILDER" "$@"; }
 
