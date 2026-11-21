@@ -3979,6 +3979,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_CH_ALL_IN: {
+    exit: 2,
+    meaning: "Codex hooks eval: a part C step or a judge run was refused before it spent (lanes/codex-hooks/allin.ts): every item of both parts and the judge item, each at its spend once done and otherwise at the larger of its spend and its projection, plus the crew file's counter, would pass the all-in stop the Captain set, or an item was missing from the count.",
+    fix: "Take the all-in lines to the Captain. Nothing in either part or the judge item spends until the Captain moves the stop or the count falls inside it.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   E_CODEX_R_LAUNCH: {
     exit: 2,
     meaning: "A part R launch was refused before it started (lanes/codex-hooks/r/money.ts launchGuard): the item's projection would pass its cap, every item's projection plus the crew file's counter would pass the all-in stop the Captain set, the item is marked done, or r-main was asked to start before r-pilot was marked done.",

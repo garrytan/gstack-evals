@@ -509,9 +509,10 @@ export function readSets(o: { key: Key; suite: Suite; states: StatesFile; counte
   return { judged, differ: must.length, second, third, dropped };
 }
 
-/** The joined label of each judged item: the third read's where it read, else the primary's (R2's join). */
+/** The joined label of each judged item: the third read's where it read, else the primary's (R2's join). An item a required
+ *  second or third read left unjudged gets no label, never the primary's: its state is a judging gap, its finding unadjudicated. */
 export function joinLabels<T>(sets: ReadSets, primary: Map<string, T>, third: Map<string, T> | null): Map<string, T> {
-  return new Map(sets.judged.filter((k) => !sets.dropped.has(k) || sets.dropped.get(k)!.role !== "primary").map((k) => [k, sets.third?.has(k) ? third!.get(k)! : primary.get(k)!]));
+  return new Map(sets.judged.filter((k) => !sets.dropped.has(k)).map((k) => [k, sets.third?.has(k) ? third!.get(k)! : primary.get(k)!]));
 }
 
 /** Cohen's kappa over paired labels; null when chance agreement is 1 or there are no pairs. */
@@ -561,9 +562,9 @@ export function judgedStates(o: { key: Key; states: StatesFile; counted: Counted
       continue;
     }
     const ref = o.key.packets.find((p) => p.state === s.id)!;
-    const drop = [...o.dropped].find(([k, u]) => u.role === "primary" && k.startsWith(ref.file + " "));
+    const drop = [...o.dropped].find(([k]) => k.startsWith(ref.file + " "));
     if (drop) {
-      out.push({ ...base, gap: "the primary judge's matching reply for its packet was refused twice: " + drop[1].reason });
+      out.push({ ...base, gap: "the " + drop[1].role + " judge's matching reply for its packet was refused twice: " + drop[1].reason });
       continue;
     }
     const matches: Record<string, number[]> = {};

@@ -56,7 +56,7 @@ bun lanes/codex-hooks/cli.ts c plan                          # the steps in orde
 bun lanes/codex-hooks/cli.ts c approve --record <record> --item c-pilot --cap 60 --by <who> --words "<their words>"
 bun lanes/codex-hooks/cli.ts c guard --record <record> --item c-pilot --root <root>
 bun lanes/codex-hooks/cli.ts c run --phase pilot --root <root> --record <record> --ledger <ledger.sqlite> \
-  --source garrytan/gstack=<clone> --source garrytan/gbrain=<clone>
+  --r-ledgers <dir> --crew <crew.json> --source garrytan/gstack=<clone> --source garrytan/gbrain=<clone>
 bun lanes/codex-hooks/cli.ts c readout --root <root>         # writes <root>/<item>/readout/ and prints each summary
 bun lanes/codex-hooks/cli.ts c states --root <root> --phase pilot --out <states.jsonl>   # the states file `c analysis` reads
 bun lanes/codex-hooks/cli.ts c rerun --root <root> --item c-pilot   # then run the phase again for the one rerun
@@ -103,8 +103,8 @@ Paid, on L1's host and part machinery, each after the Captain records the item's
 ```
 bun lanes/codex-hooks/cli.ts r approve --ledger <jsonl> --item r-pilot --usd 50 --approved-by <who>
 LEDGER=<jsonl> ARMS=<tar dir> SWEREBENCH=<export> bun lanes/codex-hooks/cli.ts r prepare <work> --item r-pilot
-R_LEDGERS=<dir> R_CREW=<crew.json> bun lanes/codex-hooks/cli.ts r host-up <work>
-R_LEDGERS=<dir> R_CREW=<crew.json> bun lanes/codex-hooks/cli.ts r launch <work> --part r-pilot
+R_LEDGERS=<dir> R_CREW=<crew.json> CH_RECORD=<record> bun lanes/codex-hooks/cli.ts r host-up <work>
+R_LEDGERS=<dir> R_CREW=<crew.json> CH_RECORD=<record> bun lanes/codex-hooks/cli.ts r launch <work> --part r-pilot
 ```
 
-The crew file holds `as_of` and `usd`, this thread's counter. The guard reads every item's projection plus that counter against the Captain's $1,200 all-in stop (r/pins.ts). r-main launches only after r-pilot is marked done.
+The crew file holds `as_of` and `usd`, this thread's counter. Before every part R launch, part C step and judge run, the all-in stop (allin.ts) counts every item of both parts and the judge item, part R's ledgers in `R_LEDGERS` (`--r-ledgers`) and part C's and the judge's in the record (`CH_RECORD`, `--record`), plus that counter, against the Captain's $1,200 stop. r-main launches only after r-pilot is marked done.

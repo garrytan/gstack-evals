@@ -467,6 +467,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CODEX_R_PREPARE](#e_codex_r_prepare) | 2 | U20 |
 | [E_CODEX_R_TABLE](#e_codex_r_table) | 2 | U20 |
 | [E_CODEX_R_MONEY](#e_codex_r_money) | 2 | U20 |
+| [E_CH_ALL_IN](#e_ch_all_in) | 2 | U20 |
 | [E_CODEX_R_LAUNCH](#e_codex_r_launch) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -3638,6 +3639,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 A part R ledger step was refused (lanes/codex-hooks/r/money.ts): an approval at an amount other than the item's recorded cap or on a ledger that already holds rows, a ledger with no approval row for its item, a done mark while a reservation is open, a plan whose sessions or cap rule differ from section 11, or a dry run whose ledger did not read back as approved, settled and done.
 
 Fix: Use the recorded cap and a fresh ledger, settle open reservations first, and take a cap or plan change to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_ALL_IN
+
+Codex hooks eval: a part C step or a judge run was refused before it spent (lanes/codex-hooks/allin.ts): every item of both parts and the judge item, each at its spend once done and otherwise at the larger of its spend and its projection, plus the crew file's counter, would pass the all-in stop the Captain set, or an item was missing from the count.
+
+Fix: Take the all-in lines to the Captain. Nothing in either part or the judge item spends until the Captain moves the stop or the count falls inside it.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 

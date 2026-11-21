@@ -7,7 +7,7 @@
 //   approve --record <dir> --item <item> --cap <usd> --by <who> --words <their words> [--admission required|warn]
 //   guard --record <dir> --item <item> --root <dir>
 //   done --record <dir> --item <item>
-//   run --phase pilot|main --root <dir> --record <dir> --ledger <file> --source <owner/repo>=<clone>... [--upstream <url>]
+//   run --phase pilot|main --root <dir> --record <dir> --ledger <file> --r-ledgers <dir> --crew <file> --source <owner/repo>=<clone>... [--upstream <url>]
 //   rerun --root <dir> --item <item>              moves sessions that owe their one rerun aside; run the phase again after
 //   readout --root <dir> [--item <item>]          writes <root>/<item>/readout/ and prints each summary
 //   states --root <dir> --phase pilot|main --out <file>   the states file the analysis commands read (records.ts)
@@ -115,7 +115,7 @@ export async function main(argv: string[]): Promise<number> {
         return [s.slice(0, at), s.slice(at + 1)];
       }));
       for (const repo of ["garrytan/gstack", "garrytan/gbrain"]) if (!sources[repo]) throw new Error("E_USAGE codex-hooks c run: needs --source " + repo + "=<clone>");
-      const r = await runPhase({ root: one("--root"), phase: phase()!, record: one("--record"), ledger: one("--ledger"), sources, upstream: one("--upstream", false) || null, ids: suiteUnits(), exec: execGstackEvals, log: (l) => console.log(l) });
+      const r = await runPhase({ root: one("--root"), phase: phase()!, record: one("--record"), ledger: one("--ledger"), rLedgers: one("--r-ledgers"), crew: one("--crew"), sources, upstream: one("--upstream", false) || null, ids: suiteUnits(), exec: execGstackEvals, log: (l) => console.log(l) });
       for (const [i, why] of Object.entries(r.stopped)) console.log("stopped " + i + ": " + why);
       return r.ok ? 0 : 1;
     }
@@ -139,7 +139,7 @@ export async function main(argv: string[]): Promise<number> {
     if (cmd === "states") {
       const p = phaseRecords(one("--root"), phase()!, unitsOf);
       writeFileSync(one("--out"), p.text);
-      for (const i of p.items) console.log(i.item + ": " + i.sessions + " sessions, " + i.lines + " lines, " + i.not_run + " planned cells not run");
+      for (const i of p.items) console.log(i.item + ": " + i.sessions + " sessions, " + i.lines + " lines, " + i.not_run + " planned cells not run" + (i.cap_stopped ? ", written as cap stops: the item stopped at its cap" : ""));
       for (const i of p.skipped) console.log(i + ": not run yet (no cells.ndjson), so its sessions are missing");
       return 0;
     }

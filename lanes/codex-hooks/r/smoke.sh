@@ -42,7 +42,7 @@ FAKE_UPSTREAM_KEY=fake bun "$runner/proxy.ts" --config "$out/proxy.json" --data-
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && curl -fsS 127.0.0.1:8799/healthz >/dev/null 2>&1 && break; sleep 0.5; done
 env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u TYPESAFE_API_KEY OPENAI_API_KEY=placeholder-not-a-key \
   PYTHONPATH="$runner/agent" HARBOR_TELEMETRY=0 harbor run -y -c "$out/job.json" > "$out/harbor.log" 2>&1 || echo "harbor exit $?"
-printf '{"jobs": [{"dir": "%s", "part": "smoke"}], "sessions": ["%s"]}\n' "$out/jobs/smoke" "$out/proxy-sessions.jsonl" > "$out/table-config.json"
+printf '{"jobs": [{"dir": "%s", "part": "smoke"}], "sessions": ["%s"], "requests": ["%s"]}\n' "$out/jobs/smoke" "$out/proxy-sessions.jsonl" "$out/proxy-requests.jsonl" > "$out/table-config.json"
 bun "$repo/lanes/codex-hooks/cli.ts" r table "$out/table-config.json" "$out/table.jsonl"
 bun -e "
 const rows = require('fs').readFileSync('$out/table.jsonl', 'utf8').trim().split('\\n').filter(Boolean).map(JSON.parse);

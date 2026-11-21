@@ -18,6 +18,13 @@ const REPO = join(import.meta.dir, "..", "..", "..");
 const refs = (JSON.parse(readFileSync(join(REPO, SUITE.path), "utf8")).units as UnitRef[]).map((u) => ({ id: u.id, repo: u.repo, pr: u.pr, head: u.head }));
 const ids = suiteUnits();
 const tmp = () => mkdtempSync(join(tmpdir(), "codex-hooks-c-test-"));
+/** The all-in stop's inputs: no part R ledger yet, and the crew file at usd. */
+const allInFiles = (dir: string, usd = 0) => {
+  const rLedgers = join(dir, "r-ledgers");
+  mkdirSync(rLedgers, { recursive: true });
+  writeFileSync(join(dir, "crew.json"), JSON.stringify({ as_of: "test", usd }));
+  return { rLedgers, crew: join(dir, "crew.json") };
+};
 const flagValues = (argv: string[], flag: string): string[] => {
   const i = argv.indexOf(flag);
   if (i < 0) return [];
@@ -141,7 +148,7 @@ describe("part C's run controller and readout, against a stand-in for review-uni
         }
         return FIXTURE[arm]!;
       };
-      const run = () => runPhase({ root, phase: "pilot", record, ledger: join(dir, "ledger.sqlite"), sources: { "garrytan/gstack": "/s", "garrytan/gbrain": "/b" }, ids, exec: fakeReviewUnits(pick, calls), log: () => {} });
+      const run = () => runPhase({ root, phase: "pilot", record, ledger: join(dir, "ledger.sqlite"), ...allInFiles(dir), sources: { "garrytan/gstack": "/s", "garrytan/gbrain": "/b" }, ids, exec: fakeReviewUnits(pick, calls), log: () => {} });
       expect(await run()).toEqual({ ok: true, stopped: {} });
       expect(calls).toHaveLength(14);
       expect(calls.slice(0, 12).map((a) => flagValues(a, "--item")[0] + " " + flagValues(a, "--units").join(","))).toEqual(schedule("pilot", ids).map((s) => s.item + " " + s.unit));
@@ -202,16 +209,23 @@ describe("part C's run controller and readout, against a stand-in for review-uni
         if (flagValues(argv, "--item")[0] === "h-pilot") return { code: 2, stderr: "CAP_STOP review-units: the next round's worst case does not fit under the cap\n" };
         return inner(argv);
       };
-      const r = await runPhase({ root, phase: "pilot", record, ledger: join(dir, "l.sqlite"), sources: {}, ids, exec, log: () => {} });
+      const r = await runPhase({ root, phase: "pilot", record, ledger: join(dir, "l.sqlite"), ...allInFiles(dir), sources: {}, ids, exec, log: () => {} });
       expect(r.ok).toBe(true);
       expect(Object.keys(r.stopped)).toEqual(["h-pilot"]);
       expect(existsSync(join(root, "h-pilot", "CAP_STOP"))).toBe(true);
       expect(calls.filter((a) => flagValues(a, "--item")[0] === "h-pilot")).toHaveLength(1);
       expect(calls.filter((a) => flagValues(a, "--item")[0] === "c-pilot")).toHaveLength(7);
-      const again = await runPhase({ root, phase: "pilot", record, ledger: join(dir, "l.sqlite"), sources: {}, ids, exec, log: () => {} });
+      const again = await runPhase({ root, phase: "pilot", record, ledger: join(dir, "l.sqlite"), ...allInFiles(dir), sources: {}, ids, exec, log: () => {} });
       expect(again.stopped["h-pilot"]).toBe("a cap stop ended it before this run");
-      const broken = await runPhase({ root: join(dir, "root2"), phase: "pilot", record, ledger: join(dir, "l.sqlite"), sources: {}, ids, exec: async () => ({ code: 1, stderr: "E_DOCKER_UNAVAILABLE" }), log: () => {} });
+      const broken = await runPhase({ root: join(dir, "root2"), phase: "pilot", record, ledger: join(dir, "l.sqlite"), ...allInFiles(dir), sources: {}, ids, exec: async () => ({ code: 1, stderr: "E_DOCKER_UNAVAILABLE" }), log: () => {} });
       expect(broken.ok).toBe(false);
+      // The all-in stop: r-pilot ($9 central, $7.20 VM share, $30 reserve), r-main ($99, $30), part C's items at central plus
+      // four allowances ($53, $78, $266, $261) and the judge item's $55 central come to $888.20; with the crew at $400 nothing runs.
+      const before = calls.length;
+      const over = await runPhase({ root: join(dir, "root3"), phase: "pilot", record, ledger: join(dir, "l.sqlite"), ...allInFiles(dir, 400), sources: {}, ids, exec, log: () => {} });
+      expect(over.stopped["c-pilot"]).toStartWith("E_CH_ALL_IN all-in $1288.20 (items $888.20, crew $400.00 as of test) passes the $1200.00 stop");
+      expect(over.stopped["h-pilot"]).toStartWith("E_CH_ALL_IN");
+      expect(calls.length).toBe(before);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

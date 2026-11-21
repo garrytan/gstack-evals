@@ -2,7 +2,8 @@
 // Part C's run controller: one phase's steps (plan.ts) as review-units runs, the one rerun, and the final collect pass.
 //
 // - Before each step the guard reads the item's ledger and refuses a done item, an open lease or a projection past what is
-//   left; a refusal stops that item and the phase goes on with the others. Each step is review-units --resume over the
+//   left; a refusal stops that item and the phase goes on with the others. The all-in stop (../allin.ts) reads every item of
+//   both parts, the judge item and the crew file first, and a refusal stops the item the same way. Each step is review-units --resume over the
 //   item's --out with one unit, so a relaunch after a crash runs only the cells cells.ndjson lacks. A step whose cells are
 //   all in cells.ndjson is skipped.
 // - A step that exits with a CAP_STOP stops its item for good (<root>/<item>/CAP_STOP); its part reads INCOMPLETE and it
@@ -18,7 +19,9 @@ import { REPO } from "../pins.ts";
 import { sessionDir } from "../../../src/trial/review/run.ts";
 import { unitTaskId } from "../../../src/trial/review/unit.ts";
 import { codexArmsText, ITEM_NAMES, ITEMS, MODEL, PASSES, type ItemName } from "./pins.ts";
-import { guard, itemOut, reviewArgv, schedule } from "./plan.ts";
+import { allIn, readCrew } from "../allin.ts";
+import { readLedgers, rSpends } from "../r/money.ts";
+import { cSpends, guard, itemOut, reviewArgv, schedule } from "./plan.ts";
 import { readItem, type UnitRef } from "./readout.ts";
 import { blindKey } from "./states.ts";
 
@@ -52,6 +55,9 @@ export interface RunOptions {
   phase: "pilot" | "main";
   record: string;
   ledger: string;
+  /** Part R's item ledgers (<item>.jsonl) and the crew file, for the all-in stop. */
+  rLedgers: string;
+  crew: string;
   sources: Readonly<Record<string, string>>;
   upstream?: string | null;
   ids: readonly string[];
@@ -77,6 +83,12 @@ export async function runPhase(o: RunOptions): Promise<{ ok: boolean; stopped: R
   const step = async (item: ItemName, units: string[]): Promise<boolean> => {
     const have = cellKeys(itemOut(o.root, item));
     const planned = ITEMS[item].sessions;
+    const a = allIn([...cSpends(o.record), ...rSpends(readLedgers(o.rLedgers))], readCrew(o.crew));
+    o.log(a.ok ? a.lines[0]! : a.lines.join("\n"));
+    if (!a.ok) {
+      stopped[item] = "E_CH_ALL_IN " + a.why.join("; ") + "; take it to the Captain";
+      return true;
+    }
     const g = guard(o.record, item, Math.max(0, planned - have.size));
     o.log(g.line);
     if (!g.ok) {

@@ -118,9 +118,6 @@ export const ITEMS_USD = {
   "r-main": { central: 99, cap: 165, sessions: 180, vmOutside: 0 },
 } as const;
 export type Item = keyof typeof ITEMS_USD;
-// The all-in stop the launch guard reads: the Captain's recorded point to come back, $1,200 (2026-11-21), against every
-// item's projection plus the crew's counter (lanes/codex-hooks/r/money.ts launchGuard).
-export const ALL_IN_STOP_USD = 1200;
 export const ITEM_NAMES = Object.keys(ITEMS_USD) as Item[];
 export const isItem = (x: string): x is Item => Object.hasOwn(ITEMS_USD, x);
 // Planning prices per session (section 11): a bug task at $0.55 in a gstack arm and $0.45 in r-none.

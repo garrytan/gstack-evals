@@ -145,7 +145,8 @@ describe("destructive-command check, read audit and the table row", () => {
     writeFileSync(join(dir, "config.json"), JSON.stringify({ agent: { name: AGENT.name, kwargs: { arm: "r-on" } }, task: { path: "x/optuna__optuna-6428" } }));
     writeFileSync(join(dir, "result.json"), JSON.stringify({ trial_name: "t1", verifier_result: { rewards: { reward: 1 } } }));
     writeFileSync(join(dir, "evaluator", "laneb-summary.json"), JSON.stringify({ session: { ok_responses: 1 }, result: { thread_id: root } }));
-    const row = rRow(dir, { part: null, sessions: new Map() })!;
+    const row = rRow(dir, { part: null, sessions: new Map(), requests: new Map([["t1", [{ event: "request", trial: "t1", reasoning_effort: "low" }]]]) })!;
+    expect([row.outcome, row.reason]).toEqual(["graded", "graded"]);
     expect(row.loads).toMatchObject({ prove_it: { loaded: true, at_first_call: true }, line_delivered: true, hook: { position: "alone" }, why_no_load: null });
     expect(row.destructive).toEqual({ denies: 0, codex_rejects: 0 });
     expect(row.read_audit).toBeNull();

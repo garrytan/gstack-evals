@@ -8,6 +8,9 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { loadSuite, sha256, type Suite, type Unit } from "../../../review-noloss/suite.ts";
 import { usd } from "../../../../src/runner/ledger/money.ts";
+import { allIn, readCrew } from "../../allin.ts";
+import { readLedgers, rSpends } from "../../r/money.ts";
+import { cSpends } from "../plan.ts";
 import { analyze, type Analysis, type Contrast } from "./analysis.ts";
 import { checkItems, chooseRoute, confirmation, confirmationItems, goldLabels, pilotCheck, type Confirmation, type PilotCheck } from "./check.ts";
 import { contractReading, e3Reading } from "./decide.ts";
@@ -24,7 +27,7 @@ import { loadSeverityMaps } from "./severity.ts";
 const USAGE = [
   "usage: codex-hooks c analysis <command>",
   "  packets extract|match|adjudicate --states <file> --dir <dir> [--pilot] [--seed <n>] [--source <owner/repo>=<clone>]...",
-  "  run extract|match|adjudicate|gold --states <file> --dir <dir> [--pilot] [--route A|B] --item <ledger item> --run-id <id> [--ledger <path>] [--record <path>] [--concurrency <n>] [--dry-run]",
+  "  run extract|match|adjudicate|gold --states <file> --dir <dir> [--pilot] [--route A|B] --item <ledger item> --run-id <id> --record <path> --r-ledgers <dir> --crew <crew.json> [--ledger <path>] [--concurrency <n>] [--dry-run]",
   "  join match|adjudicate --states <file> --dir <dir> [--pilot] [--route A|B]",
   "  check --states <pilot states> --dir <dir> --pilot [--route A|B]",
   "  confirm --states <file> --dir <dir> [--route A|B]",
@@ -193,8 +196,11 @@ async function runStage(c: Ctx, stage: Stage | "gold", f: Flags, out: (s: string
   const item = one(f, "--item");
   const runId = one(f, "--run-id");
   const concurrency = Number(opt(f, "--concurrency") ?? 4);
+  const record = one(f, "--record");
+  const a = allIn([...cSpends(record), ...rSpends(readLedgers(one(f, "--r-ledgers")))], readCrew(one(f, "--crew")));
+  if (!a.ok) throw new Error("E_CH_ALL_IN " + a.why.join("; ") + "; take it to the Captain before judging\n" + a.lines.join("\n"));
   const x = stage === "extract" ? null : counted(c);
-  const { value: r, requests, lease_id } = await withMeteredJudges({ item, runId, record: opt(f, "--record") ?? "", ledger: opt(f, "--ledger") ?? "", out: dir, models, env, fetch: fetchImpl }, async (send): Promise<StageRun | Awaited<ReturnType<typeof runGold>>> => {
+  const { value: r, requests, lease_id } = await withMeteredJudges({ item, runId, record, ledger: opt(f, "--ledger") ?? "", out: dir, models, env, fetch: fetchImpl }, async (send): Promise<StageRun | Awaited<ReturnType<typeof runGold>>> => {
     if (stage === "extract") return runExtract({ b, suite: c.suite, model: route.primary, send, concurrency });
     if (stage === "gold") return runGold({ b, suite: c.suite, brief, models: GOLD, files, send, concurrency });
     return runJudged({ b, suite: c.suite, brief, states: c.states, counted: x!.counted, maps: c.maps, mechanical: x!.mechanical, route, send, concurrency });
@@ -301,6 +307,12 @@ export async function main(argv: string[], io: Io = { out: (s) => console.log(s)
     } else if (cmd === "analyze") {
       const c = context(flags);
       const judged = readJson<Judged>(join(c.dir, "judged.json"));
+      for (const s of ["extract", "match", "adjudicate"] as const) {
+        const b = judged.batches[s];
+        if (b === null && s !== "match") continue;
+        const k = key(c, s);
+        if (k.batch !== b) throw new Error("E_CH_C_BLIND judged.json's " + s + " batch is " + String(b).slice(0, 12) + ", not the " + k.batch.slice(0, 12) + " built from this states file; judge and analyze the same states file");
+      }
       const route = readJson<{ route: RouteName | null }>(one(flags, "--route-file")).route;
       if (route !== null && route !== judged.route) throw new Error("E_CH_C_CHECK the route that passed is " + route + ", but judged.json was judged on route " + judged.route);
       const a = analyze(c.suite, c.states, scoreSessions(c.states, judged, c.maps), { units: c.units, passes: c.passes });

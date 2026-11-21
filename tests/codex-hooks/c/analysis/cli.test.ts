@@ -49,12 +49,21 @@ describe("codex-hooks c analysis, end to end on a pilot", () => {
     ]),
   );
   const common = ["--states", S, "--dir", J, "--pilot"];
-  const paid = ["--item", JUDGE_ITEM.item, "--run-id", "geva-562-judge-test", "--ledger", join(dir, "ledger.sqlite"), "--record", record];
+  mkdirSync(join(dir, "r-ledgers"));
+  writeFileSync(join(dir, "crew.json"), JSON.stringify({ as_of: "test", usd: 0 }));
+  writeFileSync(join(dir, "crew-over.json"), JSON.stringify({ as_of: "test", usd: 400 }));
+  const allInFlags = ["--r-ledgers", join(dir, "r-ledgers"), "--crew", join(dir, "crew.json")];
+  const paid = ["--item", JUDGE_ITEM.item, "--run-id", "geva-562-judge-test", "--ledger", join(dir, "ledger.sqlite"), "--record", record, ...allInFlags];
 
   test("extraction: one packet for the one message with no json block, read by the primary", async () => {
     const p = await cli(["packets", "extract", ...common]);
     expect(p).toMatchObject({ code: 0, err: "" });
     expect(p.out).toMatch(/^extract: batch [0-9a-f]{64}, 1 packets/);
+    const over = await cli(["run", "extract", ...common, ...paid.slice(0, -1), join(dir, "crew-over.json")]);
+    expect(over.code).toBe(2);
+    expect(over.err).toStartWith("E_CH_ALL_IN all-in $1288.20 (items $888.20, crew $400.00 as of test) passes the $1200.00 stop");
+    expect(sent).toHaveLength(0);
+    expect(existsSync(join(J, "extract-run"))).toBe(false);
     const r = await cli(["run", "extract", ...common, ...paid]);
     expect(r.err).toBe("");
     expect(r.out).toMatch(/^extract: batch [0-9a-f]{64}, 1 requests, 0 packets unjudged/);
@@ -147,6 +156,14 @@ describe("codex-hooks c analysis, end to end on a pilot", () => {
     expect(b.err).toMatch(/^E_CH_C_CHECK the route that passed is B, but judged.json was judged on route A/);
     writeFileSync(route, JSON.stringify({ route: null }));
     expect((await cli(["analyze", ...common, "--route-file", route])).out).toMatch(/^Contract: No reading: no judge route passed/);
+    const other = join(dir, "other-states.jsonl");
+    const text = readFileSync(S, "utf8");
+    expect(text).toContain('"usd":1.2');
+    writeFileSync(other, text.replaceAll('"usd":1.2', '"usd":1.3'));
+    writeFileSync(route, JSON.stringify({ route: "A" }));
+    const mixed = await cli(["analyze", "--states", other, "--dir", J, "--pilot", "--route-file", route]);
+    expect(mixed.code).toBe(2);
+    expect(mixed.err).toMatch(/^E_CH_C_BLIND the extract batch was built from another states file/);
   });
 
   test("the pilot readout gives supply, exposure, cost, the judge check and the R113 line, and no found rate", async () => {

@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SUITE } from "../../../lanes/codex-hooks/c/analysis/frozen.ts";
 import { readStates, StatesError } from "../../../lanes/codex-hooks/c/analysis/record.ts";
 import { exposure, pilotFlags, readContractLog } from "../../../lanes/codex-hooks/c/contract.ts";
 import type { OutcomeRow } from "../../../lanes/codex-hooks/c/outcomes.ts";
 import type { SessionReadout } from "../../../lanes/codex-hooks/c/readout.ts";
-import { exposureOf, sessionId, sessionRecords } from "../../../lanes/codex-hooks/c/records.ts";
+import { itemUnits } from "../../../lanes/codex-hooks/c/pins.ts";
+import { exposureOf, phaseRecords, sessionId, sessionRecords } from "../../../lanes/codex-hooks/c/records.ts";
 import { readSessionRollouts } from "../../../lanes/codex-hooks/c/rollout.ts";
 import { sessionStates } from "../../../lanes/codex-hooks/c/states.ts";
 import { loadSuite, type Unit } from "../../../lanes/review-noloss/suite.ts";
@@ -75,6 +78,24 @@ describe("the states file the analysis reads, from the rig's readouts (lanes/cod
     const [line] = sessionRecords(s, A);
     expect([line!.findings, line!.no_block, line!.message, line!.no_text]).toEqual([[], false, null, false]);
     expect(() => readStates(jsonl([{ ...line!, no_block: true, findings: null, message: "" }]), suite, { passes: 1, units: [A.id] })).toThrow(StatesError);
+  });
+
+  // Value: protects=an item the controller stopped at its cap before a session started (the CAP_STOP marker, no session row) still reaches the analysis as cap_stop lines for every planned cell it never ran, so section 5.8's "any cap stop ends the part INCOMPLETE" holds; fails_when=a cap stop with no session row reads as a few missing sessions, which the analysis tolerates; why_new=GEVA-562 part C, PR 400 review; seam=phaseRecords, capStopRecord; no_claim=cap stops review-units reports inside a session
+  test("a cap stop before any session started", () => {
+    const root = mkdtempSync(join(tmpdir(), "chc-records-"));
+    try {
+      mkdirSync(join(root, "c-pilot"), { recursive: true });
+      writeFileSync(join(root, "c-pilot", "CAP_STOP"), "stopped\n");
+      const ids = itemUnits("c-pilot", suite.units.map((u) => u.id));
+      const p = phaseRecords(root, "pilot", (i) => (i === "c-pilot" ? suite.units.filter((u) => ids.includes(u.id)).map((u) => ({ id: u.id, repo: u.repo, pr: u.pr, head: u.head })) : []));
+      expect(p.items).toEqual([{ item: "c-pilot", sessions: 0, lines: 18, not_run: 18, cap_stopped: true }]);
+      expect(p.skipped).toEqual(["h-pilot"]);
+      const file = readStates(p.text, suite, { passes: 1, units: ids });
+      expect(file.sessions.map((s) => [s.outcome, s.outcome_code, s.states])).toEqual(Array.from({ length: 18 }, () => ["cap_stop", "CAP_STOP", null]));
+      expect(file.missing.map((m) => m.arm)).toEqual(Array.from({ length: 6 }, () => "c-high"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   // Value: protects=pre-run change 1's pilot flags reach the analysis: flagged SKILL.md read shapes are counted and a sub-agent on another model is counted once per sighting; fails_when=a flagged read or an override is dropped on the way to the states file; why_new=GEVA-562 part C; seam=exposureOf; no_claim=which flags the Captain hears, which the readout's summary decides

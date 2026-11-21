@@ -259,6 +259,13 @@ describe("join helpers", () => {
     expect([...joined]).toEqual([["P1 B1", "z"], ["P1 B2", "b"]]);
   });
 
+  // Value: protects=an item whose required second or third read was refused twice gets no joined label, so the primary's label never stands in for an unfinished read: its state reads as a judging gap and its finding as unadjudicated (R2's join); fails_when=an unresolved match or ruling earns credit from the primary alone; why_new=GEVA-562 part C, PR 400 review; seam=joinLabels; no_claim=which items need a second read
+  test("joinLabels gives no label to an item a required second or third read left unjudged", () => {
+    const sets = { judged: ["P1 B1", "P1 B2", "P3 B1"], differ: 0, second: new Set(["P1 B1", "P3 B1"]), third: new Set(["P1 B1"]), dropped: new Map([["P1 B2", { role: "second" as const, packet: "P1", reason: "x" }], ["P3 B1", { role: "third" as const, packet: "P3", reason: "y" }]]) };
+    const joined = joinLabels(sets, new Map([["P1 B1", "a"], ["P1 B2", "b"], ["P3 B1", "c"]]), new Map([["P1 B1", "z"]]));
+    expect([...joined]).toEqual([["P1 B1", "z"]]);
+  });
+
   test("kappa is Cohen's: 1 on agreement, 0 at chance, null with one category", () => {
     expect(kappa([["a", "a"], ["b", "b"]])).toBe(1);
     expect(kappa([["a", "a"], ["a", "b"], ["b", "a"], ["b", "b"]])).toBe(0);

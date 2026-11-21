@@ -20,6 +20,8 @@ import { ledgerStatus, openLease, recordApproval, settleLease } from "../../../s
 import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
 import { ledgerPath } from "../../../src/runner/ledger/paths.ts";
 import type { Admission } from "../../../src/runner/ledger/record.ts";
+import type { Spend } from "../allin.ts";
+import { JUDGE_ITEM } from "./analysis/frozen.ts";
 import { armRef, ITEM_NAMES, ITEMS, MODEL, PARALLEL, PASSES, PILOT_UNITS, seededUnits, SEVERITY_MAP, SUITE, TIMEOUT_S, type ItemName } from "./pins.ts";
 
 export interface Step {
@@ -98,6 +100,24 @@ export function guard(record: string, item: ItemName, sessionsLeft: number) {
   const vm = Math.round((sessionsLeft * p.vm_usd * 1e6) / p.sessions);
   const line = "CODEX_C_GUARD " + (why.length ? "REFUSE" : "PASS") + " " + item + ": cap " + usd(s?.cap_micros ?? 0) + ", committed " + usd(s?.committed_micros ?? 0) + ", left " + usd(left) + ", projection " + usd(projection) + " for " + sessionsLeft + " sessions" + (vm ? ", VM share held back " + usd(vm) : "");
   return { ok: why.length === 0, why, line, left_micros: left, vm_micros: vm, spend_cap_usd: Math.floor(Math.max(0, left - vm) / 10_000) / 100 };
+}
+
+/** Part C's items and the judge item for the all-in stop (../allin.ts), from one ledger record: spent is what settled, with a
+ *  done item's VM share (paid outside the ledger); while an item runs it projects at its central plus its parallel allowances,
+ *  and the judge item at its central. */
+export function cSpends(record: string): Spend[] {
+  if (!record || !existsSync(record)) refuse("name part C's ledger record for the all-in stop; " + (record || "none") + " does not exist");
+  const settled = (item: string) => {
+    const s = ledgerStatus(record, item)[0];
+    return s ? s.committed_micros - (s.open_lease?.reserved_micros ?? 0) : 0;
+  };
+  return [
+    ...ITEM_NAMES.map((item) => {
+      const p = ITEMS[item], done = existsSync(doneMark(record, item));
+      return { item, done, spent: settled(item) + (done ? Math.round(p.vm_usd * 1e6) : 0), projection: Math.round((p.central_usd + PARALLEL * p.allowance_usd) * 1e6) };
+    }),
+    { item: JUDGE_ITEM.item, done: false, spent: settled(JUDGE_ITEM.item), projection: JUDGE_ITEM.central_usd * 1e6 },
+  ];
 }
 
 /** Closes an item for good. */
