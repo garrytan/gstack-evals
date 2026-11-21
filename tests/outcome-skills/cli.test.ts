@@ -68,3 +68,17 @@ describe("gstack-evals outcome serve --registry", () => {
     expect(existsSync(join(dir, "ledger.sqlite"))).toBe(false);
   });
 });
+
+describe("gstack-evals outcome serve, cso stages", () => {
+  test("a cso stage names its arms as cso:<arm>,cso:<arm>, and the driver checks them against the item's arms", () => {
+    const dir = mkdtempSync(join(tmpdir(), "outcome-cli-cso-"));
+    const args = (stage: string) => ["serve", "--run", "r1", "--envelope-host", machineId(), "--stage", stage, "--host", "127.0.0.1", "--dir", join(dir, "run"), "--ledger", join(dir, "ledger.sqlite"), "--ledger-record", join(dir, "no-record")];
+    const pilot = run(...args("cso-pilot=cso:none,cso:cso,cso:untold"));
+    expect(pilot.code).toBe(2);
+    expect(pilot.err.startsWith("E_LEDGER_MISSING ")).toBe(true);
+    const main = run(...args("cso-main=cso:none,cso:cso,cso:untold"));
+    expect(main.code).toBe(2);
+    expect(main.err.startsWith("E_USAGE ")).toBe(true);
+    expect(main.err).toContain("cso stage cso-main serves cso:none, cso:cso, not cso:untold");
+  });
+});
