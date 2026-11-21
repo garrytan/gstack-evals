@@ -5,9 +5,10 @@
 # the token read-only, but a dispatch runs the dispatched ref's copy, so trains stay off until gstack dispatches them on the base
 # ref (GST-254, gstack GST-255). The checkout keeps no credentials, since no step needs them.
 # Later units add tests under tests/; `bun test` picks them up without a change here.
-# Shards (GEVA-566): the suite took about 30 minutes in one serial `bun test`, so the tests job runs it as six parallel
-# shards, each still serial, with `bun test --shard=<i>/6 --timings=.github/test-timings.json` balancing the shards by each
-# file's time. The checks job, the required check, waits for all six and fails unless every shard passed. It joins their
+# Shards (GEVA-566): the suite took about 30 minutes in one serial `bun test`, so the tests job runs it as 16 parallel
+# shards, each still serial, with `bun test --shard=<i>/16 --timings=.github/test-timings.json` balancing the shards by each
+# file's time. 16 shards bring each to about the slowest single file (about 1.5 minutes in November 2026), so more would not
+# shorten the run. The checks job, the required check, waits for all 16 and fails unless every shard passed. It joins their
 # JUnit reports with scripts/ci-tree.ts merge (each shard first checks that its tests left its checkout at HEAD and unchanged), which fails unless every file the bun test lane's inventory lists ran in
 # exactly one shard, and uploads the measured file times as the test-timings artifact for refreshing the timings file.
 # A stale or missing timings file only unbalances the shards; it never drops a file, since bun splits every file it finds.
@@ -35,16 +36,17 @@ permissions:
 
 jobs:
   tests:
-    name: tests (${{ matrix.shard }}/6)
-    # Ubicloud runner, the same size and Ubuntu 26.04 image ubuntu-latest gave (sealed needs only 2 vCPU). GitHub's hosted runners are one
-    # pool for every repository on the account, and jobs waited up to 2.6 to 3.9 minutes for it at p95 in November 2026 (GEVA-566).
-    runs-on: ubicloud-standard-4-ubuntu-2604
+    name: tests (${{ matrix.shard }}/16)
+    # Ubicloud runner on the Ubuntu 26.04 image ubuntu-latest gave. GitHub's hosted runners are one pool for every repository on the
+    # account, and jobs waited up to 2.6 to 3.9 minutes for it at p95 in November 2026 (GEVA-566). Each shard runs bun test serially,
+    # so 2 vCPUs per shard; the PR that moved to 16 shards compared it with 4 on real runs.
+    runs-on: ubicloud-standard-2-ubuntu-2604
     # 45, not 25: on 2026-11-06 (08:55 to 19:10 UTC) green runs took 16.8 to 24.8 minutes, main's push at 2ef5833 took 24.2, and three attempts were cancelled at the 25-minute limit.
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -133,9 +135,9 @@ jobs:
           fi
           command -v age age-keygen
           age --version
-      - name: Tests, shard ${{ matrix.shard }} of 6
+      - name: Tests, shard ${{ matrix.shard }} of 16
         if: steps.scope.outputs.docs_only != 'true'
-        run: bun test --shard=${{ matrix.shard }}/6 --timings=.github/test-timings.json --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"
+        run: bun test --shard=${{ matrix.shard }}/16 --timings=.github/test-timings.json --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"
       - name: The tests left this shard's checkout at HEAD and unchanged
         if: steps.scope.outputs.docs_only != 'true'
         run: bun scripts/ci-tree.ts verify-checkout
@@ -219,9 +221,9 @@ jobs:
         with:
           pattern: junit-*
           path: ${{ runner.temp }}/junit
-      - name: Every test file ran in exactly one shard (one JUnit report from the six)
+      - name: Every test file ran in exactly one shard (one JUnit report from each of the 16)
         if: steps.scope.outputs.docs_only != 'true'
-        run: bun scripts/ci-tree.ts merge --shards 6 --dir "$RUNNER_TEMP/junit" --out "$RUNNER_TEMP/junit.xml" --timings-out "$RUNNER_TEMP/test-timings/test-timings.json"
+        run: bun scripts/ci-tree.ts merge --shards 16 --dir "$RUNNER_TEMP/junit" --out "$RUNNER_TEMP/junit.xml" --timings-out "$RUNNER_TEMP/test-timings/test-timings.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: steps.scope.outputs.docs_only != 'true'
         with:
