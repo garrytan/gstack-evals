@@ -51,6 +51,9 @@ export const GSTACK_ARM = {
   userOnly: ["land-and-deploy", "modernize"],
 } as const;
 
+/** A gstack pin as the arm checks read it; B1e's arm (b1e-pins.ts) is another one. */
+export type GstackPin = { repo: string; sha: string; version: string; setup: string; blobs: Readonly<Record<string, string>>; hooks: readonly (readonly [string, string | null, string, number, string])[]; config: Readonly<Record<string, string>> };
+
 // The held-out arms. project-md is B1c's arm unchanged (spec, tar and manifest). project-md-noescape is B1c's arm with one
 // change to its block: the escape clause after "Route only to skills in the session's available-skills list" goes, and
 // nothing else in the block, the placement script or the tree changes. none is B1's no-gstack arm.

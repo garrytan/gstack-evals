@@ -5,10 +5,10 @@
 # the token read-only, but a dispatch runs the dispatched ref's copy, so trains stay off until gstack dispatches them on the base
 # ref (GST-254, gstack GST-255). The checkout keeps no credentials, since no step needs them.
 # Later units add tests under tests/; `bun test` picks them up without a change here.
-# Shards (GEVA-566): the suite took about 30 minutes in one serial `bun test`, so the tests job runs it as 16 parallel
-# shards, each still serial, with `bun test --shard=<i>/16 --timings=.github/test-timings.json` balancing the shards by each
-# file's time. 16 shards bring each to about the slowest single file (about 1.5 minutes in November 2026), so more would not
-# shorten the run. The checks job, the required check, waits for all 16 and fails unless every shard passed. It joins their
+# Shards (GEVA-566): the suite took about 30 minutes in one serial `bun test`, so the tests job runs it as 22 parallel
+# shards, each still serial, with `bun test --shard=<i>/22 --timings=.github/test-timings.json` balancing the shards by each
+# file's time. On November 2026's timings, bun's split puts the slowest shard at the slowest single file (97 s) with 22 shards,
+# against 121 s with 16, so more shards stop helping there. The checks job, the required check, waits for all 22 and fails unless every shard passed. It joins their
 # JUnit reports with scripts/ci-tree.ts merge (each shard first checks that its tests left its checkout at HEAD and unchanged), which fails unless every file the bun test lane's inventory lists ran in
 # exactly one shard, and uploads the measured file times as the test-timings artifact for refreshing the timings file.
 # A stale or missing timings file only unbalances the shards; it never drops a file, since bun splits every file it finds.
@@ -44,7 +44,7 @@ concurrency:
 
 jobs:
   tests:
-    name: tests (${{ matrix.shard }}/16)
+    name: tests (${{ matrix.shard }}/22)
     # Ubicloud runner on the Ubuntu 26.04 image ubuntu-latest gave. GitHub's hosted runners are one pool for every repository on the
     # account, and jobs waited up to 2.6 to 3.9 minutes for it at p95 in November 2026 (GEVA-566). 4 vCPUs, not 2: bun test is serial
     # in a shard, but the tests spawn processes, and on 2 vCPUs the same files took 1.99 times as long (run 44884246209).
@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -143,9 +143,9 @@ jobs:
           fi
           command -v age age-keygen
           age --version
-      - name: Tests, shard ${{ matrix.shard }} of 16
+      - name: Tests, shard ${{ matrix.shard }} of 22
         if: steps.scope.outputs.docs_only != 'true'
-        run: bun test --shard=${{ matrix.shard }}/16 --timings=.github/test-timings.json --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"
+        run: bun test --shard=${{ matrix.shard }}/22 --timings=.github/test-timings.json --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"
       - name: The tests left this shard's checkout at HEAD and unchanged
         if: steps.scope.outputs.docs_only != 'true'
         run: bun scripts/ci-tree.ts verify-checkout
@@ -229,9 +229,9 @@ jobs:
         with:
           pattern: junit-*
           path: ${{ runner.temp }}/junit
-      - name: Every test file ran in exactly one shard (one JUnit report from each of the 16)
+      - name: Every test file ran in exactly one shard (one JUnit report from each of the 22)
         if: steps.scope.outputs.docs_only != 'true'
-        run: bun scripts/ci-tree.ts merge --shards 16 --dir "$RUNNER_TEMP/junit" --out "$RUNNER_TEMP/junit.xml" --timings-out "$RUNNER_TEMP/test-timings/test-timings.json"
+        run: bun scripts/ci-tree.ts merge --shards 22 --dir "$RUNNER_TEMP/junit" --out "$RUNNER_TEMP/junit.xml" --timings-out "$RUNNER_TEMP/test-timings/test-timings.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: steps.scope.outputs.docs_only != 'true'
         with:
