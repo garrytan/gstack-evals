@@ -628,9 +628,10 @@
       "tests/test-first/table.test.ts"
     ],
     "tests/test-first/fixtures/**": [
-      "tests/test-first/sessions.test.ts",
       "tests/test-first/analyze.test.ts",
-      "tests/test-first/money.test.ts"
+      "tests/test-first/launch.test.ts",
+      "tests/test-first/money.test.ts",
+      "tests/test-first/sessions.test.ts"
     ],
     "quick/laneb/arms/manifests/b2/**": [
       "tests/test-first/sessions.test.ts"
@@ -644,6 +645,9 @@
     "wiki/plans/2026-11-21-capy-b2-test-first-prereg/**": [
       "tests/test-first/money.test.ts",
       "tests/test-first/cli.test.ts"
+    ],
+    "quick/laneb/tests/fixtures/l1/**": [
+      "tests/test-first/launch.test.ts"
     ]
   },
   "guards": [
