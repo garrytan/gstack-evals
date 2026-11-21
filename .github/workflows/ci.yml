@@ -22,6 +22,10 @@
 # sealed.yml still run, and the checks job still reports success. The default branch's scripts/docs-only.ts decides, on the
 # merge commit against its first parent, so a branch never changes the rule that judges it. A push, a dispatch, a pull request
 # into another branch, a base without the script or any classifier error runs every check.
+# Superseded runs: a new commit on a pull request cancels that pull request's run still in progress, as rig.yml does, so
+# runners go to the head that can merge. Pushes to main and dispatches are never cancelled. The checks job keeps
+# if: always(), so a cancelled run still ends with checks failing on its own head, never skipped (a skipped job reads as
+# passed), and no head shows green without a full run.
 name: ci
 
 on:
@@ -32,6 +36,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   tests:
