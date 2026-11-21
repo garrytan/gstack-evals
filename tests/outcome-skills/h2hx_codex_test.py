@@ -247,17 +247,81 @@ def test_pure_rules():
             assert str(e).startswith("E_H2HX_CODEX_CONFIG") and key in str(e), str(e)
 
 
+def test_agent_dispatch():
+    import types
+    import h2h_agent
+    d = Path(tempfile.mkdtemp(prefix="h2hx-agent-"))
+    DIRS.append(d)
+    seen = {}
+
+    class Fake:
+        def __init__(self, cfg, slots=None):
+            seen.setdefault("made", []).append((type(self).__name__, cfg))
+
+        async def run(self):
+            return {}
+
+        def finish(self, refused=None):
+            return {"turns": [], "slot": None, "codex": {"thread_id": None}}
+
+    class FakeCodex(Fake):
+        pass
+
+    class FakeClaude(Fake):
+        pass
+
+    task = d / "task.json"
+    task.write_text(json.dumps({"repo_dir": "/work/repo", "commits": 1, "base_commit": "b" * 40}))
+    codex_cfg = {"host": "codex", "turns": ["T"], "continuation": "c", "done_rule": BASE["done_rule"], "continuation_cap": 6, "limits": {"allowance_usd": 15, "wall_sec": 5400, "max_turns": 300}, "no_answer": "r", "env": {"GSTACK_TELEMETRY_SOURCE": "eval"}, "home": None, "home_rule": "none", "codex": {"bin": "/opt/h2h-runtimes/bin/sol-agent", "home": "/root/.codex", "model": "gpt-6.2-sol", "effort": "low", "version": "0.170.0"}}
+    claude_cfg = {**{k: v for k, v in codex_cfg.items() if k not in ("host", "codex")}, "disallowed_tools": []}
+    saved = (h2h_agent.CodexTurns, h2h_agent.Turns, h2h_agent.egress.apply, h2h_agent.subprocess.run)
+    h2h_agent.CodexTurns, h2h_agent.Turns = FakeCodex, FakeClaude
+    h2h_agent.egress.apply = lambda container, allow: {"egress": allow}
+    h2h_agent.subprocess.run = lambda *a, **k: subprocess.CompletedProcess(a, 0, "", "")
+    try:
+        def agent(arm, cfg):
+            p = d / (arm.replace(":", "_") + ".json")
+            p.write_text(json.dumps(cfg))
+            a = h2h_agent.H2hAgent.__new__(h2h_agent.H2hAgent)
+            a.options = types.SimpleNamespace(task_json=str(task), h2h_config=str(p), ledger="u4", task_label="u/" + arm, trial_n=1, arm=arm, probe_node=None, rerun="", upstream_model="m", control_url="http://127.0.0.1:1")
+            a._evaluator_dir = lambda: d / ("ev-" + arm.replace(":", "_"))
+            a._resolve_auth_env = lambda: {"ANTHROPIC_BASE_URL": "http://127.0.0.1:2"}
+            a._container_id = lambda env: "c1"
+            a._check_image = lambda c, log: None
+            a._resolved_model_name = lambda: "m"
+            return a
+
+        ctx = types.SimpleNamespace()
+        asyncio.run(agent("h2h:s-gstack", codex_cfg).run("i", None, ctx))
+        asyncio.run(agent("h2h:none", claude_cfg).run("i", None, types.SimpleNamespace()))
+        try:
+            asyncio.run(agent("h2h:s-none", claude_cfg).run("i", None, types.SimpleNamespace()))
+            raise AssertionError("an s-* arm with a Claude config was not refused")
+        except h2h_agent.SandboxSetupError as e:
+            assert str(e).startswith("E_REAL_SANDBOX_SETUP arm h2h:s-none runs in Codex"), str(e)
+        made = seen["made"]
+        assert [m[0] for m in made] == ["FakeCodex", "FakeClaude"], made
+        c = made[0][1]
+        assert c["codex"] == codex_cfg["codex"] and c["container"] == "c1" and c["exec_prefix"] == ["docker", "exec", "-i", "-w", "/work/repo", "c1"] and "cli_path" not in c
+        assert c["env"] == {"GSTACK_TELEMETRY_SOURCE": "eval"} and c["home"] == "/root" and c["commits"] == 1
+        assert "cli_path" in made[1][1] and "codex" not in made[1][1]
+        assert ctx.metadata["h2h"]["host"] == "codex"
+    finally:
+        h2h_agent.CodexTurns, h2h_agent.Turns, h2h_agent.egress.apply, h2h_agent.subprocess.run = saved
+
+
 TESTS = [test_done_in_one_turn, test_continuations_to_the_cap, test_async_question_gets_the_reply_on_the_same_thread, test_sync_question_is_counted_unanswered, test_two_scripted_turns_resume_one_thread, test_ci_unset_and_env_reaches_tools, test_policy_failure_is_a_refusal, test_wall_limit_kills_codex, test_hooks_run_under_the_trust_bypass, test_pack_config_is_kept_and_a_clash_refuses_before_the_slot, test_home_rules_and_wrong_binary_refuse]
 
 
 def main() -> int:
     failed = 0
-    try:
-        test_pure_rules()
-        print("PASS test_pure_rules")
-    except Exception:
-        failed += 1
-        print("FAIL test_pure_rules\n" + traceback.format_exc())
+    for t in (test_pure_rules, test_agent_dispatch):
+        try:
+            t()
+            print("PASS " + t.__name__)
+        except Exception:
+            failed += 1
+            print("FAIL " + t.__name__ + "\n" + traceback.format_exc())
     proc, base_url, log = stub()
     try:
         for t in TESTS:

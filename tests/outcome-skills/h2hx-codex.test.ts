@@ -16,13 +16,13 @@ const HAS = existsSync(PYTHON) && existsSync(join(CODEX_DIR, "codex")) && spawnS
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 
 describe.skipIf(!HAS)("part S's Codex loop on the real pinned Codex CLI against a stub Responses API", () => {
-  test("a session done in one turn, continuations to the cap, an async question answered on the same thread, a sync question counted unanswered, two scripted turns on one thread, CI unset, a policy failure as a refusal, the wall limit, hooks under the trust bypass, the pack's config kept and a clash refused before the slot, and the home, tree and binary checks", () => {
+  test("the agent sends s-* arms to the Codex loop and every other arm to Claude Code; a session done in one turn, continuations to the cap, an async question answered on the same thread, a sync question counted unanswered, two scripted turns on one thread, CI unset, a policy failure as a refusal, the wall limit, hooks under the trust bypass, the pack's config kept and a clash refused before the slot, and the home, tree and binary checks", () => {
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
     const r = spawnSync(PYTHON, [join(import.meta.dir, "h2hx_codex_test.py")], { env: { ...env, PYTHONDONTWRITEBYTECODE: "1", H2HX_CODEX_DIR: CODEX_DIR }, encoding: "utf8", timeout: 540_000 });
     const out = r.stdout + r.stderr;
     if (r.status !== 0) console.log(out);
     expect(out).not.toContain("FAIL");
-    expect(out.match(/^PASS /gm)?.length).toBe(12);
+    expect(out.match(/^PASS /gm)?.length).toBe(13);
     expect(r.status).toBe(0);
   }, 600_000);
 });
