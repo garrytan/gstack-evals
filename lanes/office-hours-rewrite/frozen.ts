@@ -59,6 +59,22 @@ export const CODEX = {
  * harness difference, and pre-run change 5 records the keyless check behind it.
  */
 export const CODEX_LINK = "codex-ohr";
+const CODEX_DBS = ["goals_1", "logs_2", "memories_1", "queue_1", "state_5", "thread_history_1"] as const;
+/**
+ * Pre-run change 5, F1: what a clean keyless Codex 0.170.0 session writes under its home across one exec, beside the
+ * live rollouts' own create and append (run/home-watch.ts codexOwn), read from the three Sol sessions of the keyless end
+ * to end on 2026-11-21 (none, current and new, three execs each). Paths are relative to $HOME/.codex, * matches within
+ * one path segment, type is find's %y. Codex made no delete, move or truncation there. A directory whose entries change
+ * in the same exec as an allowed create inside it (the home itself, sessions and its date folders) needs no row; the
+ * four directory rows below are the folders Codex changes entries in on every exec. Between execs nothing may change.
+ */
+export const CODEX_HOME_ALLOW: readonly { kind: "create" | "modify" | "delete" | "truncate" | "move"; path: string; type: "f" | "d" | "l"; from?: string }[] = [
+  ...["", "tmp", "tmp/arg0-linux", ".tmp", ".tmp/git-*", ".tmp/git-*/objects", ".tmp/git-*/refs", "sessions", "sessions/*", "sessions/*/*", "sessions/*/*/*", "shell_snapshots", "thread-writer-locks"].map((path) => ({ kind: "create" as const, path, type: "d" as const })),
+  ...[".sandbox_migration", "installation_id", ".tmp/plugins.sync.lock", ".tmp/git-*/HEAD", "thread-writer-locks/.coordination.lock", ...CODEX_DBS.flatMap((d) => [d + ".sqlite", d + ".sqlite-wal", d + ".sqlite-shm"])].map((path) => ({ kind: "create" as const, path, type: "f" as const })),
+  ...[".tmp", "shell_snapshots", "thread-writer-locks", "tmp/arg0-linux"].map((path) => ({ kind: "modify" as const, path, type: "d" as const })),
+  ...["logs_2.sqlite", "state_5.sqlite-wal", "thread_history_1.sqlite-wal", ...CODEX_DBS.map((d) => d + ".sqlite-shm")].map((path) => ({ kind: "modify" as const, path, type: "f" as const })),
+];
+
 /**
  * Every Sol session's Codex settings beside the proxy's provider entry, passed as -c pairs under --strict-config. Effort
  * and window are the catalog's own values for gpt-6.1-sol (default_reasoning_level low, context_window 500000), written
@@ -70,22 +86,6 @@ export const CODEX_LINK = "codex-ohr";
  * question only as a new user message, which exec gives only at the next turn (exec resume), so a model that sleeps to
  * wait for it would wait for nothing (run/codex.ts).
  */
-/**
- * Pre-run change 5, F1: what a clean keyless Codex 0.170.0 session writes under its home across one exec, beside the
- * live rollouts' own create and append (run/home-watch.ts codexOwn), read from the three Sol sessions of the keyless end
- * to end on 2026-11-21 (none, current and new, three execs each). Paths are relative to $HOME/.codex, * matches within
- * one path segment, type is find's %y. Codex made no delete, move or truncation there. A directory whose entries change
- * in the same exec as an allowed create inside it (the home itself, sessions and its date folders) needs no row; the
- * four directory rows below are the folders Codex changes entries in on every exec. Between execs nothing may change.
- */
-const CODEX_DBS = ["goals_1", "logs_2", "memories_1", "queue_1", "state_5", "thread_history_1"] as const;
-export const CODEX_HOME_ALLOW: readonly { kind: "create" | "modify" | "delete" | "truncate" | "move"; path: string; type: "f" | "d" | "l"; from?: string }[] = [
-  ...["", "tmp", "tmp/arg0-linux", ".tmp", ".tmp/git-*", ".tmp/git-*/objects", ".tmp/git-*/refs", "sessions", "sessions/*", "sessions/*/*", "sessions/*/*/*", "shell_snapshots", "thread-writer-locks"].map((path) => ({ kind: "create" as const, path, type: "d" as const })),
-  ...[".sandbox_migration", "installation_id", ".tmp/plugins.sync.lock", ".tmp/git-*/HEAD", "thread-writer-locks/.coordination.lock", ...CODEX_DBS.flatMap((d) => [d + ".sqlite", d + ".sqlite-wal", d + ".sqlite-shm"])].map((path) => ({ kind: "create" as const, path, type: "f" as const })),
-  ...[".tmp", "shell_snapshots", "thread-writer-locks", "tmp/arg0-linux"].map((path) => ({ kind: "modify" as const, path, type: "d" as const })),
-  ...["logs_2.sqlite", "state_5.sqlite-wal", "thread_history_1.sqlite-wal", ...CODEX_DBS.map((d) => d + ".sqlite-shm")].map((path) => ({ kind: "modify" as const, path, type: "f" as const })),
-];
-
 export const CODEX_SETTINGS = {
   model_reasoning_effort: "low",
   model_context_window: 500_000,
