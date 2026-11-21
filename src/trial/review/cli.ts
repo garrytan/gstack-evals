@@ -418,6 +418,11 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.err("E_CACHE_STALE review-units: run " + prior.run_id + " ran on host " + priorHost + (priorCodex ? " with codex arms " + priorCodex : "") + ", and this resume gives host " + host + (codexArms ? " with codex arms " + codexArms.sha256 : "") + "\n  fix: resume with the run's own --host and --codex-arms file, or start a new run in a new --out");
     return 2;
   }
+  const priorUpstream = (prior as { upstream?: string } | null)?.upstream ?? null;
+  if (prior && priorUpstream !== (upstream !== null ? "keyless" : null)) {
+    io.err("E_CACHE_STALE review-units: run " + prior.run_id + (priorUpstream ? " ran keyless against --upstream" : " ran against the providers") + ", and this resume gives " + (upstream !== null ? "--upstream" : "no --upstream") + "; a keyless check's cells never count as results\n  fix: start a new run in a new --out");
+    return 2;
+  }
   const kindsNow = JSON.stringify(Object.fromEntries([...armKinds].sort()));
   const kindsWas = JSON.stringify(Object.fromEntries(Object.entries(prior?.arm_session_kinds ?? {}).sort()));
   if (prior && kindsWas !== kindsNow) {

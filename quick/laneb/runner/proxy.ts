@@ -5,7 +5,7 @@
 // Real provider keys stay in this process; containers only ever hold a session token.
 import { appendFileSync, readFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
-import { applyOutputCap, isResponsesPath, reasoningEffort, responsesError, responsesRefusal, responsesUsage, ResponsesSseUsage, RESPONSES_PATH } from "./responses.ts";
+import { applyOutputCap, isResponsesPath, reasoningEffort, responsesError, responsesImageBound, responsesRefusal, responsesUsage, ResponsesSseUsage, RESPONSES_PATH } from "./responses.ts";
 
 export type Price = { input: number; output: number; cache_write_5m: number; cache_write_1h: number; cache_read: number };
 export type ModelCfg = { route: string; upstream_model: string; price_per_mtok: Price; long_prompt?: { over_tokens: number; price_per_mtok: Price }; body_overrides?: Record<string, unknown>; strip_fields?: string[]; bound_bytes_per_token?: number; output_cap_tokens?: number };
@@ -489,7 +489,7 @@ export function startProxy(opts: ProxyOptions) {
         return new Response(res.body, { status: res.status, headers: responseHeaders(res, { "content-type": res.headers.get("content-type") ?? "application/json" }) });
       }
 
-      let inputTokens = byteBoundTokens(outBody, route.count_tokens === "estimate" ? model.bound_bytes_per_token ?? 1 : 1);
+      let inputTokens = byteBoundTokens(outBody, route.count_tokens === "estimate" ? model.bound_bytes_per_token ?? 1 : 1) + (responses ? responsesImageBound(body) : 0);
       let counted = false;
       if (route.count_tokens === "forward" && !responses) {
         try {

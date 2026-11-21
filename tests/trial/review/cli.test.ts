@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { REPO_ROOT } from "../../../src/cli.ts";
@@ -274,5 +275,37 @@ describe("review-units --host codex (keyless)", () => {
     expect((await run([...base, "--codex-arms", arms, "--upstream", "http://127.0.0.1:1", "--dry-run"], { OPENAI_API_KEY: "set" })).err).toMatch(/^E_USAGE review-units: --upstream is for keyless checks, and a provider key is set/);
     expect((await run([...base, "--codex-arms", arms, "--upstream", "http://127.0.0.1:1", "--dry-run"])).code).toBe(0);
     removeTree(dir);
+  });
+
+  // Value: protects=a keyless check's cells never count as results: a resume that adds or drops --upstream is refused before anything runs, and run.json stays as it was; fails_when=a real run resumes over a stub run's cells, or a stub check over a real run's; why_new=#400's second-model review found the resume check left --upstream out.
+  test("a resume that adds or drops --upstream is refused and leaves run.json as it was", async () => {
+    const dir = mkdtempSync(join(REPO_ROOT, ".review-units-cli-"));
+    const out = join(dir, "out");
+    mkdirSync(out, { recursive: true });
+    const text = codexArmsText(["c-on", "c-none"]);
+    writeFileSync(join(dir, "arms.json"), text);
+    const sha = createHash("sha256").update(text).digest("hex");
+    const stub = ["--upstream", "http://127.0.0.1:1"];
+    const run = async (argv: string[]) => {
+      const io = collect();
+      const code = await main(["--suite", "gsta167-14pr", "--units", "3593", "--models", "gpt-6.1-sol", "--out", out, "--source", "garrytan/gstack=/nowhere", "--host", "codex", "--arms", armRef("c-on"), armRef("c-none"), "--codex-arms", join(dir, "arms.json"), "--resume", "--dry-run", "--spend-cap", "10", ...argv], io, {});
+      return { code, ...io.text() };
+    };
+    try {
+      const cases = [
+        [{ upstream: "keyless" }, [], "ran keyless against --upstream, and this resume gives no --upstream", stub],
+        [{}, stub, "ran against the providers, and this resume gives --upstream", []],
+      ] as const;
+      for (const [was, flags, why, same] of cases) {
+        const recorded = JSON.stringify({ run_id: "review-units-prior", host: "codex", codex_arms_sha256: sha, ...was }) + "\n";
+        writeFileSync(join(out, "run.json"), recorded);
+        const r = await run([...flags]);
+        expect([r.code, r.err.split("\n")[0]]).toEqual([2, "E_CACHE_STALE review-units: run review-units-prior " + why + "; a keyless check's cells never count as results"]);
+        expect(readFileSync(join(out, "run.json"), "utf8")).toBe(recorded);
+        expect((await run([...same])).code).toBe(0);
+      }
+    } finally {
+      removeTree(dir);
+    }
   });
 });
