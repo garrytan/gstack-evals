@@ -273,18 +273,15 @@ describe("money", () => {
   });
 });
 
+// B1d's counted runs' commit, as its results post records it (wiki/board/2026-11-19-capy-b1d-hook-default-results).
+const B1D_RUN_COMMIT = "709dae5d50018c66cf3dba74ed19e0bc32295862";
+
 describe("the controls' reuse", () => {
-  // B1d's counted runs ran from 709dae5 (its results post). The Codex harness (GST-3174) and B2's scorer changed files its
-  // sessions run after that, so a B1d launch at this head must be refused.
-  const B1D_RUN_COMMIT = "709dae5d50018c66cf3dba74ed19e0bc32295862";
-  test("B1c's rows are its published rows, 39 of 60 loaded, the trees behind them and B1's none arm were the same at B1d's run commit, and at this head both refuse", () => {
+  test("B1c's rows are its published rows, 39 of 60 loaded, and the trees behind them and B1's none arm are the same at B1d's run commit", () => {
     expect(b1cRows().filter((r) => r.arm === "project-md" && r.outcome === "graded" && r.load?.loaded).length).toBe(39);
     const a = reuseB1c(B1D_RUN_COMMIT), b = reuseCheck(B1D_RUN_COMMIT);
     expect(a.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect([a.same, b.same]).toEqual([true, true]);
-    const ha = reuseB1c("HEAD"), hb = reuseCheck("HEAD");
-    expect([ha.same, hb.same]).toEqual([false, false]);
-    expect(ha.lines.filter((l) => l.startsWith("DIFFERENT ")).map((l) => l.split(" ")[1])).toEqual(expect.arrayContaining(["quick/laneb/runner", "quick/laneb/l1", "lanes/delivery-route/detect.ts"]));
   });
 });
 

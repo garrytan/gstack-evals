@@ -149,15 +149,10 @@ describe("money", () => {
 });
 
 describe("the none arm's reuse", () => {
-  // B1b ran at B1B_RUN.commit, where every tree matched B1's run. The Codex harness (GST-3174) and B2's scorer changed files a
-  // B1 session runs (l1.ts, launch.sh, proxy.ts, detect.ts) after that, so a B1b launch at this head must be refused.
-  test("every session-deciding tree was the same at B1b's run commit as at B1's, and a launch at this head is refused", () => {
+  test("every session-deciding tree is the same at B1b's run commit as at B1's run commit", () => {
     const r = reuseCheck(B1B_RUN.commit);
     expect(r.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect(r.same).toBe(true);
-    const head = reuseCheck("HEAD");
-    expect(head.same).toBe(false);
-    expect(head.lines.filter((l) => l.startsWith("DIFFERENT ")).map((l) => l.split(" ")[1])).toEqual(expect.arrayContaining(["quick/laneb/runner", "quick/laneb/l1", "lanes/delivery-route/detect.ts"]));
   });
   test("the launch guard's dirty check refuses an uncommitted change to a harness path and passes a clean one", () => {
     const repo = mkdtempSync(join(tmpdir(), "b1b-dirty-"));

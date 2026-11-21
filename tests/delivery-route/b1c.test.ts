@@ -9,8 +9,8 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { B1C_CASES, b1bControls, b1cApprove, b1cCap, b1cCaseProblems, b1cCheck, b1cDone, b1cGuard, b1cMain, b1cPlan, b1cReading, b1cReport, b1cRow, b1cStats, bandOdds, checkB1cRows, harnessDirty, loadB1cCaptured, placementReading, powerLines, READINGS, reuseB1b, whyNot, type B1cRow } from "../../lanes/delivery-route/b1c.ts";
 import { B1C, B1C_CAPS_USD, B1C_SPEC, PLACEMENT } from "../../lanes/delivery-route/b1c-pins.ts";
-import { B1C_RUN } from "../../lanes/delivery-route/b1d-pins.ts";
 import { B1B_ARMS } from "../../lanes/delivery-route/b1b-pins.ts";
+import { B1C_RUN } from "../../lanes/delivery-route/b1d-pins.ts";
 import { paired, reuseCheck, type Load } from "../../lanes/delivery-route/b1b.ts";
 import { ARM_SOURCES, drawnTasks, loadBundle, REPO, sha256 } from "../../lanes/delivery-route/pins.ts";
 import { b1Row, type B1Row } from "../../lanes/delivery-route/table.ts";
@@ -165,9 +165,8 @@ describe("money", () => {
     expect(g.ok).toBe(false);
     expect(g.why[0]).toMatch(/^all-in \$150\.01 passes the \$150\.00 stop$/);
   });
-  // The harness changed after B1c's run (see the controls' reuse below), so at this head the guard refuses on reuse before it
-  // reads any ledger or crew file; the ledger and crew reads behind it stay as they ran at B1C_RUN.commit.
-  test("the launch command's guard refuses a launch at this head on reuse, before it reads a ledger or the crew file", async () => {
+  // The guard refuses before it reads a ledger on a head whose harness differs from B1's (tests/delivery-route/reuse-guard.test.ts).
+  test.skipIf(!reuseCheck("HEAD").same)("the launch command's guard reads the work dir's ledger mirror before B1C_LEDGERS, and refuses a bad or missing crew file", async () => {
     const root = mkdtempSync(join(tmpdir(), "b1c-guard-")), work = join(root, "work"), ledgers = join(root, "ledgers"), crew = join(root, "crew.json"), mirror = join(work, "host/ledger.jsonl");
     const saved = { B1C_LEDGERS: process.env.B1C_LEDGERS, B1C_CREW: process.env.B1C_CREW, LEDGER: process.env.LEDGER };
     const guard = () => b1cMain(["guard", work]);
@@ -177,10 +176,14 @@ describe("money", () => {
       b1cApprove(join(ledgers, "b1c-opus.jsonl"), "b1c-opus", 80, "the Captain");
       writeFileSync(crew, JSON.stringify({ as_of: "2026-11-18", usd: 0 }));
       Object.assign(process.env, { B1C_LEDGERS: ledgers, B1C_CREW: crew }); delete process.env.LEDGER;
-      await expect(guard()).rejects.toThrow(/^E_B1_LAUNCH b1c-opus: at HEAD the harness differs from the run B1's none arm came from \(DIFFERENT quick\/laneb\/runner /);
+      expect(await guard()).toBe(0);
       copyFileSync(join(ledgers, "b1c-opus.jsonl"), mirror);
+      for (const kind of ["reserve", "settle"]) appendFileSync(mirror, JSON.stringify({ ts: "2026-11-18T00:00:00Z", item: "b1c-opus", kind, id: "model-1", usd_micros: 30_000_000 }) + "\n");
+      await expect(guard()).rejects.toThrow(/^E_B1_LAUNCH b1c-opus: b1c-opus's projection \$[\d.]+ passes its cap \$80\.00/);
+      writeFileSync(crew, JSON.stringify({ as_of: "2026-11-18", usd: -1 }));
+      await expect(guard()).rejects.toThrow(/^E_USAGE b1c launch guard: the crew file needs/);
       delete process.env.B1C_CREW;
-      await expect(guard()).rejects.toThrow(/^E_B1_LAUNCH b1c-opus: at HEAD the harness differs/);
+      await expect(guard()).rejects.toThrow(/^E_USAGE b1c launch guard: set B1C_LEDGERS/);
     } finally {
       for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
       rmSync(root, { recursive: true, force: true });
@@ -189,14 +192,10 @@ describe("money", () => {
 });
 
 describe("the controls' reuse", () => {
-  // B1c ran at B1C_RUN.commit. The Codex harness (GST-3174) and B2's scorer changed files its sessions run after that.
-  test("every session-deciding tree was the same at B1c's run commit as at B1b's, and at B1's for the none arm; at this head both refuse", () => {
+  test("every session-deciding tree is the same at B1c's run commit as at B1b's, and at B1's for the none arm", () => {
     const a = reuseB1b(B1C_RUN.commit), b = reuseCheck(B1C_RUN.commit);
     expect(a.lines.filter((l) => !l.startsWith("SAME "))).toEqual([expect.stringMatching(/^REUSE PASS/)]);
     expect([a.same, b.same]).toEqual([true, true]);
-    const ha = reuseB1b("HEAD"), hb = reuseCheck("HEAD");
-    expect([ha.same, hb.same]).toEqual([false, false]);
-    expect(ha.lines.filter((l) => l.startsWith("DIFFERENT ")).map((l) => l.split(" ")[1])).toEqual(expect.arrayContaining(["quick/laneb/runner", "quick/laneb/l1", "lanes/delivery-route/detect.ts"]));
   });
   test("the dirty check refuses an uncommitted change to a harness path or the arm's own files", () => {
     const repo = mkdtempSync(join(tmpdir(), "b1c-dirty-"));
