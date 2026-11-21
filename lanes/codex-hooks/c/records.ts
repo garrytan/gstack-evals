@@ -53,7 +53,7 @@ export function sessionRecords(s: SessionReadout, unit: Unit): StateRecord[] {
     attempts: s.attempt,
     limit_stop: o.class === "limit_stop",
     safety_stop: o.class === "safety",
-    no_text: outcome === "scored" && final.text === null,
+    no_text: false,
     blocked,
   };
   const tail = { cost: { usd: s.usd, total_tokens: null }, exposure: exposureOf(s) };
@@ -64,7 +64,7 @@ export function sessionRecords(s: SessionReadout, unit: Unit): StateRecord[] {
       : r.outcome === "findings"
         ? { findings: r.findings.map((f) => ({ ...f, file: repoPath(f.file, "/work/" + unitTaskId(unit)) })), no_block: false, message: null }
         : { findings: null, no_block: true, message: r.text };
-    return { ...head, state: r.state, ...rest, ...body, ...tail };
+    return { ...head, state: r.state, ...rest, no_text: r.text === null, ...body, ...tail };
   };
   const first = s.states.find((r) => r.state === "first_stop");
   return blocked && first ? [line(first), line(final)] : [line(final)];

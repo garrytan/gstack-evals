@@ -80,6 +80,16 @@ describe("the states file the analysis reads, from the rig's readouts (lanes/cod
     expect(() => readStates(jsonl([{ ...line!, no_block: true, findings: null, message: "" }]), suite, { passes: 1, units: [A.id] })).toThrow(StatesError);
   });
 
+  // Value: protects=no_text is read per state, so a blocked session whose final text is null still reads back: its first-stop line keeps its findings with no_text false and its final line scores as finding nothing with no_text true; fails_when=the final state's no_text is copied onto the first-stop line and readStates refuses the whole phase
+  test("a blocked session whose final text is null reads back, with no_text per state", () => {
+    const s = readout("block", "c-on", A);
+    s.states.find((x) => x.state === "final")!.text = null;
+    const lines = sessionRecords(s, A);
+    expect(lines.map((l) => [l.state, l.no_text])).toEqual([["first_stop", false], ["final", true]]);
+    const got = readStates(jsonl(lines), suite, { passes: 1, units: [A.id] }).sessions.find((x) => x.id === sessionId("c-on", A, 1))!;
+    expect([got.blocked, got.states!.first_stop.record.findings!.length, got.states!.final.record.findings]).toEqual([true, 1, []]);
+  });
+
   // Value: protects=an item the controller stopped at its cap before a session started (the CAP_STOP marker, no session row) still reaches the analysis as cap_stop lines for every planned cell it never ran, so section 5.8's "any cap stop ends the part INCOMPLETE" holds; fails_when=a cap stop with no session row reads as a few missing sessions, which the analysis tolerates; why_new=GEVA-562 part C, PR 400 review; seam=phaseRecords, capStopRecord; no_claim=cap stops review-units reports inside a session
   test("a cap stop before any session started", () => {
     const root = mkdtempSync(join(tmpdir(), "chc-records-"));
