@@ -1,31 +1,31 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 Garry Tan. MIT License.
-# B1e's four gstack arm tars (lanes/delivery-route/b1e-pins.ts GSTACK_STABLE, B1E_ARMS). gstack at its stable tag, fetched by
+# B1f's four gstack arm tars (lanes/delivery-route/b1f-pins.ts GSTACK_STABLE, B1F_ARMS). gstack at its stable tag, fetched by
 # sha, is installed by its own ./setup in Lane B's builder (quick/laneb/arms/Dockerfile, target gstack-l1-tar, the steps B1d's
 # arm ran) with Lane B's seeded long-time user, and B1's prove-it skill goes beside it byte for byte: that tree is the hook
 # arm. own is the same tree after gstack's own `gstack-config set skill_routing off`; long and required are own with prove-it's
 # SKILL.md replaced by the arm's file. Every tree is tarred in the pinned builder image.
 #
-#   lanes/delivery-route/b1e-build.sh [out-dir]     default out-dir: ${B1E_ARMS_DIR:-~/.capy/work/b1e/arms}
+#   lanes/delivery-route/b1f-build.sh [out-dir]     default out-dir: ${B1F_ARMS_DIR:-~/.capy/work/b1f/arms}
 #
 # It refuses an out-dir that already holds hook.tar: gstack's setup is not byte for byte, so a rebuild would replace the hook tar
 # the committed manifests pin.
 #
 # Output, outside git: <out>/<arm>.tar and .tar.gz for hook, own, long and required, the trees at <out>/trees/<arm>,
 # <out>/fetch-pin.json, <out>/<arm>.gstack-config.tsv, <out>/hook.loadout.lock.json and <out>/build.log. The manifests come
-# after: bun lanes/delivery-route/cli.ts b1e arms manifest [--out <dir>]
+# after: bun lanes/delivery-route/cli.ts b1f arms manifest [--out <dir>]
 # Needs docker with buildx, bun, git and network access at build time.
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 DF=$ROOT/quick/laneb/arms
-pin() { (cd "$ROOT" && bun -e 'import { GSTACK_STABLE, B1E_ARMS } from "./lanes/delivery-route/b1e-pins.ts"; import { PROVE_IT } from "./lanes/delivery-route/b1d-pins.ts"; const v = { ...GSTACK_STABLE, prove_it: PROVE_IT.path, own: B1E_ARMS.own.skill, long: B1E_ARMS.long.skill, required: B1E_ARMS.required.skill }; process.stdout.write(String(v[process.argv[1]]))' "$1"); }
+pin() { (cd "$ROOT" && bun -e 'import { GSTACK_STABLE, B1F_ARMS } from "./lanes/delivery-route/b1f-pins.ts"; import { PROVE_IT } from "./lanes/delivery-route/b1d-pins.ts"; const v = { ...GSTACK_STABLE, prove_it: PROVE_IT.path, own: B1F_ARMS.own.skill, long: B1F_ARMS.long.skill, required: B1F_ARMS.required.skill }; process.stdout.write(String(v[process.argv[1]]))' "$1"); }
 SHA=$(pin sha) REPO=$(pin repo) LOADOUT=$(pin loadout) DEST=$(pin prove_it)
-DIR=${1:-${B1E_ARMS_DIR:-$HOME/.capy/work/b1e/arms}}
+DIR=${1:-${B1F_ARMS_DIR:-$HOME/.capy/work/b1f/arms}}
 OUT=$(mkdir -p "$DIR" && cd "$DIR" && pwd)
 for f in "$OUT"/{hook,own,long,required}.tar{,.gz}; do
   if [ -e "$f" ]; then
-    echo "refusing: $f exists. gstack's setup is not byte for byte, so a rebuild would replace the tars the committed manifests pin. Build into an empty folder: lanes/delivery-route/b1e-build.sh <new-dir>" >&2
+    echo "refusing: $f exists. gstack's setup is not byte for byte, so a rebuild would replace the tars the committed manifests pin. Build into an empty folder: lanes/delivery-route/b1f-build.sh <new-dir>" >&2
     exit 1
   fi
 done

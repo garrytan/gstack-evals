@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# sets.py: B1e's two task sets, from committed files and the task titles. The pool is B1d's held-out pool: B1's screened
+# sets.py: B1f's two task sets, from committed files and the task titles. The pool is B1d's held-out pool: B1's screened
 # scored tasks (hm-screened.txt in B1's bundle, 200 tasks, each run on this rig in the harness mechanics eval) minus every
 # task whose repository (case-folded owner/name, from quick/laneb/tasks/swerebench-r3a4.json) is the repository of one of
 # B1's 62 tasks (tasks.txt in B1's bundle). A task is feature-titled when the first non-empty line of its instruction, with

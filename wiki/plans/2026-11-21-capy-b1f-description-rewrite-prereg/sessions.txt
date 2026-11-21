@@ -4,4 +4,4 @@ own-load listing {"chars":9746,"entries":64,"bare":0,"prove_it":"full"} probe {"
 long-load listing {"chars":10211,"entries":64,"bare":0,"prove_it":"full"} probe {"capy":"0","skill_routing":"off","telemetry":"off"}
 required-stop listing {"chars":9954,"entries":64,"bare":0,"prove_it":"full"} probe {"capy":"0","skill_routing":"off","telemetry":"off"}
 none-stop listing {"chars":332,"entries":1,"bare":0,"prove_it":"absent"} probe {"capy":"0"}
-B1E SESSIONS PASS 6 cases
+B1F SESSIONS PASS 6 cases

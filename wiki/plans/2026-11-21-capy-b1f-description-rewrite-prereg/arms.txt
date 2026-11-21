@@ -1,14 +1,14 @@
-rewrites: b1e/prove-it-long.md and b1e/prove-it-required.md are gstack-shaped-SKILL.md with only the description line rewritten
+rewrites: b1f/prove-it-long.md and b1f/prove-it-required.md are gstack-shaped-SKILL.md with only the description line rewritten
 none: manifest is B1's byte for byte, tar 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e rebuilt byte for byte
 hook: tar.gz 62d619d0bb961f9a0412f77ccc70246693e727f24ded47b6ffd83121b5f3511b unpacks to the manifest's tar 489b588ed4586c2931414ea536d5c73e453dfb0eadc5c91e7b20785407d62087
 hook: the tree holds gstack-shaped-SKILL.md as prove-it, gstack 29bff55dd8a1's files at their blobs, 4 hook registrations, the seeded user and switches {"skill_routing":"on","skill_contracts":"on","telemetry":"off"}
 own: tar.gz 3eacf1ab2dc55695a26989f47c471ace94f59597693d5d151cbce6f3d6ab7e20 unpacks to the manifest's tar 5c6a1aea4b34d7c3a6683515a909b021850fbc2e9a33595a7e93ea688e741f7a
 own: the tree holds gstack-shaped-SKILL.md as prove-it, gstack 29bff55dd8a1's files at their blobs, 4 hook registrations, the seeded user and switches {"skill_routing":"off","skill_contracts":"on","telemetry":"off"}
 long: tar.gz 8aa089d0053d64df50784a272146c7edb1e4fd6bcbbe747d2750905fed14a266 unpacks to the manifest's tar d9e036945e7483c5fc01dbd4c5d921bf4a8e59acc8edb127e942914cc36032fa
-long: the tree holds b1e/prove-it-long.md as prove-it, gstack 29bff55dd8a1's files at their blobs, 4 hook registrations, the seeded user and switches {"skill_routing":"off","skill_contracts":"on","telemetry":"off"}
+long: the tree holds b1f/prove-it-long.md as prove-it, gstack 29bff55dd8a1's files at their blobs, 4 hook registrations, the seeded user and switches {"skill_routing":"off","skill_contracts":"on","telemetry":"off"}
 required: tar.gz aa355fd7cdc1cc83165ef2a50fb30ab75f2fdaa8fffddcdf5029237391880864 unpacks to the manifest's tar d51a28597ff204dfe3af2f715903cf64cdf637a7c0fb89315ea84f9fa6f548e4
-required: the tree holds b1e/prove-it-required.md as prove-it, gstack 29bff55dd8a1's files at their blobs, 4 hook registrations, the seeded user and switches {"skill_routing":"off","skill_contracts":"on","telemetry":"off"}
+required: the tree holds b1f/prove-it-required.md as prove-it, gstack 29bff55dd8a1's files at their blobs, 4 hook registrations, the seeded user and switches {"skill_routing":"off","skill_contracts":"on","telemetry":"off"}
 own: differs from hook only at .gstack/config.yaml
 long: differs from own only at .claude/skills/prove-it/SKILL.md
 required: differs from own only at .claude/skills/prove-it/SKILL.md
-B1E ARMS PASS
+B1F ARMS PASS

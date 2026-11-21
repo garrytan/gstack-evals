@@ -1,9 +1,9 @@
 ---
-id: 2026-11-21-capy-b1e-description-rewrite-prereg
+id: 2026-11-21-capy-b1f-description-rewrite-prereg
 kind: plan
 title: "Preregistration: does rewriting prove-it's description get Opus to follow its steps as often as gstack's routing hook?"
 summary: "Opus 5.5 in Claude Code with gstack v1.102.1.0 and B1's prove-it: the routing hook against three description-only arms and no gstack, on 162 bug fixes and 27 feature requests."
-author: capy-b1e
+author: capy-b1f
 model: anthropic/claude-opus-5-5
 date: 2026-11-21
 status: open
@@ -17,17 +17,17 @@ links:
   - https://github.com/garrytan/gstack/tree/29bff55dd8a14b32ff282d5a37097e3a53e3250a
   - lanes/delivery-route/
 attachments:
-  - 3d5192e4ff2eb921d2ed54dfd01a599bd8323ca980f9df368d681b87a67831f1  arms.txt
+  - 521dee9235bc581aa7a5e71a17fa3d5d9e57fed0dc3900668a3c188365a08f32  arms.txt
   - eff3f3777e45937b8c605058e6cad927a5ad4e05f3d405bba8a3f5d654c25af4  extension.txt
   - f9ac8566e250d70139f127c5d2f47dcb79e49556ae4bbbdc30e46e4acd56670d  nonfit.txt
-  - ebf35fdeb85c8e31a99387a2e767b08c84c7e053832f5e37457c106470159c9c  plan.txt
+  - 64491a4fb8cef67523326090201a7c223b4466290fd32000678987f72b622053  plan.txt
   - 3511780aa0228d1c8e4d9881d71a0860842e88f8f18a075714dbb2f8ed725d34  power.txt
   - b4e9dea8d3cef6e93e5baeaea8af8fe43aeb5e96d63137569ea0a738d7d38aeb  primary.txt
   - 9d31f8c9f56895d7bced4223678b36c679e4817fdb15a446e00f8a4709f86688  reserve.txt
   - 934fb7834362e0e23a72978f196be03138cf6efceb8a5a3537c4fd11ab2138e4  reuse.txt
   - 20986ee0076d22d04771226a9348edccaca1846a3bd5e7e056253946e85ce805  route-table.tsv
-  - 728cf71f9760952a83c0d76e10a7fcbf406e93796f6ed762dfda6352d5b4e661  sessions.txt
-  - c8b37148b3477f5434f6ba8923a58406921f228bb08706ac54228c9edd1357ba  sets.py
+  - fe92566e8d66401c40057e2b7add58e1c12243039e904d99f18144cfefe40d7f  sessions.txt
+  - 30f585d774400f20315097a186a0b4fcf8859f4c556b81a86deaf8eb1014a9d4  sets.py
   - 0bd70c9ee2e8f1cd91eea32ec82312e98ae3c79a905b5369f01aba473f27095f  sets.txt
   - 7645bd3018c8af16bb797b8c4a44aa6b7b30af9288b6ed04bd228079d3ef946f  supply.txt
 ---
@@ -42,7 +42,7 @@ The go to run this eval came to this lane through the Captain, with the decision
 
 Claude Code shows the model a list of installed skills, each with a one-line description, and the model decides on its own whether to load one. In B1, B1's prove-it skill (write a failing test, then fix the bug) sat in that list with its short description, "Use when fixing a bug: prove the bug with a failing test before the fix. (gstack)", and Opus 5.5 loaded it in 0 of 60 bug fixes. gstack's answer so far is its prompt-routing hook, which adds a line to the user's request naming the skill to run. In B1d the hook, on by default in gstack main, got prove-it loaded in 39 of 60 held-out bug fixes, and its steps followed in 15.
 
-B1e asks whether a better description can do the hook's job. It installs gstack v1.102.1.0 the way a user would, with B1's prove-it beside it, and runs Opus 5.5 unattended on bug-fix tasks with B1's plain prompt and nothing typed. Four gstack arms differ only in how prove-it can be found: the hook on (gstack's default), or the hook off with prove-it's own description, a long rewrite (546 characters) or a REQUIRED rewrite (289 characters). A fifth arm has no gstack. The rewrites come from our quick look of 2026-11-19 and are frozen byte for byte.
+B1f asks whether a better description can do the hook's job. It installs gstack v1.102.1.0 the way a user would, with B1's prove-it beside it, and runs Opus 5.5 unattended on bug-fix tasks with B1's plain prompt and nothing typed. Four gstack arms differ only in how prove-it can be found: the hook on (gstack's default), or the hook off with prove-it's own description, a long rewrite (546 characters) or a REQUIRED rewrite (289 characters). A fifth arm has no gstack. The rewrites come from our quick look of 2026-11-19 and are frozen byte for byte.
 
 The measure is steps followed: whether the session wrote a failing test before the fix, by B1's frozen scorer. A rewrite that matches the hook on that measure, and doesn't load prove-it on feature requests it doesn't fit, is advice to rewrite gstack's descriptions in that style.
 
@@ -64,11 +64,11 @@ For each rewrite (long and required), in this order:
 
 The advice names every rewrite that reads "rewrite". If the REQUIRED rewrite is one of them, whether gstack ships a REQUIRED wording is a product call for gstack's owner, sent with the result. Every reading carries this line: the evidence is Opus 5.5 in Claude Code only, so any rewrite gstack ships needs a quick look with GPT-6.2 Sol in Codex first, because a REQUIRED wording could over-load there too.
 
-own (prove-it's own description with the hook off) and none are descriptive: they show what turning the hook off costs and where the floor is, on 81 tasks. The next question, whatever the result, is the hook and the long rewrite together. b1e.ts verdictOf and mainReport hold these rules as code, and the tests drive every row.
+own (prove-it's own description with the hook off) and none are descriptive: they show what turning the hook off costs and where the floor is, on 81 tasks. The next question, whatever the result, is the hook and the long rewrite together. b1f.ts verdictOf and mainReport hold these rules as code, and the tests drive every row.
 
 ## 2. Rig
 
-B1d's rig, unchanged (B1d's preregistration, section 2): Lane B's Claude Code agent on Harbor, Claude Code 2.1.312, the claude-agent-sdk at 0.2.174 with the user and project setting sources, Claude Code's own system prompt, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1, the snapshot strip, the harness mechanics task setup, the 100-turn limit, the closing line, Harbor's egress sidecar at a 900 s read timeout, and L1's host and part machinery with six sessions at a time. `b1e reuse` shows every harness path the same as at B1's run (reuse.txt), and the launch guard reruns it.
+B1d's rig, unchanged (B1d's preregistration, section 2): Lane B's Claude Code agent on Harbor, Claude Code 2.1.312, the claude-agent-sdk at 0.2.174 with the user and project setting sources, Claude Code's own system prompt, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1, the snapshot strip, the harness mechanics task setup, the 100-turn limit, the closing line, Harbor's egress sidecar at a 900 s read timeout, and L1's host and part machinery with six sessions at a time. `b1f reuse` shows every harness path the same as at B1's run (reuse.txt), and the launch guard reruns it.
 
 CLAUDE_CODE_DISABLE_1M_CONTEXT is unset in every arm, as in B1b to B1d. Each arm spec is the arm's tar on B1's tail, `<arm>:tar=<arm>:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status`; none is B1's spec unchanged. The prompt is B1's plain prompt. It never names prove-it.
 
@@ -94,25 +94,25 @@ All tasks come from SWE-rebench as R3 amendment 4 pinned it (quick/laneb/tasks/s
 
 ## 4. The arms
 
-**hook.** gstack v1.102.1.0 (29bff55dd8a14b32ff282d5a37097e3a53e3250a, the newest stable tag when this plan froze), fetched by sha and installed in a build container with `./setup --host claude --no-browser --loadout full` as root. B1's gstack-shaped prove-it (lanes/delivery-route/arms/gstack-shaped-SKILL.md, byte for byte) goes in at /root/.claude/skills/prove-it/SKILL.md, and gstack's first-run prompts are marked seen. Nothing in gstack's own files changes; telemetry is off by gstack's default. lanes/delivery-route/b1e-build.sh does all of it (arms.txt). What the session starts with:
+**hook.** gstack v1.102.1.0 (29bff55dd8a14b32ff282d5a37097e3a53e3250a, the newest stable tag when this plan froze), fetched by sha and installed in a build container with `./setup --host claude --no-browser --loadout full` as root. B1's gstack-shaped prove-it (lanes/delivery-route/arms/gstack-shaped-SKILL.md, byte for byte) goes in at /root/.claude/skills/prove-it/SKILL.md, and gstack's first-run prompts are marked seen. Nothing in gstack's own files changes; telemetry is off by gstack's default. lanes/delivery-route/b1f-build.sh does all of it (arms.txt). What the session starts with:
 
 - 65 skill folders, gstack's 64 and prove-it. Two of gstack's (land-and-deploy, modernize) are user-only, so Claude Code lists 63 skills plus its own plugin-authoring, each with its whole description: 9,746 characters, 64 entries, none cut to a bare name, prove-it's entry in full.
 - gstack's four hooks, as at B1d's pin: prompt routing (UserPromptSubmit), the destructive-command check (PreToolUse on Bash and PowerShell), and two Stop hooks. gstack-config reads skill_routing on and skill_contracts on.
-- The tar is 1,372,733,440 bytes, sha256 489b588ed4586c2931414ea536d5c73e453dfb0eadc5c91e7b20785407d62087, 14,631 files. gstack's setup is not byte-reproducible, so this tar is kept and pinned by its sha256, and `b1e arms check` checks the tree's route files against their git blobs at the pin, the hook registrations and the switches.
+- The tar is 1,372,733,440 bytes, sha256 489b588ed4586c2931414ea536d5c73e453dfb0eadc5c91e7b20785407d62087, 14,631 files. gstack's setup is not byte-reproducible, so this tar is kept and pinned by its sha256, and `b1f arms check` checks the tree's route files against their git blobs at the pin, the hook registrations and the switches.
 
 **own.** The hook's tree after one command, `gstack-config set skill_routing off`, which adds the line "skill_routing: off" to .gstack/config.yaml; nothing else differs (arms.txt). The hook stays registered and prints nothing: from the own tree it printed a line on 0 of the 190 prompts in the route table. prove-it keeps its own description (81 characters, quoted above). Tar sha256 5c6a1aea4b34d7c3a6683515a909b021850fbc2e9a33595a7e93ea688e741f7a.
 
-**long.** own with prove-it's SKILL.md replaced by the same file with only its description line rewritten (lanes/delivery-route/arms/b1e/prove-it-long.md). Listing 10,211 characters. Tar sha256 d9e036945e7483c5fc01dbd4c5d921bf4a8e59acc8edb127e942914cc36032fa. The description, 546 characters:
+**long.** own with prove-it's SKILL.md replaced by the same file with only its description line rewritten (lanes/delivery-route/arms/b1f/prove-it-long.md). Listing 10,211 characters. Tar sha256 d9e036945e7483c5fc01dbd4c5d921bf4a8e59acc8edb127e942914cc36032fa. The description, 546 characters:
 
 > Proves a bug with a failing test before the fix. Use when fixing any bug, error, crash, regression or wrong result, and when a task or issue reports that code behaves incorrectly. Use before you change any source file in response to a bug report or issue. Use when you need to show that a fix works: write a test that reproduces the bug, confirm it fails, make the smallest fix, confirm the test passes, then run the suite. Use it even when the fix looks obvious, because the failing test is what proves the bug was real and is now gone. (gstack)
 
-**required.** The same with the REQUIRED rewrite (lanes/delivery-route/arms/b1e/prove-it-required.md). Listing 9,954 characters. Tar sha256 d51a28597ff204dfe3af2f715903cf64cdf637a7c0fb89315ea84f9fa6f548e4. The description, 289 characters:
+**required.** The same with the REQUIRED rewrite (lanes/delivery-route/arms/b1f/prove-it-required.md). Listing 9,954 characters. Tar sha256 d51a28597ff204dfe3af2f715903cf64cdf637a7c0fb89315ea84f9fa6f548e4. The description, 289 characters:
 
 > REQUIRED before any bug fix in this repository. When a task, issue or bug report asks you to fix or change behavior, invoke this skill first, before reading or editing code: it holds the test-first steps this project requires (a failing test, then the fix, then the passing test). (gstack)
 
 **none.** B1's no-gstack arm unchanged: no skill and no gstack file, the same model, rig and plain prompt (tar sha256 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e, rebuilt byte for byte). Its listing holds Claude Code's plugin-authoring alone, 332 characters.
 
-**B1d's build.** B1d's gstack-main tar (gstack 5afef04, 1.101.0.0) can't be rebuilt byte for byte, and this plan pins a later release, so B1d and B1e compare as different builds, never as paired rows.
+**B1d's build.** B1d's gstack-main tar (gstack 5afef04, 1.101.0.0) can't be rebuilt byte for byte, and this plan pins a later release, so B1d and B1f compare as different builds, never as paired rows.
 
 ## 5. What the hook does at the pin
 
@@ -125,7 +125,7 @@ route-table.tsv holds, for every prompt as the rig sends it, what gstack's match
 | non-fit (27) | 13 | 14 (nothing on 13, /verify on 1) |
 | pilot task | 1 | 0 |
 
-The hook never names prove-it second at this pin: gstack's change after B1d (#4539) names an installed bug-fix skill alone on a bug report. That change was tuned on B1's 60 run prompts (gstack's fixture skill-route-b1-in-sample.json at the pin). No task id or title from any list here appears in gstack's tree at the pin. gstack's maintainers have the hook's 13 non-fit names as a matcher finding, without a verdict, and they don't change the matcher for these tasks before B1e reports; the arm is a pinned tar either way.
+The hook never names prove-it second at this pin: gstack's change after B1d (#4539) names an installed bug-fix skill alone on a bug report. That change was tuned on B1's 60 run prompts (gstack's fixture skill-route-b1-in-sample.json at the pin). No task id or title from any list here appears in gstack's tree at the pin. gstack's maintainers have the hook's 13 non-fit names as a matcher finding, without a verdict, and they don't change the matcher for these tasks before B1f reports; the arm is a pinned tar either way.
 
 ## 6. What each session records
 
@@ -184,7 +184,7 @@ From data in hand. In B1d, gstack main's hook got steps followed in 17 of 60 in-
 
 ## 11. Pilots
 
-The pilot (b1e-pilot) runs before any counted session: the pilot task on the four gstack arms and the ten supply tasks on their arms, 14 sessions in one part. Each arm's budget is its share of b1e-main's $560 cap by expected spend; each pilot cap is the $50 pilot cap split by the arm's pilot sessions.
+The pilot (b1f-pilot) runs before any counted session: the pilot task on the four gstack arms and the ten supply tasks on their arms, 14 sessions in one part. Each arm's budget is its share of b1f-main's $560 cap by expected spend; each pilot cap is the $50 pilot cap split by the arm's pilot sessions.
 
 | Arm | Budget | Pilot cap | Part ran | Judge check | Supply |
 |---|---|---|---|---|---|
@@ -192,9 +192,9 @@ The pilot (b1e-pilot) runs before any counted session: the pilot task on the fou
 | own | $83.16 | $7.14 | no routed event and no line on its two sessions; the arm event records the own tar | none | the pilot task graded; one never-run extension task counted, or the reserve rule |
 | long | $145.52 | $14.28 | no routed event and no line on its four sessions; the arm event records the long tar | none | the pilot task graded; two never-run extension tasks and one never-run non-fit task counted, or the reserve rule |
 | required | $145.52 | $14.28 | no routed event and no line on its four sessions; the arm event records the required tar | none | the pilot task graded; two never-run extension tasks and one never-run non-fit task counted, or the reserve rule |
-| none | $40.28 | $0 | B1d's pilot passed none on this tar and rig, and b1e reuse shows the harness unchanged since B1's run | none | its 81 tasks all ran on this rig in the harness mechanics eval, 56 of them in B1d's held-out none arm |
+| none | $40.28 | $0 | B1d's pilot passed none on this tar and rig, and b1f reuse shows the harness unchanged since B1's run | none | its 81 tasks all ran on this rig in the harness mechanics eval, 56 of them in B1d's held-out none arm |
 
-`b1e report --item b1e-pilot` prints a PASS or FAIL line per arm, a line per supply failure and a loads line. Every arm also needs no audit hit in any of its sessions. Across the arms, at least one session must load prove-it, so the pilot shows the load detector still reads a load under gstack's change at this pin that runs a skill's start step as it loads (#4509). A supply failure is a task's, not an arm's: the arm still passes and the reserve rule applies (section 3). No arm has a model judge.
+`b1f report --item b1f-pilot` prints a PASS or FAIL line per arm, a line per supply failure and a loads line. Every arm also needs no audit hit in any of its sessions. Across the arms, at least one session must load prove-it, so the pilot shows the load detector still reads a load under gstack's change at this pin that runs a skill's start step as it loads (#4509). A supply failure is a task's, not an arm's: the arm still passes and the reserve rule applies (section 3). No arm has a model judge.
 
 An arm that fails its pilot is fixed or left out of the counted run, and a left-out arm is reported as left out. It is never rerun quietly into a counted run: every failure goes to the Captain first, and a fix comes back as a dated change to this plan with its own pilot. Pilot sessions never enter a reading, and the counted run runs every task fresh, the supply tasks included.
 
@@ -212,26 +212,26 @@ Planned paid spend: $399
 
 Look: none
 
-b1e-main, the counted run, plans $349.11 in model spend and $49.92 in VMs (plan.txt), under $500, so it takes no interim look and is read once, at the end.
+b1f-main, the counted run, plans $349.11 in model spend and $49.92 in VMs (plan.txt), under $500, so it takes no interim look and is read once, at the end.
 
 ## 14. Checks before the main run
 
 Keyless, before this preregistration merged:
 
-- `b1e arms check`: the four gstack tars match their manifests, each tree holds its prove-it file, gstack's route files at their blobs, the four hook registrations, the seeded user and its switches; own differs from the hook only at .gstack/config.yaml, and long and required differ from own only at prove-it's SKILL.md; none rebuilds byte for byte (arms.txt).
-- `b1e routes`: the route table on 190 prompts, lib and hook agreeing on all, and no line from the own tree (route-table.tsv).
-- Six scripted sessions in the real Claude Code 2.1.312 image against a stub model, through the rig's own agent code with the strip on (`b1e sessions run`, fixtures under tests/delivery-route/fixtures/b1e-sessions, sessions.txt). The hook arm's "Fix this bug:" prompt gets one hook line naming prove-it alone, and a Skill load of prove-it reads as a load at the first call; prove-it's preamble runs against gstack's real scripts; own and long get no line and a Skill load reads as a load; required's first request carries its description in full; none lists plugin-authoring alone. Each arm's listing size is in section 4, and an in-container probe reads each arm's skill_routing and telemetry off.
-- `b1e reuse`, `b1e plan` and `b1e power`: reuse.txt, plan.txt and power.txt.
+- `b1f arms check`: the four gstack tars match their manifests, each tree holds its prove-it file, gstack's route files at their blobs, the four hook registrations, the seeded user and its switches; own differs from the hook only at .gstack/config.yaml, and long and required differ from own only at prove-it's SKILL.md; none rebuilds byte for byte (arms.txt).
+- `b1f routes`: the route table on 190 prompts, lib and hook agreeing on all, and no line from the own tree (route-table.tsv).
+- Six scripted sessions in the real Claude Code 2.1.312 image against a stub model, through the rig's own agent code with the strip on (`b1f sessions run`, fixtures under tests/delivery-route/fixtures/b1f-sessions, sessions.txt). The hook arm's "Fix this bug:" prompt gets one hook line naming prove-it alone, and a Skill load of prove-it reads as a load at the first call; prove-it's preamble runs against gstack's real scripts; own and long get no line and a Skill load reads as a load; required's first request carries its description in full; none lists plugin-authoring alone. Each arm's listing size is in section 4, and an in-container probe reads each arm's skill_routing and telemetry off.
+- `b1f reuse`, `b1f plan` and `b1f power`: reuse.txt, plan.txt and power.txt.
 - `python3 sets.py`: every list and digest (sets.txt).
-- Tests (tests/delivery-route/b1e.test.ts): the lists, the rewrites, the route table's counts, every decision row with INCOMPLETE and the counting rule, the pairing on 162 and 81 tasks, the plans, caps and launch guard, the pilot's pass rules with supply failures, the power numbers, and the six captures, each also changed so a check must fail.
+- Tests (tests/delivery-route/b1f.test.ts): the lists, the rewrites, the route table's counts, every decision row with INCOMPLETE and the counting rule, the pairing on 162 and 81 tasks, the plans, caps and launch guard, the pilot's pass rules with supply failures, the power numbers, and the six captures, each also changed so a check must fail.
 
 ## 15. Order and machines
 
-b1e-pilot first. Then any dated change the reserve rule calls for. Then b1e-main: four primary parts of up to 21 tasks with all five arms of each task, four extension parts of up to 21 tasks with the hook and the two rewrites, and the non-fit part with the four gstack arms, each in L1's seeded order with B1's seed. One awake host (standard-2) and one part VM (standard-16) at a time, under the shared project's free-capacity rule. Every VM is destroyed when its work ends. The four gstack tars go to the run host before the pilot and are checked against their sha256s; the hook tar can't be rebuilt byte for byte, so losing it means a rebuild under a new sha256 and a dated change before any counted session.
+b1f-pilot first. Then any dated change the reserve rule calls for. Then b1f-main: four primary parts of up to 21 tasks with all five arms of each task, four extension parts of up to 21 tasks with the hook and the two rewrites, and the non-fit part with the four gstack arms, each in L1's seeded order with B1's seed. One awake host (standard-2) and one part VM (standard-16) at a time, under the shared project's free-capacity rule. Every VM is destroyed when its work ends. The four gstack tars go to the run host before the pilot and are checked against their sha256s; the hook tar can't be rebuilt byte for byte, so losing it means a rebuild under a new sha256 and a dated change before any counted session.
 
 ## 16. History
 
-L1 measured a described-only gstack skill before: on Opus, the off-u arm opened /investigate in 0 of 80 sessions (L1's results, S6). B1's described-only prove-it loaded in 0 of 60. B1e differs in three ways: a different skill and description; two descriptions written to be found, which our quick look of 2026-11-19 suggested can move first-action loads (a quick look publishes no number); and steps followed as the measure, not loads alone.
+L1 measured a described-only gstack skill before: on Opus, the off-u arm opened /investigate in 0 of 80 sessions (L1's results, S6). B1's described-only prove-it loaded in 0 of 60. B1f differs in three ways: a different skill and description; two descriptions written to be found, which our quick look of 2026-11-19 suggested can move first-action loads (a quick look publishes no number); and steps followed as the measure, not loads alone.
 
 ## 17. Limits
 
@@ -244,7 +244,7 @@ L1 measured a described-only gstack skill before: on Opus, the off-u arm opened 
 - 61 extension tasks and 11 non-fit tasks never ran on this rig. The pilot samples ten of them; the others can still gap in the counted run, and a non-fit set with more than 2 gaps reads INCOMPLETE.
 - With routing off, own, long and required keep gstack's routing hook registered; it runs and prints nothing.
 - The REQUIRED wording tells the model the project requires the skill. Whether gstack should write a description that states a project rule is a product question, not something this run settles.
-- B1d and B1e use different gstack builds, so no row pairs across them.
+- B1d and B1f use different gstack builds, so no row pairs across them.
 - The rig allows every tool the model asks for, and gstack's destructive-command check and Stop hooks run as installed (B1d's limits).
 - Paid sessions keep no request bodies, so each arm's listing in the counted run rests on the keyless sessions and the unchanged rig.
 - Steps followed carries B1's scorer as merged, with its named holes (B1b's results, Limits).
@@ -253,7 +253,7 @@ L1 measured a described-only gstack skill before: on Opus, the off-u arm opened 
 
 - **The pin.** gstack v1.102.1.0 (29bff55d) for all four gstack arms, built from the tag with telemetry off. B1d's 5afef04 tar can't be rebuilt byte for byte (section 4).
 - **The bug words.** "don't" and "do not" were added; one task changed class (section 3).
-- **The extension.** 81 bug-fix tasks on the hook and the two rewrites, so the decision comparisons read on 162 tasks. The approved count was the 71 candidates outside B1's repositories plus 10 drawn inside them. Requiring R3 amendment 4's oracle preflight removed 4 of the 71 (astronomer__astronomer-cosmos-2332, genericmappingtools__pygmt-4342, mlte-team__mlte-809, sigma67__ytmusicapi-909_interface), so the draw inside B1's repositories took 14. b1e-main's cap went from $380 to $560 and the all-in stop from $600 to $700.
+- **The extension.** 81 bug-fix tasks on the hook and the two rewrites, so the decision comparisons read on 162 tasks. The approved count was the 71 candidates outside B1's repositories plus 10 drawn inside them. Requiring R3 amendment 4's oracle preflight removed 4 of the 71 (astronomer__astronomer-cosmos-2332, genericmappingtools__pygmt-4342, mlte-team__mlte-809, sigma67__ytmusicapi-909_interface), so the draw inside B1's repositories took 14. b1f-main's cap went from $380 to $560 and the all-in stop from $600 to $700.
 - **The pilot.** The pilot task on the four gstack arms, plus the ten-task supply sample with its reserve rule (section 3). none reuses B1d's pilot. The supply sessions bring six sessions open at once and the pilot's formula cap from $30 to $50.
 
 ## Credits
@@ -267,10 +267,10 @@ Money runs on the Lane B ledger, one item per run, each opened with its approval
 
 | Item | Sessions | Expected model spend | Open-session reserve | VM share | Formula cap | Recorded cap |
 |---|---|---|---|---|---|---|
-| b1e-pilot | 14 | 6.72 | 30.00 | 7.20 | 50 | 50 |
-| b1e-main | 756 | 349.11 | 30.00 | 49.92 | 560 | 560 |
+| b1f-pilot | 14 | 6.72 | 30.00 | 7.20 | 50 | 50 |
+| b1f-main | 756 | 349.11 | 30.00 | 49.92 | 560 | 560 |
 
-Dollars. Expected spend is sessions at each arm's planning rate: the gstack arms at 0.48 (B1d's rate for gstack-main) and none at 0.31 (B1's measured none-arm mean). Each formula cap is ceil10(1.35 x expected + the open-session reserve + VM share): the reserve is the $5 allowance times the sessions that can be open at once (six), and the VM share is the host's reserve for its TTL at 0.08 an hour plus each part VM's 4-hour blocks at 0.60 an hour (b1e.ts b1eCap; plan.txt). The recorded caps sum to 610. Before each launch the guard refuses when the item's projection passes its cap, when the reuse check fails at the run commit or the checkout's head, when the checkout holds uncommitted harness changes, when b1e-main starts before b1e-pilot is marked done, or when every item's projection plus this lane's own counter passes 700 all-in; a refusal goes to the Captain. A relaunch is never refused on money: when spend so far already passes its item's cap or the $700 all-in stop, the guard prints `B1E_LAUNCH OVERSHOOT` and the reasons for the Captain, and the relaunch runs its salvage. The ledger still refuses any session past its item's cap, so a relaunch can pass only the all-in stop. A fresh launch past either still refuses.
+Dollars. Expected spend is sessions at each arm's planning rate: the gstack arms at 0.48 (B1d's rate for gstack-main) and none at 0.31 (B1's measured none-arm mean). Each formula cap is ceil10(1.35 x expected + the open-session reserve + VM share): the reserve is the $5 allowance times the sessions that can be open at once (six), and the VM share is the host's reserve for its TTL at 0.08 an hour plus each part VM's 4-hour blocks at 0.60 an hour (b1f.ts b1fCap; plan.txt). The recorded caps sum to 610. Before each launch the guard refuses when the item's projection passes its cap, when the reuse check fails at the run commit or the checkout's head, when the checkout holds uncommitted harness changes, when b1f-main starts before b1f-pilot is marked done, or when every item's projection plus this lane's own counter passes 700 all-in; a refusal goes to the Captain. A relaunch is never refused on money: when spend so far already passes its item's cap or the $700 all-in stop, the guard prints `B1F_LAUNCH OVERSHOOT` and the reasons for the Captain, and the relaunch runs its salvage. The ledger still refuses any session past its item's cap, so a relaunch can pass only the all-in stop. A fresh launch past either still refuses.
 
 </details>
 

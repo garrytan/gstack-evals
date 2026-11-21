@@ -1,9 +1,9 @@
 {
-  "arm": "required",
+  "arm": "long",
   "claude_code": "2.1.312",
   "typed": false,
-  "spec": "required:tar=required:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status",
-  "tar_gz_sha256": "aa355fd7cdc1cc83165ef2a50fb30ab75f2fdaa8fffddcdf5029237391880864",
+  "spec": "long:tar=long:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status",
+  "tar_gz_sha256": "8aa089d0053d64df50784a272146c7edb1e4fd6bcbbe747d2750905fed14a266",
   "gstack": {
     "repo": "https://github.com/garrytan/gstack.git",
     "tag": "v1.102.1.0",
@@ -29,9 +29,9 @@
   },
   "carrier": {
     "path": ".claude/skills/prove-it/SKILL.md",
-    "source": "b1e/prove-it-required.md",
-    "sha256": "8fa9e4484e775507c131598924aaaa2001b92903672f2db15fb82e2a46ff7cfe",
-    "description_chars": 289
+    "source": "b1f/prove-it-long.md",
+    "sha256": "b6862147bc42dd9de1b76adb41a7ec8f300b69b00307fa68257d3a2ecd415e3f",
+    "description_chars": 546
   },
   "route": {
     "files": [
@@ -77,24 +77,24 @@
       }
     ]
   },
-  "derived": "the own tree with .claude/skills/prove-it/SKILL.md replaced by b1e/prove-it-required.md",
+  "derived": "the own tree with .claude/skills/prove-it/SKILL.md replaced by b1f/prove-it-long.md",
   "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -cf <arm>.tar .claude .gstack (tar (GNU tar) 1.35, in quick/laneb/arms/Dockerfile's builder image)",
   "tar": {
-    "file": "required.tar",
+    "file": "long.tar",
     "bytes": 1372733440,
-    "sha256": "d51a28597ff204dfe3af2f715903cf64cdf637a7c0fb89315ea84f9fa6f548e4"
+    "sha256": "d9e036945e7483c5fc01dbd4c5d921bf4a8e59acc8edb127e942914cc36032fa"
   },
   "tree": {
     "files": 14631,
     "symlinks": 9,
     "dirs": 1729,
-    "bytes": 1358706950,
-    "digest": "cd61bca2ba51c7644dda5fddcc38f252e800190115b47610161a1dde2bd89bd4"
+    "bytes": 1358707207,
+    "digest": "69be3e3b755707e12d6481eca16831eda8ad3858e1d381bce82b90374693d8f8"
   },
   "skills": {
     "count": 65,
-    "tree_digest": "2d99aafcf86c682bfaedf3203e6438e4598d98cf2b387e59368eb4bb352aeb63",
-    "skill_md_digest": "5bb438ecd790ddbb6fcf6217dd1857865f1b8cd91e2eaa97a128eadecab9aed6",
+    "tree_digest": "48c2939c8ce4d05fb2ca99b059089e330753e221caccf8bd33895b8102644b09",
+    "skill_md_digest": "a2b3f4cc71a3049987438a4900fdbbf589a898b97bfb072d459be4d41860509b",
     "names": [
       "_gstack-command",
       "autoplan",
@@ -196,5 +196,5 @@
       }
     ]
   },
-  "inventory_sha256": "105769785b62f6b59216cabc7deaadd42f85fdc0a27f71e0663e26fa27f94e02"
+  "inventory_sha256": "b310a1d6e1aeabde1f9cd0fce54cfe75127abd43d6cfc77c92b8446e0fc8023c"
 }
