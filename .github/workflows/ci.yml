@@ -36,7 +36,9 @@ permissions:
 jobs:
   tests:
     name: tests (${{ matrix.shard }}/6)
-    runs-on: ubuntu-latest
+    # Ubicloud runner, the same size and Ubuntu 26.04 image ubuntu-latest gave (sealed needs only 2 vCPU). GitHub's hosted runners are one
+    # pool for every repository on the account, and jobs waited up to 2.6 to 3.9 minutes for it at p95 in November 2026 (GEVA-566).
+    runs-on: ubicloud-standard-4-ubuntu-2604
     # 45, not 25: on 2026-11-06 (08:55 to 19:10 UTC) green runs took 16.8 to 24.8 minutes, main's push at 2ef5833 took 24.2, and three attempts were cancelled at the 25-minute limit.
     timeout-minutes: 45
     strategy:
@@ -148,7 +150,8 @@ jobs:
   checks:
     needs: tests
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    # Ubicloud, 2 vCPU: this job runs typecheck, the report merge and the small checks, not the tests.
+    runs-on: ubicloud-standard-2-ubuntu-2604
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
