@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostTtlHours, itemCheck, L1, plannedCells, relaunchRects, type PartPlan } from "../../quick/laneb/l1/l1.ts";
 import { appendRow, fromMicros, Ledger, readRows, toMicros, type Row } from "../../quick/laneb/runner/ledger.ts";
-import { ARM_DEFS, B2, CAP_ROUND_USD, CAPS_USD, isItem, ITEM_NAMES, ITEM_MODEL, modelKey, MODELS, RATES_USD, VM_HOURS_PER_SESSION, type Item } from "./pins.ts";
+import { ARM_DEFS, B2, CAP_ROUND_USD, CAPS_USD, PREREG_CAPS_USD, isItem, ITEM_NAMES, ITEM_MODEL, modelKey, MODELS, RATES_USD, VM_HOURS_PER_SESSION, type Item } from "./pins.ts";
 import { ITEMS, itemPlan, partNumber } from "./plans.ts";
 import { buildB2Table, pulledInputs, type B2Row } from "./table.ts";
 
@@ -160,10 +160,11 @@ export function planLines(run: string[], pilot: readonly string[]) {
   for (const i of ITEM_NAMES) {
     const p = itemPlan(i, run, pilot), c = capOf(i, p.parts);
     if (i !== "b2-pilot") counted += p.sessions;
-    if (c.cap !== CAPS_USD[i]) bad.push(i + "'s cap rule gives $" + c.cap + ", not its recorded $" + CAPS_USD[i]);
-    lines.push(i + ": " + p.parts.map((x) => x.name + " (" + [...plannedCells(x).values()].reduce((a, b) => a + b, 0) + ")").join(", ") + "; " + p.sessions + " sessions; expected $" + c.expected.toFixed(2) + ", parallel $" + c.parallel.toFixed(2) + ", VM $" + c.vm.toFixed(2) + ", cap $" + c.cap + " (recorded $" + CAPS_USD[i] + ")");
+    if (c.cap !== PREREG_CAPS_USD[i]) bad.push(i + "'s cap rule gives $" + c.cap + ", not its preregistered $" + PREREG_CAPS_USD[i]);
+    lines.push(i + ": " + p.parts.map((x) => x.name + " (" + [...plannedCells(x).values()].reduce((a, b) => a + b, 0) + ")").join(", ") + "; " + p.sessions + " sessions; expected $" + c.expected.toFixed(2) + ", parallel $" + c.parallel.toFixed(2) + ", VM $" + c.vm.toFixed(2) + ", cap rule $" + c.cap + " (recorded $" + CAPS_USD[i] + ", pre-run change 1)");
   }
   const caps = ITEM_NAMES.reduce((a, i) => a + CAPS_USD[i], 0);
+  if (caps !== ITEM_NAMES.reduce((a, i) => a + PREREG_CAPS_USD[i], 0)) bad.push("the recorded caps sum to $" + caps + ", not the preregistered sum");
   lines.push("counted sessions " + counted + " (" + B2.tasks + " tasks x 4 arms x 3 models), caps sum $" + caps + ", all-in stop $" + B2.stopUsd);
   if (counted !== B2.tasks * 12) bad.push("the plan counts " + counted + " sessions, not " + B2.tasks * 12);
   return { lines, bad };

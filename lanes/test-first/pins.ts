@@ -129,8 +129,13 @@ export const BOUNDS = { look: 2.917, end: 2.068, regression: 2.576, z95: 1.95996
 export const GATE = { pooledPoints: 0.2, opusRate: 0.5 } as const;
 
 // Agent notes: the items, their caps, expected model spend, sessions, and the planning rates per session (USD), from B1's
-// measured means and B1d's gstack arm.
-export const CAPS_USD = { "b2-pilot": 65, "b2-opus": 465, "b2-sol": 605, "b2-p1": 230 } as const;
+// measured means and B1d's gstack arm. The caps are pre-run change 1's (wiki/plans/2026-11-21-geva-569-b2-test-first-change-1.md):
+// $250 moved from b2-sol to b2-opus after the pilot's cost per session.
+export const CAPS_USD = { "b2-pilot": 65, "b2-opus": 715, "b2-sol": 355, "b2-p1": 230 } as const;
+export const CHANGE_1 = "wiki/plans/2026-11-21-geva-569-b2-test-first-change-1.md";
+// The cap rule's output on the drawn plan, as the preregistration recorded it before change 1. Change 1 moves cap between
+// items and keeps their sum.
+export const PREREG_CAPS_USD: Record<keyof typeof CAPS_USD, number> = { "b2-pilot": 65, "b2-opus": 465, "b2-sol": 605, "b2-p1": 230 };
 export type Item = keyof typeof CAPS_USD;
 export const ITEM_NAMES = Object.keys(CAPS_USD) as Item[];
 export const isItem = (x: string): x is Item => Object.hasOwn(CAPS_USD, x);

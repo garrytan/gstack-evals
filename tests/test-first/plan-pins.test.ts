@@ -1,11 +1,11 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// The lane's pinned constants against the B2 plan as merged on main (3e02b099): the bounds from power.txt, the interim half,
-// the item caps, sessions and expected spend, the all-in stop, the pilot's arm caps and tasks, the procedure gate and the
+// The lane's pinned constants against the B2 plan as merged on main (3e02b099) and its pre-run change 1: the bounds from
+// power.txt, the interim half, the item caps (preregistered, and as change 1 records them), sessions and expected spend, the all-in stop, the pilot's arm caps and tasks, the procedure gate and the
 // INCOMPLETE share, each read from the plan's own files. Keyless.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { B2, BOUNDS, BUNDLE, CAPS_USD, DRAW, drawnTasks, EXPECTED_USD, GATE, loadBundle, PILOT_ARM_CAPS_USD, PILOT_TASKS, REPO, SESSIONS } from "../../lanes/test-first/pins.ts";
+import { B2, BOUNDS, BUNDLE, CAPS_USD, CHANGE_1, PREREG_CAPS_USD, DRAW, drawnTasks, EXPECTED_USD, GATE, loadBundle, PILOT_ARM_CAPS_USD, PILOT_TASKS, REPO, SESSIONS } from "../../lanes/test-first/pins.ts";
 
 const dir = join(REPO, BUNDLE);
 const readme = readFileSync(join(dir, "README.md"), "utf8"), power = readFileSync(join(dir, "power.txt"), "utf8"), draw = readFileSync(join(dir, "draw.txt"), "utf8");
@@ -29,12 +29,20 @@ describe("the lane's pins match the merged plan", () => {
     expect(one(/interim half: the first (\d+) tasks in run order, ordered sha256 ([0-9a-f]{64})/, draw).slice(1)).toEqual([String(B2.half), DRAW.halfSha256]);
     expect(drawnTasks().half.length).toBe(B2.half);
   });
-  test("the items: sessions, expected spend and caps from the money table, and the all-in stop", () => {
+  test("the items: sessions, expected spend and preregistered caps from the money table, and the all-in stop", () => {
     for (const item of Object.keys(CAPS_USD) as (keyof typeof CAPS_USD)[]) {
       const m = one(new RegExp("^\\| " + item + " \\| (\\d+) \\| ([\\d.]+) \\| (\\d+) \\|$", "m"), readme);
-      expect([num(m[1]!), num(m[2]!), num(m[3]!)]).toEqual([SESSIONS[item], EXPECTED_USD[item], CAPS_USD[item]]);
+      expect([num(m[1]!), num(m[2]!), num(m[3]!)]).toEqual([SESSIONS[item], EXPECTED_USD[item], PREREG_CAPS_USD[item]]);
     }
     expect(num(one(/plus this thread's own counter passes ([\d,]+) all-in/, readme)[1]!)).toBe(B2.stopUsd);
+  });
+  test("the recorded caps are pre-run change 1's, which keeps the sum and the all-in stop", () => {
+    const change = readFileSync(join(REPO, CHANGE_1), "utf8");
+    for (const item of Object.keys(CAPS_USD) as (keyof typeof CAPS_USD)[]) {
+      const m = one(new RegExp("^\\| " + item + " \\| (\\d+) \\| ([\\d.]+) \\| (\\d+) \\| (\\d+) \\|$", "m"), change);
+      expect([num(m[1]!), num(m[2]!), num(m[3]!), num(m[4]!)]).toEqual([SESSIONS[item], EXPECTED_USD[item], PREREG_CAPS_USD[item], CAPS_USD[item]]);
+    }
+    expect(change).toContain("the paid caps still sum to $1,365, and the all-in stop stays $" + B2.stopUsd.toLocaleString("en-US"));
   });
   test("the pilot: each arm's pilot cap from section 12, and the three tasks from section 3 and draw.txt", () => {
     for (const a of Object.keys(PILOT_ARM_CAPS_USD) as (keyof typeof PILOT_ARM_CAPS_USD)[]) {

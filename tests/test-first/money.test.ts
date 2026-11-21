@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ledger, readRows, toMicros, type Row } from "../../quick/laneb/runner/ledger.ts";
 import { approve, capOf, dryRun, infraRerun, launchGuard, markDone, orderProblems, planLines, type Order } from "../../lanes/test-first/money.ts";
-import { B2, CAPS_USD, drawnTasks, ITEM_NAMES, type Item } from "../../lanes/test-first/pins.ts";
+import { B2, CAPS_USD, drawnTasks, ITEM_NAMES, PREREG_CAPS_USD, type Item } from "../../lanes/test-first/pins.ts";
 import { row } from "./fixtures/rows.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "b2-money-"));
@@ -27,13 +27,15 @@ const guard = (item: Item, o: { rows?: Row[]; counter?: number; order?: Partial<
   launchGuard(item, { [item]: o.rows ?? ledger(item) }, {}, { ...zero, usd: o.counter ?? 0 }, { ...go, ...o.order }, o.part ?? null);
 
 describe("caps", () => {
-  test("the cap rule gives every recorded cap on the drawn plan", () => {
+  test("the cap rule gives every preregistered cap on the drawn plan, and change 1's caps keep their sum", () => {
     const d = drawnTasks(), p = planLines(d.run, d.pilot);
     expect(p.bad).toEqual([]);
-    for (const i of ITEM_NAMES) expect(capOf(i).cap).toBe(CAPS_USD[i]);
+    for (const i of ITEM_NAMES) expect(capOf(i).cap).toBe(PREREG_CAPS_USD[i]);
+    expect(CAPS_USD).toEqual({ "b2-pilot": 65, "b2-opus": 715, "b2-sol": 355, "b2-p1": 230 });
   });
-  test("an approval at any other amount is refused", () => {
-    expect(() => approve(join(dir, "x.jsonl"), "b2-opus", 470, "test")).toThrow("recorded cap is $465");
+  test("an approval at any other amount is refused, the preregistered cap included", () => {
+    expect(() => approve(join(dir, "x.jsonl"), "b2-opus", 470, "test")).toThrow("recorded cap is $715");
+    expect(() => approve(join(dir, "y.jsonl"), "b2-opus", 465, "test")).toThrow("recorded cap is $715");
   });
 });
 
@@ -44,9 +46,9 @@ describe("launch guard", () => {
     expect(g.lines[0]).toStartWith("B2_LAUNCH PASS b2-opus");
   });
   test("refuses when spend so far plus the plan passes the item's cap", () => {
-    const g = guard("b2-opus", { rows: ledger("b2-opus", 400) });
+    const g = guard("b2-opus", { rows: ledger("b2-opus", 650) });
     expect(g.ok).toBe(false);
-    expect(g.why.join()).toContain("passes its cap $465.00");
+    expect(g.why.join()).toContain("passes its cap $715.00");
   });
   test("refuses when this thread's counter takes the all-in total past $1,860", () => {
     expect(guard("b2-opus", { counter: 100 }).ok).toBe(true);
@@ -67,8 +69,14 @@ describe("launch guard", () => {
   test("no Sol part before the image check records every task, and the other items need none", () => {
     expect(guard("b2-sol", { order: { images: null } }).why.join()).toContain("no image check record");
     expect(guard("b2-sol", { order: { images: { ok: false, why: "3 failed" } } }).why.join()).toContain("3 failed");
-    expect(guard("b2-sol").ok).toBe(true);
+    expect(guard("b2-sol").why.join()).not.toContain("image check");
     expect(guard("b2-p1", { order: { images: null } }).ok).toBe(true);
+  });
+  test("at change 1's $355 cap the plan's Sol rates project past it, so the guard refuses Sol's first counted part", () => {
+    const g = guard("b2-sol");
+    expect(g.ok).toBe(false);
+    expect(g.why.join()).toContain("b2-sol's projection $467.58");
+    expect(g.why.join()).toContain("passes its cap $355.00");
   });
   test("no part past the look's half without a look record that says continue", () => {
     expect(guard("b2-opus", { part: "b2-" + B2.lookParts, order: { look: null } }).ok).toBe(true);
