@@ -32,7 +32,9 @@ records differ.
   that starts with none left ends as turn_ceiling, and so does a turn whose exec used the
   last of them with an async question pending, which then gets no reply and counts as unanswered.
 - Ends. A completed exec is a completed turn; a turn.failed event is error_result (an upstream end), with refusal set
-  when its error names one of Codex's policy codes; an exec that ends with no turn result is error (infra).
+  when its error names one of Codex's policy codes. Codex 0.170.0 prints a policy failure's message with no code in it
+  and writes the code to the rollout (the turn's task_complete event, payload.error.codex_error_info), so the rollout's
+  last task_complete is read as well (rollout_policy); an exec that ends with no turn result is error (infra).
 - Reservation-bound refusals. The metering proxy answers 429 only for E_H2H_RESERVATION_BOUND (an upstream give-up is
   a 502), and Codex runs with request_max_retries 0, so its turn.failed then names "last status: 429". Such a turn waits
   the proxy's retry-after (RESERVATION_RETRY_AFTER_S) and resumes the thread with the continuation text, at most
@@ -172,6 +174,23 @@ def model_responses(text: str) -> int:
         except (ValueError, AttributeError):
             continue
     return n
+
+
+def rollout_policy(text: str | None) -> str | None:
+    """The policy code (one of POLICY_CODES) the rollout's last task_complete event names in payload.error.codex_error_info,
+    or None."""
+    last = None
+    for line in (text or "").splitlines():
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        p = d.get("payload") if isinstance(d, dict) and d.get("type") == "event_msg" else None
+        if isinstance(p, dict) and p.get("type") == "task_complete":
+            last = p
+    info = (last or {}).get("error")
+    code = info.get("codex_error_info") if isinstance(info, dict) else None
+    return code if code in POLICY_CODES else None
 
 
 def exec_result(events: list[dict]) -> dict:
@@ -395,7 +414,7 @@ class CodexTurns(Turns):
                     continue
                 if e["failed"]:
                     info["termination"] = "error_result"
-                    info["refusal"] = any(c in e["failed"] for c in POLICY_CODES)
+                    info["refusal"] = any(c in e["failed"] for c in POLICY_CODES) or rollout_policy(self.rollout()) is not None
                     break
                 if not (e["completed"] and e["exit"] == 0 and self.thread):
                     info["termination"] = "error"

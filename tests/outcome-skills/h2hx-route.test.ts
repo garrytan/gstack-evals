@@ -1,7 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// Part P's route, keyless: the real metering proxy against a stub OpenRouter upstream. A particle-1 Messages call leaves
-// the proxy pinned to Particle AI with fallbacks off and data collection denied, and the served-provider check reads each
-// answer's generation record through the proxy's free route and refuses one served by another provider.
+// Part P's route, keyless: the real metering proxy against a stub OpenRouter upstream that replays answers OpenRouter
+// really sent (tests/fixtures/openrouter-generation-ids.json: the msg_ body id, the X-Generation-Id header and the
+// generation record of that id). A particle-1 Messages call leaves the proxy pinned to Particle AI with fallbacks off and
+// data collection denied, and the served-provider check reads each answer's generation record through the proxy's free
+// route by the header's id, refusing one served by another provider or one whose reply had no header.
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,6 +12,7 @@ import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 import { answerIds, checkServedBy, claudeRoute, EXT_CLAUDE_STAGES, extArmOf, extLimits, particleRoute, proxyLookup } from "../../lanes/outcome-skills/h2h/ext/route.ts";
 import { readExtPrereg } from "../../lanes/outcome-skills/h2h/ext/prereg.ts";
+import FIXTURE from "../fixtures/openrouter-generation-ids.json";
 
 const x = readExtPrereg();
 const MODEL = "particle-ai/particle-1";
@@ -34,8 +37,14 @@ afterEach(() => {
   for (const f of cleanup.splice(0)) f();
 });
 
-/** The real proxy with a stub OpenRouter: Messages calls answer with id gen-<n>; generation records name served[id]. */
-function setup(served: Record<string, string | null>) {
+type Recorded = (typeof FIXTURE.answers)[number];
+const PARTICLE = FIXTURE.answers.filter((a) => a.record.provider_name === "Particle AI");
+const OTHER = FIXTURE.answers.find((a) => a.record.provider_name !== "Particle AI")!;
+const NO_HEADER = { ...PARTICLE[1]!, x_generation_id: null as string | null, answer_id: "msg_noheader0123456789ab" };
+
+/** The real proxy with a stub OpenRouter that sends the given recorded answers in turn (body id and X-Generation-Id
+ *  header as recorded) and answers a generation lookup only for a recorded generation id, as OpenRouter did. */
+function setup(answers: Array<Omit<Recorded, "x_generation_id"> & { x_generation_id: string | null }>) {
   const dir = mkdtempSync(join(tmpdir(), "h2hx-route-"));
   const sent: { url: string; body: Record<string, unknown> | null }[] = [];
   let n = 0;
@@ -46,8 +55,12 @@ function setup(served: Record<string, string | null>) {
       const u = String(url);
       sent.push({ url: u, body: init.body ? JSON.parse(String(init.body)) : null });
       const gen = u.match(/\/v1\/generation\?id=([A-Za-z0-9_-]+)$/);
-      if (gen) return served[gen[1]!] === null || served[gen[1]!] === undefined ? new Response("{}", { status: 404 }) : Response.json({ data: { id: gen[1], provider_name: served[gen[1]!] } });
-      return Response.json({ id: "gen-" + ++n, type: "message", role: "assistant", model: MODEL, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 5 } });
+      if (gen) {
+        const hit = FIXTURE.answers.find((a) => a.x_generation_id === gen[1]);
+        return hit ? Response.json({ data: hit.record }) : new Response(PARTICLE[0]!.record_by_answer_id.text, { status: 400 });
+      }
+      const a = answers[n++]!;
+      return Response.json({ id: a.answer_id, type: "message", role: "assistant", model: MODEL, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 5 } }, { headers: a.x_generation_id ? { "x-generation-id": a.x_generation_id } : {} });
     },
   });
   proxy.start();
@@ -84,7 +97,7 @@ describe("h2hx part P route (particle-1 through the proxy to OpenRouter)", () =>
   });
 
   test("a particle-1 call through the proxy leaves pinned to Particle AI, and its answer's record passes the check", async () => {
-    const t = setup({ "gen-1": "Particle AI", "gen-2": "Particle AI" });
+    const t = setup(PARTICLE);
     const a = await t.call(), b = await t.call();
     expect([a.status, b.status]).toEqual([200, 200]);
     const msg = t.sent.filter((s) => s.url.endsWith("/v1/messages"));
@@ -93,17 +106,27 @@ describe("h2hx part P route (particle-1 through the proxy to OpenRouter)", () =>
     expect(msg[0]!.body!.provider).toMatchObject({ only: ["particle-ai"], allow_fallbacks: false, data_collection: "deny" });
     const synthetic = JSON.stringify({ type: "assistant", message: { id: "6f1c0d2e-8a4b-4c3d-9e5f-0a1b2c3d4e5f", model: "<synthetic>", content: [{ type: "text", text: "API Error: 402" }] } });
     const transcript = [a, b].map((r) => JSON.stringify({ type: "assistant", message: { id: r.body.id, content: [] } })).join("\n") + "\n" + JSON.stringify({ type: "user" }) + "\n" + synthetic + "\n";
-    expect(answerIds(transcript)).toEqual(["gen-1", "gen-2"]);
+    expect(answerIds(transcript)).toEqual(PARTICLE.map((a) => a.answer_id));
     expect(await checkServedBy(answerIds(transcript), t.lookup, t.route)).toEqual({ checked: 2, served_by: ["Particle AI"] });
+    const looked = t.sent.filter((s) => s.url.includes("/v1/generation")).map((s) => s.url);
+    expect(looked).toEqual(PARTICLE.map((a) => "https://openrouter.ai/api/v1/generation?id=" + a.x_generation_id));
   });
 
-  test("an answer served by another provider is refused, and so is one with no generation record", async () => {
-    const t = setup({ "gen-1": "Particle AI", "gen-2": "SomeOtherHost" });
+  test("an answer served by another provider is refused, and so is one whose reply had no X-Generation-Id header", async () => {
+    const t = setup([PARTICLE[0]!, OTHER, NO_HEADER]);
     await t.call();
     await t.call();
-    await expect(checkServedBy(["gen-1", "gen-2"], t.lookup, t.route)).rejects.toThrow(/^E_H2HX_ROUTE_PROVIDER answer gen-2 for particle-ai\/particle-1 was served by "SomeOtherHost"/);
-    await expect(checkServedBy(["gen-9"], t.lookup, t.route)).rejects.toThrow(/^E_H2HX_ROUTE_RECORD no generation record for answer gen-9 \(status 404\)/);
+    await t.call();
+    await expect(checkServedBy([PARTICLE[0]!.answer_id, OTHER.answer_id], t.lookup, t.route)).rejects.toThrow(new RegExp("^E_H2HX_ROUTE_PROVIDER answer " + OTHER.answer_id + " for particle-ai/particle-1 was served by \"Google AI Studio\""));
+    await expect(checkServedBy([NO_HEADER.answer_id], t.lookup, t.route)).rejects.toThrow(new RegExp("^E_H2HX_ROUTE_RECORD no generation id was recorded for answer " + NO_HEADER.answer_id + " .*lookup status 400"));
+    await expect(checkServedBy(["msg_neverserved0123456789"], t.lookup, t.route)).rejects.toThrow(/^E_H2HX_ROUTE_RECORD no generation id was recorded for answer msg_neverserved0123456789 /);
     await expect(checkServedBy(["gen 1"], t.lookup, t.route)).rejects.toThrow(/^E_H2HX_ROUTE_RECORD /);
+  });
+
+  test("a generation id passed straight to the lookup is not taken as an answer's record", async () => {
+    const t = setup(PARTICLE);
+    await t.call();
+    await expect(checkServedBy([PARTICLE[0]!.x_generation_id], t.lookup, t.route)).rejects.toThrow(/^E_H2HX_ROUTE_RECORD no generation id was recorded for answer gen-/);
   });
 
   test("part P's sessions run at a $5 allowance (or $10 after the doubling rule) on the h2hx-p items", () => {

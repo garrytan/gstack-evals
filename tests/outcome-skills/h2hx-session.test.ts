@@ -124,7 +124,7 @@ describe("parts P and L on the Claude Code path", () => {
     "h2h-summary.json": summary(1.25, "completed", { questions: { t1: { questions: 1 } } }),
     "sdk-messages.jsonl": "",
     "claude-session.jsonl": ids.map((id) => JSON.stringify({ type: "assistant", message: { id } })).join("\n") + "\n",
-    "generations.jsonl": Object.entries(gens).map(([id, p]) => JSON.stringify({ id, status: 200, text: JSON.stringify({ data: { id, provider_name: p } }) })).join("\n") + "\n",
+    "generations.jsonl": Object.entries(gens).map(([id, p]) => JSON.stringify({ id, status: 200, text: JSON.stringify({ data: { id: "gen-of-" + id, provider_name: p } }), generation_id: "gen-of-" + id })).join("\n") + "\n",
   });
 
   test("a part P session checks every answer's provider and records its base arm and the providers that served it", async () => {
@@ -140,7 +140,7 @@ describe("parts P and L on the Claude Code path", () => {
     await expect(runExtSession(input(planned("p-none", "h2hx-p-pilot"), nullHome("p-none", { base_arm: "none" }), join(W, "p-other")))).rejects.toThrow(/^E_H2HX_ROUTE_PROVIDER answer gen-2 .* "SomeoneElse"/);
     expect(existsSync(join(W, "p-other", "session.json"))).toBe(false);
     plan([{ files: pSession({ "gen-1": "Particle AI" }, ["gen-1", "gen-9"]) }]);
-    await expect(runExtSession(input(planned("p-none", "h2hx-p-pilot"), nullHome("p-none", { base_arm: "none" }), join(W, "p-missing")))).rejects.toThrow(/^E_H2HX_ROUTE_RECORD no generation record for answer gen-9/);
+    await expect(runExtSession(input(planned("p-none", "h2hx-p-pilot"), nullHome("p-none", { base_arm: "none" }), join(W, "p-missing")))).rejects.toThrow(/^E_H2HX_ROUTE_RECORD no generation id was recorded for answer gen-9 /);
   });
 
   test("part P refuses when the generation lookup failed, or when a slot that spent money checked no answer; a slot that checked its answers still passes", async () => {
@@ -370,7 +370,7 @@ test.skipIf(!existsSync(PY))("h2h_turns.py reads every answer's generation recor
     const u = new URL(req.url);
     seen.push(u.pathname + u.search + " " + req.headers.get("authorization"));
     const id = u.searchParams.get("id");
-    return id === "gen-2" ? new Response("not yet", { status: 404 }) : Response.json({ data: { id, provider_name: "Particle AI" } });
+    return id === "gen-2" ? new Response("not yet", { status: 404 }) : Response.json({ data: { id: "gen-of-" + id, provider_name: "Particle AI" } }, { headers: { "x-h2h-generation-id": "gen-of-" + id } });
   } });
   try {
     const script = [
@@ -391,8 +391,8 @@ test.skipIf(!existsSync(PY))("h2h_turns.py reads every answer's generation recor
     server.stop(true);
   }
   const rows = readFileSync(join(d, "generations.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
-  expect(rows.map((r) => [r.id, r.status])).toEqual([["gen-1", 200], ["gen-2", 404]]);
+  expect(rows.map((r) => [r.id, r.status, r.generation_id]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))).toEqual([["gen-1", 200, "gen-of-gen-1"], ["gen-2", 404, null]]);
   expect(seen.filter((s) => s.includes("gen-2")).length).toBe(5);
-  expect(seen[0]).toBe("/slot1/openrouter/v1/generation?id=gen-1 Bearer slot-token");
+  expect(seen).toContain("/slot1/openrouter/v1/generation?id=gen-1 Bearer slot-token");
   expect(seen.some((s) => s.includes("synth-1"))).toBe(false);
 });

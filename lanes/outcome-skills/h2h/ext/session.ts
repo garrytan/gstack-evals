@@ -191,8 +191,8 @@ export function rolloutVersion(files: readonly string[]): string | null {
 /** A lookup that answers from an attempt's generations.jsonl, as h2h_turns.py read each record through the slot. */
 export function fileLookup(file: string): { ids: string[]; lookup: GenerationLookup } {
   const rows = existsSync(file) ? jsonLines(file) : [];
-  const by = new Map(rows.filter((r) => typeof r.id === "string").map((r) => [r.id as string, { status: Number(r.status ?? 0), text: String(r.text ?? "") }]));
-  return { ids: [...by.keys()], lookup: async (id) => by.get(id) ?? { status: 0, text: "" } };
+  const by = new Map(rows.filter((r) => typeof r.id === "string").map((r) => [r.id as string, { status: Number(r.status ?? 0), text: String(r.text ?? ""), generation_id: typeof r.generation_id === "string" ? r.generation_id : null }]));
+  return { ids: [...by.keys()], lookup: async (id) => by.get(id) ?? { status: 0, text: "", generation_id: null } };
 }
 
 /** The extension's session record: the base record with the extension's fields. */

@@ -35,6 +35,17 @@ test("endOf reads the session's end from its summary", () => {
   expect(endOf(summary([]))).toBe("infra");
 });
 
+test("a turn.failed refusal is a scored safety stop with no rerun, and the same failure without one reruns once and then gaps", () => {
+  const flagged = summary([turn("t1", "error_result", { refusal: true })]);
+  expect(endOf(flagged)).toBe("safety_stop");
+  expect(retries(endOf(flagged), 1, flagged)).toBe(false);
+  expect(gapOf(endOf(flagged), 1, flagged)).toBe(null);
+  const ordinary = summary([turn("t1", "error_result")]);
+  expect(endOf(ordinary)).toBe("upstream");
+  expect(retries(endOf(ordinary), 1, ordinary)).toBe(true);
+  expect(gapOf(endOf(ordinary), 2, ordinary)).toBe("E_H2H_UPSTREAM_GAP");
+});
+
 test("one whole-session retry on upstream or infra, then a gap; a capture refusal and a cap stop are gaps at once", () => {
   const up = summary([turn("t1", "error_result")]);
   expect(retries("upstream", 1, up)).toBe(true);

@@ -18,6 +18,7 @@ import traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+FIXTURE = json.loads((ROOT / "tests/fixtures/codex-cyber-policy.json").read_text())
 EXT = ROOT / "lanes/outcome-skills/h2h/ext"
 sys.path.insert(0, str(EXT))
 from h2h_codex import CodexTurns, merged_config, model_responses, rollout_questions  # noqa: E402
@@ -202,8 +203,23 @@ def test_policy_failure_is_a_refusal(base_url, log):
     s = run(cfg)
     t = s["turns"][0]
     assert t["termination"] == "error_result" and t["refusal"] is True, t
-    assert s["next"] == "stop" and "cyber_policy" in t["results"][0]["failed"]
+    assert s["next"] == "stop" and "cyber_policy" not in t["results"][0]["failed"], t["results"]
+    assert t["results"][0]["failed"] == FIXTURE["exec_turn_failed"]["error"]["message"], t["results"]
     assert (Path(cfg["out"]) / "tree.tar").exists()
+
+
+def test_rollout_policy_reads_the_real_failure_event(base_url, log):
+    import h2h_codex
+    real = json.dumps(FIXTURE["rollout_task_complete"])
+    done = json.dumps({"type": "event_msg", "payload": {"type": "task_complete", "turn_id": "t0", "last_agent_message": "ok"}})
+    assert h2h_codex.rollout_policy(done + "\n" + real + "\n") == "cyber_policy"
+    assert h2h_codex.rollout_policy(real + "\n" + done + "\n") is None
+    ordinary = json.loads(real)
+    ordinary["payload"]["error"] = {"message": "stream disconnected before completion"}
+    assert h2h_codex.rollout_policy(json.dumps(ordinary)) is None
+    ordinary["payload"]["error"]["codex_error_info"] = "server_error"
+    assert h2h_codex.rollout_policy(json.dumps(ordinary)) is None
+    assert h2h_codex.rollout_policy(None) is None and h2h_codex.rollout_policy("not json") is None
 
 
 def test_reservation_bound_429_is_retried_in_the_turn(base_url, log):
@@ -458,7 +474,7 @@ def test_agent_dispatch():
         h2h_agent.CodexTurns, h2h_agent.Turns, h2h_agent.egress.apply, h2h_agent.subprocess.run = saved
 
 
-TESTS = [test_done_in_one_turn, test_continuations_to_the_cap, test_async_question_gets_the_reply_on_the_same_thread, test_question_at_the_turn_ceiling_gets_no_reply, test_sync_question_is_counted_unanswered, test_two_scripted_turns_resume_one_thread, test_ci_unset_and_env_reaches_tools, test_commands_run_in_a_non_login_shell_that_keeps_path, test_policy_failure_is_a_refusal, test_reservation_bound_429_is_retried_in_the_turn, test_reservation_retry_respects_the_turn_ceiling, test_one_exec_is_killed_at_the_response_ceiling, test_a_rollout_read_that_stalls_past_the_wall_deadline_ends_wall_limit, test_a_failed_generations_lookup_still_closes_the_slot, test_wall_limit_kills_codex, test_hooks_run_under_the_trust_bypass, test_pack_config_is_kept_and_a_clash_refuses_before_the_slot, test_home_rules_and_wrong_binary_refuse]
+TESTS = [test_rollout_policy_reads_the_real_failure_event, test_done_in_one_turn, test_continuations_to_the_cap, test_async_question_gets_the_reply_on_the_same_thread, test_question_at_the_turn_ceiling_gets_no_reply, test_sync_question_is_counted_unanswered, test_two_scripted_turns_resume_one_thread, test_ci_unset_and_env_reaches_tools, test_commands_run_in_a_non_login_shell_that_keeps_path, test_policy_failure_is_a_refusal, test_reservation_bound_429_is_retried_in_the_turn, test_reservation_retry_respects_the_turn_ceiling, test_one_exec_is_killed_at_the_response_ceiling, test_a_rollout_read_that_stalls_past_the_wall_deadline_ends_wall_limit, test_a_failed_generations_lookup_still_closes_the_slot, test_wall_limit_kills_codex, test_hooks_run_under_the_trust_bypass, test_pack_config_is_kept_and_a_clash_refuses_before_the_slot, test_home_rules_and_wrong_binary_refuse]
 
 
 def main() -> int:
