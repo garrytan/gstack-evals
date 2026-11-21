@@ -502,3 +502,161 @@ describe("where the run stands when the session ends", () => {
   });
 });
 
+
+// Value: protects=the run-record rule's command log against the shell forms the day-one results review left open (an EOF) line closing a heredoc inside $( ), a call inside (( )), a call inside a here-string, a "$PWD/plan.md" path in a Bash call that never ran cd, a recursive copy into /work/app made before the run existed, a background start, the parenless function form, and a quadratic scan of long inline code); fails_when=any of those forms hides a real start, or a copy made after the start, or one whose copied record predates it, counts; why_new=the day-one results PR's review rounds, which found each form and left it to this follow-up; seam=commandLog, findRun and gatePending; no_claim=forms no review named, and gstack-autoplan's own run.json writer
+describe("the shell forms the results review left open", () => {
+  const MAIN = WORK + "/.gstack/tmp/autoplan/main-20261118-054759";
+  const AT = "2026-11-18T05:47:59.115Z";
+  const MADE = "2026-11-18T05:47:59.300Z";
+  const DONE = "2026-11-18T05:47:59.453Z";
+  const pending = (folder: string, o: Record<string, unknown> = {}) => body({ status: "gate_pending", out: folder, active_plan: folder + "/plan-active.md", created_at: MADE, updated_at: "2026-11-18T06:00:00Z", ...o });
+  const C = BIN + " next --out " + RUN + " --plan " + PLAN + " --full";
+  const hidden = (work: string, t: string, name: string) => {
+    expect([name, findRun([{ dir: work, seen: WORK }], t).run?.seen]).toEqual([name, RUN + "/run.json"]);
+    expect([name, gatePending(work, t)]).toEqual([name, true]);
+  };
+
+  test("a call after an EOF) line, inside (( )) or inside a here-string is read", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      const forms: Record<string, string> = {
+        "an EOF) line closing a heredoc inside a substitution": "NOTE=\"$(cat <<'EOF'\nthe owner's first task\nEOF)\"\n" + C,
+        "a call inside an arithmetic command": "(( $(" + C + " | wc -l) > 0 ))",
+        "a call inside a here-string": 'grep -q gate <<< "$(' + C + ')"',
+      };
+      for (const [name, command] of Object.entries(forms)) hidden(work, tx([{ command }]), name);
+    }));
+
+  test("$PWD is the folder the Bash call starts in, with no cd in it", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      hidden(work, tx([{ command: BIN + ' next --out "$PWD/.gstack/tmp/autoplan/run" --plan "$PWD/plan.md" --full' }]), "a first call");
+      hidden(work, tx([{ command: "cd /work/app/.gstack" }, { command: "cd /work/app" }, { command: BIN + ' next --out "$PWD/.gstack/tmp/autoplan/run" --plan "$PWD/plan.md" --full' }]), "after cd in earlier calls");
+    }));
+
+  test("a recursive copy into /work/app counts as a hand edit unless it came before the start and returned before the record was made", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, MAIN, pending(MAIN));
+      const start = BIN + " next --out " + MAIN + " --plan /work/app/plan.md --full";
+      const copy = "cp -r /work/app/template/. /work/app/";
+      const before = txt([{ command: copy, at: "2026-11-18T05:47:50.000Z", done: "2026-11-18T05:47:50.200Z" }, { command: start, at: AT, done: DONE }]);
+      expect(findRun(roots, before).run?.seen).toBe(MAIN + "/run.json");
+      expect(gatePending(work, before)).toBe(true);
+      const sameCall = txt([{ command: copy + " && " + start, at: AT, done: DONE }]);
+      expect(findRun(roots, sameCall).run).toBeNull();
+      const copiedIn = txt([{ command: "cp -r /tmp/r/. /work/app/ && " + start, at: "2026-11-18T05:47:59.000Z", done: DONE }]);
+      expect(findRun(roots, copiedIn).run).toBeNull();
+      const after = txt([{ command: start, at: AT, done: DONE }, { command: copy, at: "2026-11-18T05:48:10.000Z", done: "2026-11-18T05:48:10.200Z" }]);
+      expect(findRun(roots, after).run).toBeNull();
+      put(work, WORK, MAIN, pending(MAIN, { created_at: "2026-11-18T05:48:30.000Z" }));
+      expect(findRun(roots, sameCall).run).toBeNull();
+      put(work, WORK, MAIN, pending(MAIN, { created_at: "2026-11-17T23:00:00.000Z" }));
+      expect(findRun(roots, before).run).toBeNull();
+      expect(findRun(roots, tx([{ command: copy }, { command: start }])).run).toBeNull();
+    }));
+
+  test("a start run in the background is tied to the run it made until the next start begins", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, MAIN, pending(MAIN));
+      const start = "cd /work/app; RUN=.gstack/tmp/autoplan/main-$(date +%Y%m%d-%H%M%S); " + BIN + ' next --out "$RUN" --plan /work/app/plan.md --full';
+      const returned = "2026-11-18T05:47:59.200Z";
+      const tool = (input: Record<string, unknown>) =>
+        JSON.stringify({ type: "assistant", timestamp: AT, message: { content: [{ type: "tool_use", id: "bg", name: "Bash", input }] } }) + "\n" + JSON.stringify({ type: "user", timestamp: returned, message: { content: [{ type: "tool_result", tool_use_id: "bg", content: "" }] } }) + "\n" + JSON.stringify({ type: "assistant", timestamp: "2026-11-18T05:49:00.000Z", message: { content: [{ type: "text", text: "waiting on the gate" }] } }) + "\n";
+      for (const [name, t] of [
+        ["run_in_background", tool({ command: start, run_in_background: true })],
+        ["a trailing &", tool({ command: start + " > /tmp/ap.log 2>&1 &" })],
+      ] as const) {
+        const f = findRun(roots, t);
+        expect([name, f.run?.seen, f.unmatched]).toEqual([name, MAIN + "/run.json", 0]);
+        expect([name, gatePending(work, t)]).toEqual([name, true]);
+      }
+      expect(findRun(roots, tool({ command: start })).run).toBeNull();
+      put(work, WORK, MAIN, pending(MAIN, { created_at: "not a time" }));
+      expect(findRun(roots, tool({ command: start, run_in_background: true })).run).toBeNull();
+      put(work, WORK, MAIN, pending(MAIN));
+      const later = tool({ command: start, run_in_background: true }) + txt([{ command: "cd /work/app; " + BIN + " next --out .gstack/tmp/autoplan/other --plan /work/app/plan.md", at: "2026-11-18T05:47:59.250Z", done: "2026-11-18T05:47:59.260Z" }]);
+      expect(findRun(roots, later).run).toBeNull();
+    }));
+
+  test("a trailing & backgrounds every command it ends, and a background window closes at the transcript's last timestamp", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, MAIN, pending(MAIN));
+      const pre = "cd /work/app; RUN=.gstack/tmp/autoplan/main-$(date +%Y%m%d-%H%M%S); ";
+      const start = BIN + ' next --out "$RUN" --plan /work/app/plan.md --full';
+      const call = (command: string) => txt([{ command, at: AT, done: "2026-11-18T05:47:59.200Z" }, { command: "true", at: "2026-11-18T05:49:00.000Z" }]);
+      for (const [name, command] of [
+        ["a pipeline", pre + start + " | tee /tmp/ap.log &"],
+        ["a subshell", pre + "( " + start + " ) &"],
+        ["a group", pre + "{ " + start + "; } &"],
+        ["an && list", pre + start + " && echo ok &"],
+      ] as const) {
+        const f = findRun(roots, call(command));
+        expect([name, f.run?.seen, f.unmatched]).toEqual([name, MAIN + "/run.json", 0]);
+      }
+      expect(findRun(roots, call(pre + "( " + start + " ); echo ok &")).run).toBeNull();
+      put(work, WORK, MAIN, pending(MAIN, { created_at: "2027-01-01T00:00:00.000Z" }));
+      expect(findRun(roots, call(pre + start + " &")).run).toBeNull();
+    }));
+
+  test("a recursive copy is excused only when it ran in the foreground, in an earlier Bash call, before a foreground start", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      const roots: RunRoot[] = [{ dir: work, seen: WORK }];
+      put(work, WORK, MAIN, pending(MAIN));
+      const start = BIN + " next --out " + MAIN + " --plan /work/app/plan.md --full";
+      const copy = "cp -r /tmp/r/. /work/app/";
+      const at = (command: string) => ({ command, at: "2026-11-18T05:47:50.000Z", done: "2026-11-18T05:47:50.010Z" });
+      const later = { command: "true", at: "2026-11-18T05:49:00.000Z" };
+      expect(findRun(roots, txt([at(copy), { command: start, at: AT, done: DONE }, later])).run?.seen).toBe(MAIN + "/run.json");
+      expect(findRun(roots, txt([at(copy + " &"), { command: start, at: AT, done: DONE }, later])).run).toBeNull();
+      const bgCopy = JSON.stringify({ type: "assistant", timestamp: "2026-11-18T05:47:50.000Z", message: { content: [{ type: "tool_use", id: "c", name: "Bash", input: { command: copy, run_in_background: true } }] } }) + "\n" + JSON.stringify({ type: "user", timestamp: "2026-11-18T05:47:50.010Z", message: { content: [{ type: "tool_result", tool_use_id: "c", content: "" }] } }) + "\n";
+      expect(findRun(roots, bgCopy + txt([{ command: start, at: AT, done: DONE }, later])).run).toBeNull();
+      expect(findRun(roots, txt([at(copy), { command: start + " &", at: AT, done: "2026-11-18T05:47:59.200Z" }, later])).run).toBeNull();
+      expect(findRun(roots, txt([{ command: copy + " & " + start + " &", at: AT, done: "2026-11-18T05:47:59.200Z" }, later])).run).toBeNull();
+    }));
+
+  test("a function body is read only where the function is called", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      for (const [name, command] of [
+        ["function NAME { } never called", "function plan { " + C + "; }"],
+        ["NAME() { } never called", "plan() { " + C + "; }"],
+        ["NAME() { } with another command called", "plan() { " + C + "; }; plans"],
+      ] as const) {
+        const t = tx([{ command }]);
+        expect([name, findRun([{ dir: work, seen: WORK }], t).run]).toEqual([name, null]);
+        expect([name, gatePending(work, t)]).toEqual([name, false]);
+      }
+      hidden(work, tx([{ command: "plan() { " + C + "; }\nplan" }]), "NAME() { } then called");
+      hidden(work, tx([{ command: "plan() {\n  " + C + "\n}\necho first; plan" }]), "a multi-line NAME() { } called later");
+    }));
+
+  test("a call inside a parenless function body is read", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      hidden(work, tx([{ command: "function plan { " + C + "; }; plan" }]), "function NAME { }");
+      hidden(work, tx([{ command: "function plan() { " + C + "; }\nplan" }]), "function NAME() { }");
+    }));
+
+  test("a long run of inline code is read in linear time", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      const t = tx([{ command: C }, { command: "python3 -c 'x = \"" + "a".repeat(200_000) + "\"; print(len(x))'" }]);
+      const from = performance.now();
+      expect(findRun([{ dir: work, seen: WORK }], t).run?.seen).toBe(RUN + "/run.json");
+      expect(performance.now() - from).toBeLessThan(1000);
+      const named = tx([{ command: C }, { command: "python3 -c 'open(\"" + RUN + "/run.json\", \"w\").write(\"{}\")'" }]);
+      expect(findRun([{ dir: work, seen: WORK }], named).run).toBeNull();
+    }));
+});
