@@ -4022,6 +4022,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CSO_FINALIZE_HALT: {
+    exit: 2,
+    meaning: "A /cso eval session closed with its metering proxy's finalize failed, or its attempt opened a slot and left no summary, so its allowance stops and spend are unknown. The driver halts the item: nothing more opens on it, and the session gets no retry and no record.",
+    fix: "Bring the proxy journal the message names to the Captain. Once the Captain rules on the session, relaunch the driver with --lift-halt <session>.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_CSO_SCAN: {
     exit: 2,
     meaning: "A /cso eval id scan did not finish: the tree is missing, a find, grep or git cat-file step failed, or the scan script exited non-zero. Containment fails closed, so no unit counts as clean on that tree.",
