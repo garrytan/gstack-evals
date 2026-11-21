@@ -96,6 +96,23 @@ describe("part C's schedule and money (preregistration sections 9, 11 and 13)", 
     }
   });
 
+  // Value: protects=a counted item's VM share, which section 11's central includes and the ledger never sees, is held back from the model spend each step leases, in proportion to the sessions still to run, and the two shares are what c-main's and h-main's centrals leave after the planned session prices (R113's $12.60); fails_when=model spend can use the money planned for the run's VM, so the item's whole cost passes its cap; why_new=GEVA-562 part C (section 11, decision D); seam=guard; no_claim=the VM's real cost, which Ubicloud bills
+  test("the VM share is held back from what a counted step leases", () => {
+    const dir = tmp();
+    try {
+      const record = join(dir, "record");
+      expect([ITEMS["c-main"].central_usd - 66 * (1.5 + 1.5 + 0.4), ITEMS["h-main"].central_usd - 66 * 3].map((x) => Math.round(x * 100) / 100)).toEqual([ITEMS["c-main"].vm_usd, ITEMS["h-main"].vm_usd]);
+      approve(record, "c-main", 345, "Captain", "approved", "warn");
+      expect(guard(record, "c-main", 198)).toMatchObject({ ok: true, vm_micros: 9_600_000, spend_cap_usd: 335.4 });
+      expect(guard(record, "c-main", 99)).toMatchObject({ vm_micros: 4_800_000, spend_cap_usd: 340.2 });
+      expect(guard(record, "c-main", 198).line).toEndWith("for 198 sessions, VM share held back $9.60");
+      approve(record, "c-pilot", 60, "Captain", "approved", "warn");
+      expect(guard(record, "c-pilot", 18)).toMatchObject({ vm_micros: 0, spend_cap_usd: 60 });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   // Value: protects=the dry run opens and settles one ledger lease per frozen item on a temporary ledger, shows a done item's guard refusing, and checks the schedule's sessions against the frozen counts and the interleave; fails_when=an item cannot serve its lease or a count drifts; why_new=GEVA-562 part C (section 12: one lease per item); seam=dryRun; no_claim=a paid run
   test("the dry run", () => {
     const d = dryRun(ids);

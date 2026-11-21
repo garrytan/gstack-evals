@@ -65,12 +65,14 @@ export interface ItemPlan {
   cap_usd: number;
   /** The per-session allowance in dollars (section 5.7). */
   allowance_usd: number;
+  /** The VM share inside central_usd: what section 11's central leaves after the planned session prices. The pilots' items pay for sessions only. */
+  vm_usd: number;
 }
 export const ITEMS: Readonly<Record<ItemName, ItemPlan>> = {
-  "c-pilot": { arms: ["c-on", "c-off", "c-none"], phase: "pilot", sessions: 18, central_usd: 21, cap_usd: 60, allowance_usd: 8 },
-  "h-pilot": { arms: ["c-high"], phase: "pilot", sessions: 6, central_usd: 18, cap_usd: 85, allowance_usd: 15 },
-  "c-main": { arms: ["c-on", "c-off", "c-none"], phase: "main", sessions: 198, central_usd: 234, cap_usd: 345, allowance_usd: 8 },
-  "h-main": { arms: ["c-high"], phase: "main", sessions: 66, central_usd: 201, cap_usd: 330, allowance_usd: 15 },
+  "c-pilot": { arms: ["c-on", "c-off", "c-none"], phase: "pilot", sessions: 18, central_usd: 21, cap_usd: 60, allowance_usd: 8, vm_usd: 0 },
+  "h-pilot": { arms: ["c-high"], phase: "pilot", sessions: 6, central_usd: 18, cap_usd: 85, allowance_usd: 15, vm_usd: 0 },
+  "c-main": { arms: ["c-on", "c-off", "c-none"], phase: "main", sessions: 198, central_usd: 234, cap_usd: 345, allowance_usd: 8, vm_usd: 9.6 },
+  "h-main": { arms: ["c-high"], phase: "main", sessions: 66, central_usd: 201, cap_usd: 330, allowance_usd: 15, vm_usd: 3 },
 };
 export const isItem = (s: string): s is ItemName => (ITEM_NAMES as readonly string[]).includes(s);
 

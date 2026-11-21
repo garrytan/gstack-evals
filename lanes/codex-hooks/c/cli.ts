@@ -10,19 +10,20 @@
 //   run --phase pilot|main --root <dir> --record <dir> --ledger <file> --source <owner/repo>=<clone>... [--upstream <url>]
 //   rerun --root <dir> --item <item>              moves sessions that owe their one rerun aside; run the phase again after
 //   readout --root <dir> [--item <item>]          writes <root>/<item>/readout/ and prints each summary
+//   states --root <dir> --phase pilot|main --out <file>   the states file the analysis commands read (records.ts)
 //   dry-run                                       one ledger lease per item on a temporary ledger, and the schedule's counts
 //
-// Any other command goes to the analysis commands in analysis/cli.ts when that module exists (the judge and the
-// within-session analysis are built there).
-import { existsSync, readFileSync } from "node:fs";
+//   analysis <command>                            the judging and analysis commands in analysis/cli.ts
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO } from "../pins.ts";
 import { codexArmsText, isItem, ITEM_NAMES, ITEMS, itemUnits, SUITE, suiteUnits, type ItemName } from "./pins.ts";
 import { approve, dryRun, guard, markDone, plannedSessions, schedule } from "./plan.ts";
 import { writeReadout, type UnitRef } from "./readout.ts";
+import { phaseRecords } from "./records.ts";
 import { execGstackEvals, moveForRerun, runPhase } from "./run.ts";
 
-const USAGE = "E_USAGE usage: codex-hooks c plan|codex-arms|approve|guard|done|run|rerun|readout|dry-run [flags] (lanes/codex-hooks/c/cli.ts)";
+const USAGE = "E_USAGE usage: codex-hooks c plan|codex-arms|approve|guard|done|run|rerun|readout|states|dry-run|analysis [flags] (lanes/codex-hooks/c/cli.ts)";
 const ANALYSIS = join(import.meta.dir, "analysis", "cli.ts");
 
 function flags(argv: string[]): Map<string, string[]> {
@@ -47,14 +48,14 @@ export async function main(argv: string[]): Promise<number> {
       console.log(USAGE.replace("E_USAGE usage: ", ""));
       return cmd === undefined ? 2 : 0;
     }
-    const known = ["plan", "codex-arms", "approve", "guard", "done", "run", "rerun", "readout", "dry-run"];
-    if (!known.includes(cmd)) {
-      if (!existsSync(ANALYSIS)) {
-        console.error(USAGE);
-        return 2;
-      }
+    if (cmd === "analysis") {
       const { main: analysis } = (await import(ANALYSIS)) as { main: (argv: string[]) => Promise<number> };
-      return analysis(argv);
+      return analysis(rest);
+    }
+    const known = ["plan", "codex-arms", "approve", "guard", "done", "run", "rerun", "readout", "states", "dry-run"];
+    if (!known.includes(cmd)) {
+      console.error(USAGE);
+      return 2;
     }
     const f = flags(rest);
     const one = (k: string, required = true): string => {
@@ -133,6 +134,13 @@ export async function main(argv: string[]): Promise<number> {
       const root = one("--root");
       const items = f.has("--item") ? [item()] : ITEM_NAMES.filter((i) => existsSync(join(root, i, "cells.ndjson")));
       for (const i of items) console.log(JSON.stringify(writeReadout(root, i, unitsOf(i)), null, 2));
+      return 0;
+    }
+    if (cmd === "states") {
+      const p = phaseRecords(one("--root"), phase()!, unitsOf);
+      writeFileSync(one("--out"), p.text);
+      for (const i of p.items) console.log(i.item + ": " + i.sessions + " sessions, " + i.lines + " lines, " + i.not_run + " planned cells not run");
+      for (const i of p.skipped) console.log(i + ": not run yet (no cells.ndjson), so its sessions are missing");
       return 0;
     }
     const d = dryRun(suiteUnits());

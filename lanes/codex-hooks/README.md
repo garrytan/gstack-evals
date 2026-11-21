@@ -16,6 +16,7 @@ Do gstack's routing hook and its /review contract help GPT-6.1 Sol in Codex CLI,
 | c/plan.ts | The schedule (pilot, then c-main and h-main interleaved by unit), each step's review-units command, and the money: approval, guard, done mark and the dry run |
 | c/run.ts | The run controller: one review-units run per item and unit, the collect pass, and the one rerun |
 | c/readout.ts | The per-item readout files and the per-arm summary the pilot readout releases |
+| c/records.ts | The states file the judging and analysis read, written from the readouts of one phase's items |
 | c/stub.ts | A keyless stand-in for the Responses API that the fixtures and the end-to-end check run Codex against |
 | c/cli.ts | `codex-hooks c` commands; any other command goes to c/analysis/cli.ts once it exists |
 | c/analysis/frozen.ts | Part C's frozen judging and analysis values: the suite, brief and severity map digests, the seeds, the judges, the judge check, power.txt's numbers and the judge item |
@@ -45,6 +46,7 @@ bun lanes/codex-hooks/cli.ts c guard --record <record> --item c-pilot --root <ro
 bun lanes/codex-hooks/cli.ts c run --phase pilot --root <root> --record <record> --ledger <ledger.sqlite> \
   --source garrytan/gstack=<clone> --source garrytan/gbrain=<clone>
 bun lanes/codex-hooks/cli.ts c readout --root <root>         # writes <root>/<item>/readout/ and prints each summary
+bun lanes/codex-hooks/cli.ts c states --root <root> --phase pilot --out <states.jsonl>   # the states file `c analysis` reads
 bun lanes/codex-hooks/cli.ts c rerun --root <root> --item c-pilot   # then run the phase again for the one rerun
 bun lanes/codex-hooks/cli.ts c done --record <record> --item c-pilot
 ```
@@ -55,7 +57,7 @@ For a keyless end-to-end check, start the stub (`bun lanes/codex-hooks/c/stub.ts
 
 ## Part C judging and analysis
 
-Every command reads one states file from the rig (`--states`) and one judging directory (`--dir`). Each batch the judges read sits in its own folder there, with its key beside it and never inside it. Only `run` without `--dry-run` calls a model, and it spends from the `geva-562-judge` ledger item under one `--run-id` for every step. Run `--dry-run` first: it prices each request's worst case and sends nothing.
+Every command reads one states file from the rig (`--states`, written by `c states`) and one judging directory (`--dir`). Each batch the judges read sits in its own folder there, with its key beside it and never inside it. Only `run` without `--dry-run` calls a model, and it spends from the `geva-562-judge` ledger item under one `--run-id` for every step. Run `--dry-run` first: it prices each request's worst case and sends nothing.
 
 1. `packets extract`, then `run extract`. The production judge lists the findings of each message that has no json block.
 2. `packets match`, `run match`, then `join match`. On the pilot, `--pilot` adds the judge check's anchors.

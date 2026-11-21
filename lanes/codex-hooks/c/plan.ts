@@ -8,7 +8,8 @@
 // - Money: an item starts with its approval row at its frozen cap and no other amount. Before each step the guard reads the
 //   item's ledger: it refuses a done item, an open lease, or a projection (the sessions left at the item's central cost per
 //   session, plus four sessions' allowances held open at once) past what the item has left. Each step leases what the item
-//   has left, rounded down to the cent, as review-units' --spend-cap; review-units refuses a round whose worst case does not
+//   has left less the VM share of the sessions still to run (the VM is paid outside the ledger, and central_usd includes
+//   it), rounded down to the cent, as review-units' --spend-cap; review-units refuses a round whose worst case does not
 //   fit (CAP_STOP). A done mark (<record>/codex-hooks-c/<item>.done) closes an item for good, refused while a lease is open.
 // - The dry run opens and settles one lease per item on a temporary ledger and checks the schedule against the frozen
 //   session counts. It spends nothing.
@@ -82,7 +83,7 @@ export function approve(record: string, item: ItemName, capUsd: number, by: stri
 
 export const doneMark = (record: string, item: ItemName) => join(record, "codex-hooks-c", item + ".done");
 
-/** The item's status and whether one more step may run: sessionsLeft at its central cost per session plus the parallel reserve. */
+/** The item's status and whether one more step may run: sessionsLeft at its central cost per session plus the parallel reserve, and the model spend it may lease once the VM share of those sessions is held back. */
 export function guard(record: string, item: ItemName, sessionsLeft: number) {
   const p = ITEMS[item];
   const s = ledgerStatus(record, item)[0];
@@ -94,8 +95,9 @@ export function guard(record: string, item: ItemName, sessionsLeft: number) {
   const left = s ? s.left_micros : 0;
   const projection = Math.round((sessionsLeft * p.central_usd * 1e6) / p.sessions) + (sessionsLeft ? PARALLEL * p.allowance_usd * 1e6 : 0);
   if (projection > left) why.push(item + "'s projection " + usd(projection) + " (" + sessionsLeft + " sessions at " + usd((p.central_usd * 1e6) / p.sessions) + " and " + PARALLEL + " allowances of $" + p.allowance_usd + " open) passes what it has left, " + usd(left));
-  const line = "CODEX_C_GUARD " + (why.length ? "REFUSE" : "PASS") + " " + item + ": cap " + usd(s?.cap_micros ?? 0) + ", committed " + usd(s?.committed_micros ?? 0) + ", left " + usd(left) + ", projection " + usd(projection) + " for " + sessionsLeft + " sessions";
-  return { ok: why.length === 0, why, line, left_micros: left, spend_cap_usd: Math.floor(left / 10_000) / 100 };
+  const vm = Math.round((sessionsLeft * p.vm_usd * 1e6) / p.sessions);
+  const line = "CODEX_C_GUARD " + (why.length ? "REFUSE" : "PASS") + " " + item + ": cap " + usd(s?.cap_micros ?? 0) + ", committed " + usd(s?.committed_micros ?? 0) + ", left " + usd(left) + ", projection " + usd(projection) + " for " + sessionsLeft + " sessions" + (vm ? ", VM share held back " + usd(vm) : "");
+  return { ok: why.length === 0, why, line, left_micros: left, vm_micros: vm, spend_cap_usd: Math.floor(Math.max(0, left - vm) / 10_000) / 100 };
 }
 
 /** Closes an item for good. */
