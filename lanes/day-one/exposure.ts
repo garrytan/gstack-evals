@@ -7,7 +7,8 @@
 //   A call is for a folder when its --out is that folder, or (rep 4 of the smoke) when it is a start call (next or
 //   run naming a --plan) and gstack-autoplan created that run during it: the run.json's created_at lies between the
 //   transcript's timestamps on the message that made the Bash call and on the one that returned its result (a start run in
-//   the background, by run_in_background or a trailing &, spans from its call until the next start call begins), no other
+//   the background, by run_in_background or a trailing & that ends its pipeline, list, subshell or group, spans from its
+//   call until the next start call begins or the transcript's last timestamp, whichever comes first), no other
 //   start call (in that Bash call or another) spans that time, and no other run the scan found was created in that
 //   span. So a --out the log cannot spell out (a command substitution, a variable set in
 //   another shell) still ties the start to the run it made. A start call that is for no record that counts is
@@ -16,15 +17,17 @@
 //   same --out named as its --plan. Flags are read as gstack-autoplan reads them: the first separate --out or --plan.
 //   A record that the command log touched any other way is hand-edited and never counts: a Write, Edit, MultiEdit or
 //   NotebookEdit call on it, a shell redirect into it, tee, sed -i, cp, mv, install, ln, dd or truncate onto it, a
-//   recursive copy, mv or rsync onto a folder above it (unless it came before the folder's first start call in the log
-//   and its Bash call returned before the record's created_at, and the record was made during that start call), or an interpreter's inline code that opens it for
+//   recursive copy, mv or rsync onto a folder above it (unless it ran in the foreground, in a Bash call before the one
+//   holding the folder's first start call, that start ran in the foreground, the copy's Bash call returned before the
+//   record's created_at, and the record was made during that start call), or an interpreter's inline code that opens it for
 //   writing (a target the code builds at run time counts every run.json the code names). Of the records that count, the latest
 //   updated_at wins. Exposure and the live gate check (gatePending) read this one record. The scan never follows a
 //   symlink, as the copy-out does not.
 // - The command log is every Bash call in the transcript, subagents included, read as shell: variables a command sets,
 //   and HOME, GSTACK_STATE_ROOT and GSTACK_HOME as the sandbox sets them, are expanded (with ${X:-default}), ~ is
 //   HOME, PWD is the folder each Bash call starts in, wrappers (env, command, exec, nohup, time, timeout, sudo, nice)
-//   and a parenless function NAME are stripped, and command substitutions (in a redirect, a here-string or an arithmetic
+//   are stripped, a function body (NAME() { } or function NAME { }) is read where the function is called and never
+//   where it is defined, and command substitutions (in a redirect, a here-string or an arithmetic
 //   command too), eval and bash or sh -c strings are read as commands too. A relative path
 //   resolves against the folder the last cd left in that agent's shell (/work/app at first); a cd inside a subshell,
 //   a substitution or a child shell does not leave it.
@@ -392,8 +395,10 @@ export interface CommandLog {
   spans: Map<string, { from: number; to: number }>;
   /** Every path the log wrote other than through gstack-autoplan. */
   writes: Set<string>;
-  /** Every folder a recursive copy, mv or rsync may have filled or replaced, with the command's place in the log and its Bash call's id. */
-  trees: { path: string; seq: number; use: string }[];
+  /** Every folder a recursive copy, mv or rsync may have filled or replaced, with the command's place in the log, its Bash call's id and whether it ran in the background. */
+  trees: { path: string; seq: number; use: string; bg: boolean }[];
+  /** The transcript's last timestamp. */
+  end: number;
 }
 
 /** What the sandbox sets before the session's first command (src/trial/state-root.ts and the agent's HOME). */
@@ -410,11 +415,12 @@ interface Ctx {
 
 /** The session's command log under the rule above. */
 export function commandLog(transcript: string): CommandLog {
-  const log: CommandLog = { calls: [], writes: new Set(), trees: [], spans: new Map() };
+  const log: CommandLog = { calls: [], writes: new Set(), trees: [], spans: new Map(), end: -Infinity };
   let use = "";
   let seq = 0;
+  let funcs = new Map<string, Tok[]>();
   const child = (c: Ctx): Ctx => ({ cwd: c.cwd, env: new Map(c.env) });
-  const simple = (raw: Piece[][], ctx: Ctx, depth: number, bg: boolean) => {
+  const simple = (raw: Piece[][], ctx: Ctx, depth: number) => {
     const ws: string[] = [];
     const words: Piece[][] = [];
     for (const w of raw) {
@@ -446,6 +452,8 @@ export function commandLog(transcript: string): CommandLog {
     }
     const [cmd, ...args] = ws.slice(k);
     if (!cmd) return;
+    const body = funcs.get(cmd);
+    if (body) return run(body, ctx, depth + 1);
     const argWords = words.slice(k + 1);
     const name = posix.basename(cmd);
     const at = (p: string) => posix.resolve(ctx.cwd, p);
@@ -469,7 +477,7 @@ export function commandLog(transcript: string): CommandLog {
       };
       const out = flag("--out");
       const plan = flag("--plan");
-      log.calls.push({ verb: args[0] ?? "", out: out === null ? null : at(out), plan: plan === null ? null : at(plan), use, seq: order, bg });
+      log.calls.push({ verb: args[0] ?? "", out: out === null ? null : at(out), plan: plan === null ? null : at(plan), use, seq: order, bg: false });
     } else if (name === "tee" || name === "truncate" || (name === "sed" && args.some((a) => /^(-[a-zA-Z]*i|--in-place)/.test(a)))) {
       for (const p of paths) log.writes.add(at(p));
     } else if (["cp", "mv", "install", "ln"].includes(name) && paths.length > 1) {
@@ -479,38 +487,82 @@ export function commandLog(transcript: string): CommandLog {
       for (const from of paths.slice(0, -1)) {
         const into = at(posix.join(to, posix.basename(from)));
         log.writes.add(into);
-        if (whole && !/\.\w+$/.test(from)) log.trees.push({ path: at(to), seq: order, use }, { path: into, seq: order, use });
+        if (whole && !/\.\w+$/.test(from)) log.trees.push({ path: at(to), seq: order, use, bg: false }, { path: into, seq: order, use, bg: false });
       }
     } else if (name === "rsync" && paths.length > 1) {
-      log.trees.push({ path: at(paths[paths.length - 1]!), seq: order, use });
+      log.trees.push({ path: at(paths[paths.length - 1]!), seq: order, use, bg: false });
     } else if (name === "dd") {
       for (const a of args) if (a.startsWith("of=")) log.writes.add(at(a.slice(3)));
     } else if (INTERPRETERS.has(name)) {
       for (const t of writeTargets(args.join(" "))) log.writes.add(at(t));
     }
   };
-  const shell = (command: string, top: Ctx, depth: number): void => {
+  const shell = (command: string, top: Ctx, depth: number): void => run(lex(command), top, depth);
+  const run = (toks: Tok[], top: Ctx, depth: number): void => {
     if (depth > 8) return;
     const scopes: Ctx[] = [];
+    const marks: number[] = [];
+    let mark = seq;
     let ctx = top;
     let raw: Piece[][] = [];
     let redirect: string | null = null;
-    const end = (bg = false) => {
-      simple(raw, ctx, depth, bg);
+    const end = () => {
+      simple(raw, ctx, depth);
       raw = [];
       redirect = null;
     };
-    for (const tok of lex(command)) {
+    const op = (t: Tok | undefined, o: string) => t !== undefined && "op" in t && t.op === o;
+    const bare = (t: Tok | undefined) => (t !== undefined && "word" in t && t.word.length === 1 && !t.word[0]!.q ? t.word[0]!.t : null);
+    for (let i = 0; i < toks.length; i++) {
+      const tok = toks[i]!;
+      if (!raw.length && !redirect) {
+        let j = -1;
+        let name = bare(tok);
+        if (name === "function" && /^[\w.:-]+$/.test(bare(toks[i + 1]) ?? "")) {
+          name = bare(toks[i + 1]);
+          j = op(toks[i + 2], "(") && op(toks[i + 3], ")") ? i + 4 : i + 2;
+        } else if (name !== null && /^[\w.:-]+$/.test(name) && op(toks[i + 1], "(") && op(toks[i + 2], ")")) j = i + 3;
+        while (j >= 0 && op(toks[j], "\n")) j++;
+        if (j >= 0 && bare(toks[j]) === "{") {
+          let open = 1;
+          let atCmd = true;
+          let k = j + 1;
+          for (; k < toks.length; k++) {
+            const t = toks[k]!;
+            if ("op" in t) atCmd = t.op !== ">" && t.op !== ">>" && t.op !== "<";
+            else if (atCmd && bare(t) === "{") open++;
+            else if (atCmd && bare(t) === "}" && --open === 0) break;
+            else atCmd = false;
+          }
+          funcs.set(name!, toks.slice(j + 1, k));
+          i = k;
+          continue;
+        }
+        if (name === "{") {
+          marks.push(mark);
+          mark = seq;
+        } else if (name === "}" && marks.length) mark = marks.pop()!;
+      }
       if ("op" in tok) {
         if (tok.op === ">" || tok.op === ">>" || tok.op === "<") {
           redirect = tok.op;
           continue;
         }
-        end(tok.op === "&");
-        if (tok.op === "(") {
+        end();
+        if (tok.op === "&") {
+          for (const c of log.calls) if (c.seq > mark) c.bg = true;
+          for (const t of log.trees) if (t.seq > mark) t.bg = true;
+        }
+        if (tok.op === "&" || tok.op === ";" || tok.op === "\n") mark = seq;
+        else if (tok.op === "(") {
+          marks.push(mark);
+          mark = seq;
           scopes.push(ctx);
           ctx = child(ctx);
-        } else if (tok.op === ")" && scopes.length) ctx = scopes.pop()!;
+        } else if (tok.op === ")") {
+          if (marks.length) mark = marks.pop()!;
+          if (scopes.length) ctx = scopes.pop()!;
+        }
       } else if (redirect) {
         for (const p of tok.word) if (p.sub !== undefined) shell(p.sub, child(ctx), depth + 1);
         if (redirect !== "<") log.writes.add(posix.resolve(ctx.cwd, expand(tok.word, ctx.env)));
@@ -523,6 +575,7 @@ export function commandLog(transcript: string): CommandLog {
   const made = new Map<string, number>();
   for (const m of readTranscript(transcript)) {
     const when = Date.parse(String(m.timestamp ?? ""));
+    if (!Number.isNaN(when)) log.end = Math.max(log.end, when);
     if (m.type === "user" && Array.isArray(m.message?.content)) {
       for (const b of m.message.content as Record<string, any>[]) {
         const from = made.get(b?.tool_use_id);
@@ -541,8 +594,9 @@ export function commandLog(transcript: string): CommandLog {
       } else if (b.name === "Bash" && typeof b.input?.command === "string") {
         use = String(b.id ?? "");
         if (!Number.isNaN(when)) made.set(use, when);
+        funcs = new Map();
         shell(b.input.command, ctx, 0);
-        if (b.input.run_in_background === true) for (const c of log.calls) if (c.use === use) c.bg = true;
+        if (b.input.run_in_background === true) for (const c of [...log.calls, ...log.trees]) if (c.use === use) c.bg = true;
         cwds.set(agent, ctx.cwd);
       }
     }
@@ -571,7 +625,7 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
     if (w === undefined || !Number.isFinite(at) || at < w.from) return false;
     if (!c.bg) return at <= w.to;
     const next = starts.find((d) => d.seq > c.seq && log.spans.has(d.use));
-    return next === undefined || at < log.spans.get(next.use)!.from;
+    return (next === undefined || at < log.spans.get(next.use)!.from) && at <= log.end;
   };
   const maker = new Map<string, Call>();
   for (const x of scanned) {
@@ -598,7 +652,7 @@ export function findRun(roots: RunRoot[], transcript: string): RunSearch {
             ? "no gstack-autoplan next or run call with --out " + folder + " and --plan " + PLAN + " in the session's command log"
             : start.plan !== PLAN
               ? "the first gstack-autoplan next or run call with --out " + folder + " and a --plan names " + start.plan + ", not " + PLAN
-              : log.writes.has(s) || log.trees.some((t) => s.startsWith(t.path + "/") && !(t.seq < start.seq && created > (log.spans.get(t.use)?.to ?? Infinity) && within(start, created)))
+              : log.writes.has(s) || log.trees.some((t) => s.startsWith(t.path + "/") && !(!t.bg && !start.bg && t.use !== start.use && t.seq < start.seq && created > (log.spans.get(t.use)?.to ?? Infinity) && within(start, created)))
                 ? "edited by hand in the session's command log"
                 : null;
     if (why) passed.push(s + ": " + why);
