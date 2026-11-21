@@ -1,7 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { commands } from "../../lanes/outcome-skills/h2h/ext/commands.ts";
 import { seededRandom } from "../../src/runner/stats/paired.ts";
 import { analyze } from "../../lanes/outcome-skills/h2h/analysis/analyze.ts";
 import { readRecords } from "../../lanes/outcome-skills/h2h/analysis/commands.ts";
@@ -255,6 +257,26 @@ describe("h2hx part S interim look (section 11)", () => {
     const drop = interimLook(sData({ lineTests: true }), { x, base });
     expect(drop.contrasts.filter((c) => !c.crossed).map((c) => c.label)).toEqual(["s-gstack-line: less-code ratio with both no-harm criteria passing"]);
     expect(drop.stop).toBe("continue");
+  });
+
+  test("x-look reads record files and prints only the crossings and the stop", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "h2hx-look-"));
+    const i = sData({ tie: "s-gsd" });
+    const put = (name: string, v: unknown) => {
+      writeFileSync(join(dir, name), JSON.stringify(v));
+      return join(dir, name);
+    };
+    const args = ["--units", put("units.json", i.units), "--sessions", put("sessions.json", i.sessions), "--scores", put("scores.json", i.scores), "--tests", put("tests.json", i.tests)];
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (s: string) => printed.push(s);
+    try {
+      expect(await commands["x-look"]!(args)).toBe(0);
+    } finally {
+      console.log = log;
+    }
+    expect(printed).toEqual(lookLines(interimLook(i, { x, base })));
+    expect(printed.at(-1)).toBe("stop: continue");
   });
 
   test("a cell past 10% gaps at the look stops part S with no verdict, and a cap stop does too", () => {
