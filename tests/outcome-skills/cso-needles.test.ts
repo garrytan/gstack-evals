@@ -39,3 +39,15 @@ test("an archive that unpacks a directory with no write bit still leaves no scra
     rmSync(root, { recursive: true, force: true });
   }
 });
+test("an archive holding a file name that is not UTF-8 is still opened and scanned", () => {
+  const root = mkdtempSync(join(tmpdir(), "cso-needles-bytes-"));
+  try {
+    const made = spawnSync("bash", ["-c", "mkdir -p src/d && printf 'GHSA-2222-3333-4444\\n' > \"src/d/$(printf '\\xff\\xfe')\" && printf 'x\\n' > \"src/$(printf 'a\\xe9')\" && tar -czf pkg.tgz -C src . && rm -rf src"], { cwd: root });
+    expect(made.status).toBe(0);
+    const r = scanIds(root, [{ unit: "u1", ghsa: "GHSA-2222-3333-4444", cves: [], fix_commit: "b".repeat(40) }]);
+    expect(r.hits.map((h) => h.unit)).toEqual(["u1"]);
+    expect(r.hits[0]!.path).toContain("_xfffe");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
