@@ -5,7 +5,7 @@
 // over-cap gold-drop limit above and at 5%, undefined kappa, the per-arm gate, the format variants and the refusal limit.
 import { describe, expect, test } from "bun:test";
 import { CHAT_PRICES, OPENROUTER_MODELS } from "../../src/runner/pricing/prices.ts";
-import { loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
+import { judgeMaxOutput, loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
 import type { UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
 import { judgeRelease } from "../../lanes/outcome-skills/cso/analysis/release.ts";
 import { treeIndex } from "../../lanes/outcome-skills/cso/score/checks.ts";
@@ -32,14 +32,14 @@ const OTHER = { text: "src/other.js:3 logs a token", source: "final", citations:
 const LAB = (hit: boolean) => ({ location: hit ? "yes" : "no", class: hit ? "yes" : "no", same_defect: hit ? "yes" : "no", grounding: "yes", file_level: hit ? "yes" : "no", known: null, validity: hit ? "supported" : "unsupported", quotes: {} });
 
 describe("section 7: clients on fake transports", () => {
-  test("Carbon goes through OpenRouter pinned to google-vertex, fallbacks off, data collection denied, high effort, 16,000 out", async () => {
+  test("Carbon goes through OpenRouter pinned to google-vertex, fallbacks off, data collection denied, high effort, 48,000 out (deviation d)", async () => {
     const seen: any[] = [];
     const t: Transport = async (r) => (seen.push(r), { status: 200, body: reply(r.provider, "{}") });
     const { judge } = routeClients(judgeRoutes(p)[0]!, p, t);
     await judge.ask("hello");
     expect(seen[0].provider).toBe("openrouter");
     expect(seen[0].route).toBe("/v1/chat/completions");
-    expect(seen[0].body).toMatchObject({ model: "google/gemini-4-carbon", max_tokens: 16000, reasoning: { effort: "high" }, provider: { only: ["google-vertex"], allow_fallbacks: false, data_collection: "deny" } });
+    expect(seen[0].body).toMatchObject({ model: "google/gemini-4-carbon", max_tokens: 48000, reasoning: { effort: "high" }, provider: { only: ["google-vertex"], allow_fallbacks: false, data_collection: "deny" } });
     expect(JSON.stringify(seen[0].body)).not.toMatch(/key|token"/i);
   });
   test("Astra maps in one place (openai/gpt-6.2-astra to openai:gpt-6.2-astra) and every Astra prompt opens with the read-only framing", async () => {
@@ -62,6 +62,24 @@ describe("section 7: clients on fake transports", () => {
       ["fallback-sol", "anthropic:claude-opus-5-5", "openai/gpt-6.2-astra", "google/gemini-4-argon"],
     ]);
     expect(() => judgeBody("openai/gpt-6.1-sol", "x", 1, "high")).toThrow(/^E_CSO_JUDGE_ROUTE/);
+  });
+  test("deviation (d): the judge's output cap is 48,000 in place of prereg.json's 16,000, and a plan that froze another number refuses", () => {
+    expect((p.judge as any).production.max_output_tokens).toBe(16000);
+    expect(judgeMaxOutput(p)).toBe(48000);
+    const other = structuredClone(p);
+    (other.judge as any).production.max_output_tokens = 20000;
+    expect(() => judgeMaxOutput(other)).toThrow(/^E_CSO_PREREG/);
+    expect(() => routeClients(judgeRoutes(other)[0]!, other, async () => ({ status: 200, body: {} }))).toThrow(/^E_CSO_PREREG/);
+  });
+  test("a reply cut off at its output cap is labelled truncated, not malformed, and the retry asks as attempt 2", async () => {
+    const cut = { choices: [{ message: { content: null }, finish_reason: "length", native_finish_reason: "MAX_TOKENS" }] };
+    const asked: unknown[] = [];
+    const both = judgeClient("google/gemini-4-carbon", "judge", async (r) => (asked.push(r.attempt), { status: 200, body: cut }), { maxOutputTokens: 1, effort: "high" });
+    expect(await askParsed(both, "x", () => 1)).toEqual({ gap: "google/gemini-4-carbon gave a truncated reply twice", refused: false, attempts: 2 });
+    expect(asked).toEqual([1, 2]);
+    const replies: unknown[] = [cut, reply("openrouter", "nope")];
+    const mixed = judgeClient("google/gemini-4-carbon", "judge", async () => ({ status: 200, body: replies.shift() }), { maxOutputTokens: 1, effort: "high" });
+    expect(await askParsed(mixed, "x", (t) => (t.startsWith("{") ? 1 : null))).toMatchObject({ gap: "google/gemini-4-carbon gave a truncated reply, then a malformed one", attempts: 2 });
   });
   test("a malformed reply gets one retry, a second is a judge gap; a refusal is counted; a non-200 refuses", async () => {
     const replies = ["nope", '{"ok":1}'];

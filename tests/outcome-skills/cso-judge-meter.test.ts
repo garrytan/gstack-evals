@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
-import { judgeClient } from "../../lanes/outcome-skills/cso/judge/client.ts";
+import { askParsed, judgeClient } from "../../lanes/outcome-skills/cso/judge/client.ts";
 import { JUDGE_ITEM, openJudgeMeter, probe, PROBE_PROMPT } from "../../lanes/outcome-skills/cso/judge/meter.ts";
 
 const p = loadCsoPrereg();
@@ -42,9 +42,9 @@ describe("section 7: the metered judge transport", () => {
     expect(rows.every((r) => r.ok)).toBe(true);
     const carbon = seen.find((x) => x.body.model === "google/gemini-4-carbon")!;
     expect(carbon.url).toContain("openrouter.ai");
-    expect(carbon.body).toMatchObject({ max_tokens: 16000, reasoning: { effort: "high" }, provider: { only: ["google-vertex"], allow_fallbacks: false, data_collection: "deny" } });
+    expect(carbon.body).toMatchObject({ max_tokens: 48000, reasoning: { effort: "high" }, provider: { only: ["google-vertex"], allow_fallbacks: false, data_collection: "deny" } });
     expect(seen.find((x) => x.body.model === "gpt-6.2-astra" && x.body.max_output_tokens === 32000)!.body.input[0].content).toContain("read-only correctness review");
-    expect(seen.find((x) => x.body.model === "claude-opus-5-5" && x.body.max_tokens === 16000)!.body.output_config).toEqual({ effort: "high" });
+    expect(seen.find((x) => x.body.model === "claude-opus-5-5" && x.body.max_tokens === 48000)!.body.output_config).toEqual({ effort: "high" });
     expect(close.spent_micros).toBeGreaterThan(0);
     expect(readItem(s.record, JUDGE_ITEM).open).toBeNull();
   });
@@ -57,6 +57,22 @@ describe("section 7: the metered judge transport", () => {
     expect((await c.ask(PROBE_PROMPT)).text).toBe("OK");
     expect([seen.length, m.sent()]).toEqual([1, 1]);
     await m.close();
+  });
+  test("the retry rule's second attempt is its own request: it is sent, kept apart, and a rerun pays for neither again", async () => {
+    const s = setup(20);
+    seen.length = 0;
+    const cut = (async (url: any, init?: any) => {
+      seen.push({ url: String(url), body: JSON.parse(String(init?.body ?? "{}")) });
+      return Response.json({ id: "g", model: "google/gemini-4-carbon", provider: "Google", choices: [{ message: { role: "assistant", content: null }, finish_reason: "length", native_finish_reason: "MAX_TOKENS" }], usage: { prompt_tokens: 20, completion_tokens: 100 } });
+    }) as typeof fetch;
+    for (const pass of [1, 2]) {
+      const m = await openJudgeMeter({ run_id: "retry", out: join(s.dir, "out"), record: s.record, ledger: s.ledger, env: DRY_ENV, fetch: cut });
+      const c = judgeClient("google/gemini-4-carbon", "judge", m.transport, { maxOutputTokens: 100, effort: "high" });
+      expect(await askParsed(c, PROBE_PROMPT, () => 1)).toMatchObject({ gap: "google/gemini-4-carbon gave a truncated reply twice", attempts: 2 });
+      expect(m.sent()).toBe(pass === 1 ? 2 : 0);
+      await m.close();
+    }
+    expect(seen.length).toBe(2);
   });
   test("a reply OpenRouter served from another provider stops the send", async () => {
     const s = setup(20);
