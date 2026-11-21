@@ -464,6 +464,12 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_SUPPLY](#e_cso_supply) | 2 | U20 |
 | [E_CSO_DRAW](#e_cso_draw) | 2 | U20 |
 | [E_CSO_ARM](#e_cso_arm) | 2 | U20 |
+| [E_CSO_SESSION](#e_cso_session) | 2 | U20 |
+| [E_CSO_CAP_STOP](#e_cso_cap_stop) | 2 | U20 |
+| [E_CSO_STOP_SAFETY](#e_cso_stop_safety) | 2 | U20 |
+| [E_CSO_STOP_LIMIT](#e_cso_stop_limit) | 2 | U20 |
+| [E_CSO_GAP_UPSTREAM](#e_cso_gap_upstream) | 2 | U20 |
+| [E_CSO_GAP_INFRA](#e_cso_gap_infra) | 2 | U20 |
 | [E_CSO_SCAN](#e_cso_scan) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_DEP](#e_cso_drop_install_dep) | 2 | U20 |
@@ -3616,6 +3622,54 @@ A /cso eval arm is not the frozen one: a gstack home lacks a pinned file or hold
 Fix: Reinstall the arm with its recipe at prereg.json's pin and verify it again. A Codex arm takes its model and CLI version from the session record.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_SESSION
+
+A /cso eval session was asked to run on inputs the plan does not allow: an arm or model with no route or entry, an allowance other than the model's or twice it, or a transcript with no init record naming the model and Claude Code version.
+
+Fix: Run the session from the plan's arms, models and limits; read the model id and harness version from the session's own init record.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_CAP_STOP
+
+A /cso eval session's slot was refused at its item's cap. The item ends incomplete and the session is not retried; sessions run unit by unit with arms interleaved, so at most one unit is left unpaired.
+
+Fix: Report the item as incomplete. A cap stop is never retried to change a verdict; a new line needs the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_STOP_SAFETY
+
+Section 9: a provider's safety system ended a /cso eval session (Anthropic's refusal stop, Claude Code's refusal fallback refused at the proxy, or OpenAI's cyber-policy refusal on Sol). It is a result: the session is scored on the assistant text before the stop and counted per arm.
+
+Fix: None: report it per arm as its own outcome, apart from model failures.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_STOP_LIMIT
+
+Section 9: a /cso eval session reached its wall time (2,700 seconds), its 200 turns or its allowance. It is scored on the assistant text it has.
+
+Fix: None: report limit counts per cell.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_GAP_UPSTREAM
+
+Section 9: a /cso eval session ended on a provider or proxy error twice (the first got one whole-session retry from a fresh container). The session is a gap: the unit leaves that contrast's complete-pair estimate and the gap bounds fill it.
+
+Fix: Report it per cell. More than 10% of a cell's units with gaps makes the cell incomplete.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_GAP_INFRA
+
+Section 9: a /cso eval session failed on infrastructure twice (the first got one rerun), or its capture failed. The session is a gap.
+
+Fix: Read the attempt's harbor.log and summary, name the harness repair, and report the gap per cell.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_CSO_SCAN
 
