@@ -32,14 +32,14 @@ const OTHER = { text: "src/other.js:3 logs a token", source: "final", citations:
 const LAB = (hit: boolean) => ({ location: hit ? "yes" : "no", class: hit ? "yes" : "no", same_defect: hit ? "yes" : "no", grounding: "yes", file_level: hit ? "yes" : "no", known: null, validity: hit ? "supported" : "unsupported", quotes: {} });
 
 describe("section 7: clients on fake transports", () => {
-  test("Carbon goes through OpenRouter pinned to google-vertex, fallbacks off, data collection denied, high effort, 48,000 out (deviation d)", async () => {
+  test("Carbon goes through OpenRouter pinned to google-vertex, fallbacks off, data collection denied, high effort, 128,000 out (deviation d)", async () => {
     const seen: any[] = [];
     const t: Transport = async (r) => (seen.push(r), { status: 200, body: reply(r.provider, "{}") });
     const { judge } = routeClients(judgeRoutes(p)[0]!, p, t);
     await judge.ask("hello");
     expect(seen[0].provider).toBe("openrouter");
     expect(seen[0].route).toBe("/v1/chat/completions");
-    expect(seen[0].body).toMatchObject({ model: "google/gemini-4-carbon", max_tokens: 48000, reasoning: { effort: "high" }, provider: { only: ["google-vertex"], allow_fallbacks: false, data_collection: "deny" } });
+    expect(seen[0].body).toMatchObject({ model: "google/gemini-4-carbon", max_tokens: 128000, reasoning: { effort: "high" }, provider: { only: ["google-vertex"], allow_fallbacks: false, data_collection: "deny" } });
     expect(JSON.stringify(seen[0].body)).not.toMatch(/key|token"/i);
   });
   test("Astra maps in one place (openai/gpt-6.2-astra to openai:gpt-6.2-astra) and every Astra prompt opens with the read-only framing", async () => {
@@ -63,9 +63,9 @@ describe("section 7: clients on fake transports", () => {
     ]);
     expect(() => judgeBody("openai/gpt-6.1-sol", "x", 1, "high")).toThrow(/^E_CSO_JUDGE_ROUTE/);
   });
-  test("deviation (d): the judge's output cap is 48,000 in place of prereg.json's 16,000, and a plan that froze another number refuses", () => {
+  test("deviation (d): the judge's output cap is 128,000 in place of prereg.json's 16,000, and a plan that froze another number refuses", () => {
     expect((p.judge as any).production.max_output_tokens).toBe(16000);
-    expect(judgeMaxOutput(p)).toBe(48000);
+    expect(judgeMaxOutput(p)).toBe(128000);
     const other = structuredClone(p);
     (other.judge as any).production.max_output_tokens = 20000;
     expect(() => judgeMaxOutput(other)).toThrow(/^E_CSO_PREREG/);
