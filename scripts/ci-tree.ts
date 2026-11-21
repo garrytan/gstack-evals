@@ -10,7 +10,9 @@
 // ci.yml runs bun test in parallel shards. Before the record, the checks job joins their JUnit reports with
 //   bun scripts/ci-tree.ts merge --shards <n> --dir <dir> --out <junit.xml> --timings-out <timings.json>
 // which reads <dir>/junit-<i>/junit.xml for every shard and refuses unless each file the bun test lane's inventory
-// (.gstack/pregate.json) lists ran in exactly one shard. It also writes each file's time in bun's --timings format, so a
+// (.gstack/pregate.json) lists ran in exactly one shard. Each shard runs `bun scripts/ci-tree.ts verify-checkout` after its
+// tests and before it uploads its report, the same HEAD and clean-tree checks the record makes, because the record's own
+// checkout is not the one the tests ran in. It also writes each file's time in bun's --timings format, so a
 // run's measured times can refresh .github/test-timings.json, which balances the shards.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -129,15 +131,24 @@ function need(args: string[], name: string): string {
   return v;
 }
 
-function record(args: string[]) {
-  const git = (a: string[]) => {
-    const r = spawnSync("git", a, { encoding: "utf8" });
-    if (r.status !== 0) throw new Error("git " + a.join(" ") + " exited " + r.status + ": " + (r.error?.message ?? r.stderr?.trim()));
-    return r.stdout.trim();
-  };
+function git(a: string[]) {
+  const r = spawnSync("git", a, { encoding: "utf8" });
+  if (r.status !== 0) throw new Error("git " + a.join(" ") + " exited " + r.status + ": " + (r.error?.message ?? r.stderr?.trim()));
+  return r.stdout.trim();
+}
+
+function headIsTested() {
   if (git(["rev-parse", "HEAD"]) !== process.env.GITHUB_SHA) throw new Error("HEAD is not GITHUB_SHA, the commit this run tested");
-  const rec = treeRecord(process.env, { junit: readFileSync(need(args, "--junit"), "utf8"), checks: readFileSync(need(args, "--checks"), "utf8"), tree: git(["rev-parse", "HEAD^{tree}"]) });
+}
+
+function checkoutUnchanged() {
   if (git(["status", "--porcelain", "--untracked-files=all"])) throw new Error("the checkout changed after checkout, so the checks did not read HEAD's tree");
+}
+
+function record(args: string[]) {
+  headIsTested();
+  const rec = treeRecord(process.env, { junit: readFileSync(need(args, "--junit"), "utf8"), checks: readFileSync(need(args, "--checks"), "utf8"), tree: git(["rev-parse", "HEAD^{tree}"]) });
+  checkoutUnchanged();
   const out = need(args, "--out");
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(rec, null, 2) + "\n");
@@ -170,8 +181,13 @@ if (import.meta.main) {
   try {
     if (verb === "record") record(args);
     else if (verb === "merge") merge(args);
+    else if (verb === "verify-checkout") {
+      headIsTested();
+      checkoutUnchanged();
+      console.log("CHECKOUT: HEAD is GITHUB_SHA and the tree is unchanged");
+    }
     else {
-      console.error("usage: bun scripts/ci-tree.ts record --junit <report> --checks <file> --out <tree.json>\n       bun scripts/ci-tree.ts merge --shards <n> --dir <dir> --out <junit.xml> --timings-out <timings.json>");
+      console.error("usage: bun scripts/ci-tree.ts record --junit <report> --checks <file> --out <tree.json>\n       bun scripts/ci-tree.ts merge --shards <n> --dir <dir> --out <junit.xml> --timings-out <timings.json>\n       bun scripts/ci-tree.ts verify-checkout");
       process.exitCode = 2;
     }
   } catch (e) {

@@ -8,7 +8,7 @@
 # Shards (GEVA-566): the suite took about 30 minutes in one serial `bun test`, so the tests job runs it as six parallel
 # shards, each still serial, with `bun test --shard=<i>/6 --timings=.github/test-timings.json` balancing the shards by each
 # file's time. The checks job, the required check, waits for all six and fails unless every shard passed. It joins their
-# JUnit reports with scripts/ci-tree.ts merge, which fails unless every file the bun test lane's inventory lists ran in
+# JUnit reports with scripts/ci-tree.ts merge (each shard first checks that its tests left its checkout at HEAD and unchanged), which fails unless every file the bun test lane's inventory lists ran in
 # exactly one shard, and uploads the measured file times as the test-timings artifact for refreshing the timings file.
 # A stale or missing timings file only unbalances the shards; it never drops a file, since bun splits every file it finds.
 # CI carry (GST-1182; gstack docs/pregate.md#ci-carry): the last steps write tree.json, the tested-tree artifact that lets
@@ -134,6 +134,9 @@ jobs:
       - name: Tests, shard ${{ matrix.shard }} of 6
         if: steps.scope.outputs.docs_only != 'true'
         run: bun test --shard=${{ matrix.shard }}/6 --timings=.github/test-timings.json --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"
+      - name: The tests left this shard's checkout at HEAD and unchanged
+        if: steps.scope.outputs.docs_only != 'true'
+        run: bun scripts/ci-tree.ts verify-checkout
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: steps.scope.outputs.docs_only != 'true'
         with:

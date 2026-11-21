@@ -157,6 +157,23 @@ describe("ci-tree.ts merge", () => {
   });
 });
 
+describe("ci-tree.ts verify-checkout", () => {
+  const verify = (cwd: string, sha: string) => spawnSync(process.execPath, ["--no-env-file", "--config=/dev/null", SCRIPT, "verify-checkout"], { cwd, encoding: "utf8", env: { ...process.env, GITHUB_SHA: sha } });
+
+  test("passes a shard checkout at GITHUB_SHA with nothing changed, and fails another commit, an edited tracked file or a new untracked file", () => {
+    const dir = tempRepo({ "src/a.ts": "export const a = 1;\n" });
+    const head = sh(dir, "git rev-parse HEAD").trim();
+    const ok = verify(dir, head);
+    expect([ok.status, ok.stdout.trim()]).toEqual([0, "CHECKOUT: HEAD is GITHUB_SHA and the tree is unchanged"]);
+    expect([verify(dir, SHA_A).status, verify(dir, SHA_A).stderr.trim()]).toEqual([1, "ci-tree: HEAD is not GITHUB_SHA, the commit this run tested"]);
+    writeFileSync(join(dir, "src", "b.ts"), "export const b = 2;\n");
+    expect([verify(dir, head).status, verify(dir, head).stderr.trim()]).toEqual([1, "ci-tree: the checkout changed after checkout, so the checks did not read HEAD's tree"]);
+    rmSync(join(dir, "src", "b.ts"));
+    writeFileSync(join(dir, "src", "a.ts"), "export const a = 3;\n");
+    expect(verify(dir, head).status).toBe(1);
+  });
+});
+
 describe("ci-tree.ts record", () => {
   const record = (cwd: string, args: string[], over: Record<string, string>) =>
     spawnSync(process.execPath, ["--no-env-file", "--config=/dev/null", SCRIPT, "record", ...args], { cwd, encoding: "utf8", env: { ...process.env, ...env({ GITHUB_EVENT_NAME: "workflow_dispatch", PR_HEAD_SHA: "" }), ...over } });
@@ -269,7 +286,7 @@ describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
     const GATE = "steps.scope.outputs.docs_only != 'true'";
     const jobsGated: [string, Step[], number[]][] = [
       ["checks", steps, [runs.findIndex((r) => r.startsWith("bun run typecheck\n")), download, merge, timingsUpload, record, upload]],
-      ["tests", shardSteps, [shardRuns.findIndex((r) => r.startsWith("bun test ")), shardSteps.findIndex((s) => s.uses?.startsWith("actions/upload-artifact@"))]],
+      ["tests", shardSteps, [shardRuns.findIndex((r) => r.startsWith("bun test ")), shardRuns.indexOf("bun scripts/ci-tree.ts verify-checkout"), shardSteps.findIndex((s) => s.uses?.startsWith("actions/upload-artifact@"))]],
     ];
     for (const [job, list, gated] of jobsGated) {
       const scope = list.findIndex((s) => s.id === "scope");
@@ -301,7 +318,8 @@ describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
     expect(shardRuns[tests]).toBe("bun test --shard=${{ matrix.shard }}/" + shards.length + ' --timings=.github/test-timings.json --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"');
     const shardUpload = shardSteps.findIndex((s) => s.uses?.startsWith("actions/upload-artifact@"));
     expect(shardSteps[shardUpload]!.with).toMatchObject({ name: "junit-${{ matrix.shard }}", path: "${{ runner.temp }}/junit.xml", "if-no-files-found": "error" });
-    expect(tests).toBeLessThan(shardUpload);
+    const verify = shardRuns.indexOf("bun scripts/ci-tree.ts verify-checkout");
+    expect([tests < verify, verify < shardUpload]).toEqual([true, true]);
     expect(steps[download]!.with).toEqual({ pattern: "junit-*", path: "${{ runner.temp }}/junit" });
     expect(runs[merge]).toBe("bun scripts/ci-tree.ts merge --shards " + shards.length + ' --dir "$RUNNER_TEMP/junit" --out "$RUNNER_TEMP/junit.xml" --timings-out "$RUNNER_TEMP/test-timings/test-timings.json"');
     expect(steps[timingsUpload]!.with).toMatchObject({ name: "test-timings", path: "${{ runner.temp }}/test-timings/test-timings.json", "if-no-files-found": "error" });
