@@ -230,6 +230,11 @@ describe("the pilot", () => {
     expect(pilotCheck(pilot((r) => (r.arm === "own" ? { audit_hits: ["/root/.capy"] } : {})), routes, tars).failed).toEqual(["own"]);
     expect(pilotCheck(pilot((r) => ({ load: { ...r.load, loaded: false } })), routes, tars).failed).toEqual(["loads"]);
   });
+  test("an audit hit on a session the pilot doesn't count fails the arm, even beside a clean graded rerun", () => {
+    const rows = pilot(), t = B1E_PILOT[0]!, clean = rows.find((r) => r.arm === "long" && r.task === t)!;
+    const r = pilotCheck([...rows, { ...clean, trial: clean.trial + "-a1", outcome: "infra", reason: "no verifier reward, verifier infrastructure error", audit_hits: ["Read /root/.capy/drive/x"] }], routes, tars);
+    expect([r.failed, r.lines[2]]).toEqual([["long"], "  pilot FAIL long: " + t + " has 1 audit hits"]);
+  });
 });
 
 describe("power", () => {

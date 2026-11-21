@@ -401,8 +401,8 @@ export function mainReport(rows: B1eRow[], primary: string[], nonfit: string[], 
 }
 export type PilotCell = { task: string; arm: GstackArm; supply: boolean };
 export const pilotCells = (repo = REPO): PilotCell[] => [...B1E_PILOT.flatMap((task) => GSTACK_ARMS.map((arm) => ({ task, arm, supply: false }))), ...supplyCells(repo).map((c) => ({ task: c.task, arm: c.arm, supply: true }))];
-/** R111 on the pilot's own outputs. Each gstack arm: its pilot-task session graded, and every session it counts with no audit
- *  hit, its tar the manifest's and its route as planned (hook: the hook named what the route table says and, where it named a
+/** R111 on the pilot's own outputs. Each gstack arm: no audit hit in any of its sessions, its pilot-task session graded, and
+ *  every session it counts with its tar the manifest's and its route as planned (hook: the hook named what the route table says and, where it named a
  *  skill, the line reached the request; the others: no routed event and no line). A supply task with no counted session
  *  (graded on the primary set, a model response on the non-fit set) is a supply failure: the arm still passes and the task
  *  goes to the reserve rule. Across the arms, at least one load the detector reads at this pin. */
@@ -411,10 +411,10 @@ export function pilotCheck(rows: B1eRow[], routeRows: string[][], tarSha: Record
   for (const arm of GSTACK_ARMS) {
     const why: string[] = [];
     for (const c of cells.filter((x) => x.arm === arm)) {
-      const t = c.task, g = rows.filter((r) => r.arm === arm && r.task === t && counts(r));
+      const t = c.task, all = rows.filter((r) => r.arm === arm && r.task === t), g = all.filter(counts), hits = all.reduce((n, r) => n + r.audit_hits.length, 0);
+      if (hits) why.push(t + " has " + hits + " audit hits");
       if (g.length !== 1) { if (c.supply && !g.length) supply.push(t + " on " + arm); else why.push(t + " has " + g.length + " counted rows"); continue; }
       const r = g[0]!, route = routeRows.find((x) => x[1] === t), want = route ? (route[5] === "-" ? [] : route[5]!.split(",")) : null;
-      if (r.audit_hits.length) why.push(t + " has " + r.audit_hits.length + " audit hits");
       if (r.tar_sha256 !== tarSha[arm]) why.push(t + ": the session's arm tar is " + r.tar_sha256 + ", not " + tarSha[arm]);
       if (arm === "hook") {
         if (want === null || JSON.stringify(r.named) !== JSON.stringify(want)) why.push(t + ": the hook named " + (r.named === null ? "nothing (no hook log)" : "[" + r.named.join(",") + "]") + ", the route table " + (want === null ? "has no row" : "[" + want.join(",") + "]"));
