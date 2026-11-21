@@ -233,6 +233,7 @@ interface Ctx {
   env: Map<string, Field>;
   funcs: Map<string, (c: Ctx) => void>;
   args: Field[];
+  locals?: Map<string, Field | undefined>;
   stack: string[];
   depth: number;
 }
@@ -375,12 +376,14 @@ export function commandLog(transcript: string): CommandLog {
       const body = bypass ? undefined : c.funcs.get(cmd);
       if (body) {
         if (c.stack.includes(cmd)) return;
-        const saved = { args: c.args, depth: c.depth };
+        const saved = { args: c.args, depth: c.depth, locals: c.locals };
         if (++c.depth > DEPTH) throw new Unreadable();
         c.args = argFields;
+        c.locals = new Map();
         c.stack.push(cmd);
         scoped(() => body(c));
         c.stack.pop();
+        for (const [n, v] of c.locals) v === undefined ? c.env.delete(n) : c.env.set(n, v);
         Object.assign(c, saved);
         return;
       }
@@ -494,6 +497,7 @@ export function commandLog(transcript: string): CommandLog {
           return background(() => stmt(x.stmt, child(c)));
         case "DeclClause":
           for (const a of x.args) {
+            if (c.locals && ["local", "declare", "typeset"].includes(x.variant?.value) && a.name && !c.locals.has(a.name.value)) c.locals.set(a.name.value, c.env.get(a.name.value));
             if (!a.naked && a.name && a.value) c.env.set(a.name.value, piece(a.value.parts, c, false, true));
             else subs(a, c);
           }

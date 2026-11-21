@@ -863,4 +863,14 @@ describe("the shell forms the full review of the hand lexer left open", () => {
       refused(work, tx([{ command: C }, { command: pad + 'eval "' + edit + '"; edit' }]), "defined in eval, called after it");
       refused(work, tx([{ command: C }, { command: pad + "bash -c \"" + edit + "; " + pad + "edit\"" }]), "defined and called in a child shell after padding");
     }));
+
+  test("a function's local, declare or typeset names go back to the caller's values when it returns", () =>
+    withDir((dir) => {
+      const work = join(dir, "work");
+      put(work, WORK, RUN, body({ status: "gate_pending" }));
+      const start = BIN + ' next --out "$out" --plan "$PWD/plan.md" --full';
+      for (const decl of ["local", "declare", "typeset"]) found(work, tx([{ command: "cd /work/app; out=.gstack/tmp/autoplan/run; h() { " + decl + " out=/tmp/x; :; }; h; " + start }]), decl + " in a function");
+      found(work, tx([{ command: "cd /work/app; h() { local out=.gstack/tmp/autoplan/run; " + start + "; }; h" }]), "a local used inside its function");
+      found(work, tx([{ command: "cd /work/app; out=.gstack/tmp/autoplan/run; h() { local out; out=/tmp/x; }; h; " + start }]), "a local named first and set later");
+    }));
 });
