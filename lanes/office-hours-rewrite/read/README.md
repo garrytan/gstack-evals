@@ -27,6 +27,8 @@ The only subprocess is the power.py re-read, and its runner is injected, so test
   to host/claude-session.jsonl, for the "Base directory for this skill" message and checks its body against
   CLAUDE_BODY's head and tail, around a start-step output that must not be empty (pre-run change 5); on Codex CLI it
   checks the <skill> item in host/transcript.ndjson against CODEX_RENDERED.
+- look.ts: stage 2's one interim look at its preregistered half (pre-run change 3, R113) and its actions.
+- stops.ts: the cap stops the decision read counts for row 1, with authoring's end from the sealed summary.
 - decision.ts: section 10's ordered table. Every row's condition is computed and returned; the first that holds decides.
   Beside the outcome go the two readings: new minus none not shown to beat no gstack by the bar, and current minus none
   wholly below zero.

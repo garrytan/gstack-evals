@@ -3,7 +3,7 @@
 This lane measures whether gstack's rewritten office-hours skill makes the right call more often than the current
 skill, without harming builders. Each brief is an invented founder or builder: an opening message, a sheet of facts
 the person reveals only when asked, and a key. A simulated person (Gemini 4 Argon) plays the founder, and three arms
-talk to it in Claude Code: none (a plain first message), current (gstack's skill at the commit the content change is
+talk to it in Claude Code (Sol's sessions run in Codex CLI, pre-run change 2): none (a plain first message), current (gstack's skill at the commit the content change is
 built on) and new (the content change's head). Each session ends with a three-line block (DECISION, NEXT ACTION, WHY),
 and blind judges score the decision and the action against the key.
 
@@ -38,7 +38,7 @@ start with E_OHR_.
 ## Commands
 
 `gstack-evals ohr --help` lists them: author, audit, rescreen, run, rows, score (packets, check-packets, judges,
-sessions), judge-check, read (admission, decision, report), dryrun, e2e and preflight. rescreen is keyless: it runs
+sessions), judge-check, read (admission, interim, decision, report), dryrun, e2e and preflight. rescreen is keyless: it runs
 authoring's vocabulary check over a briefs directory with the screen read from the pins, and prints pass or fail per
 brief with counts and file names, never text. Every model call goes through wire.ts: one
 lease on one ledger item, the product-value meter and its metering proxy. The preregistration names GPT-6.2 Astra for

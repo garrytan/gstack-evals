@@ -19,6 +19,11 @@ The arm sessions of the office-hours rewrite eval (prereg sections 2, 3, 4, 8, 1
 - `home-watch.ts`: pre-run change 5's F1 and G1 on every Sol session: the harness's snapshots of Codex's home before and
   after every exec and after copy-out, their diffs against the frozen allow list, the rollout prefix check, the
   event-stream flags, and the collaboration mode of every turn.
+- `codex.ts`: the Sol driver (pre-run change 2): the shared Codex adapter with the closing loop, the pinned Codex CLI,
+  the HOME check, the per-reply tool-item cap and the rollouts copied out after the session.
+- `codex-rig.ts`: the Sol arms' half of the rig: the Codex installs, one arm image per arm and the model tap.
+- `tap.ts`: the model tap in front of the proxy that logs the model each Sol response reports.
+- `half.ts`: stage 2's preregistered half for the one interim look (pre-run change 3).
 - `seams.ts`: the dry-run seams, run by tests/ohr/run/seams.test.ts.
 
 ## Reused and copied
