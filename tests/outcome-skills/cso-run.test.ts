@@ -171,3 +171,14 @@ test("an attempt pair that leaves no summary and no transcript is an infra gap w
   expect(record).toMatchObject({ end: "gap", attempts: 2, model_id: "", harness_version: "", texts: [], cost_usd: 0 });
   expect(record.reason).toStartWith("E_CSO_GAP_INFRA");
 });
+test("loaded reads Claude Code's session log, where the expanded /cso command block is the only trace", async () => {
+  const s = stub([{ summary: completed() }]);
+  const sdk = transcript.filter((r) => !JSON.stringify(r).includes("command-name"));
+  writeFileSync(join(s.dir, "a1", "sdk-messages.jsonl"), sdk.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  writeFileSync(join(s.dir, "a1", "claude-session.jsonl"), JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: "<command-message>cso</command-message>\n<command-name>/cso</command-name>" }] } }) + "\n");
+  const { record } = await runCsoSession(input({ harbor: s.bin }));
+  expect(record.exposure.loaded).toBe(true);
+  const bare = stub([{ summary: completed() }]);
+  writeFileSync(join(bare.dir, "a1", "sdk-messages.jsonl"), sdk.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  expect((await runCsoSession(input({ harbor: bare.bin }))).record.exposure.loaded).toBe(false);
+});

@@ -7,7 +7,8 @@
 // the end: an upstream end or an infra failure gets one whole-session retry with the full allowance while the spend cap
 // above it covers one more allowance, and a second is a gap. A close whose proxy finalize failed, or an attempt that
 // opened its slot and left no summary, halts with E_CSO_FINALIZE_HALT (the latter after POST /stop on the driver). The
-// record takes exposure and the helper records from csoExposure over the transcripts and the unit's tree.
+// record takes exposure and the helper records from csoExposure over the SDK transcript and the unit's tree; loaded also
+// reads Claude Code's own session log, the one place the expanded /cso command block is written.
 import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +20,8 @@ import { attemptUsage, retryCovered, type AttemptUsage } from "../h2h/sessions/s
 import { buildRuntimeVolume, runtimePath } from "../h2h/sessions/runtimes.ts";
 import { sessionManifest, type SessionImage } from "../statemachines/image.ts";
 import { CSO_PREFIX, csoDriverModels } from "./driver.ts";
-import { csoExposure } from "./exposure.ts";
+import { events } from "../h2h/sessions/exposure.ts";
+import { csoExposure, loaded } from "./exposure.ts";
 import { csoFail, loadCsoPrereg, type CsoPrereg } from "./prereg.ts";
 import { csoConfig, csoLimits, csoSessionRecord, harborModel, modelId, readEnd, withRefusalFallback, type EndRead } from "./sessions.ts";
 import type { CsoArm, CsoModel, CsoStage, SessionRecord, UnitRecord } from "./types.ts";
@@ -167,7 +169,7 @@ export async function runCsoSession(i: CsoSessionInput): Promise<{ record: Sessi
   const started = Date.now();
   const usage: AttemptUsage[] = [];
   const run: CsoRunRecord = { schema: "cso-run.v1", session: label(i), image_id: i.image.image_id, image_tag: i.image.tag, base_image: i.image.runtime_id, home_tree_sha256: i.home.home_tree_sha256, attempts: [] };
-  let last: { attempt: 1 | 2; end: EndRead; summary: Rec | null; records: Rec[] } | null = null;
+  let last: { attempt: 1 | 2; end: EndRead; summary: Rec | null; records: Rec[]; log: Rec[] } | null = null;
   for (const attempt of [1, 2] as const) {
     const dir = join(i.out, "a" + attempt);
     mkdirSync(dir, { recursive: true });
@@ -181,14 +183,16 @@ export async function runCsoSession(i: CsoSessionInput): Promise<{ record: Sessi
     usage.push(attemptUsage(attempt, summary as never, allowance));
     const end = readEnd(summary, attempt, records);
     run.attempts.push({ attempt, harbor_exit: exit, killed, end: end.end, reason: end.reason });
-    last = { attempt, end, summary, records };
+    last = { attempt, end, summary, records, log: ev ? readJsonl(join(ev, "claude-session.jsonl")) : [] };
     if (!end.retry) break;
     if (!retryCovered(i.capLeftUsd, allowance, usage)) {
       last = { ...last, end: { end: "gap", reason: "E_CSO_GAP_UPSTREAM the retry needs a full $" + allowance + " allowance and the spend cap had $" + (i.capLeftUsd ?? 0).toFixed(2) + " left", retry: false } };
       break;
     }
   }
-  const { exposure, helper } = csoExposure(last!.records, tree);
+  const read = csoExposure(last!.records, tree);
+  const exposure = { ...read.exposure, loaded: read.exposure.loaded || loaded(events(last!.log as never)) };
+  const helper = read.helper;
   const record = csoSessionRecord({ unit: i.unit.unit, arm: i.arm, model: i.model, stage: i.stage, attempts: last!.attempt, end: last!.end, summary: last!.summary, records: last!.records, repoDir: CSO_REPO_DIR, exposure, helper, usage, wall_sec: Math.round((Date.now() - started) / 1000) });
   const file = join(i.out, "session.json");
   writeFileSync(file, JSON.stringify(record, null, 1) + "\n", { flag: "wx" });
