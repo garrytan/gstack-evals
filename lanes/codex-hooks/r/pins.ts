@@ -61,6 +61,11 @@ export const PROVE_IT = {
   stepLine: "1. Write a test that reproduces the bug (must FAIL)",
 } as const;
 
+// The skills the load detector reads (section 4.5): prove-it, and gstack's verify skill for the /verify loads, by their
+// paths in the arm home. Their lines and the ones unique to each sit in the arm manifests (skill-lines.json, arms.ts).
+export const DETECT_SKILLS = { "prove-it": ".codex/skills/prove-it/SKILL.md", "gstack-verify": ".codex/skills/gstack-verify/SKILL.md" } as const;
+export type DetectSkill = keyof typeof DETECT_SKILLS;
+
 /** prove-it as installed on Codex, built from B1's file and checked against both digests. */
 export function proveItText(repo = REPO): string {
   const src = readFileSync(join(repo, PROVE_IT.source), "utf8");
@@ -111,6 +116,9 @@ export const ITEMS_USD = {
   "r-main": { central: 99, cap: 165, sessions: 180 },
 } as const;
 export type Item = keyof typeof ITEMS_USD;
+// The all-in stop the launch guard reads: the Captain's recorded point to come back, $1,200 (2026-11-21), against every
+// item's projection plus the crew's counter (lanes/codex-hooks/r/money.ts launchGuard).
+export const ALL_IN_STOP_USD = 1200;
 export const ITEM_NAMES = Object.keys(ITEMS_USD) as Item[];
 export const isItem = (x: string): x is Item => Object.hasOwn(ITEMS_USD, x);
 // Planning prices per session (section 11): a bug task at $0.55 in a gstack arm and $0.45 in r-none.

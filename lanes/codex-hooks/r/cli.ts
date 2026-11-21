@@ -26,8 +26,8 @@ export function guardParts(work: string, planned: PartPlan[], relaunching?: stri
 }
 
 // The launch guard's inputs: the work dir's plan and parts, the item's own ledger (LEDGER, or the host mirror l1.ts keeps),
-// every other item's ledger as R_LEDGERS/<item>.jsonl, and R_CREW, the crew file (as_of, usd from this thread's counter, and
-// stop_usd, the all-in stop the Captain set).
+// every other item's ledger as R_LEDGERS/<item>.jsonl, and R_CREW, the crew file (as_of, and usd from this thread's counter).
+// The all-in stop is pins.ts ALL_IN_STOP_USD.
 function guard(work: string, relaunching?: string) {
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
   const dir = process.env.R_LEDGERS ?? "", crewPath = process.env.R_CREW ?? "", own = process.env.LEDGER ?? "";

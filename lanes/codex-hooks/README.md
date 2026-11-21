@@ -42,4 +42,4 @@ R_LEDGERS=<dir> R_CREW=<crew.json> bun lanes/codex-hooks/cli.ts r host-up <work>
 R_LEDGERS=<dir> R_CREW=<crew.json> bun lanes/codex-hooks/cli.ts r launch <work> --part r-pilot
 ```
 
-The crew file holds `as_of`, `usd` (this thread's counter) and `stop_usd`, the all-in stop the Captain sets; the guard refuses without it. r-main launches only after r-pilot is marked done.
+The crew file holds `as_of` and `usd`, this thread's counter. The guard reads every item's projection plus that counter against the Captain's $1,200 all-in stop (r/pins.ts). r-main launches only after r-pilot is marked done.

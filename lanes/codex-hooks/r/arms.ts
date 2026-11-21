@@ -5,10 +5,11 @@
 // Codex's start capture, normalized and digested), and the check a run's tars must pass against the committed manifests in
 // quick/laneb/arms/manifests/codex-hooks-r (prepare-run.ts refuses a tar whose sha256 is not its manifest's).
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { ONBOARDING_MARKERS } from "../../../src/trial/state-root.ts";
-import { ARM_NAMES, ARMS, CODEX, GSTACK, HERE, PROVE_IT, proveItText, R, REPO, SEED_CONFIG, sha256, type RArm } from "./pins.ts";
+import { ARM_NAMES, ARMS, CODEX, DETECT_SKILLS, GSTACK, HERE, PROVE_IT, proveItText, R, REPO, SEED_CONFIG, sha256, type RArm } from "./pins.ts";
 
 export const MANIFESTS = join(REPO, "quick/laneb", R.armManifests);
 export const TAR_COMMAND = "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu";
@@ -134,4 +135,63 @@ export function checkArms(dir: string): string[] {
     if (a.length !== b.length || [...new Set(diff)].join() !== ".gstack/config.yaml") out.push("r-on and r-off differ in " + [...new Set(diff)].join(", ") + ", not only .gstack/config.yaml");
   }
   return out;
+}
+
+/** A skill's lines as section 4.5 reads them: each line below its front matter, trimmed, at least 40 characters long, and the
+ *  ones that appear in no other file under $CODEX_HOME/skills (unique, rule a). */
+export type SkillLines = { path: string; lines: string[]; unique: string[] };
+export const SKILL_LINES = join(MANIFESTS, "skill-lines.json");
+export function bodyLines(text: string): string[] {
+  const all = text.split("\n");
+  const end = all[0]?.trim() === "---" ? all.indexOf("---", 1) : -1;
+  return [...new Set(all.slice(end + 1).map((l) => l.trim()).filter((l) => l.length >= 40))];
+}
+
+/** A path (rel, from base) inside an extracted home with every link on it followed; an absolute link under /root resolves
+ *  inside root. */
+export function resolveIn(root: string, rel: string, base = root): string {
+  let cur = base;
+  for (const part of rel.split("/").filter(Boolean)) {
+    cur = join(cur, part);
+    for (let i = 0; i < 40; i++) {
+      const st = lstatSync(cur, { throwIfNoEntry: false });
+      if (!st?.isSymbolicLink()) break;
+      const t = readlinkSync(cur);
+      cur = t.startsWith("/root/") ? join(root, t.slice("/root/".length)) : t.startsWith("/") ? t : join(dirname(cur), t);
+    }
+  }
+  return cur;
+}
+
+/** Every text file under a home's .codex/skills, links followed, each real file once, keyed by its real path. Binaries (a
+ *  NUL byte) and files over 4 MB are left out. */
+export function skillsTree(root: string): Map<string, string> {
+  const out = new Map<string, string>(), seen = new Set<string>();
+  const walk = (r: string) => {
+    const st = statSync(r, { throwIfNoEntry: false });
+    if (!st || seen.has(r)) return;
+    seen.add(r);
+    if (st.isDirectory()) { for (const f of readdirSync(r).sort()) walk(resolveIn(root, f, r)); return; }
+    if (!st.isFile() || st.size > 4 << 20) return;
+    const b = readFileSync(r);
+    if (!b.includes(0)) out.set(r, b.toString("utf8"));
+  };
+  walk(resolveIn(root, ".codex/skills"));
+  return out;
+}
+
+/** The detector's skill lines from a gstack arm's tar: prove-it's and gstack's verify skill's, each against every other file. */
+export function skillLines(tar: string): Record<string, SkillLines> {
+  const root = mkdtempSync(join(tmpdir(), "codex-hooks-r-tree-"));
+  try {
+    run(["tar", "-xf", tar, "-C", root]);
+    const files = skillsTree(root), out: Record<string, SkillLines> = {};
+    for (const [name, path] of Object.entries(DETECT_SKILLS)) {
+      const real = resolveIn(root, path), text = files.get(real);
+      if (text === undefined) throw new Error("E_CODEX_R_ARMS " + tar + " holds no " + path);
+      const lines = bodyLines(text), others = [...files.entries()].filter(([f]) => f !== real).map(([, t]) => t);
+      out[name] = { path, lines, unique: lines.filter((l) => !others.some((t) => t.includes(l))) };
+    }
+    return out;
+  } finally { rmSync(root, { recursive: true, force: true }); }
 }

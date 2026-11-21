@@ -2,7 +2,7 @@
 // Part R's money on the Lane B ledger (quick/laneb/runner/ledger.ts) and L1's host and part machinery, as B1's
 // (lanes/delivery-route/money.ts): each item's approval row at its recorded cap, its done mark, the cap rule of section 11, the
 // launch guard (the item's projection against its cap, and every item's projection plus the crew's counter against the
-// all-in stop the Captain sets), the one infrastructure rerun, and the dry run that opens and settles one lease per item on a
+// Captain's all-in stop, pins.ts ALL_IN_STOP_USD), the one infrastructure rerun, and the dry run that opens and settles one lease per item on a
 // temporary ledger. A session reserves its $5 allowance on the item's ledger as it opens (the metering proxy), so six parallel
 // sessions hold six allowances open; each settles at its metered cost. A cap stop is never relaunched or rerun.
 import { mkdtempSync, rmSync } from "node:fs";
@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { hostTtlHours, itemCheck, L1, plannedCells, relaunchRects, type PartPlan } from "../../../quick/laneb/l1/l1.ts";
 import { appendRow, fromMicros, Ledger, readRows, toMicros, type Row } from "../../../quick/laneb/runner/ledger.ts";
 import { VM_HOURS_PER_SESSION } from "../../delivery-route/pins.ts";
-import { armRate, isArm, isItem, ITEM_NAMES, ITEMS_USD, R, type Item } from "./pins.ts";
+import { ALL_IN_STOP_USD, armRate, isArm, isItem, ITEM_NAMES, ITEMS_USD, R, type Item } from "./pins.ts";
 import { itemPlan } from "./plans.ts";
 import { buildRTable, pulledInputs, type RRow } from "./table.ts";
 
@@ -82,13 +82,11 @@ export function itemGuard(item: Item, rows: Row[], parts: PartPlan[], finished: 
   return { item, cap: t.cap, model, parallel, vm, host, parts_left: left.length, total: model + vm, fits: model + vm <= t.cap };
 }
 
-/** The crew file the operator writes from this thread's Capy counter (cost.dollars, list price) before each launch, and the
- *  all-in stop the Captain set for part R (section 11 sets none for the guard, so the guard refuses without one). */
-export type Crew = { as_of: string; usd: number; stop_usd: number };
+/** The crew file the operator writes from this thread's Capy counter (cost.dollars, list price) before each launch. */
+export type Crew = { as_of: string; usd: number };
 export function crewOf(crew: Crew) {
   if (typeof crew?.as_of !== "string" || typeof crew.usd !== "number" || !(crew.usd >= 0)) throw new Error("E_USAGE codex-hooks r guard: the crew file needs as_of and usd, a number of at least 0");
-  if (typeof crew.stop_usd !== "number" || !(crew.stop_usd > 0)) throw new Error("E_USAGE codex-hooks r guard: the crew file needs stop_usd, the all-in stop the Captain set for part R");
-  return { spent: toMicros(crew.usd), stop: toMicros(crew.stop_usd) };
+  return { spent: toMicros(crew.usd), stop: toMicros(ALL_IN_STOP_USD) };
 }
 
 /** Before each launch: the item's guard against its cap, and the all-in stop: each done item at its settled, each other item at

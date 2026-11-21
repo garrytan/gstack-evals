@@ -32,17 +32,18 @@ describe("part R plan and money", () => {
     approve(join(d, "r-main.jsonl"), "r-main", 165, "x");
     expect(() => approve(join(d, "r-main.jsonl"), "r-main", 165, "x")).toThrow("already holds rows");
   });
-  test("the guard needs the Captain's all-in stop, holds r-main until r-pilot is done, and reads r-pilot's projection against its cap", () => {
-    expect(() => launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 0 } as any)).toThrow("stop_usd");
-    const main = launchGuard("r-main", {}, {}, { as_of: "now", usd: 0, stop_usd: 10_000 });
+  test("the guard reads the Captain's $1,200 all-in stop, holds r-main until r-pilot is done, and reads r-pilot's projection against its cap", () => {
+    expect(() => launchGuard("r-pilot", {}, {}, { as_of: "now" } as any)).toThrow("usd");
+    const main = launchGuard("r-main", {}, {}, { as_of: "now", usd: 0 });
     expect(main.ok).toBe(false);
     expect(main.why.join()).toContain("r-pilot is not marked done");
     // The pilot's projection: $9.30 planned, the $30 parallel reserve and a $7.20 VM share (host TTL and one part VM block)
     // come to $46.50, over its recorded $45 cap; that is a decision for the Captain, not a bug in the guard.
-    const pilot = launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 0, stop_usd: 10_000 });
+    const pilot = launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 0 });
     expect(pilot.lines[0]).toContain("r-pilot $46.50 of cap $45.00");
-    const stop = launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 500, stop_usd: 600 });
-    expect(stop.why.join()).toContain("passes the $600.00 stop");
+    expect(pilot.lines[0]).toContain("all-in $184.38 of $1200.00");
+    expect(launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 1016 }).why.join()).toContain("passes the $1200.00 stop");
+    expect(launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 1015 }).why.join()).not.toContain("stop");
   });
 });
 
