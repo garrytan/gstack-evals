@@ -14,7 +14,7 @@ const p = loadCsoPrereg();
 const H = "@cso-path//" + "a".repeat(32), H2 = "@cso-path//" + "b".repeat(32);
 const units = ["u1", "u2"];
 const cells: [CsoModel, CsoArm][] = [["opus", "none"], ["opus", "cso"], ["opus", "untold"], ["particle", "none"], ["particle", "cso"]];
-const sess = (unit: string, model: CsoModel, arm: CsoArm): SessionRecord => ({ schema: "cso-session.v1", unit, arm, model, stage: "stage0", end: "completed", reason: null, texts: ["Report: src/a.js:3 and " + H + "\nDONE"], helper: { snapshot_root: "/snap", handles: { [H]: "/snap/src/a.js" } }, exposure: { loaded: arm !== "none", procedure_ran: arm === "cso", run_id: arm === "cso" ? "r" : null, completeness: "complete", findings_submitted: 1, tooling_errors: 0, host_reads_after_start: 0 } } as SessionRecord);
+const sess = (unit: string, model: CsoModel, arm: CsoArm): SessionRecord => ({ schema: "cso-session.v1", unit, arm, model, stage: "stage0", end: "completed", reason: null, texts: ["Report: src/a.js:3 and " + H + "\nDONE"], helper: { snapshot_root: "/snap", handles: { [H]: "/snap/src/a.js" } }, exposure: { loaded: arm !== "none", procedure_ran: arm === "cso", run_id: arm === "cso" ? "r" : null, completeness: "complete", findings_submitted: 1, tooling_errors: 0, host_reads_after_start: 0, scope: arm === "cso" ? "daily/default" : null } } as SessionRecord);
 const scr = (unit: string, model: CsoModel, arm: CsoArm): CsoScore => ({ schema: "cso-score.v1", unit, arm, model, stage: "stage0", gap: null, gap_reason: null } as CsoScore);
 const armRec = (arm: CsoArm) => ({ schema: "cso-arm.v1", arm, home: arm === "none" ? "none" : "gstack" } as CsoArmRecord);
 const base = (): Stage0Input => ({
@@ -45,6 +45,11 @@ describe("section 12: the stage 0 readout", () => {
   test("entry not resolved: the skill did not load, or the procedure did not run", () => {
     expect(cell(edit((i) => (s(i, "opus", "cso").exposure.loaded = false)), "opus", "cso").reasons.map((r) => r.reason)).toEqual(["entry not resolved: the cso skill did not load"]);
     expect(cell(edit((i) => (s(i, "particle", "cso").exposure.procedure_ran = false)), "particle", "cso").reasons.map((r) => r.reason)).toEqual(["entry not resolved: the helper procedure did not run"]);
+  });
+  test("not the default run: a cso helper run started comprehensive or with a scope fails its arm", () => {
+    expect(cell(edit((i) => (s(i, "opus", "cso").exposure.scope = "comprehensive/default")), "opus", "cso").reasons.map((r) => r.reason)).toEqual(["not the default run: the helper started comprehensive/default, not daily/default"]);
+    expect(cell(edit((i) => (s(i, "particle", "cso", "u2").exposure.scope = "daily/code")), "particle", "cso").reasons).toEqual([{ unit: "u2", reason: "not the default run: the helper started daily/code, not daily/default" }]);
+    expect(cell(edit((i) => (s(i, "opus", "untold").exposure.scope = "daily/owasp")), "opus", "untold").pass).toBe(true);
   });
   test("no report in assistant text", () => {
     expect(cell(edit((i) => (s(i, "opus", "none").texts = ["", " "])), "opus", "none").reasons.map((r) => r.reason)).toEqual(["no report in assistant text"]);
