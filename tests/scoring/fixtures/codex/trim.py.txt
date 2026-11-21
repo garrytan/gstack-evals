@@ -1,0 +1,26 @@
+# Copy one scenario's rollouts and final diff into the repo fixture folder, trimmed the way the Codex hooks fixtures are.
+import json, sys, os, glob, shutil
+src, dst = sys.argv[1], sys.argv[2]
+shutil.rmtree(dst, ignore_errors=True)
+for f in sorted(glob.glob(src + '/codex-sessions/*/*/*/*.jsonl')):
+    rel = os.path.relpath(f, src)
+    os.makedirs(os.path.dirname(os.path.join(dst, rel)), exist_ok=True)
+    out = []
+    for line in open(f):
+        o = json.loads(line)
+        p = o.get('payload')
+        if o.get('type') == 'session_meta' and isinstance(p, dict) and 'base_instructions' in p:
+            p['base_instructions'] = '[trimmed]'
+        if o.get('type') == 'world_state':
+            o['payload'] = {'trimmed': True}
+        if o.get('type') == 'response_item' and isinstance(p, dict):
+            if p.get('type') == 'additional_tools':
+                p['tools'] = []
+            if p.get('type') == 'message' and p.get('role') in ('developer', 'user'):
+                for c in p.get('content', []):
+                    t = c.get('text')
+                    if isinstance(t, str) and len(t) > 4000 and '<skill>' not in t:
+                        c['text'] = t[:200] + '[trimmed %d chars]' % (len(t) - 200)
+        out.append(json.dumps(o, ensure_ascii=False, separators=(',', ':')))
+    open(os.path.join(dst, rel), 'w').write('\n'.join(out) + '\n')
+shutil.copy(src + '/final.patch', dst + '/final.patch')

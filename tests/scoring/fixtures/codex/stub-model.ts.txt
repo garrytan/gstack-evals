@@ -1,0 +1,58 @@
+// A stub of the Responses API that plays a fixed script per scenario, so real Codex 0.170.0 writes real rollouts with no
+// model paid. The scenario is the [fx:<name>] tag in the first tagged user message of a request; the step is the number of
+// tool outputs the request already carries. Every call and text here is the stub's own and invented.
+type Call = { kind: "fn"; name: string; args: Record<string, unknown>; namespace?: string } | { kind: "custom"; name: string; input: string } | { kind: "say"; text: string };
+
+const TEST = "from pkg.mod import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n";
+const TEST_MORE = "from pkg.mod import add\n\n\ndef test_add_zero():\n    assert add(0, 4) == 4\n";
+const TEST_CALC = "from pkg.calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n";
+const heredoc = (path: string, body: string) => "mkdir -p tests && cat > " + path + " <<'EOF'\n" + body + "EOF";
+const sh = (cmd: string, extra: Record<string, unknown> = {}): Call => ({ kind: "fn", name: "exec_command", args: { cmd, ...extra } });
+const patch = (body: string): Call => ({ kind: "custom", name: "apply_patch", input: "*** Begin Patch\n" + body + "*** End Patch\n" });
+const addFile = (path: string, body: string) => "*** Add File: " + path + "\n" + body.split("\n").slice(0, -1).map((l) => "+" + l).join("\n") + "\n";
+const FIX = "*** Update File: pkg/mod.py\n@@\n def add(a, b):\n-    return a - b  # sum\n+    return a + b  # sum\n";
+const RUN = "python -m pytest -q tests/test_mod.py";
+const cell = (cmds: string[]): Call => ({ kind: "custom", name: "exec", input: cmds.map((c, i) => "const r" + i + " = await tools.exec_command({cmd: " + JSON.stringify(c) + "});\ntext(r" + i + ".output ?? r" + i + ");").join("\n") });
+const done: Call = { kind: "say", text: "Done.\nSTATUS: FIXED" };
+
+const SCRIPTS: Record<string, (prev: string) => Call[]> = {
+  direct: () => [sh(heredoc("tests/test_mod.py", TEST)), sh(RUN), sh("sed -i 's/a - b  # sum/a + b  # sum/' pkg/mod.py"), sh(RUN + " && grep -n 'return' pkg/mod.py && python -c 'import pkg.mod as m; print(m.add(2, 3))'"), done],
+  code: () => [cell([heredoc("tests/test_mod.py", TEST), RUN]), cell(["sed -i 's/a - b  # sum/a + b  # sum/' pkg/mod.py", RUN]), done],
+  patch: () => [patch(addFile("tests/test_mod.py", TEST)), sh(RUN), patch(addFile("tests/test_mod_more.py", TEST_MORE) + FIX), sh("python -m pytest -q tests/"), done],
+  "patch-first": () => [patch(addFile("tests/test_mod.py", TEST) + FIX), sh(RUN), done],
+  move: () => [patch(addFile("tests/test_mod.py", TEST_CALC)), sh(RUN), patch("*** Update File: pkg/mod.py\n*** Move to: pkg/calc.py\n@@\n def add(a, b):\n-    return a - b  # sum\n+    return a + b  # sum\n"), sh(RUN), done],
+  sub: () => [sh(heredoc("tests/test_mod.py", TEST)), sh(RUN), { kind: "fn", name: "spawn_agent", namespace: "collaboration", args: { message: "[fx:child] Fix pkg/mod.py so tests/test_mod.py passes, then run it.", fork_turns: "none", task_name: "fixer" } }, { kind: "fn", name: "wait_agent", namespace: "collaboration", args: { timeout_ms: 60000 } }, done],
+  child: () => [patch(FIX), sh(RUN), { kind: "say", text: "Fixed; the test passes." }],
+  bg: (prev) => [sh(heredoc("tests/test_mod.py", TEST)), sh(RUN), sh("sed -i 's/a - b  # sum/a + b  # sum/' pkg/mod.py"), sh("sleep 3; " + RUN, { yield_time_ms: 250 }), { kind: "fn", name: "write_stdin", args: { session_id: Number(/session ID (\d+)/.exec(prev)?.[1] ?? 0), chars: "", yield_time_ms: 15000 } }, done],
+  "bg-unread": () => [sh(heredoc("tests/test_mod.py", TEST)), sh(RUN), sh("sed -i 's/a - b  # sum/a + b  # sum/' pkg/mod.py"), sh("sleep 3; " + RUN, { yield_time_ms: 250 }), done],
+};
+
+const sse = (events: object[]) => events.map((e: any) => "event: " + e.type + "\ndata: " + JSON.stringify(e) + "\n\n").join("");
+const text = (item: any): string => (Array.isArray(item?.content) ? item.content.map((c: any) => (typeof c?.text === "string" ? c.text : "")).join("\n") : "");
+const outText = (o: any): string => (typeof o === "string" ? o : Array.isArray(o) ? o.map((c: any) => c?.text ?? "").join("\n") : JSON.stringify(o ?? ""));
+let n = 0;
+Bun.serve({
+  hostname: "127.0.0.1",
+  port: Number(process.env.STUB_PORT ?? 18555),
+  async fetch(req) {
+    const url = new URL(req.url);
+    if (req.method === "GET") return Response.json({ object: "list", data: [] });
+    const body: any = await req.json();
+    const input: any[] = Array.isArray(body.input) ? body.input : [];
+    const tag = input.filter((i) => i?.type === "message" && i.role === "user").map((i) => /\[fx:([\w-]+)\]/.exec(text(i))?.[1]).find(Boolean) ?? input.map((i) => /\[fx:([\w-]+)\]/.exec(JSON.stringify(i))?.[1]).find(Boolean) ?? "none";
+    if (tag === "none") console.log("NONE", JSON.stringify(input.map((i) => [i?.type, i?.role, JSON.stringify(i).slice(0, 200)])));
+    const outs = input.filter((i) => i?.type === "function_call_output" || i?.type === "custom_tool_call_output");
+    const step = outs.length, prev = outText(outs.at(-1)?.output);
+    const script = (SCRIPTS[tag] ?? (() => [done]))(prev);
+    const call = script[step] ?? done;
+    const id = "r" + n++;
+    const cid = "call_" + tag.replace(/-/g, "_") + "_" + step;
+    const item = call.kind === "fn" ? { type: "function_call", id: "fc_" + step, call_id: cid, name: call.name, arguments: JSON.stringify(call.args), ...(call.namespace ? { namespace: call.namespace } : {}) }
+      : call.kind === "custom" ? { type: "custom_tool_call", id: "ctc_" + step, call_id: cid, name: call.name, input: call.input }
+      : { type: "message", role: "assistant", id: "msg_" + step, content: [{ type: "output_text", text: call.text }] };
+    console.log(url.pathname, tag, step, item.type, (item as any).name ?? "", JSON.stringify(body.tools?.map((t: any) => t.name ?? t.type) ?? []).slice(0, 400));
+    const usage = { input_tokens: 10, input_tokens_details: { cached_tokens: 0 }, output_tokens: 5, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 15 };
+    return new Response(sse([{ type: "response.created", response: { id } }, { type: "response.output_item.done", item }, { type: "response.completed", response: { id, status: "completed", usage } }]), { headers: { "content-type": "text/event-stream" } });
+  },
+});
+console.log("stub up");
