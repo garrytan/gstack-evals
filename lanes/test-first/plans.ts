@@ -8,8 +8,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { plannedCells, prefixOf, seeded, type ItemDef, type PartPlan, type Plan, type Profile, type Rect } from "../../quick/laneb/l1/l1.ts";
-import { Ledger, type Row } from "../../quick/laneb/runner/ledger.ts";
-import { approve, attempt2Owed, itemTotals } from "./money.ts";
+import { type Row } from "../../quick/laneb/runner/ledger.ts";
+import { attempt2Owed, itemTotals } from "./money.ts";
 import { ARM_DEFS, B2, CAPS_USD, drawnTasks, HERE, hostOf, HOSTS, isItem, ITEM_MODEL, ITEM_NAMES, LABELS, labelsOf, loadBundle, MODEL_KEYS, MODELS, REPO, TARS, type Item, type ModelKey } from "./pins.ts";
 
 export const PROXY_CONFIG = join(REPO, HERE, "proxy.json");
@@ -31,18 +31,14 @@ export function pilotModels(env = process.env.B2_PILOT_MODELS): ModelKey[] {
   if (bad.length || new Set(ms).size !== ms.length) throw new Error("E_USAGE B2_PILOT_MODELS names " + JSON.stringify(env) + "; give each of " + MODEL_KEYS.join(", ") + " at most once");
   return ms as ModelKey[];
 }
-/** Pre-run change 2: a re-pilot's ledger opens with b2-pilot's approval row at its recorded cap and carries the first pilot
- *  run's settled spend as one settled row, so the first run and the re-pilot together stay inside b2-pilot's one cap. */
-export function carryPilot(path: string, from: Row[], fromRun: string, by: string) {
-  const first = itemTotals(from, "b2-pilot");
-  if (!first.done || first.open) throw new Error("E_B2_INPUT the first pilot's ledger is not done with every reserve settled; nothing to carry");
-  approve(path, "b2-pilot", CAPS_USD["b2-pilot"], by);
-  const l = new Ledger(path, "b2-pilot"), id = "carry-" + fromRun, detail = { kind_detail: "the first b2-pilot run " + fromRun + "'s settled spend, carried by pre-run change 2" };
-  const r = l.reserve(id, first.settled, detail);
-  if (!r.ok) throw new Error("E_B2_INPUT the carry reserve was refused: " + r.reason);
-  const s = l.settle(id, first.settled, detail);
-  if (!s.ok) throw new Error("E_B2_INPUT the carry settle was refused: " + s.reason);
-  return first.settled;
+/** Pre-run change 2: the re-pilot runs on a fresh b2-pilot ledger (L1 binds one run per ledger), and its launch guard reads
+ *  that ledger with the first pilot run's settled spend added as one settled row, so the guard refuses a launch whose
+ *  projection would take the two runs together past b2-pilot's one cap. */
+export function withCarry(own: Row[], first: Row[]): Row[] {
+  const t = itemTotals(first, "b2-pilot");
+  if (!t.done || t.open) throw new Error("E_B2_INPUT the first pilot's ledger is not done with every reserve settled; nothing to carry");
+  const row = { ts: new Date().toISOString(), item: "b2-pilot", id: "carry-first-pilot", usd_micros: t.settled, kind_detail: "the first b2-pilot run's settled spend (pre-run change 2)" };
+  return [...own, { ...row, kind: "reserve" } as Row, { ...row, kind: "settle" } as Row];
 }
 export const partName = (n: number) => "b2-" + n;
 /** A part's number in its item (b2-5 is 5), its attempt 2 and relaunch included; 0 for a pilot part. */

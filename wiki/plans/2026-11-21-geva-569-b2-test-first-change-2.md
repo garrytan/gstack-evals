@@ -29,5 +29,5 @@ prove-it's steps were in context in all 3 cx-prove-it sessions, and each acted o
 ## The re-pilot
 
 - `B2_PILOT_MODELS=sol` prepares b2-pilot's Sol part alone: the three pilot tasks, the four Codex arms, 12 sessions.
-- Its ledger opens with b2-pilot's approval row at $65 and carries the first pilot run's settled $13.62 as one settled row (`b2 carry`). The first run and the re-pilot together stay inside the one cap.
+- L1 binds one run to a ledger, so the re-pilot runs on a fresh b2-pilot ledger with its approval row at $65. Its launch guard reads that ledger with the first pilot run's settled $13.62 added (`B2_PILOT_CARRY`, the first run's ledger), so it refuses a launch whose projection would take the two runs together past $65. The fresh ledger itself enforces $65 on the re-pilot's own sessions; at Sol's pilot cost of $0.17 a session, the two runs together come to about $16.
 - The first pilot's Sol sessions are kept in the record and are not read again. The re-pilot's readout is the same as section 12's for Sol, plus two checks: every gstack start prints no INSTALL failure, and Bun is on the shell's PATH.
