@@ -32,6 +32,9 @@ export interface TreeRecord {
   tree: string;
   os: string;
   files: string[];
+  /** Test files whose every case skipped on the runner (Docker-only and other env-gated files). gstack's CI carry counts
+   * them as not run, so /ship and pregate run them locally with the lane's per_file runner (gstack docs/pregate.md#skipped-files). */
+  skipped_files: string[];
   tests: number;
 }
 
@@ -57,8 +60,10 @@ export function treeRecord(env: Record<string, string | undefined>, o: { junit: 
   const cases = junitCases(o.junit);
   const failed = cases.filter((c) => c.status === "fail");
   if (failed.length) throw new Error("the JUnit report holds " + failed.length + " failing case(s), the first " + failed[0]!.key);
-  const tested = [...new Set(cases.map((c) => c.key.split(" > ")[0]!))].sort();
+  const fileOf = (c: { key: string }) => c.key.split(" > ")[0]!;
+  const tested = [...new Set(cases.map(fileOf))].sort();
   if (!tested.length) throw new Error("the JUnit report lists no test file");
+  const ran = new Set(cases.filter((c) => c.status !== "skip").map(fileOf));
   const checks = [...new Set(o.checks.split("\n").map((l) => l.trim()).filter(Boolean))];
   return {
     run_id: int("GITHUB_RUN_ID"),
@@ -69,6 +74,7 @@ export function treeRecord(env: Record<string, string | undefined>, o: { junit: 
     tree: o.tree,
     os,
     files: [...tested, ...checks.map((c) => CHECK + c)],
+    skipped_files: tested.filter((f) => !ran.has(f)),
     tests: cases.filter((c) => c.status === "pass").length,
   };
 }
@@ -152,7 +158,7 @@ function record(args: string[]) {
   const out = need(args, "--out");
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(rec, null, 2) + "\n");
-  console.log("TESTED_TREE: run " + rec.run_id + "/" + rec.run_attempt + " " + rec.event + " head " + rec.head_sha.slice(0, 12) + " tree " + rec.tree.slice(0, 12) + " files=" + rec.files.length + " tests=" + rec.tests + " os=" + rec.os);
+  console.log("TESTED_TREE: run " + rec.run_id + "/" + rec.run_attempt + " " + rec.event + " head " + rec.head_sha.slice(0, 12) + " tree " + rec.tree.slice(0, 12) + " files=" + rec.files.length + " skipped_files=" + rec.skipped_files.length + " tests=" + rec.tests + " os=" + rec.os);
 }
 
 function merge(args: string[]) {
