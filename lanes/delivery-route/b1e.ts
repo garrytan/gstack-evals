@@ -101,10 +101,11 @@ function launchCheck(work: string) {
   if (dirty.length) throw new Error("E_B1_LAUNCH " + plan.item + ": the checkout holds uncommitted changes to harness paths (" + dirty.join("; ") + "); take it to the Captain before launching");
 }
 
-/** Rows whose part is not one of the item's planned parts (an attempt 2 part is its part plus -a2), so another run's table is refused. */
+/** Rows whose part is not one of the item's planned parts (L1 names an attempt 2 <part>-a2 and a relaunch <part>-relaunch,
+ *  so <part>-a2-relaunch too), so another run's table is refused. */
 export function partProblems(rows: B1dRow[], item: B1eItem): string[] {
   const names = new Set(b1ePlan(item).parts.map((p) => p.name));
-  return rows.filter((r) => !names.has(String(r.part).replace(/-a2$/, ""))).map((r) => r.trial + " came from part " + r.part + ", not a part of " + item);
+  return rows.filter((r) => !names.has(String(r.part).replace(/(-a2)?(-relaunch)?$/, ""))).map((r) => r.trial + " came from part " + r.part + ", not a part of " + item);
 }
 // ---- Readings and the decision.
 const loaded = (r: any) => !!r.load?.loaded, followed = (r: any) => !!r.detect?.followed;

@@ -78,7 +78,8 @@ describe("b1e guards", () => {
   test("a report refuses rows from another run's parts, B1d's in-sample table included", () => {
     const b1d = b1dInRows(), row = b1d[0]!;
     expect(partProblems(b1d, "b1e-in").length).toBe(b1d.length);
-    expect(partProblems([{ ...row, part: "b1e-in-2" }, { ...row, part: "b1e-in-2-a2" }], "b1e-in")).toEqual([]);
+    expect(partProblems(["b1e-in-2", "b1e-in-2-a2", "b1e-in-2-relaunch", "b1e-in-2-a2-relaunch"].map((part) => ({ ...row, part })), "b1e-in")).toEqual([]);
+    expect(partProblems(["b1d-in-1-relaunch", "b1e-fresh-1-relaunch", "b1e-in-2-relaunch-a2", "b1e-in-9-relaunch"].map((part) => ({ ...row, part })), "b1e-in").length).toBe(4);
     expect(partProblems([{ ...row, part: "b1e-fresh-1" }], "b1e-in").length).toBe(1);
     expect(partProblems([{ ...row, part: "smoke-opus" }], "b1e-smoke")).toEqual([]);
   });
