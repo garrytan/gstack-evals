@@ -487,6 +487,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_ANALYSIS_INPUT](#e_cso_analysis_input) | 2 | U20 |
 | [E_CSO_READOUT_KEY](#e_cso_readout_key) | 2 | U20 |
 | [E_CSO_READOUT_OUT](#e_cso_readout_out) | 2 | U20 |
+| [E_CSO_PROVIDER_DRIFT](#e_cso_provider_drift) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3817,6 +3818,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 The /cso eval sealed stage 1 file can't be written or opened: it already exists, can't be created, is not a cso-sealed.v1 file, or doesn't match the sha256 the run record holds.
 
 Fix: A sealed file is written once and never overwritten. Open it only with the recorded sha256 after stage 2's analysis.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_PROVIDER_DRIFT
+
+A /cso eval judge or labeller call through OpenRouter (Gemini 4 Carbon or Argon) was served by a provider other than google-vertex, the route prereg.json pins.
+
+Fix: Stop the judge send and ask the Captain. Never accept a reply from another provider, and never unpin the route.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 

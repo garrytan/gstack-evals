@@ -241,3 +241,43 @@ export const anchorSources = (u: UnitRecord, tree: TreeIndex, p: CsoPrereg): { a
   { anchor: "stock", s: { texts: [stockReport(u, tree, p)], helper: ANCHOR_ROOT } },
 ];
 
+
+
+export interface AnchorCandidate { id: string; kind: "oracle" | "stock" }
+export interface GoldFill { anchors: string[]; findings: string[]; still_short: string[] }
+
+/** Section 7's fill when gold is short of a minimum: extra anchors (oracle for the named class, stock for the not-named
+ *  class, then alternating for the report count) and extra findings for validity, each pool in check_seed order, the
+ *  anchors only as many as extraAnchorsAllowed admits under anchor_share_max. still_short names what the pools or the cap
+ *  could not fill. */
+export function goldFill(c: JudgeCheck, pools: { anchors: readonly AnchorCandidate[]; findings: readonly string[] }, p: CsoPrereg): GoldFill {
+  const j = p.judge as unknown as CheckRules;
+  const d = c.detail as { reports: number; anchors: number; gold_reports: number; gold_classes: { named: number; not_named: number }; gold_findings: number; validity_classes: { supported: number; unsupported: number } };
+  const order = <T>(xs: readonly T[], id: (x: T) => string) => checkSetOrder(xs.map((x) => ({ id: id(x), anchor: null, x })), p).map((y) => y.x);
+  const oracle = order(pools.anchors.filter((a) => a.kind === "oracle"), (a) => a.id), stock = order(pools.anchors.filter((a) => a.kind === "stock"), (a) => a.id);
+  let room = extraAnchorsAllowed(d.reports - d.anchors, d.anchors, p);
+  const anchors: string[] = [], still: string[] = [];
+  const take = (pool: AnchorCandidate[], n: number) => {
+    let got = 0;
+    while (got < n && room > 0 && pool.length) {
+      anchors.push(pool.shift()!.id);
+      room--;
+      got++;
+    }
+    return got;
+  };
+  const needOracle = Math.max(j.class_min - d.gold_classes.named, 0), needStock = Math.max(j.class_min - d.gold_classes.not_named, 0);
+  if (take(oracle, needOracle) < needOracle) still.push("named_class");
+  if (take(stock, needStock) < needStock) still.push("named_class");
+  let needReports = Math.max(j.check_reports_min - d.gold_reports - needOracle - needStock, 0);
+  for (let k = 0; needReports > 0; k++) {
+    if (!take(k % 2 ? stock : oracle, 1) && !take(k % 2 ? oracle : stock, 1)) break;
+    needReports--;
+  }
+  if (needReports > 0) still.push("named_reports");
+  const vNeed = Math.max(j.check_findings_min - d.gold_findings, j.class_min - d.validity_classes.supported, j.class_min - d.validity_classes.unsupported, 0);
+  const findings = order(pools.findings, (f) => f).slice(0, vNeed);
+  if (findings.length < vNeed) still.push("validity");
+  return { anchors, findings, still_short: [...new Set(still)] };
+}
+
