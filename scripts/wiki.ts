@@ -424,7 +424,7 @@ function tableRows(lines: string[]): string[][] {
 }
 
 const dollars = (s: string | undefined) => {
-  if ((s ?? "").split("$").length !== 2) return null;
+  if ((s ?? "").split("$").length !== 2 || ((s ?? "").match(/\d[\d,.]*/g) ?? []).length !== 1) return null;
   const m = (s ?? "").match(/\$ *(\d[\d,]*(?:\.\d+)?)([km])?(?![\d.,]*(?:[a-z]|\s+(?:[km]|thousand|million|billion)\b))/i);
   return m ? Number(m[1].replaceAll(",", "")) * (m[2] ? (m[2].toLowerCase() === "k" ? 1e3 : 1e6) : 1) : null;
 };

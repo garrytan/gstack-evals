@@ -315,6 +315,8 @@ describe("tighter parsing", () => {
   test("a value with more than one dollar figure fails closed", () => {
     expect(has(check(prereg(spend("$300 per arm, $1,200 in all"))), 'practice 6: "## Interim look" needs "Planned paid spend: $<n>"')).toBe(true);
     expect(has(check(prereg(swap("| $300 | $30 |", "| $300 | $20 to $30 |"))), 'arm "no gstack" needs its budget and pilot cap in dollars')).toBe(true);
+    expect(has(check(prereg(swap("| $300 | $30 |", "| $300 | $40-80 |"))), 'arm "no gstack" needs its budget and pilot cap in dollars')).toBe(true);
+    expect(has(check(prereg(spend("$300 per arm, 1,200 in all"))), 'practice 6: "## Interim look" needs "Planned paid spend: $<n>"')).toBe(true);
     expect(check(prereg(spend("$1,200 for the largest counted run")))).toEqual([]);
   });
 

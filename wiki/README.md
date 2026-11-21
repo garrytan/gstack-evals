@@ -112,7 +112,7 @@ The check reads these posts:
 
 Amendments, pins and addenda are not preregistrations, so they are not checked. A post that is already on the base branch is never checked, so plans and results merged before these rules stay as they are. The check decides this from git, not from the post's date. With no base (`--base none`) it does not run.
 
-A preregistration has four sections. A heading may carry a number and a note in brackets, such as `## 2. Pilots (R111)`. Labelled lines start the line, as `Label: value`. Lines inside code fences (``` or ~~~) and HTML comments (`<!-- -->`) are not read, so a fenced or commented-out example never counts as the plan. A dollar value holds exactly one figure, which may end in k or M for thousands or millions when the letter touches the number, such as $1.2k; a value with two dollar signs, a space before the k or M, or a spelled-out unit is refused.
+A preregistration has four sections. A heading may carry a number and a note in brackets, such as `## 2. Pilots (R111)`. Labelled lines start the line, as `Label: value`. Lines inside code fences (``` or ~~~) and HTML comments (`<!-- -->`) are not read, so a fenced or commented-out example never counts as the plan. A dollar value holds exactly one figure, which may end in k or M for thousands or millions when the letter touches the number, such as $1.2k; a value with two figures, a space before the k or M, or a spelled-out unit is refused.
 
 ```markdown
 ## Decision
