@@ -41,7 +41,7 @@ describe("1. pin", () => {
     expect([name, target, path!.split(":")[0], rest]).toEqual([CODEX_LINK, realpathSync(bin), CODEX.path_dir, ["exec", "-"]]);
     const s = fakeSession(FAKE.replace('process.env.ASK !== "0"', "false"));
     await solDriver({ ...o, out: tmp(), nextUser: async () => ({ end: true }) }).run(s as any, { id: "ohr", prompt: "hi" } as any, 60_000);
-    const exec = s.spawned.find((a) => a.includes(CODEX.bin))!;
+    const exec = s.spawned.find((a) => a.includes(CODEX.bin) && a.includes("exec"))!;
     expect(exec.slice(0, 4)).toEqual(codexLaunch([]));
     expect(exec.filter((a) => a.startsWith("skills.config="))).toEqual([]);
   });
@@ -235,7 +235,7 @@ function fakeSession(fake: string) {
     stop() {},
   };
 }
-const FAKE = 'const fs = require("node:fs"); const dir = process.env.HOME + "/.codex/sessions/2026/11/19"; fs.mkdirSync(dir, { recursive: true }); fs.appendFileSync(dir + "/rollout-x-th-1.jsonl", JSON.stringify({ type: "session_meta", payload: { id: "th-1" } }) + "\\n");\nconst input = await Bun.stdin.text(); const resume = process.argv.includes("resume"); const out = (o) => fs.writeSync(1, JSON.stringify(o) + "\\n");\nout({ type: "thread.started", thread_id: "th-1" }); out({ type: "turn.started" });\nif (process.env.ASK !== "0" && !resume) { out({ type: "item.completed", item: { id: "call_q1", type: "agent_message", text: "' + Q1 + '" } }); out({ type: "item.completed", item: { id: "i1", type: "agent_message", text: "I asked above." } }); }\nelse out({ type: "item.completed", item: { id: "i2", type: "agent_message", text: resume ? "Thanks: " + input.trim() : "A plan with no question." } });\nout({ type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 4, output_tokens: 3, reasoning_output_tokens: 1 } });';
+const FAKE = 'if (process.argv.includes("--version")) { console.log("codex-cli 0.170.0"); process.exit(0); }\nconst fs = require("node:fs"); const dir = process.env.HOME + "/.codex/sessions/2026/11/19"; fs.mkdirSync(dir, { recursive: true }); fs.appendFileSync(dir + "/rollout-x-th-1.jsonl", JSON.stringify({ type: "session_meta", payload: { id: "th-1" } }) + "\\n");\nconst input = await Bun.stdin.text(); const resume = process.argv.includes("resume"); const out = (o) => fs.writeSync(1, JSON.stringify(o) + "\\n");\nout({ type: "thread.started", thread_id: "th-1" }); out({ type: "turn.started" });\nif (process.env.ASK !== "0" && !resume) { out({ type: "item.completed", item: { id: "call_q1", type: "agent_message", text: "' + Q1 + '" } }); out({ type: "item.completed", item: { id: "i1", type: "agent_message", text: "I asked above." } }); }\nelse out({ type: "item.completed", item: { id: "i2", type: "agent_message", text: resume ? "Thanks: " + input.trim() : "A plan with no question." } });\nout({ type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 4, output_tokens: 3, reasoning_output_tokens: 1 } });';
 
 describe("questions", () => {
   test("a question asked through Codex reaches the closing loop as reply text, the simulator's answer goes back by exec resume, and the session continues", async () => {
@@ -245,7 +245,7 @@ describe("questions", () => {
     const r = await d.run(s as any, { id: "ohr", prompt: "$office-hours hi" } as any, 60_000);
     expect(seen).toEqual([[Q1, "I asked above."], ["Thanks: Two bakeries paid."]]);
     expect(r.termination).toEqual({ kind: "completed" });
-    const execs = s.spawned.filter((a) => a.includes(CODEX.bin));
+    const execs = s.spawned.filter((a) => a.includes(CODEX.bin) && a.includes("exec"));
     expect(execs).toHaveLength(2);
     expect(execs[1]!.slice(-3)).toEqual(["resume", "th-1", "-"]);
     expect(r.usage).toEqual({ input: 6, output: 2, reasoning: 1, cache_read: 4, cache_write: 0 });
@@ -262,10 +262,13 @@ describe("questions", () => {
   test("a session with no question ends after one exec when the loop ends it, and reads as done", async () => {
     const s = fakeSession(FAKE.replace('process.env.ASK !== "0"', "false"));
     const seen: string[][] = [];
-    const d = solDriver({ ...o, out: tmp(), nextUser: async (texts) => (seen.push(texts), { end: true }) });
+    const out = tmp();
+    const d = solDriver({ ...o, out, nextUser: async (texts) => (seen.push(texts), { end: true }) });
     const r = await d.run(s as any, { id: "ohr", prompt: "hi" } as any, 60_000);
     expect(seen).toEqual([["A plan with no question."]]);
     expect(r.termination).toEqual({ kind: "completed" });
-    expect(s.spawned.filter((a) => a.includes(CODEX.bin))).toHaveLength(1);
+    expect(s.spawned.filter((a) => a.includes(CODEX.bin) && a.includes("exec"))).toHaveLength(1);
+    expect(s.spawned.filter((a) => a.includes(CODEX.bin) && !a.includes("exec"))).toEqual([codexLaunch(["--version"])]);
+    expect(JSON.parse(readFileSync(join(out, "codex", "init.json"), "utf8")).codex_version).toBe("codex-cli " + CODEX.version);
   });
 });

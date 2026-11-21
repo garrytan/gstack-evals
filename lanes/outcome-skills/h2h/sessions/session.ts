@@ -11,6 +11,7 @@
 // safety stop is its own end and is scored like any other. Claude Code's refusal fallback (a safety filter flagged the
 // request and Claude Code switched models, which the proxy refuses) is that safety stop, never an upstream end.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import type { CloseAnswer } from "../../driver/stage.ts";
 import { h2hFail } from "../prereg.ts";
 import type { Exposure, H2hSession, SessionEnd } from "../types.ts";
 import type { H2hPlanned } from "./plan.ts";
@@ -74,10 +75,16 @@ export function gapOf(end: SessionEnd, attempt: 1 | 2, s: Summary | null): strin
 export interface AttemptUsage { attempt: 1 | 2; end: SessionEnd; slot: string | null; allowance_usd: number | null; spent_micros: number; tokens: H2hSession["tokens"]; reservation_refusals: number }
 export type H2hSessionRecord = H2hSession & { attempt_usage?: AttemptUsage[]; retry_cap_stop?: string };
 
+/** The attempt's tokens from the outcome driver's close answer (CloseAnswer.usage, Anthropic's key names; output already
+ *  holds reasoning). The head-to-head's first run read the ledger's own key names here and recorded 0 for every field. */
+export function closeTokens(close: Record<string, any>): H2hSession["tokens"] {
+  const u = (close.usage ?? {}) as Partial<CloseAnswer["usage"]>;
+  return { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, cache_read: u.cache_read_input_tokens ?? 0, cache_write: u.cache_creation_input_tokens ?? 0 };
+}
+
 export function attemptUsage(attempt: 1 | 2, s: Summary | null, allowanceUsd: number | null): AttemptUsage {
   const close = closeOf(s);
-  const u = (close.usage ?? {}) as Record<string, number>;
-  return { attempt, end: endOf(s), slot: typeof s?.slot?.id === "string" ? s.slot.id : null, allowance_usd: allowanceUsd, spent_micros: Number(close.spent_micros ?? 0), tokens: { input: u.input ?? 0, output: u.output ?? 0, cache_read: u.cache_read ?? 0, cache_write: u.cache_write ?? 0 }, reservation_refusals: Number(close.reservation_bound ?? 0) };
+  return { attempt, end: endOf(s), slot: typeof s?.slot?.id === "string" ? s.slot.id : null, allowance_usd: allowanceUsd, spent_micros: Number(close.spent_micros ?? 0), tokens: closeTokens(close), reservation_refusals: Number(close.reservation_bound ?? 0) };
 }
 
 /** Whether the money cap above the session (capLeftUsd: what it had left when the session began) still covers a retry's

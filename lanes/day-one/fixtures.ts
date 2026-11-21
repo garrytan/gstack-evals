@@ -14,7 +14,7 @@ import { join } from "node:path";
 import type { HostRig } from "../../src/skill-eval/cli/run-host.ts";
 import type { LoadedPolicy } from "../../src/skill-eval/cli/policy.ts";
 import { nodeVolume, startApp, stopApp } from "./app.ts";
-import { BROWSER_IMAGE, LIMITS, MODELS } from "./frozen.ts";
+import { BROWSER_IMAGE, CHECKER_SHA256, LIMITS, MODELS } from "./frozen.ts";
 import { attemptOutcome, endLoop, launchSession, micros, settle } from "./sessions.ts";
 import { copySamples, loadUnit, type Unit } from "./units.ts";
 import { checkPrompt, parseVerdicts, scoreBuild, type VerdictParse } from "./verdict.ts";
@@ -64,7 +64,7 @@ export async function runRealFixtures(o: { rig: HostRig; policy: LoadedPolicy; d
         done = { app: f.app, started: true, share: null, nothing_useful: null, pass: false, why: outcome.state + ": " + outcome.why };
         if (outcome.state !== "missing") {
           apps.push(done);
-          writeFileSync(join(o.out, FIXTURES_RECEIPT), JSON.stringify({ schema: "day-one.fixtures-real.v1", apps, passed: false, spent_micros: spent }, null, 2) + "\n");
+          writeFileSync(join(o.out, FIXTURES_RECEIPT), JSON.stringify({ schema: "day-one.fixtures-real.v1", checker_sha256: CHECKER_SHA256, apps, passed: false, spent_micros: spent }, null, 2) + "\n");
           return { apps, passed: false, spent_micros: spent };
         }
         continue;
@@ -80,7 +80,7 @@ export async function runRealFixtures(o: { rig: HostRig; policy: LoadedPolicy; d
     o.log((apps.at(-1)!.pass ? "PASS " : "FAIL ") + f.app + " with the real checker: " + apps.at(-1)!.why);
   }
   const passed = apps.every((a) => a.pass);
-  writeFileSync(join(o.out, FIXTURES_RECEIPT), JSON.stringify({ schema: "day-one.fixtures-real.v1", apps, passed, spent_micros: spent }, null, 2) + "\n");
+  writeFileSync(join(o.out, FIXTURES_RECEIPT), JSON.stringify({ schema: "day-one.fixtures-real.v1", checker_sha256: CHECKER_SHA256, apps, passed, spent_micros: spent }, null, 2) + "\n");
   return { apps, passed, spent_micros: spent };
 }
 

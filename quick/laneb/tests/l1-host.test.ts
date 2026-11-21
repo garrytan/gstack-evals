@@ -37,7 +37,7 @@ function rig(item: string, o: { cap?: number; preReserve?: number; entry?: strin
     PATH: FIX + ":" + process.env.PATH, HOME: process.env.HOME ?? root,
     UBI_FAKE: fake, UBI_RUNNER: join(FIX, "ubi"), UBI_RUNNER_SHA256: sha256(readFileSync(join(FIX, "ubi"))), UBI_RUNNER_STATE: state, UBI_RECOVERY_DIR: recovery, UBI_OWNER: "GEVA-268",
     LEDGER: ledger, ARMS: arms, TB2_PARTS: tb2, TB2_PARTS_SHA256: sha256(readFileSync(tb2)),
-    L1_PREPARE_RUN: join(FIX, "fake-prepare-run.ts"), L1_HOST_LEDGER_PORT: String(freePort()), L1_BUNDLE_WAIT_SEC: "30", L1_POLL_SEC: "0.2", L1_SALVAGE_WAIT_SEC: "30", PULL_RETRY_SEC: "0",
+    L1_PREPARE_RUN: join(FIX, "fake-prepare-run.ts"), L1_HOST_LEDGER_PORT: String(freePort()), L1_BUNDLE_WAIT_SEC: "30", L1_POLL_SEC: "0.2", L1_SALVAGE_WAIT_SEC: "30", PULL_RETRY_SEC: "0", VM_EXTEND_POLL_SEC: "0.2",
     ANTHROPIC_API_KEY: "test-not-a-key", OPENROUTER_API_KEY: "test-not-a-key", UBICLOUD_API_KEY: "test-not-a-key",
   };
   const r = { root, fake, work: join(root, "work"), ledger, env, entry: o.entry ?? L1TS };
@@ -847,6 +847,7 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
     expect(l1(r, ["host-up", r.work]).code).toBe(0);
     expect(l1(r, ["launch", r.work, "--part", "f1-1"], { TUNNEL_DOWN_VM: "vm-2", FAIL_PULL: "vm-2" }).code).toBe(0);
+    await until(() => existsSync(join(r.fake, "vm-2/work/run/out/vm-run.exit")));
     await loseHost(r, "host-1", "f1-1", "vm-2");
     const rec = l1(r, ["recover", r.work]);
     expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part f1-1")]);

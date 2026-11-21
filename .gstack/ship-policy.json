@@ -9,7 +9,9 @@
     "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/**",
     "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/licences/**",
     "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/MANIFEST.sha256",
-    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/*.jsonl"
+    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/*.jsonl",
+    "quick/laneb/arms/manifests/codex-hooks-r/*.files.tsv",
+    "tests/codex-hooks/**/fixtures/**"
   ],
   "review_content_patterns": [
     "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/diffs/*.patch",

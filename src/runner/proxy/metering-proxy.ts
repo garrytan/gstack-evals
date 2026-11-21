@@ -221,6 +221,8 @@ export interface ProxyOptions {
   refuseServerTools?: boolean;
   /** Copy these top-level fields of a slot's first paid request whose tools list is non-empty, as the client sent them (null for a field it left out), into the slot's meter as first_request. Off by default; the pstack-checks family turns it on for its stages to record each session's effort and thinking fields. */
   firstRequestFields?: string[];
+  /** Copy these top-level fields of every paid request, as the client sent them (null for a field it left out), into its request line in the journal as fields. Off by default; the Codex hooks eval turns it on for reasoning, to read every request's effort. */
+  requestFields?: string[];
   /** Answer an allowance refusal that only in-flight reservations cause with a retryable 429 E_H2H_RESERVATION_BOUND, counted in Meter.reservation_bound and not in allowance_stops. Off by default; the head-to-head turns it on for its stages. */
   reservationBoundRetry?: boolean;
   sleep?: (ms: number) => Promise<void>;
@@ -822,6 +824,7 @@ export class MeteringProxy {
       return Response.json({ input_tokens: Math.ceil(Buffer.byteLength(raw) / 4) });
     }
     if (allowed.free) return forwardFree(JSON.stringify(body));
+    const sentFields = o.requestFields ? structuredClone(Object.fromEntries(o.requestFields.map(k => [k, body[k] ?? null]))) : null;
     if (o.firstRequestFields && Array.isArray(body.tools) && body.tools.length > 0) this.meter(slot).first_request ??= structuredClone(Object.fromEntries(o.firstRequestFields.map(k => [k, body[k] ?? null])));
     if (body.stream === true && route === "/v1/chat/completions") body.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
     if (provider === "openai" && body.service_tier === undefined) body.service_tier = "default";
@@ -900,7 +903,7 @@ export class MeteringProxy {
       }
       const rid = held.reservation.reservation_id;
       try {
-        this.journal({ kind: "request", reservation_id: rid, idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_micros: maxMicros, source: ctx.source });
+        this.journal({ kind: "request", reservation_id: rid, idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_micros: maxMicros, source: ctx.source, ...(sentFields ? { fields: sentFields } : {}) });
       } catch (e) {
         await this.settle(ctx, rid, maxMicros, { kind: "spent", spent_micros: 0, usage: NO_TOKENS }, null, "not sent: the request line could not be journaled");
         throw e;

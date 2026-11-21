@@ -41,6 +41,7 @@ function watchSession(fake: string, blind = false) {
 
 /** A stand-in for Codex that writes what Codex writes: the session's rollout (its meta once, then each turn's start, turn_context and end) and a state database's write-ahead log, then the exec --json events. fault runs in the second exec, after Codex's own writes. */
 const fake = (x: { fault?: string; mode2?: string; stream?: string; noRollout?: boolean } = {}) => [
+  'if (process.argv.includes("--version")) { console.log("codex-cli 0.170.0"); process.exit(0); }',
   'const fs = require("node:fs");',
   'const H = process.env.HOME + "/.codex"; const dir = H + "/sessions/2026/11/19"; const R = dir + "/rollout-2026-11-19T00-00-00-th-1.jsonl";',
   'const resume = process.argv.includes("resume"); await Bun.stdin.text();',

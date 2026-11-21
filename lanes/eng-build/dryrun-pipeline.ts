@@ -20,7 +20,9 @@ import type { Candidate, ScreenResult } from "./screen.ts";
 import type { Arm, BuildUnit, CaseRuns, ReviewRecord } from "./types.ts";
 import type { BuildOutcome } from "./unit.ts";
 
-const git = (dir: string, args: string[]) => spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", ...args], { encoding: "utf8" });
+// maintenance.auto=false: git 2.56 starts a detached maintenance after a commit, and its objects/maintenance.lock can
+// appear and vanish while the review stage copies the fixture repo, so the copy fails with ENOENT.
+const git = (dir: string, args: string[]) => spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "maintenance.auto=false", ...args], { encoding: "utf8" });
 
 /** A one-commit tree as the review stage mounts it. */
 export function oneCommitRepo(dir: string): string {

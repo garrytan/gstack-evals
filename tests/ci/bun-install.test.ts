@@ -112,7 +112,7 @@ test("a run leaves no temp directory behind", () => {
 });
 
 test("every workflow that installs Bun has the step, with the pins and no other input", () => {
-  expect(installs.map((i) => i.f)).toEqual(["ci.yml", "rig.yml", "sealed.yml"]);
+  expect(installs.map((i) => i.f)).toEqual(["ci.yml", "ci.yml", "rig.yml", "sealed.yml"]);
   for (const i of installs) expect(Object.keys(i.env).sort()).toEqual(["BUN_NPM_SHA256", "BUN_SHA256", "BUN_VERSION"]);
 });
 

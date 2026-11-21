@@ -146,6 +146,7 @@ export function solDriver(o: SolOptions): AgentDriver & { env: Record<string, st
         ...session,
         spawn(argv, env) {
           if (argv[0] !== CODEX_BIN) return session.spawn(argv, env);
+          if (argv[1] !== "exec") return session.spawn(codexLaunch(argv.slice(1)), env);
           const exec = ++execs;
           watch.snap("before exec " + exec, false);
           const actual = codexLaunch(argv.slice(1));

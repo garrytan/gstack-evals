@@ -110,6 +110,11 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   // cached input and $10 a 30-minute cache write; past 272K input tokens, input and cache rates double and output is 1.5
   // times, for the whole request ($16, $60, $0.80 and $20).
   "openai:gpt-6.2-astra": { input: 8, output: 40, cache_read: 0.4, cache_write: 10, long: { above_input_tokens: 272_000, input: 16, output: 60, cache_read: 0.8, cache_write: 20 } },
+  // GPT-6.2 Sol (the skill-pack head-to-head's Sol arms in Codex CLI). OpenAI's model page
+  // (https://developers.openai.com/api/docs/models/gpt-6.2-sol), read 2026-11-21T07:30Z, Standard tier: $2 input, $10
+  // output, $0.10 cached input and $2.50 a 30-minute cache write; past 272K input tokens, input and cache rates double and
+  // output is 1.5 times, for the whole request ($4, $15, $0.20 and $5). The same rates as GPT-6.1 Sol.
+  "openai:gpt-6.2-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 } },
   ...Object.fromEntries(Object.entries(OPENROUTER_MODELS).map(([id, price]) => [`openrouter:${id}`, price])),
   ...Object.fromEntries(Object.entries(TYPESAFE_MODELS).map(([id, price]) => [`typesafe:${id}`, price])),
 };

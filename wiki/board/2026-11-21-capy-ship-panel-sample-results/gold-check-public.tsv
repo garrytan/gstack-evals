@@ -1,0 +1,32 @@
+item	part	stratum	repo	pr	finding_text	opus	astra	label_real	settled_by	judge
+269f5c8207708e97	A	AD	garrytan/gstack-evals	289	text	nit	nit	no	both labellers	no answer
+2950d349de1a89e2	A	AD	garrytan/gstack-evals	289	text	nit	nit	no	both labellers	nit
+5eacde12f17cae5b	A	AD	garrytan/gstack	4142	reference only	blocker	cant_tell	yes	run thread	cant_tell
+a6768c245a63d9f2	A	AD	garrytan/gstack-evals	205	generic subject	should	blocker	yes	both labellers	cant_tell
+f27d772800a138ca	A	AD	garrytan/gstack-evals	205	generic subject	should	blocker	yes	both labellers	cant_tell
+316b61da75cd2f46	A	FR	garrytan/gstack-evals	232	generic subject	should	cant_tell	yes	run thread	no answer
+31c33a5474503d63	A	FR	garrytan/gstack-evals	200	text	blocker	blocker	yes	both labellers	blocker
+a5a5f958b0635192	A	FR	garrytan/gstack-evals	258	text	nit	nit	no	both labellers	no answer
+afa232c94795513f	A	FR	garrytan/gstack	4486	reference only	blocker	blocker	yes	both labellers	cant_tell
+b5c5f721072152a7	A	FR	garrytan/gstack	4441	text	should	blocker	yes	both labellers	no answer
+190d23b9b762611d	A	RT	garrytan/gstack	4204	text	should	should	yes	both labellers	nit
+29417c7380fb5985	A	RT	garrytan/gstack-evals	205	text	nit	nit	no	both labellers	cant_tell
+995b02949d155b50	A	RT	garrytan/gstack-evals	258	text	nit	nit	no	both labellers	no answer
+b2a3c879fcb69314	A	RT	garrytan/gstack-evals	203	text	should	blocker	yes	both labellers	blocker
+e974ba444b6c0fdc	A	RT	garrytan/gstack	4284	text	should	blocker	yes	both labellers	should
+081f37d37ab838be	A	SM	garrytan/gstack-evals	289	text	nit	nit	no	both labellers	nit
+1e87576f32b02ee1	A	SM	garrytan/gstack	4059	reference only	should	cant_tell	yes	run thread	cant_tell
+20bc6cfd29169c53	A	SM	garrytan/gstack-evals	289	text	nit	nit	no	both labellers	no answer
+5633a34334b0d45c	A	SM	garrytan/alphaclaw	450	text	should	blocker	yes	both labellers	blocker
+dbf9a521544e5388	A	SM	garrytan/gstack	4073	reference only	blocker	blocker	yes	both labellers	cant_tell
+0b3c60c971050a7d	B		garrytan/gstack-evals	157		yes/should	yes/blocker	yes	both labellers	yes/blocker
+2a62b79df4447f04	B		garrytan/gstack	4022		yes/should	yes/blocker	yes	both labellers	no answer
+2f69b3851292c4b2	B		garrytan/gstack	3487		yes/should	yes/blocker	yes	both labellers	yes/should
+3d6eea19c8c10f62	B		garrytan/gbrain	8367		no	yes/blocker	yes	run thread	no answer
+53efd9bf41472d85	B		garrytan/gstack-evals	101		yes/should	yes/blocker	yes	both labellers	yes/blocker
+5e851a2bc66190ac	B		garrytan/gstack-evals	186		yes/nit	yes/nit	no	both labellers	yes/nit
+6f9ca502435e997b	B		garrytan/gstack-evals	305		yes/should	yes/blocker	yes	both labellers	yes/blocker
+8a09fa7584991444	B		garrytan/gbrain	8496		yes/should	yes/blocker	yes	both labellers	yes/blocker
+be7031363f254a2b	B		garrytan/gstack	3675		yes/blocker	yes/blocker	yes	both labellers	yes/blocker
+c37abc8d9457bf0a	B		garrytan/gstack-evals	139		yes/blocker	yes/blocker	yes	both labellers	yes/blocker
+e4dcf5687176ad58	B		garrytan/gbrain-evals	393		yes/should	yes/blocker	yes	both labellers	yes/blocker
