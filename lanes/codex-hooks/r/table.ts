@@ -6,11 +6,13 @@
 // stop is a cap stop; a session that hit its $5 allowance or the task's agent time limit is a limit stop, graded on what it
 // left; anything else is infrastructure. Section 10 of pre-run change 1: the root thread's model and Codex version come from
 // its rollout (turn_context.model, session_meta.cli_version), and a root thread on another model or version is an
-// infrastructure gap; sub-agents on another model are counted. The load fields (detect.ts) are not built yet.
+// infrastructure gap; sub-agents on another model are counted. The load fields come from detect.ts (section 4.5 and 4.6), and an
+// allowance stop says whether the proxy refused a reservation before the session spent $5 or its spend reached $5.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readSessionRows, sessionsByTrial, type SessionRow } from "../../../quick/laneb/analysis/analyze.ts";
-import { AGENT, CODEX, isArm, MODEL, R_EFFORT, type RArm } from "./pins.ts";
+import { detect, readHookLog, readSkillLines, whyNoLoad, type HookRead, type Reason, type SkillLoad } from "./detect.ts";
+import { AGENT, CODEX, isArm, MODEL, R, R_EFFORT, type RArm } from "./pins.ts";
 
 export type Thread = { file: string; id: string | null; cli_version: string | null; models: string[]; efforts: string[]; parent: string | null };
 export type RRow = {
@@ -24,6 +26,7 @@ export type RRow = {
   pass: boolean;
   reward: number | null;
   limit_stop: "allowance" | "time" | null;
+  allowance: "reservation" | "spend" | null;
   cost_usd: number | null;
   tokens: number | null;
   wall_s: number | null;
@@ -33,7 +36,10 @@ export type RRow = {
   root: Thread | null;
   sub_agents: { count: number; other_models: string[] };
   init: { model: string | null; reasoning_effort: string | null; codex_version: string | null; hook_trust: boolean | null; switches: Record<string, string | null> | null } | null;
+  loads: { prove_it: SkillLoad; verify: SkillLoad; steps_arrived: boolean; named_in_text: boolean; line_delivered: boolean; hook: HookRead; why_no_load: Reason | null } | null;
 };
+
+let SKILLS: ReturnType<typeof readSkillLines> | null = null;
 export type RTableConfig = { jobs: { dir: string; part?: string }[]; sessions: string[] };
 
 const readJson = (p: string) => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
@@ -96,19 +102,24 @@ export function rRow(dir: string, ctx: { part: string | null; sessions: Map<stri
   else if (offRoot) reason = "root thread on " + root.models.join("/") + " at " + root.efforts.join("/") + " in Codex " + root.cli_version + ", not " + MODEL + " at " + R_EFFORT + " in " + CODEX.version;
   else if (reward === null) reason = "no verifier reward, verifier infrastructure error" + (limit ? " (" + limit + " limit stop)" : exc ? " (" + exc + ")" : "");
   else { outcome = "graded"; reason = limit ? limit + " limit stop, graded on what it left" : exc ? exc + ", graded on the shipped diff" : "graded"; }
+  const det = threads.length ? detect(ev, (SKILLS ??= readSkillLines())) : null;
+  const hook = det ? readHookLog(ev, root?.id ?? det.root) : null;
+  const cost_usd = rows.length ? rows.reduce((x, r) => x + (r.spent_micros ?? 0), 0) / 1e6 : null;
   const usage = summary?.session?.usage;
   const init = readJson(join(ev, "init.json"));
   const events = existsSync(join(ev, "codex-events.jsonl")) ? readFileSync(join(ev, "codex-events.jsonl"), "utf8") : "";
   return {
     schema: "codex-r-session/1", part: ctx.part, arm, task, trial, outcome, reason,
     pass: outcome === "graded" && reward !== null && reward >= 1, reward, limit_stop: limit,
-    cost_usd: rows.length ? rows.reduce((x, r) => x + (r.spent_micros ?? 0), 0) / 1e6 : null,
+    allowance: limit === "allowance" ? ((cost_usd ?? 0) >= R.allowanceUsd ? "spend" : "reservation") : null,
+    cost_usd,
     tokens: usage ? ["input_tokens", "cache_creation_input_tokens", "cache_creation_1h_input_tokens", "cache_read_input_tokens", "output_tokens"].reduce((x, k) => x + (Number(usage[k]) || 0), 0) : null,
     wall_s: typeof summary?.wall_s === "number" ? summary.wall_s : null,
     questions: Number(summary?.result?.questions ?? 0), resumes: Number(summary?.result?.resumes ?? 0),
     safety_stop: safetyStop(events), root,
     sub_agents: { count: subs.length, other_models: [...new Set(subs.flatMap((t) => t.models).filter((m) => m !== MODEL))] },
     init: init ? { model: init.model ?? null, reasoning_effort: init.reasoning_effort ?? null, codex_version: init.codex_version ?? null, hook_trust: init.hook_trust ?? null, switches: init.switches ?? null } : null,
+    loads: det && hook ? { prove_it: det.loads["prove-it"], verify: det.loads["gstack-verify"], steps_arrived: det.steps_arrived, named_in_text: det.named_in_text, line_delivered: det.line_delivered, hook, why_no_load: arm === "r-on" ? whyNoLoad(det, hook) : null } : null,
   };
 }
 

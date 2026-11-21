@@ -12,9 +12,10 @@ import { approve, dryRun, launchGuard, markDone, planLines, type Crew } from "./
 import { R_PROFILE } from "./plans.ts";
 import { ITEM_NAMES, isItem, ROUTE_TABLE_SHA256, sha256, type Item } from "./pins.ts";
 import { checkPilot, routeTable } from "./routes.ts";
+import { reportMain } from "./report.ts";
 import { buildRTable } from "./table.ts";
 
-const USAGE = "E_USAGE usage: codex-hooks r routes --home <r-on home> [--export <dir>] [--out <file>] | arms build [--out <dir>] [--register] | arms check <tar dir> | plan | dry-run | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | table <config.json> <out.jsonl>";
+const USAGE = "E_USAGE usage: codex-hooks r routes --home <r-on home> [--export <dir>] [--out <file>] | arms build [--out <dir>] [--register] | arms check <tar dir> | plan | dry-run | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | table <config.json> <out.jsonl> | report <table.jsonl> --item <item> [--hand <tsv>] [--out <md>]";
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "rerun", "recover", "host-down"];
 const GUARDED = ["host-up", "launch", "relaunch"];
 
@@ -98,6 +99,14 @@ export async function main(argv: string[]): Promise<number> {
       const rows = buildRTable(JSON.parse(readFileSync(cfg, "utf8")));
       writeFileSync(out, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
       console.log("wrote " + rows.length + " rows to " + out);
+      return 0;
+    }
+    if (cmd === "report") {
+      const item = opt("item");
+      if (!rest[0] || !item) throw new Error(USAGE);
+      const md = reportMain(rest[0], item, opt("hand"));
+      const out = opt("out");
+      if (out) { writeFileSync(out, md); console.log("wrote " + out); } else process.stdout.write(md);
       return 0;
     }
     throw new Error(USAGE);
