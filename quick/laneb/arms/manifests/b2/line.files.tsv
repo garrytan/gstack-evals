@@ -1,0 +1,4 @@
+sha256	bytes	mode	type	path
+-	0	755	dir	.claude
+477d390c64ac0b99cb8b0e78eff99d1e96fac91adfbb13de36c82f3539c9d710	141	644	file	.claude/CLAUDE.md
+-	0	755	dir	.claude/skills

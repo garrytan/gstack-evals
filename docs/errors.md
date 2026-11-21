@@ -457,6 +457,15 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CODEX_R_TABLE](#e_codex_r_table) | 2 | U20 |
 | [E_CODEX_R_MONEY](#e_codex_r_money) | 2 | U20 |
 | [E_CODEX_R_LAUNCH](#e_codex_r_launch) | 2 | U20 |
+| [E_B2_INPUT](#e_b2_input) | 2 | U20 |
+| [E_B2_ARMS](#e_b2_arms) | 2 | U20 |
+| [E_B2_PREPARE](#e_b2_prepare) | 2 | U20 |
+| [E_B2_MONEY](#e_b2_money) | 2 | U20 |
+| [E_B2_LAUNCH](#e_b2_launch) | 2 | U20 |
+| [E_B2_IMAGES](#e_b2_images) | 2 | U20 |
+| [E_B2_TABLE](#e_b2_table) | 2 | U20 |
+| [E_B2_LOOK](#e_b2_look) | 2 | U20 |
+| [E_B2_SCORER](#e_b2_scorer) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3549,6 +3558,78 @@ A part R launch was refused before it started (lanes/codex-hooks/r/money.ts laun
 Fix: Take the guard's lines to the Captain before launching. A cap raise needs the Captain's record and a new approval row; nothing launches until the guard passes.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B2_INPUT
+
+A B2 input does not hold (lanes/test-first): a prereg attachment is not at its front-matter sha256, tasks.txt does not hold the 183 run tasks and the three pilot tasks in draw.py's order, or a frozen pin does not match the plan.
+
+Fix: Fix the named input and run the command again. Never edit a frozen file to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B2_ARMS
+
+A B2 arm tar does not hold (lanes/test-first/arms.ts): a rebuilt tar or inventory is not its committed manifest's, a no-gstack arm holds a gstack file, ~/.gstack or a switch, a gstack arm's switches do not read skill_routing on, skill_contracts on and telemetry off, prove-it is missing or misplaced, or a Codex start capture lists the wrong skills.
+
+Fix: Read the named arm's problem, fix the build, and rebuild every tar. Never edit a committed manifest to match a different tar.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B2_PREPARE
+
+B2's prepare could not write a part (lanes/test-first/prepare-run.ts): Lane B's prepare failed, or a Sol part's agent could not be rewritten to the B2 Codex agent with its arm's manifest.
+
+Fix: Read the named step, fix it, and prepare the part again before any launch.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B2_MONEY
+
+A B2 cap does not hold (lanes/test-first/money.ts): the cap rule does not give an item's recorded cap, the plan does not count 183 tasks by 4 arms by 3 models, or a dry-run ledger did not read back approved, settled and done.
+
+Fix: Fix the plan or the pins that disagree with the preregistration. Never change a recorded cap without the Captain's record.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B2_LAUNCH
+
+A B2 launch was refused before it started (lanes/test-first/money.ts launchGuard): the item's projection would pass its cap, the all-in total with this thread's counter would pass the $1,860 stop, the item is marked done, b2-pilot is not done, Sol has no passing image check record, or a part past the look has no look record or the look stopped the run.
+
+Fix: Take the guard's lines to the Captain before launching. A cap raise needs the Captain's record and a new approval row; nothing launches until the guard passes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B2_IMAGES
+
+B2's image check could not build or read a task (lanes/test-first/images.ts): the task is not in the pool or the export, or its image did not build with Codex added.
+
+Fix: Read the task's row in images.jsonl, fix the cause, and run the check again for that task. Sol's counted parts stay refused until every run task passes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B2_TABLE
+
+B2's session table cannot be read as it stands (lanes/test-first): a row names a task outside the scope read, an arm that is not B2's, or a model, arm and task with more than one graded row.
+
+Fix: Rebuild the table from the pulled parts and read it again. Never drop or edit rows by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B2_LOOK
+
+B2's interim look was refused (lanes/test-first/cli.ts lookRows): parts 1 to 4 of all three items are not all settled, so some model, arm and task on the look's half has no row.
+
+Fix: Finish and pull the missing parts, rebuild the table, and run the look once. The look runs exactly once.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B2_SCORER
+
+B2's scorer seam is not built yet (lanes/test-first/scorer.ts): the Codex rollout reader comes with the B2 scorer branch.
+
+Fix: Merge the B2 scorer branch into the run lane, then build the table again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

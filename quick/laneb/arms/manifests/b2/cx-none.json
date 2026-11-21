@@ -1,0 +1,33 @@
+{
+  "arm": "cx-none",
+  "base_arm": "none",
+  "host": "codex",
+  "cli": "codex-cli 0.170.0",
+  "spec": "cx-none:strip_snapshot=true:closing_line=hm-status",
+  "typed": false,
+  "session_kind": null,
+  "hook_trust": false,
+  "gstack": null,
+  "prove_it": null,
+  "line": null,
+  "switches": null,
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu (in arms/codex.Dockerfile's build stage)",
+  "tar": {
+    "file": "cx-none.tar",
+    "bytes": 10240,
+    "sha256": "f62c63eb30ec31a2b49dab82c7f65e7e59d8bc2b7f8b76f5ae2a30597ddb1d6b"
+  },
+  "tree": {
+    "files": 0,
+    "symlinks": 0,
+    "dirs": 1,
+    "digest": "b46cf28d4aac04c6e3215ba4c55a8797faf09447acfbec8febc8869d190cdc1b"
+  },
+  "inventory_sha256": "b46cf28d4aac04c6e3215ba4c55a8797faf09447acfbec8febc8869d190cdc1b",
+  "prompt_input": {
+    "sha256": "156409ca1ecefac564ee73eabeefa08a39d37093a1106bbd02616722b6810828",
+    "skills": [],
+    "prove_it_line": null,
+    "agents_md": false
+  }
+}
