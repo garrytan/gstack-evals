@@ -27,7 +27,9 @@ records differ.
   a prose question, as h2h_turns does.
 - Limits. The wall deadline is the slot's, enforced inside an exec by killing Codex in the container (wall_limit).
   Codex has no turn cap of its own, so each exec's model responses (the rollout's token_usage_record lines) count against
-  max_turns after the exec; a turn that starts with none left ends as turn_ceiling, and so does a turn whose exec used the
+  max_turns: the rollout is read every CEILING_POLL_S seconds during an exec, and Codex is killed in the container once
+  the session reaches max_turns (turn_ceiling, so it can pass the ceiling by what it answers between two reads); a turn
+  that starts with none left ends as turn_ceiling, and so does a turn whose exec used the
   last of them with an async question pending, which then gets no reply and counts as unanswered.
 - Ends. A completed exec is a completed turn; a turn.failed event is error_result (an upstream end), with refusal set
   when its error names one of Codex's policy codes; an exec that ends with no turn result is error (infra).
@@ -70,6 +72,7 @@ POLICY_CODES = ("cyber_policy", "bio_policy", "misalignment_policy_violation")
 MAX_REPLIES = 20
 RESERVATION_RETRIES = 3
 RESERVATION_RETRY_AFTER_S = 20
+CEILING_POLL_S = 5
 RESERVATION_429 = re.compile(r"last status: 429\b")
 PROVIDER_ID = "h2h_proxy"
 DOCKER_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
@@ -246,7 +249,7 @@ class CodexTurns(Turns):
             self.summary["codex"]["node_link"] = link.stdout.decode(errors="replace").strip() or None
 
     def argv(self) -> list[str]:
-        flags = ["exec", "--json", "--strict-config", "--skip-git-repo-check", "--dangerously-bypass-hook-trust", "--color", "never"]
+        flags = ["exec", "--json", "--strict-config", "--skip-git-repo-check", "--dangerously-bypass-hook-trust", "--color", "never", "-c", "allow_login_shell=false"]
         return [self.codex["bin"], *flags, *(["resume", self.thread] if self.thread else []), "-"]
 
     def env(self, slot: dict) -> tuple[dict, dict]:
@@ -278,8 +281,9 @@ class CodexTurns(Turns):
         except subprocess.TimeoutExpired:
             proc.kill()
 
-    def run_exec(self, phase: str, kind: str, message: str, slot: dict) -> dict:
-        """One codex exec, its message on stdin, read until it exits or the wall deadline kills it."""
+    def run_exec(self, phase: str, kind: str, message: str, slot: dict, stop_at: int | None = None) -> dict:
+        """One codex exec, its message on stdin, read until it exits, the wall deadline kills it (wall_limit), or its
+        thread's rollout reaches stop_at model responses, read every CEILING_POLL_S seconds (turn_ceiling)."""
         self.execs += 1
         n = self.execs
         secret, plain = self.env(slot)
@@ -310,21 +314,36 @@ class CodexTurns(Turns):
             except (BrokenPipeError, OSError):
                 pass
             killed = None
-            try:
-                proc.wait(timeout=max(self.deadline - time.time(), 0))
-            except subprocess.TimeoutExpired:
-                killed = "wall_limit"
-                self.kill(proc)
+            while True:
+                try:
+                    proc.wait(timeout=max(min(self.deadline - time.time(), CEILING_POLL_S), 0))
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                if time.time() >= self.deadline:
+                    killed = "wall_limit"
+                    self.kill(proc)
+                    break
+                self.thread = self.thread or exec_result(list(events))["thread_id"]
+                text = self.rollout(min(60.0, max(self.deadline - time.time(), 0.0))) if stop_at is not None else None
+                if time.time() >= self.deadline:
+                    killed = "wall_limit"
+                    self.kill(proc)
+                    break
+                if text is not None and model_responses(text) >= stop_at:
+                    killed = "turn_ceiling"
+                    self.kill(proc)
+                    break
             reader.join(timeout=30)
         r = exec_result(events)
         self.thread = self.thread or r["thread_id"]
         return {"exec": n, "phase": phase, "kind": kind, "exit": proc.returncode, "killed": killed, "wall_s": round(time.time() - started, 1), **{k: r[k] for k in ("thread_id", "completed", "failed", "last_error", "agent_messages", "usage")}, "final": r["final"]}
 
-    def rollout(self) -> str | None:
+    def rollout(self, timeout: float = 60) -> str | None:
         if not self.thread:
             return None
         try:
-            res = self.sh(ROLLOUT, self.codex["home"], self.thread, timeout=60)
+            res = self.sh(ROLLOUT, self.codex["home"], self.thread, timeout=timeout)
         except subprocess.TimeoutExpired:
             return None
         return res.stdout.decode(errors="replace") if res.returncode == 0 else None
@@ -349,10 +368,16 @@ class CodexTurns(Turns):
             self.configure(slot)
             message, kind, replies = text, "turn", 0
             while True:
-                e = await asyncio.to_thread(self.run_exec, phase, kind, message, slot)
+                stop_at = self.responses + int(self.limits["max_turns"]) - self.summary["turns_used"] - info["num_turns"]
+                e = await asyncio.to_thread(self.run_exec, phase, kind, message, slot, stop_at)
                 execs.append(e)
                 info["final"] = e["final"] or info["final"]
                 if e["killed"]:
+                    rollout = self.rollout()
+                    if rollout is not None:
+                        total = model_responses(rollout)
+                        info["num_turns"] += max(total - self.responses, 0)
+                        self.responses = max(total, self.responses)
                     info["termination"] = e["killed"]
                     break
                 if e["failed"] and RESERVATION_429.search(e["failed"]) and info["reservation_retries"] < RESERVATION_RETRIES and time.time() + RESERVATION_RETRY_AFTER_S < self.deadline:

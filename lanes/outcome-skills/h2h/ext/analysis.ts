@@ -60,7 +60,10 @@ export class ExtData {
     add(i.scores, this.scores, "h2h-score.v1", "score");
     add(i.sessions, this.sessions, "h2h-session.v1", "session");
     add(i.tests, this.tested, "h2hx-tests.v1", "tests-added");
+    this.capStop = [...this.sessions.values()].some((s) => s.end === "cap_stop") || [...this.scores.values()].some((s) => s.gap === "CAP_STOP");
   }
+  /** Section 14: a cap stop anywhere in the part's stage ends that part incomplete, so every cell reads incomplete. */
+  readonly capStop: boolean;
   arms = (u: H2hUnit): ExtArm[] => extArmsFor(this.part, u.kind, this.x);
   score = (u: H2hUnit, arm: ExtArm) => this.scores.get(u.id + "\t" + arm) ?? null;
   session = (u: H2hUnit, arm: ExtArm) => this.sessions.get(u.id + "\t" + arm) ?? null;
@@ -84,7 +87,7 @@ export function cellOf(d: ExtData, base: H2hPrereg, cls: UnitClass, arm: ExtArm)
   const us = d.of(cls, arm);
   const gaps = us.filter((u) => d.value(u, arm) === null).length;
   const share = us.length ? gaps / us.length : null;
-  return { units: us.length, gaps, gap_share: share, incomplete: share === null || share > base.analysis.incomplete_gap_share };
+  return { units: us.length, gaps, gap_share: share, incomplete: d.capStop || share === null || share > base.analysis.incomplete_gap_share };
 }
 
 /** Arms whose bug-unit exposure is the installed pack (section 8): every gstack install that has no bug entry of its own. */
@@ -235,7 +238,7 @@ function armRow(d: ExtData, base: H2hPrereg, cls: UnitClass, arm: ExtArm): ArmRo
 export interface OpusRows { scores: H2hScore[] }
 
 export interface ExtAnalysis {
-  schema: "h2hx-analysis.v1"; part: Part; stage: Stage; bootstrap_seed: number; units: { O: number; B: number }; stopped_at_half: boolean;
+  schema: "h2hx-analysis.v1"; part: Part; stage: Stage; bootstrap_seed: number; units: { O: number; B: number }; stopped_at_half: boolean; cap_stop: boolean;
   family: FamilyRow[]; sentence: SentenceRow[]; tests: TestsRow[]; arms: ArmRow[]; secondaries: Contrast[]; opus_gap: Contrast[]; rows: string[];
 }
 
@@ -290,7 +293,7 @@ export function analyzeExt(part: Part, i: ExtInput, o: { x?: ExtPrereg; base?: H
       }
   }
   const a: ExtAnalysis = {
-    schema: "h2hx-analysis.v1", part, stage: i.stage, bootstrap_seed: seed, units: { O: d.units.filter((u) => u.class === "O").length, B: d.units.filter((u) => u.class === "B").length }, stopped_at_half: !!half,
+    schema: "h2hx-analysis.v1", part, stage: i.stage, bootstrap_seed: seed, units: { O: d.units.filter((u) => u.class === "O").length, B: d.units.filter((u) => u.class === "B").length }, stopped_at_half: !!half, cap_stop: d.capStop,
     family, sentence, tests, arms, secondaries, opus_gap, rows: [],
   };
   a.rows = partRows(a, x);
@@ -299,6 +302,7 @@ export function analyzeExt(part: Part, i: ExtInput, o: { x?: ExtPrereg; base?: H
 
 /** The section 10 rows one part's analysis triggers on its own. Rows that need two parts come from crossRows. */
 function partRows(a: ExtAnalysis, x: ExtPrereg): string[] {
+  if (a.cap_stop) return ["Part " + a.part + " incomplete: a session stopped at the cap, and the part is not retried"];
   const out: string[] = [];
   if (a.part === "L") {
     const md = a.sentence.find((s) => s.sentence === "l-gstack-md" && s.gstack === "l-gstack");
@@ -321,10 +325,11 @@ function partRows(a: ExtAnalysis, x: ExtPrereg): string[] {
 
 /** The section 10 rows that read two parts: s-gstack-line holding while l-gstack-md does not, both holding (the Codex
  *  AGENTS.md too), and particle-1's sentence losing fixes while l-gstack-md holds. Each reads Part L's counted stage, so
- *  none fires on a Part L that is descriptive only: a stage other than stage2, or under min_counted counted units. */
+ *  none fires on a Part L that is descriptive only or incomplete: a stage other than stage2, a cap stop, or under
+ *  min_counted counted units. */
 export function crossRows(parts: Partial<Record<Part, ExtAnalysis>>, x: ExtPrereg = readExtPrereg()): string[] {
   const l = parts.L;
-  if (!l || l.stage !== "stage2" || l.units.O < x.parts.L.units.min_counted) return [];
+  if (!l || l.stage !== "stage2" || l.cap_stop || l.units.O < x.parts.L.units.min_counted) return [];
   const md = l.sentence.find((s) => s.sentence === "l-gstack-md" && s.gstack === "l-gstack");
   const line = parts.S?.sentence.find((s) => s.sentence === "s-gstack-line");
   const one = parts.P?.sentence.find((s) => s.sentence === "p-gstack-oneline");
