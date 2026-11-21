@@ -3832,6 +3832,43 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  // The Codex hooks eval, part C (GEVA-562, lanes/codex-hooks/c and review-units --host codex).
+  E_CODEX_CAPTURE: {
+    exit: 2,
+    meaning: "review-units --host codex: an arm's keyless model-input capture (codex debug prompt-input in the arm's own image, before the first session) failed or printed nothing, so the run has no digest of what that arm's model receives. No session started and nothing was spent.",
+    fix: "Read the capture's error in the message, check the codex-arms file's bin and the arm's install, and run again with --resume.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_CODEX_C_NO_ROLLOUT: {
+    exit: 2,
+    meaning: "Codex hooks eval part C (prereg section 5.8): no root rollout was copied out of the session, so it is not scored. It is an infrastructure failure: it reruns once as attempt 2, and a second failure is a gap.",
+    fix: "Run codex-hooks c rerun for the item, then run its phase again. Never rerun a cell twice.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_CODEX_C_NO_RESPONSE: {
+    exit: 2,
+    meaning: "Codex hooks eval part C (prereg section 5.8): no model response reached the agent (the root rollout holds no assistant message and no tool call), so the session is not scored. It is an infrastructure failure: it reruns once as attempt 2, and a second failure is a gap.",
+    fix: "Run codex-hooks c rerun for the item, then run its phase again. Never rerun a cell twice.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_CODEX_C_DRIFT: {
+    exit: 2,
+    meaning: "Codex hooks eval part C (prereg section 2, pre-run change 1 section 10): the session's own record breaks the pin. Its root thread ran a model other than gpt-6.1-sol, a rollout names a Codex version other than 0.170.0, a request in the proxy's journal names a model no thread ran or carries another effort than the arm's, or the journal holds no request for the session. It is an infrastructure gap: it reruns once as attempt 2, and a second failure is a gap.",
+    fix: "Read the row's reasons in outcomes.jsonl. Rerun once with codex-hooks c rerun only when the image and the codex-arms file are the frozen ones; if the record still drifts, take the rows to the Captain before any further spend.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

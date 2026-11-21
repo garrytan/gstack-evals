@@ -8,3 +8,33 @@ Do gstack's routing hook and its /review contract help GPT-6.1 Sol in Codex CLI,
 |---|---|
 | pins.ts | Values both parts share: the gstack pin, the Codex CLI and its digests, the model, and the settings every arm passes |
 | cli.ts | `gstack-evals codex-hooks r|c <command>` |
+| c/pins.ts | Part C's frozen values: the suite and its seeded pilot draw, the prefix, the four arms as review-units' codex-arms entries, and the four ledger items |
+| c/rollout.ts | A session's rollouts as the readouts read them: the root thread, sub-agent threads, turns, messages, tool calls and contract blocks |
+| c/states.ts | Each session's final and first-stop states and their findings, and the blind copy the judge reads |
+| c/contract.ts | Section 5.6's exposure readout (contract log and independent check, false blocks, would-block) and pre-run change 1's pilot flags |
+| c/outcomes.ts | Section 5.8's outcome per session, with the model, Codex version and effort read from the session's own record |
+| c/plan.ts | The schedule (pilot, then c-main and h-main interleaved by unit), each step's review-units command, and the money: approval, guard, done mark and the dry run |
+| c/run.ts | The run controller: one review-units run per item and unit, the collect pass, and the one rerun |
+| c/readout.ts | The per-item readout files and the per-arm summary the pilot readout releases |
+| c/stub.ts | A keyless stand-in for the Responses API that the fixtures and the end-to-end check run Codex against |
+| c/cli.ts | `codex-hooks c` commands; any other command goes to c/analysis/cli.ts once it exists |
+
+## Part C, step by step
+
+All of these are keyless except `run` on a real ledger, which spends.
+
+```sh
+bun lanes/codex-hooks/cli.ts c dry-run                       # one lease per item on a temporary ledger, and the schedule's counts
+bun lanes/codex-hooks/cli.ts c plan                          # the steps in order
+bun lanes/codex-hooks/cli.ts c approve --record <record> --item c-pilot --cap 60 --by <who> --words "<their words>"
+bun lanes/codex-hooks/cli.ts c guard --record <record> --item c-pilot --root <root>
+bun lanes/codex-hooks/cli.ts c run --phase pilot --root <root> --record <record> --ledger <ledger.sqlite> \
+  --source garrytan/gstack=<clone> --source garrytan/gbrain=<clone>
+bun lanes/codex-hooks/cli.ts c readout --root <root>         # writes <root>/<item>/readout/ and prints each summary
+bun lanes/codex-hooks/cli.ts c rerun --root <root> --item c-pilot   # then run the phase again for the one rerun
+bun lanes/codex-hooks/cli.ts c done --record <record> --item c-pilot
+```
+
+`run` builds each step as `gstack-evals review-units --host codex --codex-arms <root>/<item>/codex-arms.json ... --resume` over the item's own `--out` (`<root>/<item>`), so a relaunch runs only the cells `cells.ndjson` lacks. Each session records init.json's host facts, copies its rollouts to `host/codex-sessions/` and gstack's hook logs and contract records to `host/gstack-hooks/` and `host/gstack-contracts/`, and the proxy's journal keeps each request's reasoning effort.
+
+For a keyless end-to-end check, start the stub (`bun lanes/codex-hooks/c/stub.ts <port> <log>`) and pass `--upstream http://host.docker.internal:<port>` with every provider key unset; review-units refuses `--upstream` while a key is set.

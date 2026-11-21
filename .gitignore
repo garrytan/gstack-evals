@@ -5,3 +5,5 @@ __pycache__/
 .gstack/tmp/
 /receipts/
 wiki/INDEX.md
+# Part C fixtures keep gstack's hook logs as Codex wrote them.
+!tests/codex-hooks/c/fixtures/*/host/gstack-hooks/*.log

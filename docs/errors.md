@@ -451,6 +451,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_DRYRUN_FAIL](#e_ohr_dryrun_fail) | 2 | U20 |
 | [E_OHR_PREFLIGHT_FAIL](#e_ohr_preflight_fail) | 2 | U20 |
 | [E_OHR_MODEL_DRIFT](#e_ohr_model_drift) | 2 | U20 |
+| [E_CODEX_CAPTURE](#e_codex_capture) | 2 | U20 |
+| [E_CODEX_C_NO_ROLLOUT](#e_codex_c_no_rollout) | 2 | U20 |
+| [E_CODEX_C_NO_RESPONSE](#e_codex_c_no_response) | 2 | U20 |
+| [E_CODEX_C_DRIFT](#e_codex_c_drift) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3495,6 +3499,38 @@ Office-hours rewrite eval (pre-run change 4): a reply named a model other than t
 Fix: Keep the journal and the transcript that show the reported model, and send the question to the Captain. Never retry the item on another model or route.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CODEX_CAPTURE
+
+review-units --host codex: an arm's keyless model-input capture (codex debug prompt-input in the arm's own image, before the first session) failed or printed nothing, so the run has no digest of what that arm's model receives. No session started and nothing was spent.
+
+Fix: Read the capture's error in the message, check the codex-arms file's bin and the arm's install, and run again with --resume.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CODEX_C_NO_ROLLOUT
+
+Codex hooks eval part C (prereg section 5.8): no root rollout was copied out of the session, so it is not scored. It is an infrastructure failure: it reruns once as attempt 2, and a second failure is a gap.
+
+Fix: Run codex-hooks c rerun for the item, then run its phase again. Never rerun a cell twice.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CODEX_C_NO_RESPONSE
+
+Codex hooks eval part C (prereg section 5.8): no model response reached the agent (the root rollout holds no assistant message and no tool call), so the session is not scored. It is an infrastructure failure: it reruns once as attempt 2, and a second failure is a gap.
+
+Fix: Run codex-hooks c rerun for the item, then run its phase again. Never rerun a cell twice.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CODEX_C_DRIFT
+
+Codex hooks eval part C (prereg section 2, pre-run change 1 section 10): the session's own record breaks the pin. Its root thread ran a model other than gpt-6.1-sol, a rollout names a Codex version other than 0.170.0, a request in the proxy's journal names a model no thread ran or carries another effort than the arm's, or the journal holds no request for the session. It is an infrastructure gap: it reruns once as attempt 2, and a second failure is a gap.
+
+Fix: Read the row's reasons in outcomes.jsonl. Rerun once with codex-hooks c rerun only when the image and the codex-arms file are the frozen ones; if the record still drifts, take the rows to the Captain before any further spend.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
