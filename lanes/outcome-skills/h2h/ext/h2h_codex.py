@@ -27,7 +27,8 @@ records differ.
   a prose question, as h2h_turns does.
 - Limits. The wall deadline is the slot's, enforced inside an exec by killing Codex in the container (wall_limit).
   Codex has no turn cap of its own, so each exec's model responses (the rollout's token_usage_record lines) count against
-  max_turns after the exec, and a turn that starts with none left ends as turn_ceiling.
+  max_turns after the exec; a turn that starts with none left ends as turn_ceiling, and so does a turn whose exec used the
+  last of them with an async question pending, which then gets no reply and counts as unanswered.
 - Ends. A completed exec is a completed turn; a turn.failed event is error_result (an upstream end), with refusal set
   when its error names one of Codex's policy codes; an exec that ends with no turn result is error (infra).
 
@@ -367,7 +368,8 @@ class CodexTurns(Turns):
                         self.count(phase, "unanswered", len(q["questions"]))
                         self.count(phase, "questions", len(q["questions"]))
                         self.user.log({"event": "question", "phase": phase, "tool": SYNC_QUESTION, "questions": q["questions"], "answer": None, "source": "codex_itself"})
-                if asks and replies < MAX_REPLIES:
+                ceiling = self.summary["turns_used"] + info["num_turns"] >= int(self.limits["max_turns"])
+                if asks and replies < MAX_REPLIES and not ceiling:
                     for q in asks:
                         self.count(phase, "async_questions", len(q["questions"]))
                         self.user.answer([{"question": t} for t in q["questions"]])
@@ -378,10 +380,10 @@ class CodexTurns(Turns):
                     self.count(phase, "async_questions", n)
                     self.count(phase, "unanswered", n)
                     self.count(phase, "questions", n)
-                    self.user.log({"event": "question", "phase": phase, "tool": ASYNC_QUESTION, "answer": None, "source": "reply_cap"})
+                    self.user.log({"event": "question", "phase": phase, "tool": ASYNC_QUESTION, "answer": None, "source": "turn_ceiling" if ceiling else "reply_cap"})
                 elif not fresh:
                     self.user.prose(info["final"])
-                info["termination"] = "completed"
+                info["termination"] = "turn_ceiling" if asks and ceiling else "completed"
                 break
         except Exception as e:
             info["termination"] = "error"

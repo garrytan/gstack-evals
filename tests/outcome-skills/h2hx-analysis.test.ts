@@ -9,7 +9,7 @@ import { analyze } from "../../lanes/outcome-skills/h2h/analysis/analyze.ts";
 import { readRecords } from "../../lanes/outcome-skills/h2h/analysis/commands.ts";
 import type { PairedTest } from "../../lanes/outcome-skills/h2h/analysis/stats.ts";
 import { analyzeExt, crossRows, noHarm, reportExt, testsRecord, type ExtInput, type ExtScore, type ExtSession, type ExtTests } from "../../lanes/outcome-skills/h2h/ext/analysis.ts";
-import { boundAt, holmCrossings, interimLook, lookLines, obfBounds } from "../../lanes/outcome-skills/h2h/ext/look.ts";
+import { absZ, boundAt, holmCrossings, interimLook, lookLines, obfBounds } from "../../lanes/outcome-skills/h2h/ext/look.ts";
 import { EXT_PREREG_PATH, extArmsFor, readExtPrereg, type ExtArm, type Part } from "../../lanes/outcome-skills/h2h/ext/prereg.ts";
 import { readPrereg } from "../../lanes/outcome-skills/h2h/prereg.ts";
 import type { H2hArm, H2hScore, H2hSession, H2hUnit, UnitKind } from "../../lanes/outcome-skills/h2h/types.ts";
@@ -148,6 +148,27 @@ describe("h2hx primary families (section 9)", () => {
     expect(oNone.state).toBe("ahead");
     expect(oNone.holm_alpha).toBeCloseTo(0.005, 12);
     expect(a.rows[0]).toBe("Sol, O: s-gstack ahead of s-none");
+    const crossed = holmCrossings(a.family.map((r) => ({ p: r.p_holm_input, z: r.incomplete ? 0 : absZ(r.test) })), 10, x, 1);
+    a.family.forEach((r, k) => {
+      expect(r.bound).toBe(boundAt(x, Math.round(0.05 / r.holm_alpha), 1));
+      if (r.state === "ahead" || r.state === "behind") expect(crossed[k]).toBe(true);
+      if (!crossed[k] && !r.incomplete) expect(r.state).toBe("no_difference");
+    });
+    expect(a.stopped_at_half).toBe(false);
+  });
+
+  test("part S stopped at half reads the first half of each class against the look's bounds; other parts have no bound", () => {
+    const us = [...units("O", 100), ...units("B2", 60)];
+    const rand = seededRandom(7);
+    const i = records("S", us, (u, arm, k) => ({ v: arm === "s-none" && u.class === "O" ? (rand() < 0.2 ? 1 : 0) : arm === "s-gstack" || arm === "s-gstack-line" ? (k % 10 ? 1 : 0) : (rand() < 0.88 ? 1 : 0) }));
+    const h = analyzeExt("S", i, { x, base, withMdd: false, stoppedAtHalf: true });
+    expect(h.stopped_at_half).toBe(true);
+    expect(h.units).toEqual({ O: 50, B: 30 });
+    for (const r of h.family) expect(r.bound).toBe(boundAt(x, Math.round(0.05 / r.holm_alpha), 0));
+    expect(reportExt(h)[0]).toContain("stopped at half");
+    const p = records("P", us.slice(0, 20), () => ({ v: 1 }));
+    expect(() => analyzeExt("P", p, { x, base, withMdd: false, stoppedAtHalf: true })).toThrow(/^E_H2HX_ANALYSIS_INPUT only part S/);
+    expect(analyzeExt("P", p, { x, base, withMdd: false }).family.every((r) => r.bound === null)).toBe(true);
   });
 
   test("part P: the family of 12 equals the base analysis's on the same records under base names, at the extension's seed", () => {
@@ -194,6 +215,10 @@ describe("h2hx primary families (section 9)", () => {
       "l-gstack-md holds and s-gstack-line holds: the same sentence goes into gstack's Codex AGENTS.md",
       "particle-1's gstack-oneline loses fixes (criterion 2 fails) while l-gstack-md holds",
     ]);
+    const small = analyzeExt("L", records("L", units("O", x.parts.L.units.min_counted - 1), (_u, arm, k) => ({ v: gv(k), lines: arm === "l-gstack-md" ? 10 : 20 })), { x, base });
+    expect(small.sentence.find((s) => s.sentence === "l-gstack-md" && s.gstack === "l-gstack")!.reading).toBe("holds");
+    expect(crossRows({ L: small, S, P }, x)).toEqual([]);
+    expect(crossRows({ L: { ...L("holds"), stage: "stage1" }, S, P }, x)).toEqual([]);
   });
 });
 

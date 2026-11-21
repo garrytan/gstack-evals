@@ -13,6 +13,7 @@ import { mdd } from "../analysis/power.ts";
 import { logRatio, mean, pairedTest, percentile, wilson, type LogRatio, type Pair, type PairedTest } from "../analysis/stats.ts";
 import { h2hFail, readPrereg, type H2hPrereg } from "../prereg.ts";
 import { COMPARATORS, type H2hScore, type H2hSession, type H2hUnit, type RowState, type Stage, type UnitClass } from "../types.ts";
+import { absZ, boundAt, holmCrossings, lookHalf, zFromP } from "./look.ts";
 import { EXT_ARMS, extArmsFor, readExtPrereg, type ExtArm, type ExtPrereg, type Part } from "./prereg.ts";
 
 const ALPHA = 0.05;
@@ -127,14 +128,16 @@ export function comparatorsOf(part: "S" | "P", x: ExtPrereg = readExtPrereg()): 
 }
 
 export interface FamilyRow {
-  class: UnitClass; other: ExtArm; test: PairedTest; incomplete: boolean; p_holm_input: number; p_holm: number; holm_rank: number; holm_alpha: number;
+  class: UnitClass; other: ExtArm; test: PairedTest; incomplete: boolean; p_holm_input: number; p_holm: number; holm_rank: number; holm_alpha: number; bound: number | null;
   mdd: number | null; state: RowState; exposure_other: ExposureRate | null; exposure_gstack: ExposureRate; cells: { gstack: Cell; other: Cell }; worst_case: PairedTest;
 }
 
 /** Section 9's primary family for part S or P: gstack minus each comparator in O and in B, the clustered McNemar test,
  *  Holm over holm_m (an incomplete cell stays in with p = 1), the MDD at the contrast's discordant share and Holm-step
- *  alpha, and the base plan's row states. */
-export function primaryFamily(d: ExtData, part: "S" | "P", base: H2hPrereg, o: { runAsPublished?: readonly string[]; withMdd?: boolean } = {}): FamilyRow[] {
+ *  alpha, and the base plan's row states. With look set (part S's counted stage, section 11), a contrast is significant
+ *  only when it crosses its Holm step's O'Brien-Fleming bound (0 at the look, 1 at the end) and every contrast ranked
+ *  before it crossed, in place of p Holm under 0.05. */
+export function primaryFamily(d: ExtData, part: "S" | "P", base: H2hPrereg, o: { runAsPublished?: readonly string[]; withMdd?: boolean; look?: 0 | 1 | null } = {}): FamilyRow[] {
   const x = d.x, seed = x.bootstrap_seed, g = GSTACK_ARM[part], m = x.parts[part].holm_m;
   const published = new Set(o.runAsPublished ?? []);
   const v: Val = (u, a) => d.value(u, a);
@@ -146,20 +149,23 @@ export function primaryFamily(d: ExtData, part: "S" | "P", base: H2hPrereg, o: {
       const cells = { gstack: cellOf(d, base, cls, g), other: cellOf(d, base, cls, other) };
       const incomplete = cells.gstack.incomplete || cells.other.incomplete || test.n === 0;
       rows.push({
-        class: cls, other, test, incomplete, p_holm_input: incomplete ? 1 : test.p, p_holm: 1, holm_rank: 0, holm_alpha: ALPHA, mdd: null, state: "no_difference",
+        class: cls, other, test, incomplete, p_holm_input: incomplete ? 1 : test.p, p_holm: 1, holm_rank: 0, holm_alpha: ALPHA, bound: null, mdd: null, state: "no_difference",
         exposure_other: other.endsWith("-none") ? null : exposureOf(d, cls, other), exposure_gstack: exposureOf(d, cls, g), cells,
         worst_case: pairedTest(pairsOf(us, other, g, (u, a) => d.value(u, a, true)), seed),
       });
     }
   const adj = holmAdjusted(rows.map((r) => r.p_holm_input));
+  const look = o.look ?? null;
+  const crossed = look === null ? null : holmCrossings(rows.map((r) => ({ p: r.p_holm_input, z: r.incomplete ? 0 : absZ(r.test) })), m, x, look);
   rows.map((r, k) => ({ p: r.p_holm_input, k })).sort((a, b) => a.p - b.p).forEach(({ k }, rank) => {
     const r = rows[k]!;
     r.p_holm = adj[k]!;
     r.holm_rank = rank + 1;
     r.holm_alpha = ALPHA / (m - rank);
+    r.bound = look === null ? null : boundAt(x, m - rank, look);
     r.mdd = o.withMdd !== false && r.test.n && r.test.discordant_share !== null ? mdd(r.test.n, r.test.discordant_share, r.holm_alpha) : null;
     const notExercised = r.exposure_other !== null && (r.exposure_other.procedure ?? 0) < base.analysis.exposure_floor;
-    r.state = rowState({ incomplete: r.incomplete, runAsPublished: published.has(r.other) || published.has(g), notExercised, pHolm: r.p_holm, ci95: r.test.ci95 });
+    r.state = rowState({ incomplete: r.incomplete, runAsPublished: published.has(r.other) || published.has(g), notExercised, pHolm: crossed ? (crossed[k] ? 0 : 1) : r.p_holm, ci95: r.test.ci95 });
   });
   return rows;
 }
@@ -184,8 +190,10 @@ export const SENTENCE_PAIRS: Record<Part, [ExtArm, ExtArm][]> = {
 
 /** One sentence contrast's three co-primaries on O units, sentence arm minus gstack: (1) the paired log ratio of non-test
  *  lines on units both arms fixed (piece G's statistic), (2) the verified-correct difference, (3) the tests-added
- *  difference, each with the clustered test and bootstrap on bootstrap_seed, Holm over the three, and the reading. */
-export function sentenceContrast(d: ExtData, sentence: ExtArm, gstack: ExtArm, base: H2hPrereg, decides = true): SentenceRow {
+ *  difference, each with the clustered test and bootstrap on bootstrap_seed, Holm over the three, and the reading. With
+ *  look set (part S's counted stage), the less-code ratio counts only when it crosses its step's O'Brien-Fleming bound
+ *  within the three, as primaryFamily reads its contrasts. */
+export function sentenceContrast(d: ExtData, sentence: ExtArm, gstack: ExtArm, base: H2hPrereg, decides = true, look: 0 | 1 | null = null): SentenceRow {
   const x = d.x, seed = x.bootstrap_seed, us = d.of("O", sentence).filter((u) => d.arms(u).includes(gstack));
   const lines = logRatio(us.filter((u) => d.value(u, sentence) === 1 && d.value(u, gstack) === 1).map((u) => ({ repo: u.repo, x: d.score(u, gstack)!.lines_changed, y: d.score(u, sentence)!.lines_changed })), seed);
   const fixes = pairedTest(pairsOf(us, gstack, sentence, (u, a) => d.value(u, a)), seed);
@@ -193,7 +201,8 @@ export function sentenceContrast(d: ExtData, sentence: ExtArm, gstack: ExtArm, b
   const incomplete = cellOf(d, base, "O", sentence).incomplete || cellOf(d, base, "O", gstack).incomplete || fixes.n === 0;
   const p_holm = holmAdjusted([lines.p, fixes.p, tests.p]) as [number, number, number];
   const min = x.sentence_family.min_point_diff;
-  const less_code = p_holm[0] < ALPHA && lines.ratio !== null && lines.ratio < 1;
+  const below = lines.ratio !== null && lines.ratio < 1;
+  const less_code = below && (look === null ? p_holm[0] < ALPHA : holmCrossings([{ p: lines.p, z: zFromP(lines.p) }, { p: fixes.p, z: absZ(fixes) }, { p: tests.p, z: absZ(tests) }], x.sentence_family.holm_within, x, look)[0]!);
   const fixes_kept = noHarm(fixes, min), tests_kept = noHarm(tests, min);
   const reading: SentenceReading = incomplete ? "incomplete" : !less_code ? "does not cut code" : !fixes_kept ? "cuts code but loses fixes" : !tests_kept ? "holds only by dropping tests" : "holds";
   return { label: sentence + " minus " + gstack, sentence, gstack, decides, incomplete, lines, fixes, tests, p_holm, less_code, fixes_kept, tests_kept, reading };
@@ -226,18 +235,24 @@ function armRow(d: ExtData, base: H2hPrereg, cls: UnitClass, arm: ExtArm): ArmRo
 export interface OpusRows { scores: H2hScore[] }
 
 export interface ExtAnalysis {
-  schema: "h2hx-analysis.v1"; part: Part; stage: Stage; bootstrap_seed: number; units: { O: number; B: number };
+  schema: "h2hx-analysis.v1"; part: Part; stage: Stage; bootstrap_seed: number; units: { O: number; B: number }; stopped_at_half: boolean;
   family: FamilyRow[]; sentence: SentenceRow[]; tests: TestsRow[]; arms: ArmRow[]; secondaries: Contrast[]; opus_gap: Contrast[]; rows: string[];
 }
 
 /** The whole section 9 analysis of one part and stage. opus gives particle-1's gap to the published Opus rows (part P),
- *  paired on unit ids, each particle-1 arm against its base arm. */
-export function analyzeExt(part: Part, i: ExtInput, o: { x?: ExtPrereg; base?: H2hPrereg; opus?: OpusRows; withMdd?: boolean } = {}): ExtAnalysis {
+ *  paired on unit ids, each particle-1 arm against its base arm. Part S's counted stage reads its significance against
+ *  the O'Brien-Fleming bounds (section 11): the end bounds over every unit, or, with stoppedAtHalf, the look's bounds over
+ *  the first half only, the analysis after an efficacy stop at the look. */
+export function analyzeExt(part: Part, i: ExtInput, o: { x?: ExtPrereg; base?: H2hPrereg; opus?: OpusRows; withMdd?: boolean; stoppedAtHalf?: boolean } = {}): ExtAnalysis {
   const x = o.x ?? readExtPrereg(), base = o.base ?? readPrereg();
-  const d = new ExtData(part, i, x);
+  const counted = part === "S" && i.stage === "stage2";
+  if (o.stoppedAtHalf && !counted) h2hFail("E_H2HX_ANALYSIS_INPUT", "only part S's counted stage has an interim look to stop at");
+  const half = o.stoppedAtHalf ? lookHalf(i.units.filter((u) => u.stage === "stage2"), x) : null;
+  const d = new ExtData(part, half ? { ...i, units: i.units.filter((u) => half.has(u.id)), sessions: i.sessions.filter((r) => half.has(r.unit)), scores: i.scores.filter((r) => half.has(r.unit)), tests: i.tests.filter((r) => half.has(r.unit)) } : i, x);
+  const look = counted ? (half ? 0 : 1) : null;
   const seed = x.bootstrap_seed;
-  const family = part === "L" ? [] : primaryFamily(d, part, base, { runAsPublished: i.runAsPublished, withMdd: o.withMdd });
-  const sentence = SENTENCE_PAIRS[part].map(([s, g]) => sentenceContrast(d, s, g, base));
+  const family = part === "L" ? [] : primaryFamily(d, part, base, { runAsPublished: i.runAsPublished, withMdd: o.withMdd, look });
+  const sentence = SENTENCE_PAIRS[part].map(([s, g]) => sentenceContrast(d, s, g, base, true, look));
   if (part === "L") sentence.push(sentenceContrast(d, "l-gstack-md", "l-gstack-task", base, false));
   const classes: UnitClass[] = part === "L" ? ["O"] : ["O", "B"];
   const tests: TestsRow[] = [], arms: ArmRow[] = [];
@@ -275,7 +290,7 @@ export function analyzeExt(part: Part, i: ExtInput, o: { x?: ExtPrereg; base?: H
       }
   }
   const a: ExtAnalysis = {
-    schema: "h2hx-analysis.v1", part, stage: i.stage, bootstrap_seed: seed, units: { O: d.units.filter((u) => u.class === "O").length, B: d.units.filter((u) => u.class === "B").length },
+    schema: "h2hx-analysis.v1", part, stage: i.stage, bootstrap_seed: seed, units: { O: d.units.filter((u) => u.class === "O").length, B: d.units.filter((u) => u.class === "B").length }, stopped_at_half: !!half,
     family, sentence, tests, arms, secondaries, opus_gap, rows: [],
   };
   a.rows = partRows(a, x);
@@ -305,9 +320,12 @@ function partRows(a: ExtAnalysis, x: ExtPrereg): string[] {
 }
 
 /** The section 10 rows that read two parts: s-gstack-line holding while l-gstack-md does not, both holding (the Codex
- *  AGENTS.md too), and particle-1's sentence losing fixes while l-gstack-md holds. */
-export function crossRows(parts: Partial<Record<Part, ExtAnalysis>>): string[] {
-  const md = parts.L?.sentence.find((s) => s.sentence === "l-gstack-md" && s.gstack === "l-gstack");
+ *  AGENTS.md too), and particle-1's sentence losing fixes while l-gstack-md holds. Each reads Part L's counted stage, so
+ *  none fires on a Part L that is descriptive only: a stage other than stage2, or under min_counted counted units. */
+export function crossRows(parts: Partial<Record<Part, ExtAnalysis>>, x: ExtPrereg = readExtPrereg()): string[] {
+  const l = parts.L;
+  if (!l || l.stage !== "stage2" || l.units.O < x.parts.L.units.min_counted) return [];
+  const md = l.sentence.find((s) => s.sentence === "l-gstack-md" && s.gstack === "l-gstack");
   const line = parts.S?.sentence.find((s) => s.sentence === "s-gstack-line");
   const one = parts.P?.sentence.find((s) => s.sentence === "p-gstack-oneline");
   const out: string[] = [];
@@ -324,10 +342,10 @@ const rci = (c: [number, number] | null) => (c ? "[" + c.map((v) => v.toFixed(3)
 /** The analysis as plain lines: the primary family, the sentence family, tests added with the recount beside the frozen
  *  rule, the secondaries and the section 10 rows. */
 export function reportExt(a: ExtAnalysis): string[] {
-  const out = ["h2hx analysis, part " + a.part + ", " + a.stage + ": O " + a.units.O + " units, B " + a.units.B];
+  const out = ["h2hx analysis, part " + a.part + ", " + a.stage + ": O " + a.units.O + " units, B " + a.units.B + (a.stopped_at_half ? ", stopped at half: the first half only, against the look's bounds" : "")];
   if (a.family.length) {
-    out.push("class | gstack minus | n | difference (points) | 95% interval | p clustered | p Holm | Holm step | MDD | procedure rate | state");
-    for (const r of a.family) out.push([r.class, r.other, r.test.n, pct(r.test.delta), ci(r.test.ci95), r.test.p.toFixed(4), r.p_holm.toFixed(4), "0.05/" + Math.round(ALPHA / r.holm_alpha), r.mdd === null ? "none fits" : Math.round(100 * r.mdd), r.exposure_other ? pct(r.exposure_other.procedure) : "n/a", r.state].join(" | "));
+    out.push("class | gstack minus | n | difference (points) | 95% interval | p clustered | p Holm | Holm step | |z| bound | MDD | procedure rate | state");
+    for (const r of a.family) out.push([r.class, r.other, r.test.n, pct(r.test.delta), ci(r.test.ci95), r.test.p.toFixed(4), r.p_holm.toFixed(4), "0.05/" + Math.round(ALPHA / r.holm_alpha), r.bound === null ? "none" : r.bound.toFixed(3), r.mdd === null ? "none fits" : Math.round(100 * r.mdd), r.exposure_other ? pct(r.exposure_other.procedure) : "n/a", r.state].join(" | "));
   }
   for (const s of a.sentence) {
     out.push("sentence " + s.label + (s.decides ? "" : " (secondary, decides nothing)") + ": lines ratio " + (s.lines.ratio?.toFixed(3) ?? "none") + " on " + s.lines.n + " units both fixed " + rci(s.lines.ci95) + " Holm p " + s.p_holm[0].toFixed(4)

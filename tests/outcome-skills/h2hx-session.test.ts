@@ -11,10 +11,11 @@ import { createHash } from "node:crypto";
 import { homeTreeSha256 } from "../../lanes/outcome-skills/h2h/arms/hash.ts";
 import { recordPath } from "../../lanes/outcome-skills/h2h/arms/layer.ts";
 import { codexExposure, readCodexEvents } from "../../lanes/outcome-skills/h2h/ext/exposure.ts";
+import type { LookStop } from "../../lanes/outcome-skills/h2h/ext/look.ts";
 import type { ExtPlanned } from "../../lanes/outcome-skills/h2h/ext/plan.ts";
 import { readExtPrereg } from "../../lanes/outcome-skills/h2h/ext/prereg.ts";
 import { runExtStage, type ExtRunnerDeps } from "../../lanes/outcome-skills/h2h/ext/runner.ts";
-import { extClaudeConfig, extClaudeRunCopy, extHome, firstInput, rolloutVersion, runExtSession, type ExtHome, type ExtSessionInput, type ExtSessionRecord } from "../../lanes/outcome-skills/h2h/ext/session.ts";
+import { checkExtHome, extClaudeConfig, extClaudeRunCopy, extHome, firstInput, rolloutVersion, runExtSession, type ExtHome, type ExtSessionInput, type ExtSessionRecord } from "../../lanes/outcome-skills/h2h/ext/session.ts";
 import { extTests } from "../../lanes/outcome-skills/h2h/ext/tests.ts";
 import { readPrereg } from "../../lanes/outcome-skills/h2h/prereg.ts";
 import { scoreSession } from "../../lanes/outcome-skills/h2h/score/score.ts";
@@ -229,18 +230,29 @@ describe("x-run's stage runner", () => {
     writeFileSync(recordPath(join(lHomes, h)), JSON.stringify({ schema: "h2hx-arm-install.v1", home: h, exit: 0, home_tree_sha256: homeTreeSha256(join(lHomes, h)) }));
   }
   const env = { H2H_CONTROL: "http://127.0.0.1:9", H2H_PROXY: "http://127.0.0.1:9", H2H_UNITS: W, H2HX_L_HOMES: lHomes };
-  const deps = (log: string[], hit: string | null = null): ExtRunnerDeps => ({
+  type Plant = { cost?: (arm: string) => number; gap?: (arm: string) => string | null; stop?: LookStop; looks?: number[] };
+  const deps = (log: string[], hit: string | null = null, p: Plant = {}): ExtRunnerDeps => ({
     unit: (id, u) => ({ dir: join(W, id), input: { ...unitInput, unit: u } }),
+    home: (arm, installs) => {
+      if (arm.startsWith("s-")) return { arm, part: "S", dir: null, home_rule: "none", home_tree_sha256: null, pin: arm } as ExtHome;
+      const h = extHome(arm, { lHomes, installs });
+      checkExtHome(h);
+      return h;
+    },
+    look: (i) => {
+      p.looks?.push(i.sessions.length);
+      return { half: { O: 0, B: 0 }, contrasts: [{ label: "planted", crossed: p.stop === "efficacy" }], stop: p.stop ?? "continue" };
+    },
     runtime: async () => ({ volume: "h2h-runtimes-test" }),
     contain: () => hit,
     session: async (i) => {
       log.push(i.session.index + " " + i.session.arm + " " + i.home.pin);
       mkdirSync(i.out, { recursive: true });
-      const record = { schema: "h2h-session.v1", unit: i.session.unit, arm: i.session.arm, stage: i.session.stage, index: i.session.index, end: "completed", gap: null } as unknown as ExtSessionRecord;
+      const record = { schema: "h2h-session.v1", unit: i.session.unit, arm: i.session.arm, stage: i.session.stage, index: i.session.index, end: "completed", gap: p.gap?.(i.session.arm) ?? null, cost_usd: p.cost?.(i.session.arm) ?? 0.5 } as unknown as ExtSessionRecord;
       writeFileSync(join(i.out, "session.json"), JSON.stringify(record));
       return { record, file: join(i.out, "session.json") };
     },
-    score: (r) => ({ score: { schema: "h2h-score.v1", unit: r.unit, arm: r.arm, stage: r.stage, gap: null, verified: true } as unknown as H2hScore, warnings: [], main: null, candidates: [] }),
+    score: (r) => ({ score: { schema: "h2h-score.v1", unit: r.unit, arm: r.arm, stage: r.stage, gap: r.gap, verified: r.gap === null } as unknown as H2hScore, warnings: [], main: null, candidates: [] }),
     tests: (r) => ({ schema: "h2hx-tests.v1", unit: r.unit, arm: r.arm, stage: r.stage, added: false, recount: false, lines: 0 }),
   });
 
@@ -259,6 +271,43 @@ describe("x-run's stage runner", () => {
     rmSync(join(dirs[3]!, "session.json"));
     await expect(runExtStage({ part: "L", stage: "stage1", units, out, env, deps: deps(log), log: () => {} })).rejects.toThrow(/^E_H2HX_RUN .* exists with no session.json/);
     await expect(runExtStage({ part: "L", stage: "stage1", units: units.slice(0, 1), out, env, deps: deps(log), log: () => {} })).rejects.toThrow(/^E_H2HX_RUN .*plan.json holds another plan/);
+  });
+
+  test("stage 1 opens an arm's next pilot session only under its cap, leaves out an arm that reached it, and keeps that on a relaunch", async () => {
+    const out = join(W, "stage-pilot-cap");
+    const log: string[] = [];
+    const plant = { cost: (arm: string) => (arm === "l-gstack-md" ? X.pilot_caps_usd["l-gstack-md"]! + 1 : 0.5) };
+    const r = await runExtStage({ part: "L", stage: "stage1", units, out, env, deps: deps(log, null, plant), log: () => {} });
+    expect(r).toMatchObject({ ran: 7, kept: 0, left_out: ["l-gstack-md"], stopped: null });
+    expect(log.filter((l) => l.includes(" l-gstack-md "))).toHaveLength(1);
+    expect(JSON.parse(readFileSync(join(out, "left-out.json"), "utf8")).arms).toEqual([{ arm: "l-gstack-md", settled_usd: X.pilot_caps_usd["l-gstack-md"]! + 1, sessions_run: 1, cap_usd: X.pilot_caps_usd["l-gstack-md"] }]);
+    const again = await runExtStage({ part: "L", stage: "stage1", units, out, env, deps: deps(log, null, plant), log: () => {} });
+    expect(again).toMatchObject({ ran: 0, kept: 7, left_out: ["l-gstack-md"] });
+  });
+
+  test("parts P and L's stage 2 stop once a cell's gaps pass the incomplete share of its planned sessions", async () => {
+    const s2 = units.map((u) => ({ ...u, stage: "stage2" as const }));
+    const r = await runExtStage({ part: "L", stage: "stage2", units: s2, out: join(W, "stage-gaps"), env, deps: deps([], null, { gap: (arm) => (arm === "l-gstack-task" ? "E_PF_UPSTREAM" : null) }), log: () => {} });
+    expect(r.stopped).toMatch(/^gaps: cell O l-gstack-task has 1 gaps of 2 planned sessions/);
+    expect(r.ran).toBeLessThan(r.plan.sessions.length);
+    expect(r.records.at(-1)!.session.arm).toBe("l-gstack-task");
+  });
+
+  test("part S's stage 2 runs the first half, takes the one look, and runs the rest only when it says continue", async () => {
+    const s2 = ["o__s0", "o__s1", "o__s2", "o__s3"].map((id, k) => ({ ...units[0]!, id, position: k + 1, stage: "stage2" as const }));
+    const looks: number[] = [];
+    const stop = await runExtStage({ part: "S", stage: "stage2", units: s2, out: join(W, "stage-look-stop"), env, deps: deps([], null, { stop: "efficacy", looks }), log: () => {} });
+    const halfN = stop.plan.sessions.length / 2;
+    expect(stop).toMatchObject({ ran: halfN, stopped: "interim look: efficacy" });
+    expect(looks).toEqual([halfN]);
+    expect(JSON.parse(readFileSync(join(W, "stage-look-stop", "look.json"), "utf8")).stop).toBe("efficacy");
+    expect((await runExtStage({ part: "S", stage: "stage2", units: s2, out: join(W, "stage-look-stop"), env, deps: deps([], null, { stop: "continue", looks }), log: () => {} })).stopped).toBe("interim look: efficacy");
+    expect(looks).toEqual([halfN]);
+    const go = await runExtStage({ part: "S", stage: "stage2", units: s2, out: join(W, "stage-look-go"), env, deps: deps([], null, { stop: "continue" }), log: () => {} });
+    expect(go).toMatchObject({ ran: go.plan.sessions.length, stopped: null });
+    const firstUnits = new Set(go.records.slice(0, halfN).map((r) => r.session.unit));
+    expect(firstUnits.size).toBe(2);
+    expect(go.records.slice(halfN).every((r) => !firstUnits.has(r.session.unit))).toBe(true);
   });
 
   test("an answer-key hit in a home refuses before its session; a stage with no units refuses", async () => {

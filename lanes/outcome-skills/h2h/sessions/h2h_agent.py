@@ -10,7 +10,8 @@ real_agent's RealAgent and leaves real_agent.py and pf_agent.py untouched. Per t
      whole-session retry names meta.rerun, and a 409 on the open is a cap stop).
 Claude Code is the container's own pinned binary, run through real_agent's docker-exec wrapper (FREEZE) as cli_path.
 h2h_config is a host JSON file run.ts writes: turns, continuation, done_rule, continuation_cap, limits, no_answer,
-disallowed_tools, env, home (a host dir, or null) and home_rule.
+disallowed_tools, env, home (a host dir, or null) and home_rule; the extension's part P (ext/session.ts) adds generations,
+which h2h_turns reads to write each answer's generation record before the slot closes.
 An s-* arm (the extension's part S, Sol in Codex) runs ext/h2h_codex.py's loop in step 4 instead, on the same slot; its
 h2h_config is ext/run.ts's and adds host "codex" and the codex block. Every other arm stays on the Claude Code path.
 """
@@ -119,7 +120,7 @@ class H2hAgent(RealAgent):
             "cli_path": str(wrapper), "cwd": str(host_dir), "repo": repo, "work": WORK, "sh_dir": SH_DIR, "home": HOME, "exec_prefix": ["docker", "exec", "-i", "-w", repo, container], "container": container,
             "out": str(evdir), "model": model, "no_answer": h["no_answer"], "env": env, "turns": h["turns"], "continuation": h["continuation"], "done_rule": h["done_rule"],
             "continuation_cap": h["continuation_cap"], "limits": h["limits"], "disallowed_tools": h["disallowed_tools"], "home_rule": h["home_rule"], "rerun": o.rerun or None,
-            "commits": task["commits"], "head": task["base_commit"],
+            "commits": task["commits"], "head": task["base_commit"], "generations": bool(h.get("generations")),
         }
         summary = await run_session(Turns(cfg, H2hSlots(self, trial, h["limits"], log)))
         summary["events"] = events

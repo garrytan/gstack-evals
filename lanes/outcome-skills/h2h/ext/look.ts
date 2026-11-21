@@ -10,7 +10,7 @@ import { normalQuantile } from "../../../../src/runner/stats/paired.ts";
 import { phi } from "../../../../src/runner/stats/outcome-decision.ts";
 import type { PairedTest } from "../analysis/stats.ts";
 import { h2hFail, readPrereg, type H2hPrereg } from "../prereg.ts";
-import type { UnitClass } from "../types.ts";
+import type { H2hUnit, UnitClass } from "../types.ts";
 import { cellOf, ExtData, primaryFamily, sentenceContrast, type ExtInput } from "./analysis.ts";
 import { planExtStage } from "./plan.ts";
 import { readExtPrereg, type ExtPrereg } from "./prereg.ts";
@@ -67,13 +67,11 @@ export function holmCrossings(items: readonly { p: number; z: number }[], m: num
 export type LookStop = "efficacy" | "gaps" | "cap" | "continue";
 export interface LookResult { half: Record<UnitClass, number>; contrasts: { label: string; crossed: boolean }[]; stop: LookStop }
 
-/** The look over part S's stage 2 records. capStop is the ledger's cap stop on h2hx-s-main, if one came. */
-export function interimLook(i: ExtInput, o: { x?: ExtPrereg; base?: H2hPrereg; capStop?: boolean } = {}): LookResult {
-  const x = o.x ?? readExtPrereg(), base = o.base ?? readPrereg();
-  const all = i.units.filter((u) => u.stage === "stage2");
-  const order = planExtStage("S", all, "stage2", x).units;
-  const byId = new Map(all.map((u) => [u.id, u]));
-  const want: Record<UnitClass, number> = { O: Math.floor(all.filter((u) => u.class === "O").length / 2), B: Math.floor(all.filter((u) => u.class === "B").length / 2) };
+/** Part S's look half: the first half, rounded down, of each class of its stage 2 units in planExtStage's run order. */
+export function lookHalf(stage2: readonly H2hUnit[], x: ExtPrereg = readExtPrereg()): Set<string> {
+  const order = planExtStage("S", [...stage2], "stage2", x).units;
+  const byId = new Map(stage2.map((u) => [u.id, u]));
+  const want: Record<UnitClass, number> = { O: Math.floor(stage2.filter((u) => u.class === "O").length / 2), B: Math.floor(stage2.filter((u) => u.class === "B").length / 2) };
   const got: Record<UnitClass, number> = { O: 0, B: 0 };
   const half = new Set<string>();
   for (const id of order) {
@@ -83,6 +81,16 @@ export function interimLook(i: ExtInput, o: { x?: ExtPrereg; base?: H2hPrereg; c
       half.add(id);
     }
   }
+  return half;
+}
+
+/** The look over part S's stage 2 records. capStop is the ledger's cap stop on h2hx-s-main, if one came. */
+export function interimLook(i: ExtInput, o: { x?: ExtPrereg; base?: H2hPrereg; capStop?: boolean } = {}): LookResult {
+  const x = o.x ?? readExtPrereg(), base = o.base ?? readPrereg();
+  const all = i.units.filter((u) => u.stage === "stage2");
+  const half = lookHalf(all, x);
+  const got: Record<UnitClass, number> = { O: 0, B: 0 };
+  for (const u of all) if (half.has(u.id)) got[u.class]++;
   const keep = <T extends { unit: string }>(rows: readonly T[]) => rows.filter((r) => half.has(r.unit));
   const d = new ExtData("S", { units: all.filter((u) => half.has(u.id)), sessions: keep(i.sessions), scores: keep(i.scores), tests: keep(i.tests), stage: "stage2" }, x);
   const family = primaryFamily(d, "S", base, { withMdd: false });

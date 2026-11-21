@@ -133,6 +133,18 @@ def test_async_question_gets_the_reply_on_the_same_thread(base_url, log):
     assert events[0]["answer"] == BASE["texts"]["question_reply"]
 
 
+def test_question_at_the_turn_ceiling_gets_no_reply(base_url, log):
+    cfg, d = session("ask-ceiling", base_url, ["[fx:ask] Fix the parser."], limits={"max_turns": 1})
+    s = run(cfg)
+    t = s["turns"][0]
+    assert t["termination"] == "turn_ceiling", t
+    assert [x["kind"] for x in t["drive"]["execs"]] == ["turn"], t["drive"]["execs"]
+    q = s["questions"]["t1"]
+    assert (q["async_questions"], q["unanswered"]) == (1, 1), q
+    events = [json.loads(l) for l in (Path(cfg["out"]) / "usersim-events.jsonl").read_text().splitlines()]
+    assert events[-1]["source"] == "turn_ceiling", events
+
+
 def test_sync_question_is_counted_unanswered(base_url, log):
     cfg, d = session("asksync", base_url, ["[fx:asksync] Fix the parser."])
     s = run(cfg)
@@ -294,13 +306,15 @@ def test_agent_dispatch():
         ctx = types.SimpleNamespace()
         asyncio.run(agent("h2h:s-gstack", codex_cfg).run("i", None, ctx))
         asyncio.run(agent("h2h:none", claude_cfg).run("i", None, types.SimpleNamespace()))
+        asyncio.run(agent("h2h:p-gstack", {**claude_cfg, "generations": True}).run("i", None, types.SimpleNamespace()))
         try:
             asyncio.run(agent("h2h:s-none", claude_cfg).run("i", None, types.SimpleNamespace()))
             raise AssertionError("an s-* arm with a Claude config was not refused")
         except h2h_agent.SandboxSetupError as e:
             assert str(e).startswith("E_REAL_SANDBOX_SETUP arm h2h:s-none runs in Codex"), str(e)
         made = seen["made"]
-        assert [m[0] for m in made] == ["FakeCodex", "FakeClaude"], made
+        assert [m[0] for m in made] == ["FakeCodex", "FakeClaude", "FakeClaude"], made
+        assert made[1][1]["generations"] is False and made[2][1]["generations"] is True, "part P's generations flag must reach Turns"
         c = made[0][1]
         assert c["codex"] == codex_cfg["codex"] and c["container"] == "c1" and c["exec_prefix"] == ["docker", "exec", "-i", "-w", "/work/repo", "c1"] and "cli_path" not in c
         assert c["env"] == {"GSTACK_TELEMETRY_SOURCE": "eval"} and c["home"] == "/root" and c["commits"] == 1
@@ -310,7 +324,7 @@ def test_agent_dispatch():
         h2h_agent.CodexTurns, h2h_agent.Turns, h2h_agent.egress.apply, h2h_agent.subprocess.run = saved
 
 
-TESTS = [test_done_in_one_turn, test_continuations_to_the_cap, test_async_question_gets_the_reply_on_the_same_thread, test_sync_question_is_counted_unanswered, test_two_scripted_turns_resume_one_thread, test_ci_unset_and_env_reaches_tools, test_policy_failure_is_a_refusal, test_wall_limit_kills_codex, test_hooks_run_under_the_trust_bypass, test_pack_config_is_kept_and_a_clash_refuses_before_the_slot, test_home_rules_and_wrong_binary_refuse]
+TESTS = [test_done_in_one_turn, test_continuations_to_the_cap, test_async_question_gets_the_reply_on_the_same_thread, test_question_at_the_turn_ceiling_gets_no_reply, test_sync_question_is_counted_unanswered, test_two_scripted_turns_resume_one_thread, test_ci_unset_and_env_reaches_tools, test_policy_failure_is_a_refusal, test_wall_limit_kills_codex, test_hooks_run_under_the_trust_bypass, test_pack_config_is_kept_and_a_clash_refuses_before_the_slot, test_home_rules_and_wrong_binary_refuse]
 
 
 def main() -> int:

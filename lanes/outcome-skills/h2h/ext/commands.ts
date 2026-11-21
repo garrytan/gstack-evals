@@ -28,13 +28,15 @@ const inputs = (f: NonNullable<ReturnType<typeof parseFlags>>) => {
   };
 };
 
-const ANALYZE_HELP = `Usage: gstack-evals h2h x-analyze --part S|P|L --units <units> --sessions <file|dir> --scores <file|dir> --tests <file|dir> --out <analysis.json> [--frame <frame>] [--stage stage2] [--run-as-published <arms>] [--opus <session data dir>]
+const ANALYZE_HELP = `Usage: gstack-evals h2h x-analyze --part S|P|L --units <units> --sessions <file|dir> --scores <file|dir> --tests <file|dir> --out <analysis.json> [--frame <frame>] [--stage stage2] [--run-as-published <arms>] [--opus <session data dir>] [--stopped-at-half]
 Section 9 for one part: the primary family (Holm over 10 for S, 12 for P), the sentence family's three co-primaries with
 Holm over the three and the reading, tests added per arm with the recount beside the frozen rule, the secondaries, and
-for part P the gap to the published Opus rows (--opus, the head-to-head's session data by default). The analysis JSON
-goes to --out (a new file); the table prints.`;
+for part P the gap to the published Opus rows (--opus, the head-to-head's session data by default). Part S's counted
+stage reads significance against the O'Brien-Fleming end bounds (section 11); --stopped-at-half, after an efficacy stop
+at the look, reads the first half only against the look's bounds. The analysis JSON goes to --out (a new file); the
+table prints.`;
 const analyzeCmd: Command = async (argv) => {
-  const f = parseFlags(argv, [...INPUT_FLAGS, "--part", "--out", "--stage", "--run-as-published", "--opus"], [], ANALYZE_HELP, INPUT_FLAGS);
+  const f = parseFlags(argv, [...INPUT_FLAGS, "--part", "--out", "--stage", "--run-as-published", "--opus"], ["--stopped-at-half"], ANALYZE_HELP, INPUT_FLAGS);
   if (!f) return 0;
   const part = f.need("--part") as Part;
   if (!PARTS.includes(part)) h2hFail("E_USAGE", "--part is S, P or L");
@@ -43,7 +45,7 @@ const analyzeCmd: Command = async (argv) => {
   const out = f.need("--out");
   if (existsSync(out)) h2hFail("E_USAGE", out + " already exists; the analysis is written to a new file");
   const opus = part === "P" ? { scores: readRecords<H2hScore>(join(f.one("--opus") ?? OPUS_DATA, "score-records.jsonl"), "h2h-score.v1") } : undefined;
-  const a = analyzeExt(part, { ...inputs(f), stage, runAsPublished: (f.one("--run-as-published") ?? "").split(",").filter(Boolean) }, { opus });
+  const a = analyzeExt(part, { ...inputs(f), stage, runAsPublished: (f.one("--run-as-published") ?? "").split(",").filter(Boolean) }, { opus, stoppedAtHalf: f.has("--stopped-at-half") });
   writeFileSync(out, JSON.stringify(a, null, 2) + "\n", { flag: "wx" });
   for (const l of reportExt(a)) console.log(l);
   return 0;
@@ -77,7 +79,9 @@ const dryrunCmd: Command = async (argv) => {
 const RUN_HELP = `Usage: gstack-evals h2h x-run --part S|P|L --stage stage0|stage1|stage2 --units <units> --out <dir> [--frame <frame>] [--allowance <usd>]
 Runs one part's stage on the running outcome driver: plans the stage's units from prereg.json's order_seed, then runs,
 scores and writes the tests-added record of each session in order under --out (one dir per session; a relaunch keeps the
-sessions already written). The driver, its proxy, the unit dirs and the homes come from the environment (ext/runner.ts).
+sessions already written). Section 11's stops run inside it: per-arm pilot caps in stage 1 (left-out.json), part S's one
+interim look at half in stage 2 (look.json), and the gap stop in parts P and L's stage 2. The driver, its proxy, the unit
+dirs and the homes come from the environment (ext/runner.ts).
 --allowance is the part's session allowance, or exactly twice it after the doubling rule.`;
 const runCmd: Command = async (argv) => {
   const f = parseFlags(argv, ["--part", "--stage", "--units", "--frame", "--out", "--allowance"], [], RUN_HELP, ["--units", "--frame"]);
@@ -93,7 +97,7 @@ const runCmd: Command = async (argv) => {
   const why = await extPreflight(part, units);
   if (why) h2hFail("E_H2HX_RUN", why + "; nothing was opened");
   const r = await runExtStage({ part, stage, units, out: f.need("--out"), allowance });
-  console.log("x-run part " + part + " " + stage + ": " + r.plan.sessions.length + " sessions planned, " + r.ran + " run, " + r.kept + " kept from an earlier launch");
+  console.log("x-run part " + part + " " + stage + ": " + r.plan.sessions.length + " sessions planned, " + r.ran + " run, " + r.kept + " kept from an earlier launch" + (r.left_out.length ? "; left out under R111: " + r.left_out.join(", ") : "") + (r.stopped ? "; stopped, " + r.stopped : ""));
   return 0;
 };
 
