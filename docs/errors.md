@@ -457,6 +457,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_DEP](#e_cso_drop_install_dep) | 2 | U20 |
 | [E_CSO_RELEASE](#e_cso_release) | 2 | U20 |
+| [E_CSO_SCORE_INPUT](#e_cso_score_input) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3547,6 +3548,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 Deviation (b): a /cso eval stage 1 release was asked to carry a judge-check field beyond whether each gold minimum was met and whether each gate passed (a count, a kappa value, a rate or a per-class figure), or lacked a minimum or gate the plan names.
 
 Fix: Release only the booleans deviation (b) allows; everything else stays in the sealed file until stage 2's analysis opens it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_SCORE_INPUT
+
+The /cso eval scorer was handed input it can't score: prereg.json lacks a scoring constant or its redaction list is malformed, a session was scored against another unit, a session with assistant text came with no judge result, or the labels don't match the counted findings one for one.
+
+Fix: Score each session against its own unit record and its own pass A and pass B results; never fill a missing label by hand.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 

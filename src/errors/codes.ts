@@ -3887,6 +3887,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CSO_SCORE_INPUT: {
+    exit: 2,
+    meaning: "The /cso eval scorer was handed input it can't score: prereg.json lacks a scoring constant or its redaction list is malformed, a session was scored against another unit, a session with assistant text came with no judge result, or the labels don't match the counted findings one for one.",
+    fix: "Score each session against its own unit record and its own pass A and pass B results; never fill a missing label by hand.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
