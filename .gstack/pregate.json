@@ -678,7 +678,8 @@
       "profiles": [
         "ci-carry/checks"
       ],
-      "inventory": "git ls-tree -r --name-only HEAD | grep -Ei '(^|/)[^/]+[._](test|spec)\\.([cm]?[jt]s|[jt]sx)$' | grep -Ev '(^|/)(\\.[^/]*|node_modules)/'"
+      "inventory": "git ls-tree -r --name-only HEAD | grep -Ei '(^|/)[^/]+[._](test|spec)\\.([cm]?[jt]s|[jt]sx)$' | grep -Ev '(^|/)(\\.[^/]*|node_modules)/'",
+      "per_file": "bun test {files}"
     },
     "bun run typecheck": {
       "profiles": [
