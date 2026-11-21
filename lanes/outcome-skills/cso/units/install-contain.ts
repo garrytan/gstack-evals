@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// Deviation (a), dated pre-data (deviations post 2026-11-21-geva-561-cso-advisories-deviations): the containment gate
+// Deviation (a), dated pre-data (deviations post 2026-11-21-capy-cso-advisories-deviations): the containment gate
 // also scans each arm's installed gstack tree, and a unit whose GHSA id, CVE id or fix-commit prefix appears there drops
 // from every cell, so pairing holds. Section 3's gate 6 read only the session tree, but gstack's tree at the pin names
 // nine candidate advisories by GHSA id (CHANGELOG.md, TODOS.md, .osv-scanner.toml and a design record). The scan runs

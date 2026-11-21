@@ -18,7 +18,7 @@ export const csoFail = (code: ReasonCode, message: string): never => {
 
 export const POST_ID = "2026-11-19-geva-561-cso-advisories-prereg";
 export const PREREG_PATH = join(import.meta.dir, "..", "..", "..", "wiki", "plans", POST_ID, "prereg.json");
-export const DEVIATIONS_POST_ID = "2026-11-21-geva-561-cso-advisories-deviations";
+export const DEVIATIONS_POST_ID = "2026-11-21-capy-cso-advisories-deviations";
 
 /** The dated pre-data deviations, as the deviations post lists them: a, b, CV5 and CV6 in the Captain's approvals record
  *  (approvals/2026-11-19-untested-parts-ship-guards-cso.md), c from the Captain's decision of 2026-11-21. Run receipts

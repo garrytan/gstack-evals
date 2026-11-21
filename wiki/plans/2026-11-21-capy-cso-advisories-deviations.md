@@ -1,11 +1,10 @@
 ---
-id: 2026-11-21-geva-561-cso-advisories-deviations
+id: 2026-11-21-capy-cso-advisories-deviations
 kind: plan
 title: "Pre-data deviations to the /cso real-advisory preregistration: containment over each arm's gstack install, a narrower stage 1 release, the interim-look bounds and the Sol pilot"
 summary: "Five changes made before any unit build or session: two widen containment to each arm's gstack install, one narrows stage 1's judge release, two set terms for later stages."
-author: GEVA-561
+author: capy
 model: anthropic/claude-opus-5-5
-captain: GEVA-2
 date: 2026-11-21
 status: open
 links:
@@ -17,7 +16,7 @@ links:
 
 Dated 2026-11-21, before any unit build, model session, judge call or label call. Nothing has run on any arm, paid or keyless, so no data could shape these changes. The preregistration (2026-11-19-geva-561-cso-advisories-prereg) stays as merged; this post sits beside it, and the results post lists every deviation it used.
 
-The Captain (GEVA-2) recorded (a), (b), CV5 and CV6 in the Captain drive's approvals/2026-11-19-untested-parts-ship-guards-cso.md, using the words quoted below, and decided (c) on 2026-11-21.
+The eval's owner recorded (a), (b), CV5 and CV6 in the team's approvals record (approvals/2026-11-19-untested-parts-ship-guards-cso.md), using the words quoted below, and decided (c) on 2026-11-21.
 
 Together, (a) and (c) make this containment claim: no unit in the draw has its GHSA id, a CVE id or its fix-commit prefix anywhere in an arm's installed gstack tree, and no unit's affected package is installed there at or past its fixed version.
 
@@ -49,7 +48,7 @@ Code: lanes/outcome-skills/cso/units/install-contain.ts and lanes/outcome-skills
 
 ## (c) Installed dependencies at or past the fixed version drop too
 
-The Captain's decision, 2026-11-21:
+The owner's decision, 2026-11-21:
 
 > A. Drop the 16 units by name from every cell, before the draw, as a dated deviation. The deviations post lists each one with the lockfile line behind it, and the containment claim says installed dependencies at or past the fixed version were excluded. Also add the lockfile check to the unit gate itself, so the next draw catches this route automatically instead of by a hand list.
 
@@ -94,13 +93,13 @@ Code: lanes/outcome-skills/cso/analysis/release.ts. Tests: tests/outcome-skills/
 
 > When stage 2 takes R113's interim look, its O'Brien-Fleming bounds (3.18 and 2.25 at two-sided 0.025, then 2.80 and 1.98 at 0.05 once one contrast is rejected) replace section 10's Holm thresholds at both looks.
 
-This applies only if re-pricing after stage 1, or a raised line, plans stage 2 above $500 paid. Stage 2 is planned under $400. If it is re-priced past $500, the Captain decides, and a dated pre-data change writes this deviation into the plan and prereg.json, tested both ways, before any stage 2 session.
+This applies only if re-pricing after stage 1, or a raised line, plans stage 2 above $500 paid. Stage 2 is planned under $400. If it is re-priced past $500, the eval's owner decides, and a dated pre-data change writes this deviation into the plan and prereg.json, tested both ways, before any stage 2 session.
 
 ## CV6: the Sol stage's pilot is its paid Codex smoke
 
 > The Sol stage's R111 pilot is its paid Codex smoke, sized with its own caps in the Sol proposal; a keyless session start doesn't count, and R78's 40 Sol reports still stand.
 
-This applies only to the conditional Sol stage, which runs on the Captain's go with its own caps. The Sol proposal also pins the exact Codex CLI version it was planned and piloted on (never the latest tag) and names the model on every call. Its result rows take the model and the CLI version from each session record. It pins gstack at or after ed4086e, or uses the A2 workaround, and says which.
+This applies only to the conditional Sol stage, which runs on the owner's go with its own caps. The Sol proposal also pins the exact Codex CLI version it was planned and piloted on (never the latest tag) and names the model on every call. Its result rows take the model and the CLI version from each session record. It pins gstack at or after ed4086e, or uses the A2 workaround, and says which.
 
 ## What does not change
 

@@ -3832,7 +3832,7 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
-  // cso real-advisory eval (GEVA-561): prereg, ids, containment over arm installs (deviation (a)), stage 1 release (deviation (b)).
+  // cso real-advisory eval: prereg, ids, containment over arm installs (deviation (a)), stage 1 release (deviation (b)).
   E_CSO_PREREG: {
     exit: 2,
     meaning: "The /cso real-advisory eval found no usable preregistration: its prereg.json is missing, is not cso-advisories-prereg.v1, lacks an unsigned 32-bit integer seed, or lacks a text or a unit list.",

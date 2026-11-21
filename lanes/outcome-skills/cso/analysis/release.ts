@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// Deviation (b), dated pre-data (deviations post 2026-11-21-geva-561-cso-advisories-deviations): stage 1's judge-check
+// Deviation (b), dated pre-data (deviations post 2026-11-21-capy-cso-advisories-deviations): stage 1's judge-check
 // release reports only whether each gold minimum was met and the pass or fail of each gate, not gold counts by class.
 // Section 12 releases item 6 as "judge check results (kappa per label, per-arm gate, format variants, refusals, gold
 // counts)", but gold counts by class on stage 0 and 1 reports, read beside the released no-gstack named count, would

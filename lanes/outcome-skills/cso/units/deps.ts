@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// Deviation (c), dated pre-data (deviations post 2026-11-21-geva-561-cso-advisories-deviations): a unit whose affected
+// Deviation (c), dated pre-data (deviations post 2026-11-21-capy-cso-advisories-deviations): a unit whose affected
 // package an arm's installed gstack tree holds at or past its fixed version drops from every cell, because that install
 // carries the fixed code of the library under audit and the none arm's does not. The gate reads every lockfile and
 // installed package manifest it knows in the tree (bun.lock, package-lock.json, yarn.lock, pnpm-lock.yaml and
