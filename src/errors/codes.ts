@@ -2595,6 +2595,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_H2HX_ANALYSIS_INPUT: {
+    exit: 2,
+    meaning: "The extension's analysis or its interim look got records it can't use: a unit listed twice or of a kind the part does not run, a record for an unknown unit or for an arm that does not run on that unit, two records for one session, a record of another schema, or a scored session with no tests-added record.",
+    fix: "Pass the part's own units, sessions, scores and tests-added records, one of each per session, as the scorer and the tests-added module wrote them.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_H2H_PREREG: {
     exit: 2,
     meaning: "The skill-pack head-to-head found no usable preregistration: its prereg.json is missing, is not h2h-prereg.v1, lacks an unsigned 32-bit integer draw_seed, order_seed or bootstrap_seed, lists other arms than the lane's, or lacks a text, entry, list or continuation cap.",

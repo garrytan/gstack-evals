@@ -312,6 +312,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
 | [E_H2HX_PREREG](#e_h2hx_prereg) | 2 | U20 |
 | [E_H2HX_INPUT](#e_h2hx_input) | 2 | U20 |
+| [E_H2HX_ANALYSIS_INPUT](#e_h2hx_analysis_input) | 2 | U20 |
 | [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
 | [E_H2H_INSTALL](#e_h2h_install) | 2 | U20 |
 | [E_H2H_PIN](#e_h2h_pin) | 2 | U20 |
@@ -2447,6 +2448,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 An extension command got input it can't use: an unknown part, stage or arm, a unit listed twice, a B1 unit, a non-O unit in part L, or an empty problem statement.
 
 Fix: Pass the part's own units and arms, each once, as the extension's preregistration lists them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ANALYSIS_INPUT
+
+The extension's analysis or its interim look got records it can't use: a unit listed twice or of a kind the part does not run, a record for an unknown unit or for an arm that does not run on that unit, two records for one session, a record of another schema, or a scored session with no tests-added record.
+
+Fix: Pass the part's own units, sessions, scores and tests-added records, one of each per session, as the scorer and the tests-added module wrote them.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
