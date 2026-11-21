@@ -18,6 +18,26 @@ import { interimApplies } from "./verdicts.ts";
 const REPO = join(import.meta.dir, "..", "..", "..", "..");
 const SEALED = "cso-sealed.v1";
 const SEALED_ROW = "cso-sealed-row.v1";
+const SEALED_FILE = "cso-sealed-file.v1";
+type Envelope = { iv: string; tag: string; ciphertext: string };
+
+function encrypt(plain: Buffer, aad: string, key: Buffer) {
+  const iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", key, iv);
+  c.setAAD(Buffer.from(aad));
+  const ciphertext = Buffer.concat([c.update(plain), c.final()]);
+  return { schema: aad, alg: "aes-256-gcm", iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), ciphertext: ciphertext.toString("base64") };
+}
+function decrypt(v: Envelope, aad: string, key: Buffer, where: string): Buffer {
+  const dc = createDecipheriv("aes-256-gcm", key, Buffer.from(v.iv, "base64"));
+  dc.setAAD(Buffer.from(aad));
+  dc.setAuthTag(Buffer.from(v.tag, "base64"));
+  try {
+    return Buffer.concat([dc.update(Buffer.from(v.ciphertext, "base64")), dc.final()]);
+  } catch (e) {
+    return csoFail("E_CSO_READOUT_KEY", where + " does not open with this key: " + (e as Error).message);
+  }
+}
 const STAGE1_CELLS: [CsoModel, CsoArm][] = [["opus", "none"], ["opus", "cso"], ["opus", "untold"], ["particle", "none"], ["particle", "cso"]];
 const STAGE2_CELLS: [CsoModel, CsoArm][] = [["opus", "none"], ["opus", "cso"], ["particle", "none"], ["particle", "cso"]];
 const N2 = { min: 48, max: 100, step: 4 } as const;
@@ -219,24 +239,40 @@ export const sealedStage = (stage: string): boolean => stage === "stage1" || sta
 
 /** One JSON line holding a row encrypted to the readout key. */
 export function sealRow(row: unknown, key: Buffer): string {
-  const iv = randomBytes(12);
-  const c = createCipheriv("aes-256-gcm", key, iv);
-  c.setAAD(Buffer.from(SEALED_ROW));
-  const ciphertext = Buffer.concat([c.update(JSON.stringify(row), "utf8"), c.final()]);
-  return JSON.stringify({ schema: SEALED_ROW, alg: "aes-256-gcm", iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), ciphertext: ciphertext.toString("base64") });
+  return JSON.stringify(encrypt(Buffer.from(JSON.stringify(row), "utf8"), SEALED_ROW, key));
 }
 
 /** Whether a parsed JSON line is a row sealRow wrote. */
-export const isSealedRow = (v: unknown): v is { iv: string; tag: string; ciphertext: string } => typeof v === "object" && v !== null && (v as { schema?: unknown }).schema === SEALED_ROW;
+export const isSealedRow = (v: unknown): v is Envelope => typeof v === "object" && v !== null && (v as { schema?: unknown }).schema === SEALED_ROW;
 
 /** Opens one sealed row (E_CSO_READOUT_KEY when the key does not open it; where names its file). */
-export function openRow<T>(v: { iv: string; tag: string; ciphertext: string }, key: Buffer, where: string): T {
-  const dc = createDecipheriv("aes-256-gcm", key, Buffer.from(v.iv, "base64"));
-  dc.setAAD(Buffer.from(SEALED_ROW));
-  dc.setAuthTag(Buffer.from(v.tag, "base64"));
-  try {
-    return JSON.parse(Buffer.concat([dc.update(Buffer.from(v.ciphertext, "base64")), dc.final()]).toString("utf8")) as T;
-  } catch (e) {
-    return csoFail("E_CSO_READOUT_KEY", where + " holds a row that does not open with this key: " + (e as Error).message);
-  }
+export function openRow<T>(v: Envelope, key: Buffer, where: string): T {
+  return JSON.parse(decrypt(v, SEALED_ROW, key, where).toString("utf8")) as T;
+}
+
+/** A whole file's bytes encrypted to the readout key, as the text of its .sealed file. */
+export function sealBytes(bytes: Buffer, key: Buffer): string {
+  return JSON.stringify(encrypt(bytes, SEALED_FILE, key)) + "\n";
+}
+
+/** Whether a file's text is a sealed file, a sealed check or readout, or JSON lines that are all sealed rows. */
+export function isSealedText(text: string): boolean {
+  const lines = text.split("\n").filter((l) => l.trim());
+  const parse = (l: string): unknown => {
+    try {
+      return JSON.parse(l);
+    } catch {
+      return null;
+    }
+  };
+  const one = lines.length === 1 ? (parse(lines[0]!) as { schema?: unknown } | null) : null;
+  if (one && (one.schema === SEALED_FILE || one.schema === SEALED)) return true;
+  return lines.length > 0 && lines.every((l) => isSealedRow(parse(l)));
+}
+
+/** A sealed file's bytes (E_CSO_READOUT_OUT when it is not one, E_CSO_READOUT_KEY when the key does not open it). */
+export function openBytes(text: string, key: Buffer, where: string): Buffer {
+  const v = JSON.parse(text) as Envelope & { schema?: unknown };
+  if (v.schema !== SEALED_FILE) csoFail("E_CSO_READOUT_OUT", where + " is not a " + SEALED_FILE + " file");
+  return decrypt(v, SEALED_FILE, key, where);
 }

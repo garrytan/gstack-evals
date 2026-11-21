@@ -4184,6 +4184,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CSO_EXPORT: {
+    exit: 2,
+    meaning: "The /cso eval export refused: --run is not a directory, --out already exists or overlaps --run, the readout key sits under --run, a file in the run holds the key's bytes, or a run file would collide with MANIFEST.sha256 or scored-texts.jsonl.",
+    fix: "Export a finished run dir to a new dir outside it, with the readout key kept in the sealed store outside the run; move any file that holds the key out of the run first.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

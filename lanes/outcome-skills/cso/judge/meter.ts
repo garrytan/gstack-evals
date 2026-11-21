@@ -5,8 +5,9 @@
 // slot's allowance. Before each call the lease's room must hold that worst case, or the item cap-stops and nothing more
 // is sent. Carbon and Argon go through OpenRouter, where the proxy pins google-vertex with fallbacks off and data
 // collection denied, and a reply served by any other provider stops the send; Astra goes through OpenAI and Opus
-// through Anthropic. Answered replies are kept by request digest in the out dir, so a rerun never pays for the same
-// request twice; with the readout key they are sealed to it, since stage 1's replies carry its labels (section 12).
+// through Anthropic. Every request (the judge packet) and answered reply is kept by request digest in the out dir, so a rerun
+// never pays for the same request twice and the export carries both; with the readout key they are sealed to it, since
+// stage 1's packets and replies carry its reports and labels (section 12).
 // probe sends one short call down each judge and labeller route at its frozen model, effort and cap.
 import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -46,6 +47,7 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
   const warn = (code: string, m: string) => (o.warn ?? ((l: string) => console.error(l)))(code + " cso judge: " + m);
   const out = resolve(o.out);
   mkdirSync(join(out, "replies"), { recursive: true });
+  mkdirSync(join(out, "requests"), { recursive: true });
   const journal = join(out, "journal.ndjson");
   let proxy: MeteringProxy | null = null;
   let lease = { lease_id: "", reserved_micros: 0 };
@@ -76,6 +78,8 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
       const v: unknown = JSON.parse(readFileSync(kept, "utf8"));
       return { status: 200, body: isSealedRow(v) ? openRow(v, o.seal ?? csoFail("E_USAGE", kept + " is sealed to the readout key; pass --key"), kept) : v };
     }
+    const packet = join(out, "requests", digest + ".json");
+    if (!existsSync(packet)) writeFileSync(packet, o.seal ? sealRow(body, o.seal) : JSON.stringify(body));
     const maxOut = Number(body.max_tokens ?? body.max_output_tokens);
     const worst = reservationMicros(priceRequest(provider, body, maxOut, route));
     const room = lease.reserved_micros - local.held(lease.lease_id);

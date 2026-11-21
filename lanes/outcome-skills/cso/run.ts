@@ -8,9 +8,11 @@
 // above it covers one more allowance, and a second is a gap. A close whose proxy finalize failed, or an attempt that
 // opened its slot and left no summary, halts with E_CSO_FINALIZE_HALT (the latter after POST /stop on the driver). The
 // record takes exposure and the helper records from csoExposure over the SDK transcript and the unit's tree; loaded also
-// reads Claude Code's own session log, the one place the expanded /cso command block is written.
+// reads Claude Code's own session log, the one place the expanded /cso command block is written. A stage 1 or re-pilot
+// session needs the readout key (section 12): its session.json is one sealed row, and when it ends, halts or fails every
+// other file in its dir (transcripts, Claude Code's session log, Harbor's logs and job dirs) becomes <file>.sealed.
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { INSTALL_IMAGE } from "../h2h/arms/recipes.ts";
@@ -22,6 +24,7 @@ import { sessionManifest, type SessionImage } from "../statemachines/image.ts";
 import { CSO_PREFIX, csoDriverModels } from "./driver.ts";
 import { events } from "../h2h/sessions/exposure.ts";
 import { csoExposure, loaded } from "./exposure.ts";
+import { sealBytes, sealedStage, sealRow } from "./analysis/readout.ts";
 import { csoFail, loadCsoPrereg, type CsoPrereg } from "./prereg.ts";
 import { csoConfig, csoLimits, csoSessionRecord, harborModel, modelId, readEnd, withRefusalFallback, type EndRead } from "./sessions.ts";
 import type { CsoArm, CsoModel, CsoStage, SessionRecord, UnitRecord } from "./types.ts";
@@ -61,6 +64,8 @@ export interface CsoSessionInput {
   unit: UnitRecord; tree: string; image: SessionImage; arm: CsoArm; model: CsoModel; stage: CsoStage; index: number;
   home: { dir: string | null; home_tree_sha256: string }; control: string; proxy: string; out: string;
   allowance?: number; capLeftUsd?: number; harbor?: string; claude?: string; runtime?: { volume: string; path?: string }; jobName?: string;
+  /** The readout key; stage 1 and re-pilot sessions need it. */
+  seal?: Buffer | null;
 }
 
 const label = (i: Pick<CsoSessionInput, "unit" | "arm" | "model" | "stage" | "index">) => i.unit.unit + "/" + i.arm + "/" + i.model + "/" + i.stage + "/" + i.index;
@@ -161,7 +166,27 @@ export async function runCsoSession(i: CsoSessionInput): Promise<{ record: Sessi
   if (existsSync(i.out)) csoFail("E_CSO_SESSION", i.out + " exists; each session writes a new run dir");
   if ((i.arm === "none") !== (i.home.dir === null)) csoFail("E_CSO_ARM", i.arm + (i.arm === "none" ? " runs with no home" : " needs its installed home"));
   if (i.home.dir !== null && homeTreeSha256(i.home.dir) !== i.home.home_tree_sha256) csoFail("E_CSO_ARM", i.arm + "'s home " + i.home.dir + " no longer hashes to its arm record's " + i.home.home_tree_sha256);
+  const key = sealedStage(i.stage) ? (i.seal ?? csoFail("E_CSO_SESSION", label(i) + ": stage 1 and re-pilot sessions are sealed to the readout key (section 12), and none was given")) : null;
   mkdirSync(i.out, { recursive: true });
+  try {
+    return await session(i, key);
+  } finally {
+    if (key) sealDir(i.out, key);
+  }
+}
+
+function sealDir(dir: string, key: Buffer): void {
+  for (const e of readdirSync(dir)) {
+    const f = join(dir, e), st = lstatSync(f);
+    if (st.isDirectory()) sealDir(f, key);
+    else if (st.isFile() && e !== "session.json" && !e.endsWith(".sealed")) {
+      writeFileSync(f + ".sealed", sealBytes(readFileSync(f), key), { flag: "wx", mode: 0o600 });
+      rmSync(f);
+    }
+  }
+}
+
+async function session(i: CsoSessionInput, key: Buffer | null): Promise<{ record: SessionRecord; file: string }> {
   const p = loadCsoPrereg();
   const allowance = csoLimits(i.model, p, i.allowance).allowance_usd;
   const runtime = i.runtime ?? { volume: (await buildRuntimeVolume()).volume };
@@ -195,7 +220,7 @@ export async function runCsoSession(i: CsoSessionInput): Promise<{ record: Sessi
   const helper = read.helper;
   const record = csoSessionRecord({ unit: i.unit.unit, arm: i.arm, model: i.model, stage: i.stage, attempts: last!.attempt, end: last!.end, summary: last!.summary, records: last!.records, repoDir: CSO_REPO_DIR, exposure, helper, usage, wall_sec: Math.round((Date.now() - started) / 1000) });
   const file = join(i.out, "session.json");
-  writeFileSync(file, JSON.stringify(record, null, 1) + "\n", { flag: "wx" });
+  writeFileSync(file, (key ? sealRow(record, key) : JSON.stringify(record, null, 1)) + "\n", { flag: "wx" });
   writeFileSync(join(i.out, "run.json"), JSON.stringify(run, null, 1) + "\n", { flag: "wx" });
   return { record, file };
 }
