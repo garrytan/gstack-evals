@@ -300,3 +300,48 @@ describe("old posts stay closed", () => {
     expect(checkWiki(repoRoot, { baseFiles: new Map() }).problems.filter((p) => p.message.startsWith("practice")).length).toBeGreaterThan(0);
   });
 });
+
+describe("tighter parsing", () => {
+  const spend = (v: string) => swap("Planned paid spend: $700", "Planned paid spend: " + v);
+
+  test("a spaced multiplier fails closed, a glued one still reads", () => {
+    expect(has(check(prereg(spend("$1.2 k"))), 'practice 6: "## Interim look" needs "Planned paid spend: $<n>"')).toBe(true);
+    expect(has(check(prereg(spend("$1.2 M"))), 'practice 6: "## Interim look" needs "Planned paid spend: $<n>"')).toBe(true);
+    expect(check(prereg(spend("$1.2k")))).toEqual([]);
+    const quick = check({ [QUICK]: post(QUICK_ID, "plan", PASSING_QUICK.replace("Paid cap: $60", "Paid cap: $1.2 k")) });
+    expect(has(quick, 'quick look: "Paid cap: $<n>" is missing')).toBe(true);
+  });
+
+  test("a value with more than one dollar figure fails closed", () => {
+    expect(has(check(prereg(spend("$300 per arm, $1,200 in all"))), 'practice 6: "## Interim look" needs "Planned paid spend: $<n>"')).toBe(true);
+    expect(has(check(prereg(swap("| $300 | $30 |", "| $300 | $20 to $30 |"))), 'arm "no gstack" needs its budget and pilot cap in dollars')).toBe(true);
+    expect(check(prereg(spend("$1,200 for the largest counted run")))).toEqual([]);
+  });
+
+  test("the judge's lab is read before the model name, past a router prefix", () => {
+    const same = check(prereg(swap("Judge: openai/gpt-6-astra scores", "Judge: openrouter/anthropic/claude-opus-5-5 scores")));
+    expect(has(same, 'practice 5: judge "openrouter/anthropic/claude-opus-5-5" is from the same model family as "anthropic/claude-opus-5-5"')).toBe(true);
+    expect(check(prereg(swap("Judge: openai/gpt-6-astra scores", "Judge: openrouter/openai/gpt-6-astra scores")))).toEqual([]);
+  });
+
+  test("numbered prereg and results ids are checked", () => {
+    expect(check(prereg("# Plan\n", "2026-11-20-geva-9-hook-prereg-v2", "A plan")).filter((p) => p.includes("practice"))).toHaveLength(4);
+    expect(check(prereg("# Plan\n", "2026-11-20-geva-9-hook-prereg-2", "A plan")).filter((p) => p.includes("practice"))).toHaveLength(4);
+    const id = "2026-11-20-geva-9-hook-results-v2";
+    expect(has(check({ ["wiki/board/" + id + ".md"]: post(id, "finding", "# No line\n") }), "practice 12")).toBe(true);
+    expect(check({ ["wiki/board/" + id + ".md"]: post(id, "finding", PASSING_RESULTS) })).toEqual([]);
+  });
+
+  test("sections inside an HTML comment are not read", () => {
+    const hidden = PASSING_PREREG.replace(/## Decision\n\n- If[^\n]*\n- If[^\n]*\n/, (m) => "<!--\n" + m + "-->\n");
+    expect(has(check(prereg(hidden)), 'practice 1: no "## Decision" section')).toBe(true);
+    expect(check(prereg(PASSING_PREREG + "\n<!-- a reviewer's note -->\n"))).toEqual([]);
+    expect(has(check(prereg(swap("## Judge check", "<!-- unclosed\n## Judge check"))), 'practice 5: no "## Judge check" section')).toBe(true);
+  });
+
+  test("a file with Windows line endings gets the line-ending problem, not missing sections", () => {
+    const problems = check({ [PREREG]: post(PREREG_ID, "plan", PASSING_PREREG, "Preregistration: does the hook help?").replaceAll("\n", "\r\n") });
+    expect(has(problems, "use LF line endings")).toBe(true);
+    expect(problems.filter((p) => p.includes("practice"))).toEqual([]);
+  });
+});

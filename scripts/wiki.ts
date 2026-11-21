@@ -338,9 +338,9 @@ export type EvalKind = "prereg" | "quick-look" | "results";
 
 export function evalKind(e: Entry): EvalKind | null {
   const title = str(e, "title");
-  if (e.id.endsWith("-results")) return "results";
+  if (/-results(?:-v?\d+)?$/.test(e.id)) return "results";
   if (e.id.endsWith("-quick-look") || /^quick look\b/i.test(title)) return "quick-look";
-  if (e.id.endsWith("-prereg") || /^preregistration\b/i.test(title)) return "prereg";
+  if (/-prereg(?:-v?\d+)?$/.test(e.id) || /^preregistration\b/i.test(title)) return "prereg";
   return null;
 }
 
@@ -348,7 +348,8 @@ function bodyLines(text: string): string[] {
   const lines = text.split("\n");
   const close = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
   let fence = "";
-  return lines.slice(close + 1).filter((l) => {
+  const body = lines.slice(close + 1).join("\n").replace(/<!--[\s\S]*?(?:-->|$)/g, "");
+  return body.split("\n").filter((l) => {
     const f = l.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (!fence) {
       if (!f || (f[1][0] === "`" && f[2].includes("`"))) return true;
@@ -388,9 +389,11 @@ function tableRows(lines: string[]): string[][] {
 }
 
 const dollars = (s: string | undefined) => {
-  const m = (s ?? "").match(/\$ *(\d[\d,]*(?:\.\d+)?)([km])?(?![\d.,]*(?:[a-z]|\s+(?:thousand|million|billion)\b))/i);
+  if ((s ?? "").split("$").length !== 2) return null;
+  const m = (s ?? "").match(/\$ *(\d[\d,]*(?:\.\d+)?)([km])?(?![\d.,]*(?:[a-z]|\s+(?:[km]|thousand|million|billion)\b))/i);
   return m ? Number(m[1].replaceAll(",", "")) * (m[2] ? (m[2].toLowerCase() === "k" ? 1e3 : 1e6) : 1) : null;
 };
+const labOf = (model: string) => model.split("/").slice(-2)[0].toLowerCase();
 const blank = (s: string | undefined) => !s || /^(?:-|none|n\/a)$/i.test(s.trim());
 const HOW = " (wiki/README.md, Eval plans and results, gives the format)";
 
@@ -411,15 +414,14 @@ function checkPrereg(lines: string[], p: (message: string) => void) {
   if (judges.some(emptyJudge)) p('practice 5: "Judge:" line is empty; write "Judge: none" or "<lab>/<model> scores <lab>/<model>"' + HOW);
   if (judge && hasJudge) {
     for (const j of judges.filter((j) => !emptyJudge(j))) {
-      const m = j.match(/^([^\s/]+)\/\S+ scores (.+)$/);
+      const m = j.match(/^(\S+\/\S+) scores (.+)$/);
       if (!m) {
         p('practice 5: judge line "' + j + '" must read "<lab>/<model> scores <lab>/<model>[, ...]"' + HOW);
         continue;
       }
       for (const scored of m[2].split(",").map((s) => s.trim())) {
-        const lab = scored.match(/^([^\s/]+)\/\S+$/)?.[1];
-        if (!lab) p('practice 5: scored model "' + scored + '" must be written <lab>/<model>' + HOW);
-        else if (lab.toLowerCase() === m[1].toLowerCase()) p('practice 5: judge "' + j.split(" ")[0] + '" is from the same model family as "' + scored + '" it scores; use a judge from another lab');
+        if (!/^\S+\/\S+$/.test(scored)) p('practice 5: scored model "' + scored + '" must be written <lab>/<model>' + HOW);
+        else if (labOf(scored) === labOf(m[1])) p('practice 5: judge "' + j.split(" ")[0] + '" is from the same model family as "' + scored + '" it scores; use a judge from another lab');
       }
     }
     const labels = Number(labelled(judge, "Labelled outputs")[0]?.replaceAll(",", "").match(/^\d+/)?.[0] ?? NaN);
