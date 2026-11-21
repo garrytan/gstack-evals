@@ -221,10 +221,10 @@ Dollars, at B1d's planning rates (gstack-main 0.48, none 0.31 a session; B1d mea
 
 | Arm | Budget | Pilot cap | Part ran | Judge check | Supply |
 |---|---|---|---|---|---|
-| gstack-main | $155 | $5 | both hook logs copied; the hook named prove-it alone on a2a-python-682 and nothing on dspy-9478, as route-table.tsv says; a hand reading confirms the load detector sees the load | none | both smoke tasks graded on this arm, six sessions at once |
+| gstack-main | $156 | $5 | both hook logs copied; the hook named prove-it alone on a2a-python-682 and nothing on dspy-9478, as route-table.tsv says; a hand reading confirms the load detector sees the load | none | both smoke tasks graded on this arm, six sessions at once |
 | none | $43 | $3 | B1's read audit finds no gstack file read in either session | none | both smoke tasks graded on this arm, six sessions at once |
 
-Budgets are each arm's share of the item caps (gstack-main: b1e-in plus its share of b1e-fresh; none: its share of b1e-fresh). A pilot cap is the most that arm's pilot sessions may settle; the b1e-smoke ledger cap of $30 holds both pilots plus the open-session reserve and the VM share.
+Budgets are b1e-in's cap plus b1e-fresh's cap split by each arm's expected spend, rounded down to the dollar; b1e-smoke's cap is the pilots' item and counts in neither. A pilot cap is the most that arm's pilot sessions may settle. A dated change on the results branch, made before the pilot runs, has `b1e report --item b1e-smoke` print FAIL for an arm whose pilot sessions settle above its cap. Until then, the b1e-smoke ledger cap of $30 holds both pilots plus the open-session reserve and the VM share.
 
 ## Interim look
 
