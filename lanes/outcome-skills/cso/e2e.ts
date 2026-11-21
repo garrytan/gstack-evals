@@ -23,6 +23,7 @@ import { homeTreeSha256 } from "../h2h/arms/hash.ts";
 import { rerun } from "./cli.ts";
 import { CSO_STAGES } from "./driver.ts";
 import { loadCsoPrereg } from "./prereg.ts";
+import { armRuns } from "./sessions.ts";
 import { csoRunner } from "./rerunner.ts";
 import type { CsoArm, CsoModel, SessionRecord } from "./types.ts";
 
@@ -99,7 +100,7 @@ export async function main(argv: string[]): Promise<number> {
   const env = { CSO_CONTROL: served.control, CSO_PROXY: served.stages[0]!.proxy, CSO_WORK: W, CSO_HOME: home, CSO_STAGE: "stage0", CSO_OUT: join(W, "sessions") };
   try {
     for (const arm of arms)
-      for (const model of models) {
+      for (const model of models.filter((m) => (["stage0", "stage1", "stage2"] as const).some((s) => armRuns(arm, m, s, p)))) {
         const name = "arm " + arm + " on " + model;
         current = { arm, requests: 0 };
         const t0 = Date.now();
