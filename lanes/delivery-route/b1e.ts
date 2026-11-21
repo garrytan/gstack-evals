@@ -14,7 +14,7 @@ import { fromMicros, Ledger, readRows, toMicros } from "../../quick/laneb/runner
 import { b1References, paired, reuseCheck } from "./b1b.ts";
 import { armProblems, b1cRows, b1dStats, buildB1dTable, calibrationTasks, checkB1dRows, clearOdds, harnessDirty, mainManifestOf, pairedPower, pairLine, partProjection, pilotCheck, readRouteTsv, reasonsTsv, reuseB1c, rigPromptOf, routeCounts, routesByTask, routeTable, routeTsv, smokeOf, splitLines, statLine, strataLines, type B1dRow, type Stat, type TaskRoute } from "./b1d.ts";
 import { B1D_ARM } from "./b1d-pins.ts";
-import { B1D_RUN, B1E, B1E_ARMS, B1E_BUNDLE, B1E_CAPS_USD, B1E_ITEMS, B1E_SMOKE, B1E_SPECS, COVERAGE, FRESH, GSTACK_ARM, isB1eItem, type B1eArm, type B1eItem } from "./b1e-pins.ts";
+import { B1D_RUN, B1E, B1E_ARMS, B1E_BUNDLE, B1E_CAPS_USD, B1E_ITEMS, B1E_SMOKE, B1E_SPECS, COVERAGE, FRESH, GSTACK_ARM, isB1eItem, PILOT_CAPS_USD, type B1eArm, type B1eItem } from "./b1e-pins.ts";
 import { infraRerun, needsRerun } from "./money.ts";
 import { B1, drawnTasks, frontMatterDigests, loadBundle, MODELS, REPO, sha256, TASK_SETUP } from "./pins.ts";
 import { pulledInputs } from "./table.ts";
@@ -107,6 +107,17 @@ export function partProblems(rows: B1dRow[], item: B1eItem): string[] {
   const names = new Set(b1ePlan(item).parts.map((p) => p.name));
   return rows.filter((r) => !names.has(String(r.part).replace(/(-a2)?(-relaunch)?$/, ""))).map((r) => r.trial + " came from part " + r.part + ", not a part of " + item);
 }
+/** The pilot's per-arm cap check: an arm FAILs when its sessions (every row, graded or not) settle above its pilot cap. */
+export function pilotCapCheck(rows: B1dRow[]): { lines: string[]; failed: B1eArm[] } {
+  const lines: string[] = [], failed: B1eArm[] = [];
+  for (const arm of B1E_ARMS) {
+    const usd = rows.filter((r) => r.arm === arm).reduce((x, r) => x + (r.cost_usd ?? 0), 0), cap = PILOT_CAPS_USD[arm];
+    if (usd > cap) failed.push(arm);
+    lines.push("  pilot cap " + (usd > cap ? "FAIL " : "PASS ") + arm + ": settled $" + usd.toFixed(2) + " of $" + cap);
+  }
+  return { lines, failed };
+}
+
 // ---- Readings and the decision.
 const loaded = (r: any) => !!r.load?.loaded, followed = (r: any) => !!r.detect?.followed;
 export type BarReading = { key: "incomplete" | "clears" | "short"; text: string };
@@ -251,7 +262,7 @@ export async function b1eMain(argv: string[]): Promise<number> {
     const bad = [...checkB1dRows(rows, tasks, arms), ...partProblems(rows, it)];
     if (bad.length) { for (const b of bad) console.error("E_USAGE b1e report: " + b); return 2; }
     let lines: string[];
-    if (it === "b1e-smoke") lines = ["== B1e pilot: the two smoke tasks, both arms", ...B1E_ARMS.map((a) => statLine(b1dStats(rows, a, tasks.length))), ...splitLines(rows), ...pilotCheck(rows, routeRows(), tasks, B1E_ARMS).lines];
+    if (it === "b1e-smoke") lines = ["== B1e pilot: the two smoke tasks, both arms", ...B1E_ARMS.map((a) => statLine(b1dStats(rows, a, tasks.length))), ...splitLines(rows), ...pilotCheck(rows, routeRows(), tasks, B1E_ARMS).lines, ...pilotCapCheck(rows).lines];
     else if (it === "b1e-in") lines = inReport(rows).lines;
     else {
       const inRows = read(opt("in") ?? usage("b1e report --item b1e-fresh needs --in <in-sample table.jsonl>")), inBad = [...checkB1dRows(inRows, drawnTasks(loadBundle()).run, [B1D_ARM]), ...partProblems(inRows, "b1e-in")];
