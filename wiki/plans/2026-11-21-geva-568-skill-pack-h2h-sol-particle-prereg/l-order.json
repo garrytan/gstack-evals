@@ -1,7 +1,7 @@
 {
  "schema": "h2hx-l-order.v1",
  "draw_seed": 4246445583,
- "frame_sha256": "1ba3a9f1a8eb83b77b514c3b963b5ddbd08a8f621791c462578f76e622302c70",
+ "frame_sha256": "1b6199b20e8d9375cf883080f5227ff82596844ad9b3e4157c869d40461fcf7b",
  "complete": false,
  "months": [
   "2026-07",
@@ -164,25 +164,26 @@
   "sveltejs__svelte-16619",
   "sveltejs__svelte-16601",
   "sveltejs__svelte-16666",
-  "dotnetcore__BootstrapBlazor-6376",
   "sveltejs__svelte-16309",
-  "sveltejs__svelte-16526",
+  "sveltejs__svelte-16482",
+  "sveltejs__svelte-16417",
+  "react-hook-form__react-hook-form-12990",
   "sveltejs__svelte-16504",
   "rust-lang__rust-analyzer-20185",
-  "sveltejs__svelte-16482",
+  "google__starlark-go-599",
   "sveltejs__svelte-16389",
   "sveltejs__svelte-16466",
   "dotnetcore__BootstrapBlazor-6338",
   "sveltejs__svelte-16278",
-  "sveltejs__svelte-16417",
-  "jhlywa__chess.js-546",
+  "cc65__cc65-2791",
+  "sveltejs__svelte-16526",
   "sveltejs__svelte-16509",
   "TecharoHQ__anubis-881",
   "sveltejs__svelte-16449",
   "sveltejs__svelte-16502",
-  "google__starlark-go-599",
+  "dotnetcore__BootstrapBlazor-6376",
   "sveltejs__svelte-16405",
-  "cc65__cc65-2791",
-  "react-hook-form__react-hook-form-12990"
+  "apache__lucene-14932",
+  "jhlywa__chess.js-546"
  ]
 }

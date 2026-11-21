@@ -9,44 +9,48 @@
   "named reserves (GEVA-540 custody log)": "9c4c4cbf0b3fb58deeb542d133ad14dd1b6e0197c67028d25db2bb3544524db7",
   "verdicts.tsv (GEVA-520 export)": "2d5117ac451b14b41196194191914949ce6aea66447d37b7687a507674b616d1",
   "verdicts.tsv (GEVA-521 export)": "756e739fe5368f393c4d70b8724cfe3dcbde1e0cdcbde8b25c7bbbc37cbae706",
-  "swerebench-r3a4.json": "7d2b2735cd50836364cc2c1fba9a2dd07a5ce42e9ea0f9c4b8d699b9e81ea1af"
+  "swerebench-r3a4.json": "7d2b2735cd50836364cc2c1fba9a2dd07a5ce42e9ea0f9c4b8d699b9e81ea1af",
+  "walk-logs MANIFEST.sha256 (GEVA-540 holding VM walk logs)": "174b8d5be8ec5016ef7377b86e2c2af8ce0f7dc85e996bd90ed823ef30f6e31f",
+  "o-walk.out (GEVA-540 walk logs, listed in that MANIFEST)": "aabe271e0ff640ef86c91a97a78659a9318abc3dee11448101d2827ebdee350e"
  },
  "pools": {
   "1": {
    "expected": 18,
-   "recovered": 5,
+   "recovered": 6,
    "complete": false,
-   "how": "The head-to-head's O draw (o-draw.json) and gate file (gates-o.json) were lost with its runner. Its custody log names 5 reserves (4 with oracle records from the pstack-checks eval and cc65__cc65-2791). The other 5 reserves and the 8 units that passed between stage 0's bug unit (position 123) and its feature unit (position 132) are named by no surviving record. Each missing window lists the o-order.json rows that could hold them: rows not drawn, not capped and not dropped by a surviving verdict record (bug rows only for the passed positions). They are candidates, not units.",
+   "how": "The head-to-head's O draw (o-draw.json) and gate file (gates-o.json) were lost with its runner. Its custody log names 5 reserves (4 with oracle records from the pstack-checks eval and cc65__cc65-2791). Its walk log (o-walk.out, kept on the holding VM) names no passed unit; each draw line gives the usable, dropped and capped counts over the order rows before the unit it waits on. Those counts fix 1 more unit, where a line's usable delta equals its candidate rows, and rule out every row of a line with no unplaced usable unit. The rest are named by no surviving record. Each missing window lists the o-order.json rows between two draw lines that could hold them: rows not drawn, not capped and not dropped by a surviving verdict record (bug rows only for the passed positions). They are candidates, not units.",
    "missing": [
     {
-     "from_index": 488,
-     "to_index": 533,
+     "from_index": 490,
+     "to_index": 498,
      "positions": [
       112,
-      113,
-      114,
-      115,
-      116,
-      117,
-      118,
-      119
+      113
      ],
      "role": "reserve",
-     "need": 4,
+     "need": 1,
      "candidates": [
-      "TanStack__form-1664",
-      "vmware-tanzu__velero-9059",
       "TanStack__router-4751",
       "antvis__G2-7021",
       "dotnet__orleans-9605",
       "varnishcache__varnish-cache-4370",
       "ollama__ollama-11509",
       "grommet__grommet-7712",
-      "gitlab4j__gitlab4j-api-1266",
-      "TryGhost__Ghost-24345",
-      "TanStack__router-4611",
-      "uutils__coreutils-8310",
-      "withastro__starlight-3306",
+      "gitlab4j__gitlab4j-api-1266"
+     ]
+    },
+    {
+     "from_index": 508,
+     "to_index": 523,
+     "positions": [
+      115,
+      116,
+      117,
+      118
+     ],
+     "role": "reserve",
+     "need": 3,
+     "candidates": [
       "istio__istio-56962",
       "apache__accumulo-5763",
       "webdriverio__webdriverio-14672",
@@ -58,28 +62,18 @@
       "Shopify__hydrogen-3008",
       "noir-lang__noir-9323",
       "dotnet__runtime-118239",
-      "php__php-src-19215",
-      "rook__rook-16087",
-      "apache__jena-3324",
-      "google__go-github-3653",
-      "apple__pkl-1126",
-      "apache__inlong-11947",
-      "GothenburgBitFactory__taskwarrior-3911",
-      "AutoMQ__automq-2699"
+      "php__php-src-19215"
      ]
     },
     {
-     "from_index": 535,
+     "from_index": 538,
      "to_index": 543,
      "positions": [
-      121,
       122
      ],
      "role": "reserve",
      "need": 1,
      "candidates": [
-      "primefaces__primefaces-14032",
-      "crowdsecurity__crowdsec-3744",
       "recharts__recharts-6070",
       "akuity__kargo-4687",
       "recharts__recharts-6068",
@@ -87,42 +81,61 @@
      ]
     },
     {
-     "from_index": 545,
-     "to_index": 594,
+     "from_index": 548,
+     "to_index": 553,
      "positions": [
       124,
-      125,
-      126,
-      127,
-      128,
-      129,
-      130,
-      131
+      125
      ],
      "role": "passed_unassigned",
-     "need": 8,
+     "need": 2,
      "candidates": [
-      "apache__datafusion-16726",
-      "apache__pinot-16421",
       "TanStack__router-4716",
       "linebender__vello-1132",
       "prometheus__alertmanager-4478",
       "less__less.js-4349",
-      "quarkusio__quarkus-49065",
-      "microsoft__playwright-java-1825",
-      "clap-rs__clap-6068",
-      "react-hook-form__react-hook-form-12983",
-      "OpenLineage__OpenLineage-3921",
-      "linebender__vello-1100",
+      "quarkusio__quarkus-49065"
+     ]
+    },
+    {
+     "from_index": 561,
+     "to_index": 565,
+     "positions": [
+      126,
+      127
+     ],
+     "role": "passed_unassigned",
+     "need": 2,
+     "candidates": [
       "php__php-src-19154",
       "graphql-go__graphql-727",
       "matrix-org__matrix-rust-sdk-5395",
-      "stripe__stripe-cli-1352",
-      "apache__lucene-14932",
+      "stripe__stripe-cli-1352"
+     ]
+    },
+    {
+     "from_index": 567,
+     "to_index": 568,
+     "positions": [
+      129
+     ],
+     "role": "passed_unassigned",
+     "need": 1,
+     "candidates": [
       "TanStack__router-4685",
-      "siimon__prom-client-679",
-      "grommet__grommet-7709",
-      "uutils__coreutils-8336",
+      "siimon__prom-client-679"
+     ]
+    },
+    {
+     "from_index": 572,
+     "to_index": 588,
+     "positions": [
+      130,
+      131
+     ],
+     "role": "passed_unassigned",
+     "need": 2,
+     "candidates": [
       "TanStack__form-1620",
       "lightdash__lightdash-15838",
       "openai__openai-agents-js-205",
@@ -134,12 +147,7 @@
       "honojs__hono-4329",
       "cucumber__godog-695",
       "Azure__azure-mcp-604",
-      "jestjs__jest-15714",
-      "apache__inlong-11946",
-      "alibaba__nacos-13650",
-      "fmtlib__fmt-4490",
-      "quarkusio__quarkus-48907",
-      "openfga__openfga-2598"
+      "jestjs__jest-15714"
      ]
     }
    ]
@@ -404,6 +412,16 @@
    "entry": null,
    "licence": null,
    "source": "quick/laneb/tasks/swerebench-r3a4.json"
+  },
+  {
+   "id": "apache__lucene-14932",
+   "pool": 1,
+   "repo": "apache/lucene",
+   "month": "2025-07",
+   "language": "java",
+   "entry": "bug",
+   "licence": "Apache-2.0",
+   "source": "o-frame.json; a unit that passed every gate of the head-to-head's O walk at position 128, fixed by its walk log (GEVA-540 o-walk.out line at 2026-11-16T13:16:08.194Z: usable 127 to 128 over o-order.json rows 566 to 566)"
   },
   {
    "id": "astronomy-commons__hats-648",
