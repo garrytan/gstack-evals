@@ -453,6 +453,16 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_MODEL_DRIFT](#e_ohr_model_drift) | 2 | U20 |
 | [E_CSO_PREREG](#e_cso_prereg) | 2 | U20 |
 | [E_CSO_UNIT_IDS](#e_cso_unit_ids) | 2 | U20 |
+| [E_CSO_UNIT_FRAME](#e_cso_unit_frame) | 2 | U20 |
+| [E_CSO_ADVISORY](#e_cso_advisory) | 2 | U20 |
+| [E_CSO_DROP_FIX_DATE](#e_cso_drop_fix_date) | 2 | U20 |
+| [E_CSO_DROP_FETCH](#e_cso_drop_fetch) | 2 | U20 |
+| [E_CSO_DROP_SAME_FIX](#e_cso_drop_same_fix) | 2 | U20 |
+| [E_CSO_DROP_CWE](#e_cso_drop_cwe) | 2 | U20 |
+| [E_CSO_DROP_ANSWER_KEY](#e_cso_drop_answer_key) | 2 | U20 |
+| [E_CSO_DROP_CONTAINMENT](#e_cso_drop_containment) | 2 | U20 |
+| [E_CSO_SUPPLY](#e_cso_supply) | 2 | U20 |
+| [E_CSO_DRAW](#e_cso_draw) | 2 | U20 |
 | [E_CSO_SCAN](#e_cso_scan) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_DEP](#e_cso_drop_install_dep) | 2 | U20 |
@@ -3515,6 +3525,86 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 A /cso eval unit's containment ids are malformed: its GHSA id, a CVE id of its advisory at the pinned advisory database, or its fix commit (40 hex characters) has the wrong shape, so a scan for it would find nothing by construction.
 
 Fix: Rebuild the unit's record from the pinned advisory database and b2-frame.json; never scan with a hand-typed id.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_UNIT_FRAME
+
+The /cso eval's candidate list does not match its frame: b2-frame.json's sha256 differs from prereg.json's frame pin, or a unit id in part1_h2h or part2_added has no row there.
+
+Fix: Restore b2-frame.json at the pinned sha256. The candidate order changes only through a dated pre-data change post.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ADVISORY
+
+A /cso eval advisory record could not be read at the pinned advisory-database commit: the fetch failed, the reply was not JSON, or its id differs from the frame row's GHSA id.
+
+Fix: Read it again from raw.githubusercontent.com at the pinned commit (or a checkout at that commit). A unit never builds from an advisory read anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_FIX_DATE
+
+Section 3, gate 1: the fix commit's committer date (UTC) is before 2026-07-01, so the unit could sit inside a model's training data. The unit is not usable and takes no position.
+
+Fix: None for the unit: it is dropped by rule. Report it in the gate table.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_FETCH
+
+Section 3, gate 2: the repository did not clone, or the fix commit or its first parent is missing from it, or the frame's parent is not the fix's first parent. The unit is not usable and takes no position.
+
+Fix: None for the unit when the repository or commit is gone. A network failure is retried before the gate records the drop.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_SAME_FIX
+
+Section 3, gate 3: an earlier usable unit has the same fix commit or the same parent tree, so the two units would audit one tree. The later unit is not usable.
+
+Fix: None: it is dropped by rule. The earlier unit keeps its position.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_CWE
+
+Section 3, gate 4: the advisory lists no CWE id at the pinned advisory-database commit, so the class rule has nothing to match. The unit is not usable.
+
+Fix: None: it is dropped by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_ANSWER_KEY
+
+Section 3, gate 5: no non-test source file of the fix exists at the parent with a changed line of code (it only adds files, or its source changes are only whitespace, blank lines or comment lines), so the location rule has no pre-fix hunk to test. The unit is not usable.
+
+Fix: None: it is dropped by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_CONTAINMENT
+
+Section 3, gate 6: the unit's one-commit session tree holds its GHSA id, a CVE id of its advisory or its fix commit's first 12 hex characters (in a file, a git object store or an archive two levels deep). The unit is not usable; the record names the path.
+
+Fix: None: it is dropped by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_SUPPLY
+
+The /cso eval's unit build ran out of candidates before it filled every position the plan can use (stage 0, stage 1, one re-pilot block, stage 2 up to its cap and the reserves). The message gives the count filled and the count needed.
+
+Fix: Send the count to the Captain before any paid call (section 12's supply rule). Never widen the candidate list by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DRAW
+
+A /cso eval draw was asked for something the plan does not allow: n2 outside 48 to 100 or not a multiple of 4, a re-pilot restriction other than floor or ceiling, or more positions than the built units fill.
+
+Fix: Read section 12's cost and headroom rules and ask for a draw they allow.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
