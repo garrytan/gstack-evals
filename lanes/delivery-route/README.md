@@ -161,6 +161,27 @@ bun lanes/delivery-route/cli.ts b1d report <table.jsonl> --item <b1d-smoke|b1d-i
 
 The launcher commands are L1's under B1d's profile: host root ~/b1d, ledger port 9950, ARMS holding the four held-out tars. The launch guard reads B1D_LEDGERS and B1D_CREW, and refuses when the run commit's or the checkout's harness differs from B1c's run or B1's (`b1d reuse`) or the checkout holds uncommitted changes to those paths or B1d's own. Its all-in stop is $400 (b1d-pins.ts B1D.stopUsd, raised from $340 on 2026-11-19 before the pilot). A relaunch is never refused on money: when it would pass its item's cap or the all-in stop, the guard prints `B1D_LAUNCH OVERSHOOT` and the reasons for the Captain, and the relaunch runs its salvage. A fresh launch past either still refuses. Held-out commands read the sealed list from B1D_HELDOUT and refuse it unless it is the committed draw. `routes` needs the built tree and an export holding each task's instruction.md; `sessions run` needs Docker, the hm-session image and the built tars. None of them makes a model call.
 
+## B1e: B1d on gstack's matcher fix
+
+B1e runs B1d's gstack-main arm again, built by `B1_PINS=b1e-pins.ts lanes/delivery-route/b1d-build.sh` from gstack main at 5df6b5a8, which names the installed bug-fix skill alone on bug reports. It runs on B1's 60 run tasks against the same bar of 39, and on a fresh draw of 60 tasks no B1 run has used, beside B1's no-gstack arm. The plan and the decision are in [its preregistration](../../wiki/plans/2026-11-20-capy-b1e-matcher-fix-prereg/README.md). The session rows, load detector and readers are B1d's; b1d.ts's arm checks take the gstack pin as an argument, and its pilot check takes the arms.
+
+| File | What it does |
+|---|---|
+| b1e-pins.ts | Frozen values: the gstack pin and its blobs, the arms, the keyless coverage, the fresh draw's digests, the smoke tasks, the items and caps, and B1d's run whose in-sample rows are a paired reference |
+| b1e.ts | The arm manifest and check, the route table with the fresh draw, the plan, profile and caps, the launch check, the reports, the decision and its R48 verdict, and the power table |
+
+```
+bun lanes/delivery-route/cli.ts b1e arms manifest|check [--out <dir>]
+bun lanes/delivery-route/cli.ts b1e routes --export <swe-rebench export> [--out <tsv>] [--check]
+bun lanes/delivery-route/cli.ts b1e plan | power | reuse
+bun lanes/delivery-route/cli.ts b1e approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who>
+bun lanes/delivery-route/cli.ts b1e prepare|host-up|attach|recover|host-down|launch|relaunch|rerun <work> ...
+bun lanes/delivery-route/cli.ts b1e table <config.json> <out.jsonl>
+bun lanes/delivery-route/cli.ts b1e report <table.jsonl> --item <b1e-smoke|b1e-in|b1e-fresh> [--in <in-sample table.jsonl>] [--out <dir>]
+```
+
+The launcher commands are L1's under B1e's profile: host root ~/b1e, ledger port 9951, ARMS holding gstack-main.tar and none.tar. Before host-up, launch and relaunch, B1e reruns both reuse checks at the run commit and the checkout's head and refuses a checkout with uncommitted harness changes. It has no all-in guard; each item's ledger cap bounds its spend.
+
 ## Credits
 
 The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19, and B1d installs gstack itself at 5afef04e31de. NOTICE.md has the rows.

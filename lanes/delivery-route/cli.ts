@@ -12,6 +12,7 @@ import { main as armsMain } from "./arms.ts";
 import { b1bMain } from "./b1b.ts";
 import { b1cMain } from "./b1c.ts";
 import { b1dMain } from "./b1d.ts";
+import { b1eMain } from "./b1e.ts";
 import { detect } from "./detect.ts";
 import { approve, capOf, launchGuard, markDone, type Crew } from "./money.ts";
 import { B1, CAPS_USD, CLOSING, drawnTasks, isItem, ITEM_NAMES, loadBundle, type Item } from "./pins.ts";
@@ -19,7 +20,7 @@ import { B1_PROFILE, itemPlan } from "./plans.ts";
 import { main as sessionsMain } from "./sessions.ts";
 import { buildB1Table, type B1Row } from "./table.ts";
 
-const USAGE = "E_USAGE usage: b1 arms sources|build|check ... | b1b <command> (b1b.ts) | b1c <command> (b1c.ts) | b1d <command> (b1d.ts) | sessions run --out <dir> [--gstack <checkout>] [--cut <dir>] | plan | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | table <config.json> <out.jsonl> | report <table.jsonl> [--out <dir>] | detect <trial dir>";
+const USAGE = "E_USAGE usage: b1 arms sources|build|check ... | b1b <command> (b1b.ts) | b1c <command> (b1c.ts) | b1d <command> (b1d.ts) | b1e <command> (b1e.ts) | sessions run --out <dir> [--gstack <checkout>] [--cut <dir>] | plan | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | table <config.json> <out.jsonl> | report <table.jsonl> [--out <dir>] | detect <trial dir>";
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "rerun", "recover", "host-down"];
 const GUARDED = ["host-up", "launch", "relaunch"];
 
@@ -74,6 +75,7 @@ export async function main(argv: string[]): Promise<number> {
     if (cmd === "b1b") return await b1bMain(rest);
     if (cmd === "b1c") return await b1cMain(rest);
     if (cmd === "b1d") return await b1dMain(rest);
+    if (cmd === "b1e") return await b1eMain(rest);
     if (cmd === "sessions") return await sessionsMain(rest);
     if (cmd === "plan") {
       const p = planLines();

@@ -7,6 +7,8 @@
 #
 #   lanes/delivery-route/b1d-build.sh [out-dir]     default out-dir: ~/.capy/work/b1d/arms
 #
+# B1_PINS names the pins file beside this script (default b1d-pins.ts); B1e builds its arm with B1_PINS=b1e-pins.ts.
+#
 # Output, outside git: <out>/gstack-main.tar and .tar.gz, the tree at <out>/trees/gstack-main, <out>/fetch-pin.json,
 # <out>/gstack-main.gstack-config.tsv, <out>/gstack-main.loadout.lock.json and <out>/build.log. The manifest comes after:
 #   bun lanes/delivery-route/cli.ts b1d arms manifest [--out <dir>]
@@ -15,7 +17,8 @@ set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 DF=$ROOT/quick/laneb/arms
-pin() { (cd "$ROOT" && bun -e 'import { GSTACK_ARM, PROVE_IT } from "./lanes/delivery-route/b1d-pins.ts"; const v = { ...GSTACK_ARM, prove_it: PROVE_IT.path, source: PROVE_IT.source }; process.stdout.write(String(v[process.argv[1]]))' "$1"); }
+PINS=${B1_PINS:-b1d-pins.ts}
+pin() { (cd "$ROOT" && bun -e 'const { GSTACK_ARM, PROVE_IT } = await import("./lanes/delivery-route/" + process.argv[2]); const v = { ...GSTACK_ARM, prove_it: PROVE_IT.path, source: PROVE_IT.source }; process.stdout.write(String(v[process.argv[1]]))' "$1" "$PINS"); }
 SHA=$(pin sha) REPO=$(pin repo) LOADOUT=$(pin loadout) DEST=$(pin prove_it) SRC=$ROOT/lanes/delivery-route/arms/$(pin source)
 OUT=$(mkdir -p "${1:-$HOME/.capy/work/b1d/arms}" && cd "${1:-$HOME/.capy/work/b1d/arms}" && pwd)
 BUILDER=$(sed -n 's/^ARG BUILDER_IMAGE=//p' "$DF/Dockerfile")
