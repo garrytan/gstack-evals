@@ -42,9 +42,10 @@ describe("section 7: the metered judge transport", () => {
     expect(rows.every((r) => r.ok)).toBe(true);
     const carbon = seen.find((x) => x.body.model === "google/gemini-4-carbon")!;
     expect(carbon.url).toContain("openrouter.ai");
-    expect(carbon.body).toMatchObject({ max_tokens: 128000, reasoning: { effort: "high" }, provider: { only: ["google-vertex"], allow_fallbacks: false, data_collection: "deny" } });
+    expect(carbon.body).toMatchObject({ max_tokens: 65536, reasoning: { effort: "medium" }, provider: { only: ["google-vertex"], allow_fallbacks: false, data_collection: "deny" } });
     expect(seen.find((x) => x.body.model === "gpt-6.2-astra" && x.body.max_output_tokens === 32000)!.body.input[0].content).toContain("read-only correctness review");
-    expect(seen.find((x) => x.body.model === "claude-opus-5-5" && x.body.max_tokens === 128000)!.body.output_config).toEqual({ effort: "high" });
+    expect(seen.find((x) => x.body.model === "claude-opus-5-5" && x.body.max_tokens === 65536)!.body.output_config).toEqual({ effort: "medium" });
+    expect(seen.find((x) => x.body.model === "claude-opus-5-5" && x.body.max_tokens === 32000)!.body.output_config).toEqual({ effort: "high" });
     expect(close.spent_micros).toBeGreaterThan(0);
     expect(readItem(s.record, JUDGE_ITEM).open).toBeNull();
   });
