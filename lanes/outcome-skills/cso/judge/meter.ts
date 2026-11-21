@@ -6,7 +6,8 @@
 // is sent. Carbon and Argon go through OpenRouter, where the proxy pins google-vertex with fallbacks off and data
 // collection denied, and a reply served by any other provider stops the send; Astra goes through OpenAI and Opus
 // through Anthropic. Answered replies are kept by request digest in the out dir, so a rerun never pays for the same
-// request twice. probe sends one short call down each judge and labeller route at its frozen model, effort and cap.
+// request twice; with the readout key they are sealed to it, since stage 1's replies carry its labels (section 12).
+// probe sends one short call down each judge and labeller route at its frozen model, effort and cap.
 import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +20,7 @@ import { readItem } from "../../../../src/runner/ledger/record.ts";
 import { priceRequest, reservationMicros } from "../../../../src/runner/pricing/prices.ts";
 import { MeteringProxy, reconcileJournal, type RetryBudget } from "../../../../src/runner/proxy/metering-proxy.ts";
 import { rigAdmission } from "../../../../src/rig/admission.ts";
+import { isSealedRow, openRow, sealRow } from "../analysis/readout.ts";
 import { csoFail, type CsoPrereg } from "../prereg.ts";
 import { judgeRoutes, LABELLER_MAX_OUTPUT, routeClients, type JudgeClient, type Transport } from "./client.ts";
 
@@ -30,7 +32,7 @@ const RETRY: RetryBudget = { attempts: 3, elapsed_ms: 900_000 };
 const PROXY_FIELDS = { openai: { service_tier: "default" }, anthropic: { inference_geo: "global" }, openrouter: { usage: { include: true } } } as const;
 const KEY_ENV = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" } as const;
 
-export interface MeterOptions { run_id: string; out: string; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; warn?: (line: string) => void }
+export interface MeterOptions { run_id: string; out: string; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; warn?: (line: string) => void; seal?: Buffer }
 export interface JudgeMeter { lease_id: string; transport: Transport; sent(): number; close(): Promise<{ spent_micros: number; unknown_micros: number }> }
 
 /** Leases cso-judge for the run (settling this run's own stale lease first), starts the proxy and returns its transport.
@@ -70,7 +72,10 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
     if (closed) csoFail("E_USAGE", "the judge meter is closed");
     const digest = createHash("sha256").update(provider + route + JSON.stringify(body)).digest("hex");
     const kept = join(out, "replies", digest + ".json");
-    if (existsSync(kept)) return { status: 200, body: JSON.parse(readFileSync(kept, "utf8")) };
+    if (existsSync(kept)) {
+      const v: unknown = JSON.parse(readFileSync(kept, "utf8"));
+      return { status: 200, body: isSealedRow(v) ? openRow(v, o.seal ?? csoFail("E_USAGE", kept + " is sealed to the readout key; pass --key"), kept) : v };
+    }
     const maxOut = Number(body.max_tokens ?? body.max_output_tokens);
     const worst = reservationMicros(priceRequest(provider, body, maxOut, route));
     const room = lease.reserved_micros - local.held(lease.lease_id);
@@ -98,7 +103,7 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
     } catch {}
     appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), event: "reply", digest, meter_id: b.meter_id, status, micros: local.meters(lease.lease_id).get(b.meter_id)?.spent_micros ?? null }) + "\n");
     if (status === 200 && provider === "openrouter" && !(typeof parsed?.provider === "string" && VERTEX.test(parsed.provider))) csoFail("E_CSO_PROVIDER_DRIFT", model + " was served by " + (parsed?.provider ?? "an unnamed provider") + ", not google-vertex; stop and ask the Captain");
-    if (status === 200 && parsed) writeFileSync(kept, JSON.stringify(parsed));
+    if (status === 200 && parsed) writeFileSync(kept, o.seal ? sealRow(parsed, o.seal) : JSON.stringify(parsed));
     return { status, body: parsed };
   };
   return {
