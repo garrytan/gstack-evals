@@ -5,8 +5,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startProxy, type ProxyConfig } from "../../../quick/laneb/runner/proxy.ts";
-import { responsesUsage, ResponsesSseUsage } from "../../../quick/laneb/runner/responses.ts";
+import { BYTE_SLACK_TOKENS, startProxy, type ProxyConfig } from "../../../quick/laneb/runner/proxy.ts";
+import { RESPONSES_IMAGE_BOUND_TOKENS, responsesUsage, ResponsesSseUsage } from "../../../quick/laneb/runner/responses.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "laneb-responses-"));
 const KEY = "stub-openai-key-" + Math.random().toString(16).slice(2);
@@ -96,6 +96,30 @@ describe("the Responses route on Lane B's session proxy", () => {
       expect(logLines().filter((l) => l.event === "refused" && l.session === s.id).at(-1)).toMatchObject({ reason, wire: "responses", reasoning_effort: "low" });
     }
     expect(seen.length).toBe(before);
+  });
+
+  test("inline file content is refused, an inline image is bounded at admission, and a text request passes as before", async () => {
+    const s = await open(2);
+    const before = seen.length;
+    const pdf = "data:application/pdf;base64,JVBERi0xLjQK";
+    for (const part of [{ type: "input_file", filename: "a.pdf", file_data: pdf }, { type: "input_file", file_url: pdf }]) {
+      const res = await send(s.token, codexBody({ input: [{ type: "message", role: "user", content: [part] }] }));
+      expect(res.status).toBe(400);
+      expect(logLines().filter((l) => l.event === "refused" && l.session === s.id).at(-1)).toMatchObject({ reason: "inline_file", wire: "responses" });
+    }
+    expect(seen.length).toBe(before);
+    const last = () => logLines().filter((l) => l.event === "request" && l.session === s.id).at(-1);
+    await (await send(s.token, codexBody())).text();
+    const text = last();
+    expect(text.status).toBe(200);
+    expect(text.input_tokens_bound).toBe(Math.ceil(text.body_bytes / 3) + BYTE_SLACK_TOKENS);
+    const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==";
+    const output = [{ type: "input_image", image_url: png }];
+    await (await send(s.token, codexBody({ input: [{ type: "message", role: "user", content: [{ type: "input_image", image_url: png }] }, { type: "function_call_output", call_id: "c1", output }] }))).text();
+    const image = last();
+    expect(image.status).toBe(200);
+    expect(image.input_tokens_bound).toBe(Math.ceil(image.body_bytes / 3) + BYTE_SLACK_TOKENS + 2 * RESPONSES_IMAGE_BOUND_TOKENS);
+    expect(seen.length).toBe(before + 2);
   });
 
   test("a request whose worst case passes the session cap is refused before it is sent", async () => {

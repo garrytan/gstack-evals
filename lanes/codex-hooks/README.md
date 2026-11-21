@@ -8,6 +8,7 @@ Do gstack's routing hook and its /review contract help GPT-6.1 Sol in Codex CLI,
 |---|---|
 | pins.ts | Values both parts share: the gstack pin, the Codex CLI and its digests, the model, and the settings every arm passes |
 | cli.ts | `gstack-evals codex-hooks r|c <command>` |
+| allin.ts | The all-in stop (section 11, pre-run change 2): before a part R launch, a part C step or a judge run, every item of both parts and the judge item counts at its spend or projection, plus the crew counter, and past $1,200 nothing starts |
 | c/pins.ts | Part C's frozen values: the suite and its seeded pilot draw, the prefix, the four arms as review-units' codex-arms entries, and the four ledger items |
 | c/rollout.ts | A session's rollouts as the readouts read them: the root thread, sub-agent threads, turns, messages, tool calls and contract blocks |
 | c/states.ts | Each session's final and first-stop states and their findings, and the blind copy the judge reads |
@@ -33,7 +34,7 @@ Do gstack's routing hook and its /review contract help GPT-6.1 Sol in Codex CLI,
 | c/analysis/decide.ts | The readings of section 1's contract table and E3 table |
 | c/analysis/pilot.ts | The pilot readout and the R113 line |
 | c/analysis/cli.ts | `gstack-evals codex-hooks c analysis <command>` |
-| r/pins.ts | Part R's frozen values: the three arms, prove-it on Codex, the pilot tasks, the items and caps, the session allowance, the Codex install line, the proxy route and the route table's digest |
+| r/pins.ts | Part R's frozen values: the three arms, the Codex settings they pass (the shared ones plus a non-login shell, pre-run change 3), prove-it on Codex, the pilot tasks, the items and caps, the session allowance, the Codex install line, the proxy route and the route table's digest |
 | r/routes.ts, r/route-table.tsv | The keyless route table (section 4.4): each prompt through the r-on home's routing hook; its output is change 1's table byte for byte |
 | r/arms/Dockerfile, r/arms.ts | The three arm tars (gstack at ~/gstack set up with `./setup --host codex`, prove-it beside it, the seeded user; r-off with `skill_routing off`; r-none empty), each with a manifest: the tar's and tree's digests, the switches and Codex's own start capture |
 | r/task-setup.Dockerfile | B1's task setup byte for byte, then Codex 0.170.0 from npm's tarball by its sha256 at /opt/laneb/codex |
@@ -41,7 +42,7 @@ Do gstack's routing hook and its /review contract help GPT-6.1 Sol in Codex CLI,
 | r/prepare-run.ts | Lane B's prepare step, then part R's proxy route and the Codex agent in each job, with the driver's argv and env |
 | r/plans.ts, r/money.ts | The items and their parts on L1's host and part machinery; the approval, done mark, launch guard, one rerun and the dry run |
 | r/detect.ts | The load detector (section 4.5) on a session's copied rollouts, what the session's own hook log named, and section 4.6's reasons and split; tested on stub-driven sessions real Codex 0.170 wrote (tests/codex-hooks/r/fixtures) |
-| r/table.ts | One row per session: outcome by section 4.7, cost, tokens, wall time, questions, safety stops, the root thread's model and Codex version from its rollout, the loads, destructive-check denies, r-none's read audit, and whether an allowance stop was a refused reservation or spend reaching $5 |
+| r/table.ts | One row per session: outcome by section 4.7, cost, tokens, wall time, questions, safety stops, the root thread's model and Codex version from its rollout, the loads, destructive-check denies, the shell calls Codex refused for asking for a login shell (pre-run change 3), r-none's read audit, and whether an allowance stop was a refused reservation or spend reaching $5 |
 | r/smoke.sh, r/fake-responses.ts | The keyless end-to-end smoke: a fake Responses upstream, the metering proxy with a scratch ledger, Harbor, the Codex agent and Codex 0.170 in a real SWE-rebench task image, the verifier, then the session table |
 | r/report.ts | The reading (section 4.8) with section 1's routing decision, and the pilot readout (section 9), which gives no load rate |
 | r/cli.ts | `gstack-evals codex-hooks r <command>` |

@@ -59,6 +59,24 @@ export function responsesRemoteSources(v: unknown): string[] {
   return [...own, ...Object.values(o).flatMap(responsesRemoteSources)];
 }
 
+/** Inline image and file parts: input_image with a data URL, and input_file with file_data or a data URL. */
+export function responsesInline(v: unknown): { images: number; files: number } {
+  if (Array.isArray(v)) return v.map(responsesInline).reduce((a, b) => ({ images: a.images + b.images, files: a.files + b.files }), { images: 0, files: 0 });
+  if (!v || typeof v !== "object") return { images: 0, files: 0 };
+  const o = v as any;
+  const own = { images: o.type === "input_image" && typeof o.image_url === "string" && o.image_url.startsWith("data:") ? 1 : 0, files: o.type === "input_file" && (o.file_data !== undefined || (typeof o.file_url === "string" && o.file_url.startsWith("data:"))) ? 1 : 0 };
+  const inner = responsesInline(Object.values(o));
+  return { images: own.images + inner.images, files: own.files + inner.files };
+}
+
+// The admission bound for one inline image. An image is billed by its patches, not its bytes, so the byte bound alone can
+// undercount a small file of many pixels. OpenAI's vision guide caps an image at 30,000 patches; the bound takes twice that
+// in tokens, so a model's patch multiplier up to 2 stays inside it, and the settle's over_reserve flag shows any image past it.
+export const RESPONSES_IMAGE_BOUND_TOKENS = 60_000;
+
+/** The tokens a Responses body's inline images add to its byte bound. */
+export const responsesImageBound = (body: any) => responsesInline([body?.input, body?.instructions]).images * RESPONSES_IMAGE_BOUND_TOKENS;
+
 /** The refusal a Responses body earns before it is priced, or null. */
 export function responsesRefusal(body: any, model: Pick<ModelCfg, "output_cap_tokens">): { reason: string; message: string; extra: Record<string, unknown> } | null {
   const server = responsesServerTools(body);
@@ -67,6 +85,8 @@ export function responsesRefusal(body: any, model: Pick<ModelCfg, "output_cap_to
   if (unknown.length) return { reason: "body_keys", message: "request fields are not allowed: " + unknown.join(","), extra: { keys: unknown } };
   const remote = responsesRemoteSources([body.input, body.instructions]);
   if (remote.length) return { reason: "remote_source", message: "image and file content with a url or file id is not allowed", extra: { sources: remote } };
+  const inline = responsesInline([body.input, body.instructions]);
+  if (inline.files) return { reason: "inline_file", message: "file content sent inline is not allowed: its tokens are not bounded by its bytes", extra: { files: inline.files } };
   const cap = model.output_cap_tokens;
   if (!Number.isSafeInteger(cap) || (cap as number) < 1) return { reason: "output_cap", message: "the model's output_cap_tokens is not set", extra: {} };
   const asked = body.max_output_tokens;

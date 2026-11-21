@@ -67,6 +67,7 @@ describe("part R's prepare step and profile", () => {
       expect(k.codex_argv).toContain('model_providers.gstack_evals_proxy.base_url="http://__GATEWAY__:8787/laneb/openai/v1"');
       expect(k.codex_argv).toContain('model_reasoning_effort="low"');
       expect(k.codex_argv).toContain("features.sleep_tool=false");
+      expect(k.codex_argv).toContain("allow_login_shell=false");
       expect(k.codex_argv.slice(k.codex_argv.indexOf("-m"), k.codex_argv.indexOf("-m") + 2)).toEqual(["-m", "gpt-6.1-sol"]);
       expect(k.codex_argv.includes("--dangerously-bypass-hook-trust")).toBe(gstack);
       expect(k.codex_resume_argv.slice(-3)).toEqual(["resume", "__THREAD__", "-"]);
