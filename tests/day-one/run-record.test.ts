@@ -536,7 +536,7 @@ describe("the shell forms the results review left open", () => {
       hidden(work, tx([{ command: "cd /work/app/.gstack" }, { command: "cd /work/app" }, { command: BIN + ' next --out "$PWD/.gstack/tmp/autoplan/run" --plan "$PWD/plan.md" --full' }]), "after cd in earlier calls");
     }));
 
-  test("a recursive copy into /work/app counts as a hand edit only when it comes after the start or brings the record with it", () =>
+  test("a recursive copy into /work/app counts as a hand edit unless it came before the start and returned before the record was made", () =>
     withDir((dir) => {
       const work = join(dir, "work");
       const roots: RunRoot[] = [{ dir: work, seen: WORK }];
@@ -547,7 +547,9 @@ describe("the shell forms the results review left open", () => {
       expect(findRun(roots, before).run?.seen).toBe(MAIN + "/run.json");
       expect(gatePending(work, before)).toBe(true);
       const sameCall = txt([{ command: copy + " && " + start, at: AT, done: DONE }]);
-      expect(findRun(roots, sameCall).run?.seen).toBe(MAIN + "/run.json");
+      expect(findRun(roots, sameCall).run).toBeNull();
+      const copiedIn = txt([{ command: "cp -r /tmp/r/. /work/app/ && " + start, at: "2026-11-18T05:47:59.000Z", done: DONE }]);
+      expect(findRun(roots, copiedIn).run).toBeNull();
       const after = txt([{ command: start, at: AT, done: DONE }, { command: copy, at: "2026-11-18T05:48:10.000Z", done: "2026-11-18T05:48:10.200Z" }]);
       expect(findRun(roots, after).run).toBeNull();
       put(work, WORK, MAIN, pending(MAIN, { created_at: "2026-11-17T23:00:00.000Z" }));
@@ -573,6 +575,9 @@ describe("the shell forms the results review left open", () => {
         expect([name, gatePending(work, t)]).toEqual([name, true]);
       }
       expect(findRun(roots, tool({ command: start })).run).toBeNull();
+      put(work, WORK, MAIN, pending(MAIN, { created_at: "not a time" }));
+      expect(findRun(roots, tool({ command: start, run_in_background: true })).run).toBeNull();
+      put(work, WORK, MAIN, pending(MAIN));
       const later = tool({ command: start, run_in_background: true }) + txt([{ command: "cd /work/app; " + BIN + " next --out .gstack/tmp/autoplan/other --plan /work/app/plan.md", at: "2026-11-18T05:47:59.250Z", done: "2026-11-18T05:47:59.260Z" }]);
       expect(findRun(roots, later).run).toBeNull();
     }));
