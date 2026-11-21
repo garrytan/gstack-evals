@@ -270,7 +270,7 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     expect([...readJournal(out).values()].every((e) => e.key.parts.adapter_sha256 !== undefined)).toBe(true);
   }, 300_000);
 
-  // Value: protects=the judge is keyed apart from the agent's session: --resume with a new judge model or rubric judges every journaled session again from its journaled answer and evidence and reruns none of them, with the same judge it judges nothing, and a changed agent key (with --repair) reruns the session and judges it again; every judge request marks the task's shared prefix for Anthropic's prompt cache; fails_when=a judge change reruns or refuses agent sessions, a reused judgment from another judge counts, an agent change keeps the old judgment, or the judge's request loses its cache marker; why_new=the Captain's brief for GEVA-563 (take the judge out of the agent-session cache key, test both directions); seam=runOnHost's reuse, needsJudgment and adjudicate, judgeKey, cells.ndjson; no_claim=a real judge model's answers or the provider's cache hit rate
+  // Value: protects=the judge is keyed apart from the agent's session: --resume with a new judge model or rubric judges every journaled session again from its journaled answer and evidence and reruns none of them, with the same judge it judges nothing, and a changed agent key (with --repair) reruns the session and judges it again; every judge request marks the task's shared prefix for Anthropic's prompt cache; fails_when=a judge change reruns or refuses agent sessions (a rubric edit in the tasks sidecar or lock on disk included), a change to any other file in the tasks directory goes unnoticed, a reused judgment from another judge counts, an agent change keeps the old judgment, or the judge's request loses its cache marker; why_new=the Captain's brief for GEVA-563 (take the judge out of the agent-session cache key, test both directions); seam=runOnHost's reuse, needsJudgment and adjudicate, judgeKey, cells.ndjson; no_claim=a real judge model's answers or the provider's cache hit rate
   test("a judge change judges journaled sessions again without rerunning them, and an agent change reruns and judges them", async () => {
     let sessions = 0;
     const script: Script = (turn) => {
@@ -283,7 +283,16 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
       judged.push(turn.body);
       return [{ type: "message", text: "VERDICT: done" }];
     };
-    const first = await runHost("claude", { judge: true, script, responses });
+    const root = mkdtempSync(join(tmpdir(), "gse-runhost-"));
+    const tasks = join(root, "tasks");
+    const sidecar = (rubric: string) => {
+      writeFileSync(join(tasks, "tasks.ext.json"), JSON.stringify({ schema_version: 1, tasks: { hello: { judge: rubric } } }));
+      writeFileSync(join(tasks, "tasks.lock.json"), JSON.stringify({ rubric }));
+    };
+    mkdirSync(tasks, { recursive: true });
+    sidecar("The answer greets the user.");
+    writeFileSync(join(tasks, "fixture.txt"), "first\n");
+    const first = await runHost("claude", { root, judge: true, script, responses });
     const out = join(first.root, "out");
     const journal = () => readFileSync(join(out, "cells.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(first.run.input.records.map((r) => r.judge)).toEqual(["done", "done", "done"]);
@@ -316,8 +325,13 @@ describe.skipIf(!HAS_CLAUDE_CLI || !HAS_CODEX_CLI)("the run loop on a real host'
     const lines = readFileSync(join(out, "adjudication.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(lines.slice(-3).map((l) => [l.judge_model, l.judgment])).toEqual(Array(3).fill(["gpt-6-astra", "done"]));
 
+    sidecar("The answer greets the user by name.");
     const newRubric = await again({ judgeModel: "gpt-6-astra", entries: { hello: { judge: "The answer greets the user by name." } } });
     expect([newRubric.run.stale, newRubric.sessions, newRubric.judged.length, journal().length]).toEqual([[], 0, 3, 9]);
+
+    writeFileSync(join(tasks, "fixture.txt"), "second\n");
+    const fixture = await again({ judgeModel: "gpt-6-astra", entries: { hello: { judge: "The answer greets the user by name." } } });
+    expect([fixture.run.stale.map((s) => s.code), fixture.run.stale.every((s) => s.message.includes("changed: fixture_tree")), fixture.sessions, fixture.judged.length]).toEqual([["E_CACHE_STALE", "E_CACHE_STALE", "E_CACHE_STALE"], true, 0, 0]);
 
     const changed = { image_digest: null, recipe: "test", host_version: "test", adapter_sha256: "changed", isolation: "process", verifier: "test" } as const;
     const stale = await again({ keyBase: changed });

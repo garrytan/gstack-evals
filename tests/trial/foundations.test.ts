@@ -63,7 +63,17 @@ describe("session cache key", () => {
     const withDir = dirTreeSha256(dir);
     expect(withDir).not.toBe(exec);
     symlinkSync("a.sh", join(dir, "link"));
-    expect(dirTreeSha256(dir)).not.toBe(withDir);
+    const withLink = dirTreeSha256(dir);
+    expect(withLink).not.toBe(withDir);
+    const skip = new Set(["tasks.ext.json"]);
+    writeFileSync(join(dir, "tasks.ext.json"), "{}");
+    expect(dirTreeSha256(dir)).not.toBe(withLink);
+    expect(dirTreeSha256(dir, skip)).toBe(withLink);
+    writeFileSync(join(dir, "empty", "tasks.ext.json"), "{}");
+    const nested = dirTreeSha256(dir, skip);
+    expect(nested).not.toBe(withLink);
+    writeFileSync(join(dir, "a.sh"), "echo b\n");
+    expect(dirTreeSha256(dir, skip)).not.toBe(nested);
   });
 
   test("a space in a symlink's name or target cannot make two trees hash alike", () => {

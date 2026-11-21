@@ -1,7 +1,7 @@
 // The session cache key and progress.json (plan v3.2, "Execution, isolation and secrets").
 //
 // Each cached session is keyed by a sha256 over named parts: the arm's installed tree, the task object and its sidecar
-// entry, the fixture directory's tree, the check runner and verifier code, the trial image digest, the rig recipe hash
+// entry, the fixture directory's tree (leaving out the tasks sidecar and the lock), the check runner and verifier code, the trial image digest, the rig recipe hash
 // (CI plan v5: the same hash the verdict's rig block takes), model, host version, adapter sha256, isolation, --timeout,
 // the passthrough env values (hashed) and policy. A resumed or reused session whose key differs refuses before any spend
 // (E_CACHE_STALE), names the parts that changed, and points at --repair.
@@ -71,12 +71,14 @@ export function cacheStale(cell: string, changed: readonly SessionKeyPart[]): Ca
 /**
  * A directory's tree hash: every entry's relative path, type, executable bit and content (a symlink's target), sorted.
  * Directories with no files still count. Each entry is one JSON array, so a space or newline in a name or target cannot
- * make two trees serialize alike. Used for the fixture tree and an arm's installed tree.
+ * make two trees serialize alike. Names in skip are left out at the top level of root only. Used for the fixture tree,
+ * which skips the tasks sidecar and the lock, and for an arm's installed tree, which skips nothing.
  */
-export function dirTreeSha256(root: string): string {
+export function dirTreeSha256(root: string, skip: ReadonlySet<string> = new Set()): string {
   const lines: string[] = [];
   const walk = (dir: string, rel: string) => {
     for (const name of readdirSync(dir).sort()) {
+      if (!rel && skip.has(name)) continue;
       const path = join(dir, name);
       const relPath = rel ? rel + "/" + name : name;
       const st = lstatSync(path);

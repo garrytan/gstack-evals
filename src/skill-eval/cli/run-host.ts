@@ -61,8 +61,9 @@ import { dockerSandbox, type Sandbox } from "../../trial/sandbox.ts";
 import type { Delta } from "../../trial/delta.ts";
 import { runTrial, type AgentDriver, type TrialRun } from "../../trial/trial.ts";
 import type { ArmSpec, CalibrationResult, Host, TrialRecord } from "../../types.ts";
-import type { SidecarTask } from "../contract/sidecar.ts";
+import { SIDECAR_FILE, type SidecarTask } from "../contract/sidecar.ts";
 import type { ContractTask } from "../contract/tasks.ts";
+import { LOCK_FILE } from "../lock/lock.ts";
 import { rerunPlan, type Stop, type VerdictInput } from "../verdict/gates.ts";
 import { gradeScope, gradeTrial, type VerdictTask } from "../verdict/grade.ts";
 import type { GateEvidence } from "../verdict/lock.ts";
@@ -302,7 +303,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     return micros;
   };
   const byId = new Map(o.tasks.map((t) => [t.id, t]));
-  const fixtureTree = dirTreeSha256(o.tasksDir);
+  const fixtureTree = dirTreeSha256(o.tasksDir, new Set([SIDECAR_FILE, LOCK_FILE]));
   const keyOf = (model: string, arm: ArmSpec, task: ContractTask): SessionKey => {
     const entry = o.entries[task.id];
     const { judge: _rubric, ...agentEntry } = entry ?? {};
