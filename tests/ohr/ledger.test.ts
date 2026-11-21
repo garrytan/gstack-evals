@@ -17,14 +17,14 @@ describe("the ledger split", () => {
     expect(SPLIT.map((p) => [p.item, p.central, p.allowance, p.cap])).toEqual([
       ["ohr-author", 281.64, 28, 409],
       ["ohr-audit", 28.81, 1, 40],
-      ["ohr-s1-arms", 99.6, null, 151],
+      ["ohr-s1-arms", 100.24, null, 152],
       ["ohr-s1-sim", 5.76, null, 14],
       ["ohr-s1-labels", 4.32, null, 7],
-      ["ohr-s1-repair-arms", null, null, 38],
+      ["ohr-s1-repair-arms", null, null, 37],
       ["ohr-s1-repair-sim", null, null, 7],
       ["ohr-s1-repair-labels", null, null, 3],
       ["ohr-judge-check", 89.8, 1, 123],
-      ["ohr-s2-arms", 944, null, 1308],
+      ["ohr-s2-arms", 950.4, null, 1308],
       ["ohr-s2-sim", 38.4, null, 58],
       ["ohr-s2-labels", 28.8, null, 40],
       ["ohr-s2p-arms", 52, null, 77],
@@ -35,9 +35,10 @@ describe("the ledger split", () => {
     expect(Object.fromEntries((Object.keys(CAPS) as (keyof typeof CAPS)[]).map((line) => [line, SPLIT.filter((p) => p.line === line).reduce((t, p) => t + p.cap, 0)]))).toEqual(CAPS);
   });
 
-  test("stage 1 and the judge check keep pre-run change 4's rows, as the second attempt's section 7 says", () => {
+  test("stage 1 and the judge check keep pre-run change 4's rows, as the second attempt's section 7 says, with its pre-run change 2's $1 move", () => {
     const tsv = readFileSync(join(import.meta.dir, "../../wiki/plans/2026-11-18-geva-553-office-hours-rewrite-pre-run-change-4/split.tsv"), "utf8");
-    const rows = tsv.trimEnd().split("\n").slice(1).map((l) => l.split("\t")).filter((r) => r[1] === "stage1" || r[1] === "judge_check");
+    const moved: Record<string, [string, string]> = { "ohr-s1-arms": ["100.24", "152"], "ohr-s1-repair-arms": ["", "37"] };
+    const rows = tsv.trimEnd().split("\n").slice(1).map((l) => l.split("\t")).filter((r) => r[1] === "stage1" || r[1] === "judge_check").map((r) => (moved[r[0]!] ? [r[0]!, r[1]!, moved[r[0]!]![0], r[3]!, moved[r[0]!]![1], r[5]!] : r));
     expect(rows).toEqual(SPLIT.filter((p) => p.line === "stage1" || p.line === "judge_check").map((p) => [p.item, p.line, String(p.central ?? ""), String(p.allowance ?? ""), String(p.cap), p.what]));
   });
 
@@ -67,7 +68,8 @@ describe("the ledger split", () => {
     const py = readFileSync(join(import.meta.dir, "../../wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg/cost.py"), "utf8");
     const pair = (a: string, b: string) => new RegExp("^" + a + ", " + b + " = ([0-9.]+), ([0-9.]+)$", "m").exec(py)!.slice(1).map(Number);
     expect(pair("OPUS_SKILL", "OPUS_NONE")).toEqual([CENTRAL.session.opus.skill, CENTRAL.session.opus.none]);
-    expect(pair("SOL_SKILL", "SOL_NONE")).toEqual([CENTRAL.session.sol.skill, CENTRAL.session.sol.none]);
+    expect(pair("SOL_SKILL", "SOL_NONE")).toEqual([2, CENTRAL.session.sol.none]);
+    expect(CENTRAL.session.sol.skill).toBe(2.04);
     expect(pair("P1_SKILL", "P1_NONE")).toEqual([CENTRAL.session.particle.skill, CENTRAL.session.particle.none]);
     expect(pair("SIM", "LABEL")).toEqual([CENTRAL.sim, CENTRAL.label]);
   });
@@ -79,7 +81,8 @@ describe("the ledger split", () => {
     expect(read("stage1-repair", 1)).toMatchObject({ started: 3, stops_on: "arms" });
     expect(read("stage2", 1.35)).toMatchObject({ rounds: 160, started: 160, sessions: 480, stops_on: null });
     expect(read("stage2-particle", 1.35)).toMatchObject({ rounds: 80, started: 80, sessions: 240, stops_on: null });
-    expect(finishesUpTo(SCHEDULES.find((s) => s.name === "stage1")!)).toBeGreaterThanOrEqual(1.35);
+    expect(finishesUpTo(SCHEDULES.find((s) => s.name === "stage1")!)).toBe(1.356);
+    expect(finishesUpTo(SCHEDULES.find((s) => s.name === "stage1-repair")!)).toBe(0.045);
     expect(finishesUpTo(SCHEDULES.find((s) => s.name === "stage2")!)).toBe(1.354);
     expect(finishesUpTo(SCHEDULES.find((s) => s.name === "stage2-particle")!)).toBe(1.363);
   });

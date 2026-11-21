@@ -43,14 +43,14 @@ export interface LedgerPart {
 export const SPLIT: readonly LedgerPart[] = [
   { item: "ohr-author", line: "authoring", what: "the pilot and every draw after it, one run", central: 281.64, allowance: 28, cap: 409 },
   { item: "ohr-audit", line: "simulator_audit", what: "the fixed script's simulator calls and both auditors, one run", central: 28.81, allowance: 1, cap: 40 },
-  { item: "ohr-s1-arms", line: "stage1", what: "stage 1's arm sessions, all three models", central: 99.6, allowance: null, cap: 151 },
+  { item: "ohr-s1-arms", line: "stage1", what: "stage 1's arm sessions, all three models", central: 100.24, allowance: null, cap: 152 },
   { item: "ohr-s1-sim", line: "stage1", what: "stage 1's simulator", central: 5.76, allowance: null, cap: 14 },
   { item: "ohr-s1-labels", line: "stage1", what: "stage 1's production labels", central: 4.32, allowance: null, cap: 7 },
-  { item: "ohr-s1-repair-arms", line: "stage1", what: "the one admission repair's arm sessions", central: null, allowance: null, cap: 38 },
+  { item: "ohr-s1-repair-arms", line: "stage1", what: "the one admission repair's arm sessions", central: null, allowance: null, cap: 37 },
   { item: "ohr-s1-repair-sim", line: "stage1", what: "the one admission repair's simulator", central: null, allowance: null, cap: 7 },
   { item: "ohr-s1-repair-labels", line: "stage1", what: "the one admission repair's labels", central: null, allowance: null, cap: 3 },
   { item: "ohr-judge-check", line: "judge_check", what: "the live judge probes, the gold pass and the check labels, one run", central: 89.8, allowance: 1, cap: 123 },
-  { item: "ohr-s2-arms", line: "stage2", what: "stage 2's Opus and Sol arm sessions", central: 944, allowance: null, cap: 1308 },
+  { item: "ohr-s2-arms", line: "stage2", what: "stage 2's Opus and Sol arm sessions", central: 950.4, allowance: null, cap: 1308 },
   { item: "ohr-s2-sim", line: "stage2", what: "stage 2's Opus and Sol simulator", central: 38.4, allowance: null, cap: 58 },
   { item: "ohr-s2-labels", line: "stage2", what: "stage 2's Opus and Sol production labels", central: 28.8, allowance: null, cap: 40 },
   { item: "ohr-s2p-arms", line: "stage2_particle", what: "stage 2's particle-1 arm sessions", central: 52, allowance: null, cap: 77 },
@@ -66,9 +66,9 @@ export const LAUNCH_ITEMS: Readonly<Record<LaunchName, { arms: string; sim: stri
   "stage2-particle": { arms: "ohr-s2p-arms", sim: "ohr-s2p-sim" },
 };
 
-/** cost.py's planning figures, in dollars a session: each model's skill and none sessions, the simulator and a label. */
+/** cost.py's planning figures, in dollars a session: each model's skill and none sessions, the simulator and a label. Sol's skill figure is the measured $2.04 of the second attempt's pre-run change 2, in place of cost.py's $2.00. */
 export const CENTRAL: { session: Readonly<Record<ModelId, { skill: number; none: number }>>; sim: number; label: number } = {
-  session: { opus: { skill: 3.5, none: 0.5 }, sol: { skill: 2.0, none: 0.3 }, particle: { skill: 0.3, none: 0.05 } },
+  session: { opus: { skill: 3.5, none: 0.5 }, sol: { skill: 2.04, none: 0.3 }, particle: { skill: 0.3, none: 0.05 } },
   sim: 0.08,
   label: 0.06,
 };
