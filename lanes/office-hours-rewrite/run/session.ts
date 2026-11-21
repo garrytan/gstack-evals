@@ -30,7 +30,7 @@ import type { ReasonCode } from "../../../src/errors/codes.ts";
 import { readTranscript } from "../../../src/trial/review/readers.ts";
 import type { Termination } from "../../../src/types.ts";
 import { CLOSING, CLOSING_SENDS, FOUNDER_REPLIES, firstMessage } from "../frozen.ts";
-import type { SimOutcome } from "../sim/founder.ts";
+import type { OwnTurn, SimOutcome } from "../sim/founder.ts";
 import type { ArmId, BlockParse, BlockParser, EndState, Turn } from "../types.ts";
 
 export { firstMessage };
@@ -39,6 +39,8 @@ export { firstMessage };
 export interface Line {
   role: "assistant" | "person";
   text: string;
+  /** A person line's JSON as the simulator returned it, which its own history shows it (pre-run change 6). */
+  own?: OwnTurn;
 }
 
 /** The loop's record of one attempt, read after the driver returns. */
@@ -99,7 +101,7 @@ export function closingLoop(o: { parse: BlockParser; founder: (transcript: Line[
         state.founder_done = true;
         return closing();
       }
-      state.transcript.push({ role: "person", text: r.reply });
+      state.transcript.push({ role: "person", text: r.reply, own: { reply: r.reply, revealed: r.revealed, rules: r.rules, done: r.done } });
       return { reply: r.reply };
     }
     state.failed_turn = { outcome: r.kind, rejected_draws: draws(r) };

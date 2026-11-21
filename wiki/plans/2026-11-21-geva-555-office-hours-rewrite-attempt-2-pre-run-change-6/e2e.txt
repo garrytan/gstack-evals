@@ -1,0 +1,98 @@
+s1/opus/none/fx-t8: block (a block in reply 3 after 1 closing message), 1 attempt, $0.03 arm, $0.00 simulator
+s1/opus/current/fx-t8: block (a block in reply 3 after 1 closing message), 1 attempt, $0.04 arm, $0.00 simulator
+s1/opus/new/fx-t8: block (a block in reply 3 after 1 closing message), 1 attempt, $0.04 arm, $0.00 simulator
+s1/opus/none/fx-build: block (a block in reply 4 after 2 closing messages), 1 attempt, $0.04 arm, $0.00 simulator
+s1/opus/current/fx-build: block (a block in reply 3 after 1 closing message), 1 attempt, $0.04 arm, $0.00 simulator
+s1/opus/new/fx-build: block (a block in reply 3 after 1 closing message), 1 attempt, $0.04 arm, $0.00 simulator
+s1/sol/none/fx-build: block (a block in reply 3 after 1 closing message), 1 attempt, $0.00 arm, $0.00 simulator
+s1/sol/current/fx-build: block (a block in reply 3 after 1 closing message), 1 attempt, $0.00 arm, $0.00 simulator
+s1/sol/new/fx-build: block (a block in reply 3 after 1 closing message), 1 attempt, $0.00 arm, $0.00 simulator
+PASS the launch ran: runLaunch returned
+PASS the launch ended with no stop and every session has a row: 9 rows
+PASS no key in any container's env, no mount but the work dir and HOME, no departure in the arm env: clean; clean; clean; clean; clean; clean; clean; clean; clean
+PASS the egress probe is closed: curl https://example.com exited 6 000curl: (6) Could not resolve host: example.com
+PASS WebSearch, WebFetch and AskUserQuestion are absent from every request the stub saw: 23 main-agent requests, 0 with a denied tool
+PASS fx-t8: the none arm got the lens line before the opening, and the skill arms /office-hours with the same text: 3 none requests, 8 skill requests
+PASS fx-build: the none arm got the lens line before the opening, and the skill arms /office-hours with the same text: 4 none requests, 8 skill requests
+PASS one lease opened and settled on the arms item: 1 opened, 1 settled
+PASS one lease opened and settled on the sim item: 1 opened, 1 settled
+PASS the proxy journal shows every call that reached the stub: 37 outcomes journaled, 37 calls reached the stub through the proxy
+PASS s1/opus/none/fx-t8: the founder's done reply was replaced by the closing message, and the block ended the session: block, 1 closings, turns true/false
+PASS s1/opus/current/fx-t8: the founder's done reply was replaced by the closing message, and the block ended the session: block, 1 closings, turns true/false
+PASS s1/opus/new/fx-t8: the founder's done reply was replaced by the closing message, and the block ended the session: block, 1 closings, turns true/false
+PASS s1/opus/none/fx-build: no block after the first closing message, a block after the second: block, 2 closings, turns true/false
+PASS s1/opus/current/fx-build: the founder's done reply was replaced by the closing message, and the block ended the session: block, 1 closings, turns true/false
+PASS s1/opus/new/fx-build: the founder's done reply was replaced by the closing message, and the block ended the session: block, 1 closings, turns true/false
+PASS s1/sol/none/fx-build: the founder's done reply was replaced by the closing message, and the block ended the session: block, 1 closings, turns true/false
+PASS s1/sol/current/fx-build: the founder's done reply was replaced by the closing message, and the block ended the session: block, 1 closings, turns true/false
+PASS s1/sol/new/fx-build: the founder's done reply was replaced by the closing message, and the block ended the session: block, 1 closings, turns true/false
+PASS the founder turns are the real simulator's reading of the stub's draws, and the meter serves a repeated request from its cache: 12 turns, 6 distinct simulator calls reached the stub
+PASS current on fx-t8: the container printed SESSION_KIND: interactive and the row reads it: interactive
+PASS current on fx-t8: gstack-slug prints idea in the work repo: SLUG: idea
+PASS current on fx-t8: Claude Code's session file came out as host/claude-session.jsonl, and A8 reads the pin's whole head and tail in it around the start step's output: the skill message holds the pin's head (23740 characters) and tail (42108 characters) whole around 570 characters of start-step output (dcc0981a1292)
+PASS current on fx-t8: the row's session kind is the one the start step printed at load: interactive
+PASS current on fx-t8: the pin check in the container passed and the state root was copied out: ~/.capy/work/ohr-e2e-8Vp9DI/out/sessions/s1/opus/current/fx-t8/a1/host/gstack-state
+PASS current on fx-build: the container printed SESSION_KIND: interactive and the row reads it: interactive
+PASS current on fx-build: gstack-slug prints idea in the work repo: SLUG: idea
+PASS current on fx-build: Claude Code's session file came out as host/claude-session.jsonl, and A8 reads the pin's whole head and tail in it around the start step's output: the skill message holds the pin's head (23740 characters) and tail (42108 characters) whole around 570 characters of start-step output (d4bac6af3ddf)
+PASS current on fx-build: the row's session kind is the one the start step printed at load: interactive
+PASS current on fx-build: the pin check in the container passed and the state root was copied out: ~/.capy/work/ohr-e2e-8Vp9DI/out/sessions/s1/opus/current/fx-build/a1/host/gstack-state
+PASS new on fx-t8: the container printed SESSION_KIND: interactive and the row reads it: interactive
+PASS new on fx-t8: gstack-slug prints idea in the work repo: SLUG: idea
+PASS new on fx-t8: Claude Code's session file came out as host/claude-session.jsonl, and A8 reads the pin's whole head and tail in it around the start step's output: the skill message holds the pin's head (23740 characters) and tail (42034 characters) whole around 570 characters of start-step output (29d9603e478d)
+PASS new on fx-t8: the row's session kind is the one the start step printed at load: interactive
+PASS new on fx-t8: the pin check in the container passed and the state root was copied out: ~/.capy/work/ohr-e2e-8Vp9DI/out/sessions/s1/opus/new/fx-t8/a1/host/gstack-state
+PASS new on fx-build: the container printed SESSION_KIND: interactive and the row reads it: interactive
+PASS new on fx-build: gstack-slug prints idea in the work repo: SLUG: idea
+PASS new on fx-build: Claude Code's session file came out as host/claude-session.jsonl, and A8 reads the pin's whole head and tail in it around the start step's output: the skill message holds the pin's head (23740 characters) and tail (42034 characters) whole around 570 characters of start-step output (03520e64eeec)
+PASS new on fx-build: the row's session kind is the one the start step printed at load: interactive
+PASS new on fx-build: the pin check in the container passed and the state root was copied out: ~/.capy/work/ohr-e2e-8Vp9DI/out/sessions/s1/opus/new/fx-build/a1/host/gstack-state
+PASS none rows: Claude Code's session file came out for them too: ~/.capy/work/ohr-e2e-8Vp9DI/out/sessions/s1/opus/none/fx-t8/a1/host/transcript.ndjson, ~/.capy/work/ohr-e2e-8Vp9DI/out/sessions/s1/opus/none/fx-build/a1/host/transcript.ndjson
+PASS none rows have no session kind: null, null
+PASS new on fx-t8: the seeded commitment is due (KILL_DUE: yes): KILL_DUE: yes
+PASS new on fx-build: no seed, so nothing is due: KILL_DUE: no
+PASS current on fx-t8: --read returns the seeded assignment: LAST_ASSIGNMENT printed
+PASS Sol: each skill arm's whole rendered office-hours SKILL.md arrived as Codex's <skill> item, and the none arm got none: 9aabb2d1949a, 7b927e4de37d
+PASS Sol current: A8 reads the whole rendered SKILL.md in the transcript's <skill> item: the <skill> item holds the rendered SKILL.md whole (48068 bytes) (9aabb2d1949a)
+PASS Sol new: A8 reads the whole rendered SKILL.md in the transcript's <skill> item: the <skill> item holds the rendered SKILL.md whole (48058 bytes) (7b927e4de37d)
+PASS Sol: every request named gpt-6.1-sol at low effort, with no web search and no sleep tool: 14 requests; models gpt-6.1-sol; efforts low
+PASS Sol none: no request names gstack: 4 none-arm requests
+PASS Sol none: the request_user_input_async question reached the simulator, its answer came back by exec resume, and the block ended the session: block, 1 closings, 1 captured questions
+PASS Sol none: the transcript reads as Claude Code's, its question as assistant text: 8 lines
+PASS Sol none: no session kind and no gstack read: null
+PASS Sol current: the request_user_input_async question reached the simulator, its answer came back by exec resume, and the block ended the session: block, 1 closings, 1 captured questions
+PASS Sol current: the transcript reads as Claude Code's, its question as assistant text: 11 lines
+PASS Sol current: the container printed SESSION_KIND: interactive with the seeded state root: interactive
+PASS Sol new: the request_user_input_async question reached the simulator, its answer came back by exec resume, and the block ended the session: block, 1 closings, 1 captured questions
+PASS Sol new: the transcript reads as Claude Code's, its question as assistant text: 11 lines
+PASS Sol new: the container printed SESSION_KIND: interactive with the seeded state root: interactive
+PASS Sol none: the watch logged a whole snapshot of Codex's home before and after every exec and after copy-out (pre-run change 5, F1): before exec 1 ok 0 entries; after exec 1 ok 33 entries; before exec 2 ok 33 entries; after exec 2 ok 33 entries; before exec 3 ok 33 entries; after exec 3 ok 33 entries; after copy-out ok 33 entries; 6 diffs
+PASS Sol none: nothing is flagged (F1): 0 flags
+PASS Sol none: every turn's turn_context reads collaboration mode default (G1): 3 turn_context records: default, default, default
+PASS Sol current: the watch logged a whole snapshot of Codex's home before and after every exec and after copy-out (pre-run change 5, F1): before exec 1 ok 120 entries; after exec 1 ok 152 entries; before exec 2 ok 152 entries; after exec 2 ok 152 entries; before exec 3 ok 152 entries; after exec 3 ok 152 entries; after copy-out ok 152 entries; 6 diffs
+PASS Sol current: nothing is flagged (F1): 0 flags
+PASS Sol current: every turn's turn_context reads collaboration mode default (G1): 3 turn_context records: default, default, default
+PASS Sol new: the watch logged a whole snapshot of Codex's home before and after every exec and after copy-out (pre-run change 5, F1): before exec 1 ok 120 entries; after exec 1 ok 152 entries; before exec 2 ok 152 entries; after exec 2 ok 152 entries; before exec 3 ok 152 entries; after exec 3 ok 152 entries; after copy-out ok 152 entries; 6 diffs
+PASS Sol new: nothing is flagged (F1): 0 flags
+PASS Sol new: every turn's turn_context reads collaboration mode default (G1): 3 turn_context records: default, default, default
+PASS the tap logged every Sol response with the model it reports, the dated pin: 14 tap lines for 14 Sol requests
+PASS the proxy metered every Sol call on the arms item with its cached and reasoning tokens: 14 openai outcomes; {"kind":"spent","spent_micros":980,"usage":{"input":200,"output":45,"reasoning":5,"cache_read":800,"cache_write":0}}
+PASS every row names the models its replies report and the CLI version it ran, and rows finds both pinned: s1/opus/none/fx-t8: claude-opus-5-5 on 2.1.314; s1/opus/current/fx-t8: claude-opus-5-5 on 2.1.314; s1/opus/new/fx-t8: claude-opus-5-5 on 2.1.314; s1/opus/none/fx-build: claude-opus-5-5 on 2.1.314; s1/opus/current/fx-build: claude-opus-5-5 on 2.1.314; s1/opus/new/fx-build: claude-opus-5-5 on 2.1.314; s1/sol/none/fx-build: gpt-6.1-sol-2026-11-01 on 0.170.0; s1/sol/current/fx-build: gpt-6.1-sol-2026-11-01 on 0.170.0; s1/sol/new/fx-build: gpt-6.1-sol-2026-11-01 on 0.170.0
+PASS the rows parse and match the frozen manifest: 9 rows
+PASS the e2e's rows reach the scorer: six Opus rows and three Sol rows, every one ended with a block: opus/none/fx-t8 block, opus/current/fx-t8 block, opus/new/fx-t8 block, opus/none/fx-build block, opus/current/fx-build block, opus/new/fx-build block, sol/none/fx-build block, sol/current/fx-build block, sol/new/fx-build block
+PASS stage 1 label packets: one per brief and model, each with its three arms' blocks, three stock rows and a near-miss; Opus's routed to Astra, Sol's to Opus: opus fx-build to astra, sol fx-build to opus, opus fx-t8 to astra
+RIG_UNPROVEN line item ohr-e2e-labels leased without admission: no admission record at ~/.capy/work/ohr-e2e-score-9BO7G1/record/items/ohr-e2e-labels/admission-0001.json for slot 1; run gstack-evals rig admit --item ohr-e2e-labels on the machine that will spend (docs/rig.md)
+ohr e2e: settled 0.2320 dollars on ohr-e2e-labels
+PASS one lease opened and settled on the labels item through the wire's metered judge client: 1 opened, spent 232000 micros
+PASS Astra's calls reached openai's gpt-6.2-astra and Opus's claude-opus-5-5; no call named gpt-6-astra: claude-opus-5-5, gpt-6.2-astra
+PASS Sol's packet was labelled by Opus 5.5 alone: 7 labels by opus
+PASS every label cell came back labelled: 0 production, 0 gold, 0 check cells unlabelled
+PASS scored rows: fx-build's block is the key's call and action (R 1 on all three arms); fx-t8's is not (R2 0, R 0); R1 reads the delivered reveal: none R11 R21 R31 R1; current R11 R21 R31 R1; new R11 R21 R31 R1 | none R11 R20 R30 R0; current R11 R20 R30 R0; new R11 R20 R30 R0
+PASS skill-arm rows carry exposure and compliance reads; none-arm rows carry no exposure: none:none, current:exposure, new:exposure, none:none, current:exposure, new:exposure
+PASS Sol's scored rows: fx-build's block is the key's call and action on all three arms (R 1); skill arms carry exposure with the skill read, none carries none: none R11 R21 R31 R1 no exposure; current R11 R21 R31 R1 exposure, read true; new R11 R21 R31 R1 exposure, read true
+PASS no stock row credited in the production packets: 9 stock rows, 0 credited
+PASS astra's judge check on planted gold: kappa 1 overall, near-miss 1, no stock credited, and NO READ only because six real blocks cannot reach 10 gold cells of each class: NO READ, 100 outputs from 52 blocks, kappa 1, real null, near-miss 1; NO READ: kappa on real session blocks has 6 credited and 6 not credited gold cells, or is undefined; each class needs 10
+PASS opus's judge check on planted gold: kappa 1 overall, near-miss 1, no stock credited, and NO READ only because six real blocks cannot reach 10 gold cells of each class: NO READ, 100 outputs from 52 blocks, kappa 1, real null, near-miss 1; NO READ: kappa on real session blocks has 6 credited and 6 not credited gold cells, or is undefined; each class needs 10
+PASS admission takes the scored rows and the run rows, and refuses stage 1 without its 8 calibration briefs: E_OHR_READ_INPUT A1 needs the 8 calibration sessions of current on opus, got 2
+PASS the decision table reads the scored rows: row 1, INCOMPLETE, since the judge checks did not pass: row 1 INCOMPLETE, new minus current 0
+ohr e2e: 86 PASS, 0 FAIL

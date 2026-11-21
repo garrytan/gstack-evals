@@ -4,12 +4,13 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { BRIEF_ALLOWANCE, CAPS, CHANGE_1, CHANGE_2, CLAUDE_BODY, CLOSING, CODEX_RENDERED, DROPPED_SLOTS, LENS_LINE, PILOT, PIN_MOVE, PINS, PREREG, PREREG_1, PROJECTION, QUOTA, RENDER_GAP, REUSE_PLAINTEXT_SHA256, REUSED_SLOTS, REVEAL_NOTE, SEED, SIM_ADDED_RULES, SIM_RULES_FILES, SIM_RULES_SHA256, SKILL_PREFIX, TOP_UP_BOUND, attemptLine, firstMessage } from "../../lanes/office-hours-rewrite/frozen.ts";
+import { BRIEF_ALLOWANCE, CAPS, CHANGE_1, CHANGE_2, CLAUDE_BODY, CLOSING, CODEX_RENDERED, DROPPED_SLOTS, LENS_LINE, PILOT, PIN_MOVE, PINS, PREREG, PREREG_1, PROJECTION, QUOTA, RENDER_GAP, REUSE_PLAINTEXT_SHA256, REUSED_SLOTS, REVEAL_NOTE, SEED, SIM_ADDED_RULES, SIM_RULES_FILES, SIM_RULES_MOVE, SIM_RULES_SHA256, SKILL_PREFIX, TOP_UP_BOUND, attemptLine, firstMessage } from "../../lanes/office-hours-rewrite/frozen.ts";
 
 const root = join(import.meta.dir, "..", "..");
 const prereg = readFileSync(join(root, PREREG_1), "utf8");
 const change1 = readFileSync(join(root, CHANGE_1), "utf8");
 const change2 = readFileSync(join(root, CHANGE_2), "utf8");
+const change6 = readFileSync(join(root, SIM_RULES_MOVE), "utf8");
 const pinMove = readFileSync(join(root, PIN_MOVE), "utf8");
 const MOVE_DIR = PIN_MOVE.split("/").at(-2)!;
 const pinTable = (file: string): Record<string, { bytes: number; sha256: string }> => Object.fromEntries(readFileSync(join(root, CHANGE_2, "..", "..", file), "utf8").trim().split("\n").slice(1).map((l) => l.split("\t")).map((r) => [r[0], { bytes: Number(r[1]), sha256: r[2] }]));
@@ -33,9 +34,11 @@ describe("frozen values match the posts", () => {
   });
   test("the simulator's rules files and the guard's notes", () => {
     for (const kind of ["founder", "builder"] as const) {
-      const text = readFileSync(join(root, CHANGE_1, "..", SIM_RULES_FILES[kind]), "utf8");
+      const text = readFileSync(join(root, SIM_RULES_MOVE, "..", SIM_RULES_FILES[kind]), "utf8");
       expect(createHash("sha256").update(text).digest("hex")).toBe(SIM_RULES_SHA256[kind]);
-      expect(change1).toContain(SIM_RULES_SHA256[kind] + "  " + SIM_RULES_FILES[kind]);
+      expect(change6).toContain(SIM_RULES_SHA256[kind] + "  " + SIM_RULES_FILES[kind]);
+      const first = readFileSync(join(root, CHANGE_1, "..", SIM_RULES_FILES[kind]), "utf8");
+      expect(change1).toContain(createHash("sha256").update(first).digest("hex") + "  " + SIM_RULES_FILES[kind]);
       SIM_ADDED_RULES.forEach((rule, i) => expect(text).toContain("\n" + (11 + i) + ". " + rule + "\n"));
     }
     expect(change1).toContain('"' + REVEAL_NOTE + '"');

@@ -18,6 +18,8 @@ export const CHANGE_1 = "wiki/plans/2026-11-18-geva-553-office-hours-rewrite-pre
 export const CHANGE_2 = "wiki/plans/2026-11-18-geva-553-office-hours-rewrite-pre-run-change-2/README.md";
 /** The second attempt's pre-run change 5, which moves both pins (PINS) and the Codex and Claude Code figures that follow from them. */
 export const PIN_MOVE = "wiki/plans/2026-11-21-geva-555-office-hours-rewrite-attempt-2-pre-run-change-5/README.md";
+/** Pre-run change 6: the simulator reads its own turns as the JSON it returned, and its rules files, with rule 3 and the revealed line rewritten, are attached to this post. */
+export const SIM_RULES_MOVE = "wiki/plans/2026-11-21-geva-555-office-hours-rewrite-attempt-2-pre-run-change-6/README.md";
 
 /** Every seeded draw, order and sample in the eval (pre-run change 1, item 5). */
 export const SEED = 20261117;
@@ -255,11 +257,11 @@ export const REVEAL_GUARD = { max_reveals: 2, calls_per_reply: 3 } as const;
 export const REVEAL_NOTE = "Your last answer listed more than two facts in revealed. Reveal at most two hidden facts in one reply.";
 export const attemptLine = (n: number): string => "This is attempt " + n + " of " + REVEAL_GUARD.calls_per_reply + ".";
 
-/** Pre-run change 1, item 4e: the simulator's whole rules text per brief kind, attached to the change; the manifest binds each sha256. */
+/** Pre-run change 1, item 4e: the simulator's whole rules text per brief kind; since pre-run change 6 the files attached to SIM_RULES_MOVE. The manifest binds each sha256. */
 export const SIM_RULES_FILES = { founder: "sim-rules-founder.txt", builder: "sim-rules-builder.txt" } as const;
 export const SIM_RULES_SHA256 = {
-  founder: "4e57be24062e90d7871162561b5749728e2e3f2d527e29532212e53d8874aa40",
-  builder: "8bf2b16592b3c3bb8fd56658e106298a988cfba57bb0c8d292d778ee2b8f9aff",
+  founder: "6d82c1e116bd6685d447214cf9cb0b547f7be29f6bdacb048280b622a6fb42dd",
+  builder: "5d519101daef789c8d17420de27c97ecaf4deca3fd50620aa2df7549c9071694",
 } as const;
 
 /** Section 12 stage 3: the fixed-script simulator audit. */
