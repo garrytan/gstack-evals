@@ -166,7 +166,7 @@ describe("workflow hygiene", () => {
     const installing = files.flatMap((f) =>
       jobs(f).flatMap(([name, job]) => (job.steps.some((s) => s.env?.BUN_SHA256) ? [f + "/" + name] : [])),
     );
-    expect(installing).toEqual(["ci.yml/checks", "rig.yml/tier", "sealed.yml/sealed"]);
+    expect(installing).toEqual(["ci.yml/tests", "ci.yml/checks", "rig.yml/tier", "sealed.yml/sealed"]);
     for (const f of files) expect([f, shortLimits(workflows[f]!)]).toEqual([f, []]);
   });
 
