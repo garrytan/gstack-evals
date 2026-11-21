@@ -444,6 +444,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_PILOT_STOP](#e_ohr_pilot_stop) | 2 | U20 |
 | [E_OHR_PILOT_OPEN](#e_ohr_pilot_open) | 2 | U20 |
 | [E_OHR_SUPPLY_SHORT](#e_ohr_supply_short) | 2 | U20 |
+| [E_OHR_RESUME](#e_ohr_resume) | 2 | U20 |
+| [E_OHR_REUSE](#e_ohr_reuse) | 2 | U20 |
 | [E_OHR_CUSTODY](#e_ohr_custody) | 2 | U20 |
 | [E_OHR_SIM_RULES](#e_ohr_sim_rules) | 2 | U20 |
 | [E_OHR_SIM_GUARD](#e_ohr_sim_guard) | 2 | U20 |
@@ -458,6 +460,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_NO_BLOCK](#e_ohr_no_block) | 2 | U20 |
 | [E_OHR_ARM_STOP](#e_ohr_arm_stop) | 2 | U20 |
 | [E_OHR_SESSION_KIND](#e_ohr_session_kind) | 2 | U20 |
+| [E_OHR_ROLLOUT_UNREADABLE](#e_ohr_rollout_unreadable) | 2 | U20 |
 | [E_OHR_INFRA_MISSING](#e_ohr_infra_missing) | 2 | U20 |
 | [E_OHR_UNRUN](#e_ohr_unrun) | 2 | U20 |
 | [E_OHR_T8_SEED](#e_ohr_t8_seed) | 2 | U20 |
@@ -469,6 +472,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_DRYRUN_FAIL](#e_ohr_dryrun_fail) | 2 | U20 |
 | [E_OHR_PREFLIGHT_FAIL](#e_ohr_preflight_fail) | 2 | U20 |
 | [E_OHR_MODEL_DRIFT](#e_ohr_model_drift) | 2 | U20 |
+| [E_OHR_TAP](#e_ohr_tap) | 2 | U20 |
 | [E_CODEX_CAPTURE](#e_codex_capture) | 2 | U20 |
 | [E_CODEX_C_NO_ROLLOUT](#e_codex_c_no_rollout) | 2 | U20 |
 | [E_CODEX_C_NO_RESPONSE](#e_codex_c_no_response) | 2 | U20 |
@@ -3476,6 +3480,22 @@ Fix: Take the shortfall and its MDD to the Captain before stage 1.
 
 Exit 2. Side effects: Spend so far stays on the authoring lease; every placed brief and every draft's outcome are written under custody. Retry safe: no. Resumable: no. Owner: U20.
 
+### E_OHR_RESUME
+
+Office-hours rewrite eval, second attempt (its section 5.2): ohr author --resume cannot rebuild the run from its sealed checkpoint and draft records. The file is not a checkpoint, its log does not match its name, a draft record after it is missing, a record sits out of place, a brief's files no longer match its digest, a checkpoint or record carries no run id or names another run, or the --meter dir or checkpoints folder's run.json names another run than the checkpoint. It also refuses a run that ended on a cap stop, which is final; a checkpoint whose ledger item is not --item; and a checkpoints folder another ohr author process holds locked.
+
+Fix: A run that ended on a cap stop reads INCOMPLETE and is not resumed. Otherwise pass the --item its checkpoint names, and wait for the process that holds the folder to exit. Point --resume at a checkpoint-&lt;drafts>.age in the run's checkpoints folder with every draft-&lt;seq>.age sealed after it beside it. A missing record would pay for a settled draft twice, so restore it from custody rather than resuming without it. Pass --meter only with the same run's meter dir, or leave it out: the resume continues the checkpoint's run id on the ledger item either way.
+
+Exit 2. Side effects: None: the decrypted checkpoint and records are deleted from /dev/shm before the refusal, and no call is made. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_REUSE
+
+Office-hours rewrite eval, second attempt (its section 4): authoring was handed reused briefs that are not one whole brief or pair in one of the 13 reused slots. ohr author --reuse checks each first-attempt brief against its recorded digest and slot and drafts a failing one again, so this is a bug in what was passed to the run.
+
+Fix: Pass the first attempt's sealed authoring output to --reuse and let readReuse check it; never hand-place a brief.
+
+Exit 2. Side effects: None: the run stops before any draft. Retry safe: no. Resumable: no. Owner: U20.
+
 ### E_OHR_CUSTODY
 
 Office-hours rewrite eval (prereg section 3, Sealing): a custody path was refused or sealing failed. Briefs are written only into a fresh work directory under /dev/shm, sealed with age to an output outside the repository that does not exist yet, and decrypted only into /dev/shm.
@@ -3588,6 +3608,14 @@ Fix: Check that the arm environment leaves GSTACK_SESSION_KIND, OPENCLAW_SESSION
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
 
+### E_OHR_ROLLOUT_UNREADABLE
+
+Office-hours rewrite eval (pre-run change 5, F1): Codex's rollout of a Sol session could not be read after a turn or copied out after the session, on both attempts. The session scores missing, and the report lists it by name apart from other infra misses.
+
+Fix: Read host/codex/cli-stderr.log and host/codex/home-watch.ndjson in the attempt's directory. A steady failure goes to the eval's owner.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
 ### E_OHR_INFRA_MISSING
 
 Office-hours rewrite eval (section 8): an upstream, provider or harness failure ended the session after its one retry, or the ledger never admitted it. The session scores missing.
@@ -3675,6 +3703,14 @@ Office-hours rewrite eval (pre-run change 4): a reply named a model other than t
 Fix: Keep the journal and the transcript that show the reported model, and send the question to the Captain. Never retry the item on another model or route.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_TAP
+
+Office-hours rewrite eval (pre-run change 2): the model tap between the Sol arms' Codex CLI and the metering proxy did not start, or did not print TAP_READY within 30 seconds. No Sol session starts without it, because Codex records no reported model of its own.
+
+Fix: Read the tap container's docker logs and &lt;out>/tap/tap.json, fix the image or the rig network, and open the rig again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_CODEX_CAPTURE
 

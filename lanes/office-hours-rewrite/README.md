@@ -3,7 +3,7 @@
 This lane measures whether gstack's rewritten office-hours skill makes the right call more often than the current
 skill, without harming builders. Each brief is an invented founder or builder: an opening message, a sheet of facts
 the person reveals only when asked, and a key. A simulated person (Gemini 4 Argon) plays the founder, and three arms
-talk to it in Claude Code: none (a plain first message), current (gstack's skill at the commit the content change is
+talk to it in Claude Code (Sol's sessions run in Codex CLI, pre-run change 2): none (a plain first message), current (gstack's skill at the commit the content change is
 built on) and new (the content change's head). Each session ends with a three-line block (DECISION, NEXT ACTION, WHY),
 and blind judges score the decision and the action against the key.
 
@@ -37,13 +37,19 @@ start with E_OHR_.
 
 ## Commands
 
-`gstack-evals ohr --help` lists them: author, audit, run, rows, score (packets, check-packets, judges, sessions),
-judge-check, read (admission, decision, report), dryrun, e2e and preflight. Every model call goes through wire.ts: one
+`gstack-evals ohr --help` lists them: author, audit, rescreen, run, rows, score (packets, check-packets, judges,
+sessions), judge-check, read (admission, interim, decision, report), dryrun, e2e and preflight. rescreen is keyless: it runs
+authoring's vocabulary check over a briefs directory with the screen read from the pins, and prints pass or fail per
+brief with counts and file names, never text. Every model call goes through wire.ts: one
 lease on one ledger item, the product-value meter and its metering proxy. The preregistration names GPT-6.2 Astra for
 the Opus judge, the gold pass, the unanimous key and the simulator auditor, so wire.ts sends every "astra" request to the
 meter's "astra-6.2" key (openai/gpt-6.2-astra); the meter's "astra" key stays GPT-6 Astra for other lanes.
 
-Warning: `ohr read decision` learns of a cap stop only from its `--cap-stop` flag. It does not read a launch's stops.json, so never read a stage that stopped at its cap without `--cap-stop`. A rerun's build fixes this. It is the one review finding that pull request 368 defers.
+`ohr read decision` takes every cap stop from each launch's stops.json and from each ledger item's record, and reads
+authoring's end from the sealed authoring summary: an authoring cap stop after all 88 calibration and comparison
+briefs were placed ends authoring only, and any other authoring end before that reads INCOMPLETE. `--cap-stop` can add
+a stop but never remove one. This is the second attempt's fix for the one review finding that pull request 368
+deferred.
 
 ## The no-model preflight on a VM
 

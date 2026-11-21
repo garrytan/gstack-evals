@@ -1,7 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The rewrite eval's detectors on planted fixtures (prereg sections 7, 10, 11 and 12; pre-run change 1 items 4e and 4f).
 import { afterAll, describe, expect, test } from "bun:test";
-import { readFileSync, rmSync, utimesSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync, utimesSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { PINS } from "../../../lanes/office-hours-rewrite/frozen.ts";
 import { compliance, datedAndNumbered, delivered, exposure, founderReplies, keptWhole, loadCompliance, loadMarkers, markersFrom, questionsAsked, startupOnly } from "../../../lanes/office-hours-rewrite/score/detect.ts";
@@ -29,7 +31,8 @@ describe("markers", () => {
   test("candidate markers load for both pins, and the current pin's source files match its frozen hashes", () => {
     expect(CUR.sha).toBe(PINS.current!.sha);
     for (const [f, h] of Object.entries(CUR.source_files)) expect(PINS.current!.files[f]).toBe(h);
-    expect(NEW.sha).toBe("0787a1e01f2d847f8e915a680e7f6afec777be88");
+    expect(NEW.sha).toBe(PINS.new!.sha);
+    for (const [f, h] of Object.entries(NEW.source_files)) expect(PINS.new!.files[f]).toBe(h);
     expect(Object.keys(NEW.questions)).toContain("reality-check");
     expect(Object.keys(CUR.questions)).not.toContain("reality-check");
     expect(CUR.deliverables.memo).toBeNull();
@@ -40,6 +43,14 @@ describe("markers", () => {
     expect(() => markersFrom({ ...d, questions: { Q1: "(" } })).toThrow(/^E_OHR_MARKERS/);
     expect(() => markersFrom({ ...d, questions: {} })).toThrow(/^E_OHR_MARKERS/);
   });
+});
+
+const CLONE = process.env.GSTACK_OHR_CLONE || join(homedir(), ".capy", "work", "gstack");
+const ready = existsSync(CLONE) && ([PINS.current!.sha, PINS.new!.sha] as const).every((sha) => spawnSync("git", ["-C", CLONE, "cat-file", "-e", sha + "^{commit}"]).status === 0);
+if (!ready) console.log("SKIP tests/ohr/score/detect.test.ts pin text check: no gstack clone holding both pins at " + CLONE);
+test.skipIf(!ready)("from a clone holding both pins, every new-pin question and startup-only marker matches the new pin's office-hours text (pre-run change 5)", () => {
+  const text = Object.keys(NEW.source_files).map((f) => spawnSync("git", ["-C", CLONE, "show", PINS.new!.sha + ":" + f], { encoding: "utf8", maxBuffer: 1 << 26 }).stdout).join("\n");
+  expect([NEW.questions, NEW.startup_only.questions, NEW.startup_only.lines].flatMap((set) => Object.entries(set)).filter(([, re]) => !re.test(text)).map(([id]) => id)).toEqual([]);
 });
 
 describe("exposure (section 12)", () => {

@@ -1,0 +1,74 @@
+# Token shape of the keyless Codex captures (caps/*.request.jsonl), counted with tiktoken 0.12.0's o200k_base.
+# Run: uv run --with tiktoken==0.12.0 python analyze.py > analyze.txt
+# Message items count their text parts; any other item (the additional_tools item) counts its JSON text, which
+# over-counts against how the model sees tool schemas. Per-message framing tokens are not added.
+import json, os, hashlib
+import tiktoken
+enc = tiktoken.get_encoding('o200k_base')
+tok = lambda s: len(enc.encode(s, disallowed_special=()))
+M = os.path.expanduser('~/.capy/work/ohr2/money'); C = os.path.expanduser('~/.capy/work/ohr2/codex')
+RENDERED = {a: hashlib.sha256(open(f'{C}/{a}/.agents/skills/gstack-office-hours/SKILL.md', 'rb').read()).hexdigest() for a in ('current', 'new')}
+def reqs(name):
+    return [json.loads(l)['body'] for l in open(f'{M}/caps/{name}.request.jsonl') if l.strip() and json.loads(l)['path'].endswith('/responses')]
+def itext(it):
+    if it.get('type') == 'message':
+        return ''.join(c.get('text', '') for c in it['content'])
+    return json.dumps(it)
+def label(it):
+    t = itext(it)
+    if it.get('type') != 'message': return it.get('type')
+    if it['role'] == 'developer':
+        for k, v in (('<skills_instructions>', 'skills list'), ('<permissions instructions>', 'permissions'), ('<multi_agent_role>', 'agent role'), ('<multi_agent_mode>', 'agent mode'), ('You are Codex', 'base instructions')):
+            if t.startswith(k): return v
+        return 'developer other'
+    if it['role'] == 'user':
+        if t.startswith('<environment_context>'): return 'environment context'
+        if t.startswith('<skill>'): return 'skill body'
+        return 'user message'
+    return it['role'] + ' message'
+def parts(it):
+    return len(it['content']) if it.get('type') == 'message' else 1
+def skill(it):
+    t = itext(it)
+    head, rest = t.split('</path>\n', 1)
+    body = rest[:-len('\n</skill>')] if rest.endswith('\n</skill>') else rest
+    return {'name': head.split('<name>')[1].split('</name>')[0], 'wrapper_bytes': len(t.encode()), 'body_bytes': len(body.encode()), 'body_sha256': hashlib.sha256(body.encode()).hexdigest(), 'body_tokens': tok(body), 'item_tokens': tok(t)}
+out = {'tokenizer': 'tiktoken 0.12.0 o200k_base', 'rendered_sha256': RENDERED, 'start': {}, 'turns': {}}
+print('Session starts (first request), approximate o200k tokens per input item')
+for arm in ('none', 'current', 'new'):
+    b = reqs('start-' + arm)[0]
+    items = [{'label': label(it), 'parts': parts(it), 'bytes': len(itext(it).encode()), 'tokens': tok(itext(it))} for it in b['input']]
+    sk = [skill(it) for it in b['input'] if label(it) == 'skill body']
+    listed = [it for it in b['input'] if label(it) == 'skills list']
+    n_listed = sum(itext(it).count('(file: ') for it in listed)
+    names = [l[2:].split(':')[0] for it in listed for l in itext(it).splitlines() if l.startswith('- ') and '(file: ' in l]
+    row = {'duplicate_names': sorted(set(n for n in names if names.count(n) > 1)), 'total_tokens': sum(i['tokens'] for i in items), 'total_bytes': sum(i['bytes'] for i in items), 'items': items, 'skill': sk, 'skills_listed_entries': n_listed,
+           'fields': {k: b.get(k) for k in ('model', 'reasoning', 'store', 'stream', 'include', 'tool_choice', 'parallel_tool_calls', 'text')}, 'instructions_chars': len(b.get('instructions') or ''), 'tools_field': len(b.get('tools') or [])}
+    if sk: row['skill_matches_rendered'] = sk[0]['body_sha256'] == RENDERED[arm]
+    out['start'][arm] = row
+    print(f"{arm}: {n_listed} skills listed, names listed twice {row['duplicate_names']}; total {row['total_tokens']} tokens, {row['total_bytes']} bytes; instructions field {row['instructions_chars']} chars, tools field {row['tools_field']}; fields {json.dumps(row['fields'])}")
+    for i in items: print(f"   {i['label']:20s} parts {i['parts']}  {i['bytes']:6d} bytes  {i['tokens']:6d} tokens")
+    if sk: print(f"   skill: {json.dumps(sk[0])}; matches rendered pin file: {row['skill_matches_rendered']}")
+print()
+print('Multi-turn sessions: first message, then 4 resumed turns (codex exec resume)')
+for arm in ('none', 'current', 'new'):
+    rs = reqs('turns-' + arm)
+    totals = [sum(tok(itext(it)) for it in b['input']) for b in rs]
+    rows = []
+    for k, b in enumerate(rs):
+        r = {'request': k + 1, 'tokens': totals[k], 'items': len(b['input'])}
+        if k:
+            p = rs[k - 1]
+            r['prefix_append_only'] = b['input'][:len(p['input'])] == p['input']
+            r['same_cache_key'] = b['prompt_cache_key'] == p['prompt_cache_key']
+            r['same_other_fields'] = all(b.get(f) == p.get(f) for f in ('model', 'instructions', 'tools', 'reasoning', 'include', 'text', 'tool_choice', 'parallel_tool_calls', 'store'))
+            new = b['input'][len(p['input']):]
+            r['growth_tokens'] = totals[k] - totals[k - 1]
+            r['new_items'] = [(label(it), tok(itext(it))) for it in new]
+        rows.append(r)
+    first_skill = [it for it in rs[0]['input'] if label(it) == 'skill body']
+    out['turns'][arm] = {'requests': rows, 'skill_in_every_request': all(any(label(it) == 'skill body' for it in b['input']) for b in rs) if first_skill else False}
+    print(f"{arm}: request tokens {totals}; skill body carried in every request: {out['turns'][arm]['skill_in_every_request']}")
+    for r in rows[1:]:
+        print(f"   request {r['request']}: +{r['growth_tokens']} tokens, new items {r['new_items']}, append-only {r['prefix_append_only']}, same prompt_cache_key {r['same_cache_key']}, other fields unchanged {r['same_other_fields']}")
+json.dump(out, open(f'{M}/caps/summary.json', 'w'), indent=1)

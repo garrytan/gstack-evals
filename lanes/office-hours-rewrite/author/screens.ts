@@ -5,11 +5,15 @@
 // build-time choice, each read from a gstack checkout at its commit and refused on any other sha256: the six forcing
 // questions ("Ask:" lines) of phase-2a at the current pin and at the new pin (pre-run change 2), the quoted questions
 // of that head's reality check, and the quoted questions of its pivot flow (phase-2c). Words are compared the founder
-// lane's way: lowercased, with every run of other characters one space.
+// lane's way: lowercased, with every run of other characters one space. ohr rescreen runs the same check over a briefs
+// directory with the screen built from the pins as pre-run change 5 of the second attempt moves them.
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { AuthorError, sha256 } from "../../office-hours-founder/author/files.ts";
 import { forcingQuestions, unitStrings, words, type Hits, type Screen } from "../../office-hours-founder/author/screens.ts";
 import { LENS_LINE, PINS } from "../frozen.ts";
+import { loadBriefs } from "../run/manifest.ts";
 import type { BriefFiles } from "./files.ts";
 import { NAMED_TERMS } from "./prompts.ts";
 
@@ -70,4 +74,25 @@ export function screenVocabulary(screen: Screen, b: Partial<BriefFiles>): Hits {
     if (found.length) files.add(s.file);
   }
   return { pass: hits.size === 0, hits: [...hits], files: [...files] };
+}
+
+/** One brief's vocabulary check, as authoring's first check ran it: counts and file names, never text. */
+export interface Rescreened {
+  id: string;
+  pass: boolean;
+  /** Barred five-word sequences found, and named terms found. */
+  sequences: number;
+  terms: number;
+  files: string[];
+}
+
+/** Every brief in a briefs directory (each <id>/brief.json and its files) through the vocabulary check, in id order. */
+export function rescreen(screen: Screen, dir: string): Rescreened[] {
+  return loadBriefs(dir).map(({ id }) => {
+    const at = (f: string) => join(dir, id, f);
+    const json = (f: string) => (existsSync(at(f)) ? JSON.parse(readFileSync(at(f), "utf8")) : undefined);
+    const v = screenVocabulary(screen, { opening: existsSync(at("opening.md")) ? readFileSync(at("opening.md"), "utf8") : undefined, sheet: json("sheet.json"), key: json("key.json"), prior: json("prior.json") ?? null });
+    const terms = v.hits.filter((h) => (NAMED_TERMS as readonly string[]).includes(h)).length;
+    return { id, pass: v.pass, sequences: v.hits.length - terms, terms, files: v.files };
+  });
 }

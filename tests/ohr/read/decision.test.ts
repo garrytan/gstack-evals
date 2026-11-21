@@ -21,7 +21,7 @@ describe("section 10's rows", () => {
     const d = decide(plant("merge"));
     expect(d.conditions.row4.estimate).toBeCloseTo(0.3, 12);
     expect(d.conditions.row4.lo!).toBeGreaterThan(0);
-    expect(d.conditions.row1).toMatchObject({ holds: false, admission: "admitted", cap_stop: false, missing_limit: false, judge_check_failed: false });
+    expect(d.conditions.row1).toMatchObject({ holds: false, admission: "admitted", stops: [], missing_limit: false, judge_check_failed: false });
     expect(d.conditions.row2).toMatchObject({ holds: false, pooled_loss: false, opus_loss: false, sol_loss: false, kept_whole_harm: false, builder_right_call_loss: false, guardrail_broken: false });
     expect(d.conditions.row3.holds).toBe(false);
     expect(d.conditions.row5.holds).toBe(false);

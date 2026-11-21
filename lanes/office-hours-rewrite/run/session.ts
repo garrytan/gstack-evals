@@ -30,7 +30,7 @@ import type { ReasonCode } from "../../../src/errors/codes.ts";
 import { readTranscript } from "../../../src/trial/review/readers.ts";
 import type { Termination } from "../../../src/types.ts";
 import { CLOSING, CLOSING_SENDS, FOUNDER_REPLIES, firstMessage } from "../frozen.ts";
-import type { SimOutcome } from "../sim/founder.ts";
+import type { OwnTurn, SimOutcome } from "../sim/founder.ts";
 import type { ArmId, BlockParse, BlockParser, EndState, Turn } from "../types.ts";
 
 export { firstMessage };
@@ -39,6 +39,8 @@ export { firstMessage };
 export interface Line {
   role: "assistant" | "person";
   text: string;
+  /** A person line's JSON as the simulator returned it, which its own history shows it (pre-run change 6). */
+  own?: OwnTurn;
 }
 
 /** The loop's record of one attempt, read after the driver returns. */
@@ -99,7 +101,7 @@ export function closingLoop(o: { parse: BlockParser; founder: (transcript: Line[
         state.founder_done = true;
         return closing();
       }
-      state.transcript.push({ role: "person", text: r.reply });
+      state.transcript.push({ role: "person", text: r.reply, own: { reply: r.reply, revealed: r.revealed, rules: r.rules, done: r.done } });
       return { reply: r.reply };
     }
     state.failed_turn = { outcome: r.kind, rejected_draws: draws(r) };
@@ -125,8 +127,10 @@ export function safetyStop(transcript: string): string | null {
   return null;
 }
 
-/** The SESSION_KIND value the first main-agent tool result printed, or null. */
-export function sessionKindOf(transcript: string): string | null {
+/** The SESSION_KIND value the skill's start step printed at load (pre-run change 5; read/load.ts startOutput), else the first main-agent tool result's, or null. */
+export function sessionKindOf(transcript: string, start: string | null = null): string | null {
+  const atLoad = start === null ? null : /SESSION_KIND: ([A-Za-z0-9._-]+)/.exec(start);
+  if (atLoad) return atLoad[1]!;
   for (const m of readTranscript(transcript) as Record<string, any>[]) {
     if (m.type !== "user" || m.parent_tool_use_id || !Array.isArray(m.message?.content)) continue;
     for (const b of m.message.content) {
@@ -153,8 +157,18 @@ export interface AttemptRead {
   session_kind: string | null;
   /** Models the session's assistant messages name that are not its pin (pinned.ts offPin); any one halts the launch. */
   off_pin: string[];
+  /** The models the session's replies report (pinned.ts servedModel): Claude Code's transcript, or the tap for Sol. */
+  served_model: string | null;
+  /** The CLI version the session's transcript names (pinned.ts cliVersion). */
+  cli_version: string | null;
   micros: number;
   sim_micros: number;
+  /** Pre-run change 5, F1 on a Sol attempt (run/home-watch.ts): every flag on trusting its rollout; null or absent on Claude Code. */
+  rollout_flags?: string[] | null;
+  /** Pre-run change 5, G1 on a Sol attempt: every turn whose turn_context did not record collaboration mode default. */
+  non_default_turns?: string[] | null;
+  /** The adapter could not read the Sol session's rollout after a turn, or the rollout was not copied out. */
+  rollout_unreadable?: boolean;
 }
 
 export type Outcome =
@@ -180,6 +194,7 @@ export function attemptOutcome(a: AttemptRead, arm: ArmId): Outcome {
   if (safety) return { state: "safety-stop", code: "E_OHR_SAFETY_STOP", why: "a provider safety stop: " + safety };
   if (arm === "none" && a.gstack_reads.length) return { state: "contaminated", code: "E_OHR_GSTACK_READ", why: "the none arm read " + a.gstack_reads.join(", ") };
   if (t.kind === "missing" && t.code === "E_LEDGER_UNAVAILABLE") return { state: "missing", code: "E_OHR_INFRA_MISSING", why: "the ledger never admitted the session" };
+  if (a.rollout_unreadable) return { state: "retry", as: "infra", code: "E_OHR_ROLLOUT_UNREADABLE", why: "Codex's rollout of the session could not be read or copied out" };
   if (arm !== "none" && a.session_kind !== null && a.session_kind !== "interactive") return { state: "retry", as: "infra", code: "E_OHR_SESSION_KIND", why: "the skill printed SESSION_KIND: " + a.session_kind };
   if (a.contained === null || (arm !== "none" && a.pin === null)) return { state: "retry", as: "infra", code: "E_OHR_INFRA_MISSING", why: "the containment probe or the container's pin check could not run" };
   if (a.loop.ended === "block") return { state: "block", code: null, why: "a block in reply " + a.loop.replies + " after " + a.loop.closings + " closing message" + (a.loop.closings === 1 ? "" : "s") };
