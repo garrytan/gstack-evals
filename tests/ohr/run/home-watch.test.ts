@@ -213,3 +213,24 @@ describe("F1: the sensitivity row", () => {
     expect(s.estimate!).toBeLessThan(primary.estimate!);
   });
 });
+
+describe("pre-run change 7: gstack's Codex skill root", () => {
+  const ev = (item: object) => JSON.stringify({ type: "item.completed", item });
+  const cmd = (command: string) => ev({ id: "c", type: "command_execution", command });
+  const exec = (c: string) => JSON.stringify({ type: "response_item", payload: { type: "custom_tool_call", name: "exec", input: "const r = await tools.exec_command({cmd: " + JSON.stringify(c) + "});" } });
+  const call = (c: string) => JSON.stringify({ type: "response_item", payload: { type: "function_call", name: "exec_command", arguments: JSON.stringify({ cmd: c }) } });
+  const ROOT = "$" + "{CODEX_HOME:-~/.codex}/skills/gstack";
+  test("the exact skill-root token, alone or followed by a path with no '..', is no flag in a command or a rollout tool call", () => {
+    const seeded = ["GSTACK_ROOT=" + ROOT + "\n\"$GSTACK_ROOT/bin/gstack-skill-start\"", "_r=" + ROOT + ";[ -d \"$_r/bin\" ]||echo none", "[ -x \"" + ROOT + "/bin/gstack-skill-start\" ]&&\"" + ROOT + "/bin/gstack-skill-start\""];
+    expect(streamFlags(seeded.map(cmd).join("\n"), [seeded.map(exec).join("\n"), seeded.map(call).join("\n")])).toEqual([]);
+  });
+  test("every other CODEX_HOME use still flags, the token with '..' after it included, and so does a file_change path", () => {
+    const seeded = ["cat " + ROOT + "/../../sessions/x", "ls " + ROOT + "-office-hours", "cat $" + "{CODEX_HOME:-~/.codex}/config.toml", "echo $CODEX_HOME", "cat $" + "{CODEX_HOME}/skills/gstack/bin/x", "GSTACK_ROOT=" + ROOT + "; ls $CODEX_HOME/sessions"];
+    const stream = [...seeded.map(cmd), ev({ id: "f", type: "file_change", changes: [{ path: ROOT + "/bin/x", kind: "add" }] })].join("\n");
+    expect(streamFlags(stream, [])).toHaveLength(seeded.length + 1);
+    for (const c of seeded) {
+      expect(streamFlags("", [exec(c)])).toHaveLength(1);
+      expect(streamFlags("", [call(c)])).toHaveLength(1);
+    }
+  });
+});

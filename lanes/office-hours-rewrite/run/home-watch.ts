@@ -201,9 +201,11 @@ export function copyFlags(last: Snapshot | null, thread: string | null, copied: 
 
 const DELIM = "[^\\s\"'\x60;|&<>()]";
 const SKILL_PATH = new RegExp("^/skills(?:/" + DELIM + "*)?(?!" + DELIM + ")");
+const SKILL_ROOT = new RegExp("\\$\\{CODEX_HOME:-~/\\.codex\\}/skills/gstack(?=/|\\\\|(?!" + DELIM + "))(" + DELIM + "*)", "g");
 
-/** Whether text names Codex's home, its sessions or a rollout; skillPath lets the skill install's own paths (.codex/skills/..., no "..") through. */
+/** Whether text names Codex's home, its sessions or a rollout; skillPath lets the skill install's own paths (.codex/skills/..., and pre-run change 7's exact root gstack renders for Codex, ${CODEX_HOME:-~/.codex}/skills/gstack, each with no "..") through. */
 export function namesCodexHome(text: string, skillPath: boolean): boolean {
+  if (skillPath) text = text.replace(SKILL_ROOT, (m, rest: string) => (rest.includes("..") ? m : ""));
   if (/CODEX_HOME|rollout|sessions\/\d{4}\//i.test(text)) return true;
   for (const m of text.matchAll(/\.codex/g)) {
     const rest = text.slice(m.index! + m[0].length);

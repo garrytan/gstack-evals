@@ -110,6 +110,12 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
   const sol: { model: string; effort: string | null; tools: string[]; skills: string[]; founder: string[]; text: string }[] = [];
   const SOL_ASK = "What has happened since, and who has asked for it?";
   const solProbe = () => probe().replace("for R in " + roots.join(" "), 'for R in "$HOME/.codex/skills/gstack" "$HOME/.local/share/gstack"');
+  const startStep = (skill: string | undefined): string => {
+    const block = (skill ?? "").split("\x60\x60\x60bash\n").slice(1).map((b) => b.split("\n\x60\x60\x60")[0]!).find((b) => b.includes("gstack-skill-start"));
+    const shell = 'echo "LOGIN""_SHELL=$(shopt -q login_shell && echo yes || echo no)"; echo "BUN""_AT=$(command -v bun || echo none)"; case ":$PATH:" in *":' + CODEX.path_dir + ':"*) echo "HARNESS""_PATH=kept";; *) echo "HARNESS""_PATH=dropped";; esac; ';
+    const read = 'echo "START""_EXIT=$?"; echo "INSTALL""_ROW=$(sed -n "s/^INSTALL: \\([a-z]*\\).*/\\1/p" "$O" | head -1)"; grep -q "status=refused" "$O" && echo "START""_REFUSED=yes" || echo "START""_REFUSED=no"; grep -q "^SESSION_KIND:" "$O" && echo "START""_RAN=yes" || echo "START""_RAN=no"';
+    return shell + (block ? 'O="$(mktemp)"; (\n' + block + '\n) > "$O" 2>&1; ' + read : 'echo "START""_STEP=missing"');
+  };
 
   let roots: string[] = [];
   const main: { tools: string[]; text: string }[] = [];
@@ -146,7 +152,7 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
         const n = sol.length;
         const text = (t: string) => ({ id: "msg_" + n, type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: t, annotations: [] }] });
         const item = founder[0]?.startsWith("$office-hours") && founder.length === 1 && !outputs
-          ? { id: "ctc_" + n, type: "custom_tool_call", status: "completed", call_id: "call_probe_" + n, name: "exec", input: "const r = await tools.exec_command({cmd: " + JSON.stringify(solProbe()) + "});\ntext(typeof r === \"string\" ? r : JSON.stringify(r));" }
+          ? { id: "ctc_" + n, type: "custom_tool_call", status: "completed", call_id: "call_probe_" + n, name: "exec", input: "const r = await tools.exec_command({cmd: " + JSON.stringify(solProbe() + "; " + startStep(users.find((t) => t.startsWith("<skill>")))) + ", yield_time_ms: 60000});\ntext(typeof r === \"string\" ? r : JSON.stringify(r));" }
           : founder.length === 1 && !asked
             ? { id: "fc_" + n, type: "function_call", status: "completed", call_id: "call_ask_" + n, name: "request_user_input_async", arguments: JSON.stringify({ questions: [{ title: SOL_ASK }] }) }
             : founder.length === 1 ? text("I asked my question above; reply in your own words.") : founder.at(-1)!.startsWith(CLOSING.slice(0, 20)) ? text(BLOCK) : text(SOL_ASK);
@@ -287,6 +293,11 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
     const r = solRow(arm)?.row;
     const load = r ? skillLoad(r) : null;
     check("Sol " + arm + ": A8 reads the whole rendered SKILL.md in the transcript's <skill> item", load?.pass === true && load.sha256 === CODEX_RENDERED[arm].sha256, load ? load.why + " (" + load.sha256?.slice(0, 12) + ")" : "no row");
+    const tr = solFile(arm, "transcript.ndjson");
+    const events = solFile(arm, "codex/transcript.ndjson");
+    const shells = (flag: string) => (events.match(new RegExp('"command":"(?:/usr)?/bin/bash ' + flag + " ", "g")) ?? []).length;
+    const marks = [...new Set(tr.match(/(LOGIN_SHELL|HARNESS_PATH|BUN_AT|START_EXIT|INSTALL_ROW|START_REFUSED|START_RAN|START_STEP)=[^\\"]*/g) ?? [])];
+    check("Sol " + arm + ": gstack's start step ran as the skill runs it, in a shell that kept the harness PATH and found bun, and its INSTALL row did not refuse; the shell's shape is reported (pre-run change 7)", ["HARNESS_PATH=kept", "START_EXIT=0", "START_REFUSED=no", "START_RAN=yes"].every((m) => marks.includes(m)) && marks.some((m) => /^BUN_AT=\/\S*bun$/.test(m)) && !marks.includes("INSTALL_ROW=fail"), marks.join("; ") + "; tool commands bash -lc " + shells("-lc") + ", bash -c " + shells("-c"));
   }
   check("Sol: every request named gpt-6.1-sol at low effort, with no web search and no sleep tool", sol.length > 0 && sol.every((r) => r.model === CODEX.model && r.effort === "low" && !r.tools.some((t) => /web_search|sleep/.test(t))), sol.length + " requests; models " + [...new Set(sol.map((r) => r.model))].join() + "; efforts " + [...new Set(sol.map((r) => r.effort))].join());
   check("Sol none: no request names gstack", sol.filter((r) => !r.founder[0]?.startsWith("$office-hours")).every((r) => !/gstack/i.test(r.text)), sol.filter((r) => !r.founder[0]?.startsWith("$office-hours")).length + " none-arm requests");
