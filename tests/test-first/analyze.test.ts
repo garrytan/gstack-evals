@@ -109,7 +109,22 @@ describe("the decision table, first row that applies", () => {
     expect(r.decision.key).toBe("null");
     expect(report(table(20, (m, a, i) => ({ followed: followed(a), pass: i < 10, reg: i < 5 })), "end", 20).lines.some((l) => l.includes("why null? power"))).toBe(true);
   });
-  test("after a stop at the look, passes with a regression test are descriptive (PR #396's edit)", () => {
+  // prove-it passes 36 of 40 with no regression test; gstack passes 20, each with one.
+  const split = table(40, (m, a, i) => ({ followed: followed(a), pass: a === "prove-it" ? i < 36 : i < 20, reg: a !== "prove-it" }));
+  test("passes above 0 while passes with a regression test are below 0 at the end: no reading, to the Captain", () => {
+    const r = reading(split, "end", 40);
+    expect(r.passes!.z!).toBeGreaterThan(BOUNDS.end);
+    expect(r.regression!.z!).toBeLessThan(-BOUNDS.regression);
+    expect(r.decision.key).toBe("captain");
+    expect(r.decision.text).toContain("both contrasts");
+  });
+  test("the same tables after a stop at the look: passes alone decide, KEEP and strengthen", () => {
+    const r = reading(split, "look", 40);
+    expect(r.passes!.z!).toBeGreaterThan(BOUNDS.look);
+    expect(r.regressionRead).toBe(false);
+    expect(r.decision.key).toBe("keep-strengthen");
+  });
+  test("after a stop at the look, passes with a regression test are descriptive (sections 9.3 and 11 as merged)", () => {
     expect(REGRESSION_AFTER_STOP).toBe("descriptive");
     const r = reading(table(20, (m, a, i) => ({ followed: followed(a), pass: i < 10, reg: a === "prove-it" })), "look", 20);
     expect([r.regressionRead, r.decision.key, r.bound]).toEqual([false, "null", BOUNDS.look]);
@@ -159,6 +174,11 @@ describe("pilot report (section 12)", () => {
   test("step text in the none arm, a missing line, no followed session and a manifest problem each fail their arm", () => {
     const p = pilotReport(pilot((r) => (r.arm === "none" && r.model === "claude-opus-5-5" ? { ...r, steps_seen: true } : r.arm === "line" && r.host === "codex" ? { ...r, line_seen: false } : r.arm === "prove-it" && r.model === "particle-1" ? { ...r, followed_b2: false } : r)), PILOT_TASKS, (l) => (l === "gstack" ? ["telemetry is on"] : []));
     expect(p.failed.sort()).toEqual(["gstack claude-opus-5-5", "gstack particle-1", "line gpt-6.2-sol", "none claude-opus-5-5", "prove-it particle-1"].sort());
+  });
+  test("a Sol session with a metered request at another effort, or with no metered request, fails its arm", () => {
+    const p = pilotReport(pilot((r) => (r.model === "gpt-6.2-sol" && r.arm === "gstack" && r.task === PILOT_TASKS[1] ? { ...r, metered_effort: ["low", "medium"] } : r.model === "gpt-6.2-sol" && r.arm === "none" && r.task === PILOT_TASKS[2] ? { ...r, metered_effort: [] } : r)), PILOT_TASKS, () => []);
+    expect(p.failed.sort()).toEqual(["gstack gpt-6.2-sol", "none gpt-6.2-sol"]);
+    expect(p.lines.find((l) => l.startsWith("FAIL gstack"))).toContain("every metered request at effort low (1 of 3 sessions not)");
   });
   test("a pilot task not graded fails supply", () => {
     const p = pilotReport(pilot((r) => (r.task === PILOT_TASKS[0] && r.arm === "none" && r.model === "particle-1" ? { ...r, outcome: "infra" } : r)), PILOT_TASKS, () => []);

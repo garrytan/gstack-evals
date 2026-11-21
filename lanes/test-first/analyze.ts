@@ -8,7 +8,7 @@
 // order, the delivery-form contrast, and section 6.4's descriptive lines. The interim look (section 11) prints only its z,
 // its bound and its decision. The pilot report prints a PASS or FAIL line per arm and model by section 12's criteria.
 import { newcombe, wilson } from "../delivery-route/analyze.ts";
-import { ARM_KEYS, B2, BOUNDS, GATE, LABELS, labelOf, MODEL_KEYS, MODELS, PILOT_ARM_CAPS_USD, type Arm, type ModelKey } from "./pins.ts";
+import { ARM_KEYS, B2, BOUNDS, GATE, LABELS, labelOf, MODEL_KEYS, MODELS, PILOT_ARM_CAPS_USD, SOL_EFFORT, type Arm, type ModelKey } from "./pins.ts";
 import type { B2Row } from "./table.ts";
 
 export { newcombe, wilson };
@@ -25,8 +25,8 @@ export const outcomeOf = (o: Outcome, r: B2Row, way: "primary" | "low" | "high" 
 };
 // Section 9.1's per-model contrasts, each first minus second.
 export const CONTRASTS: [Arm, Arm][] = [["prove-it", "gstack"], ["prove-it", "none"], ["prove-it", "line"], ["gstack", "none"], ["line", "none"]];
-// The pending edit on PR #396: when the run stops at the look, passes with a regression test are descriptive and take no part
-// in the decision; otherwise they are read at the end, on all 183 tasks, at |z| of at least 2.576.
+// Sections 9.3 and 11 of the plan as merged on main (3e02b099): when the run stops at the look, passes with a regression test
+// are descriptive and take no part in the decision; otherwise they are read at the end, on all 183 tasks, at |z| of at least 2.576.
 export const REGRESSION_AFTER_STOP = "descriptive" as const;
 
 const graded = (rows: B2Row[]) => rows.filter((r) => r.outcome === "graded");
@@ -118,7 +118,7 @@ export function procedureGate(rows: B2Row[], models: ModelKey[]) {
 }
 
 export type Stage = "end" | "look";
-export type Decision = { key: "incomplete" | "gate" | "cut" | "keep-strengthen" | "keep" | "null"; text: string };
+export type Decision = { key: "incomplete" | "gate" | "captain" | "cut" | "keep-strengthen" | "keep" | "null"; text: string };
 export type Reading = {
   stage: Stage; planned: number; complete: ModelKey[]; incomplete: Partial<Record<ModelKey, string[]>>; gate: ReturnType<typeof procedureGate> | null;
   passes: Pooled | null; regression: Pooled | null; delivery: Pooled | null; bound: number; regressionRead: boolean; decision: Decision; beside: Pooled[];
@@ -140,8 +140,9 @@ export function reading(rows: B2Row[], stage: Stage, planned: number): Reading {
   const p1 = incomplete.p1 ? " (particle-1 left out: " + incomplete.p1.join("; ") + ")" : "";
   const out = { ...base, gate, passes, regression, beside, delivery: null as Pooled | null };
   if (!gate.pass) return { ...out, decision: { key: "gate", text: "The procedure gate fails (prove-it minus gstack followed " + (gate.gap === null ? "n/a" : pts(gate.gap)) + " points pooled, Opus prove-it " + pct(gate.opus) + "): the procedure didn't reach the sessions. No reading on outcomes. FIX-METHOD on exposure; gstack changes nothing." + p1 } };
-  const z = passes.z ?? 0, rz = regression.z ?? 0, rb = BOUNDS.regression;
-  if (z <= -bound || (regressionRead && rz <= -rb)) return { ...out, decision: { key: "cut", text: "Test-first costs fixes (passes z " + num(passes.z) + ", passes with a regression test z " + num(regression.z) + "). CUT-CANDIDATE: gstack drops the routing hook's bug-report rule and the \"focused failing test first\" clause of its CLAUDE.md bug line." + p1 } };
+  const z = passes.z ?? 0, rz = regression.z ?? 0, rb = BOUNDS.regression, regressionBelow = regressionRead && rz <= -rb;
+  if (z >= bound && regressionBelow) return { ...out, decision: { key: "captain", text: "Passes above 0 (z " + num(passes.z) + " >= " + bound + ") while passes with a regression test are below 0 (z " + num(regression.z) + " <= -" + rb + "). The table makes no reading: the result goes to the Captain with both contrasts." + p1 } };
+  if (z <= -bound || regressionBelow) return { ...out, decision: { key: "cut", text: "Test-first costs fixes (passes z " + num(passes.z) + ", passes with a regression test z " + num(regression.z) + "). CUT-CANDIDATE: gstack drops the routing hook's bug-report rule and the \"focused failing test first\" clause of its CLAUDE.md bug line." + p1 } };
   if (z >= bound) {
     const delivery = pooled(rows, complete, "prove-it", "line", "pass");
     const skill = delivery.lo !== null && delivery.lo > 0;
@@ -226,6 +227,7 @@ export function pilotReport(rows: B2Row[], pilot: readonly string[], armTree: (l
     for (const a of ARM_KEYS) {
       const label = labelOf(host, a), all = armRows(mine, a), g = graded(all), why: string[] = [...armTree(label)];
       const every = (f: (r: B2Row) => boolean, what: string) => { const bad = all.filter((r) => !f(r)); if (!all.length || bad.length) why.push(what + (all.length ? " (" + bad.length + " of " + all.length + " sessions not)" : " (no session)")); };
+      if (m === "sol") every((r) => !!r.metered_effort?.length && r.metered_effort.every((e) => e === SOL_EFFORT), "every metered request at effort " + SOL_EFFORT);
       const missing = pilot.filter((t) => !g.some((r) => r.task === t));
       if (missing.length) why.push("supply: not graded on " + missing.join(", "));
       if (a === "none" || a === "line") {

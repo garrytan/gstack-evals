@@ -7,7 +7,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { b2Row, regression } from "../../lanes/test-first/table.ts";
+import { b2Row, meteredEfforts, regression } from "../../lanes/test-first/table.ts";
 
 const root = mkdtempSync(join(tmpdir(), "b2-table-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -74,6 +74,17 @@ describe("Codex rows", () => {
     expect(row({ arm: "cx-none", rollouts: (x) => x.replaceAll('"cli_version":"0.170.0"', '"cli_version":"0.171.0"') }).reason).toBe("the root rollout's Codex is 0.171.0, not 0.170.0");
     expect(row({ arm: "cx-none", rollouts: null }).reason).toBe("no rollout copied out for the root thread");
     expect(row({ arm: "cx-none", responses: 0 }).reason).toStartWith("no model response");
+  });
+  test("the proxy's metered requests give each trial's efforts; refused and other events don't count", () => {
+    const log = join(root, "proxy-requests.jsonl"), t = TASK + "__x";
+    writeFileSync(log, [{ event: "session_open", session: "s1", trial: t + "__env" }, { event: "request", session: "s1", trial: t + "__env", wire: "responses", reasoning_effort: "low" }, { event: "late_usage", session: "s1", trial: t + "__env", wire: "responses", reasoning_effort: null }, { event: "refused", session: "s1", trial: t + "__env", wire: "responses", reasoning_effort: "high" }, { event: "request", session: "s2", trial: "other", route_mark: false }].map((e) => JSON.stringify(e)).join("\n") + "\n");
+    const m = meteredEfforts([log]);
+    expect([...m.get(t)!]).toEqual(["low", "none"]);
+    expect(m.has("other")).toBe(false);
+    const dir = trial({ arm: "cx-none" }), name = JSON.parse(readFileSync(join(dir, "result.json"), "utf8")).trial_name;
+    expect(b2Row(dir, { part: null, sessions: new Map(), home: "/root", metered: new Map([[name, new Set(["low"])]]) })!.metered_effort).toEqual(["low"]);
+    expect(row({ arm: "cx-none" }).metered_effort).toBeNull();
+    expect(row({ arm: "none" }).metered_effort).toBeNull();
   });
   test("a Codex arm under the Claude Code agent is refused, and another agent's trial is left out", () => {
     expect(() => row({ arm: "cx-none", agent: "laneb-claude-code" })).toThrow("E_B2_TABLE");

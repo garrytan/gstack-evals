@@ -37,6 +37,9 @@ export type B2Row = {
   /** The Agent SDK's version is not in a Claude Code session's own record; null there. */
   sdk_version: string | null;
   effort: string[] | null;
+  /** Codex: each distinct reasoning.effort the proxy's request log metered for the trial ("none" when a request sent none);
+   *  null on Claude Code or with no request log. */
+  metered_effort: string[] | null;
   outcome: "graded" | "cap_stop" | "infra";
   reason: string;
   pass: boolean;
@@ -73,7 +76,8 @@ export type B2Row = {
   /** The read audit of the no-gstack arms: reads of gstack paths, skills or a drive. null in a gstack arm. */
   audit: number | null;
 };
-export type B2TableConfig = { jobs: { dir: string; part?: string }[]; sessions: string[]; home?: string };
+export type B2TableConfig = { jobs: { dir: string; part?: string }[]; sessions: string[]; requests?: string[]; home?: string };
+type Ctx = { part: string | null; sessions: Map<string, SessionRow[]>; home: string; metered?: Map<string, Set<string>> };
 
 const readJson = (p: string) => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
 const readText = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : null);
@@ -162,7 +166,7 @@ const outcomeOf = (b: { result: unknown; exc: string | null; reward: number | nu
   return { outcome: "graded" as const, reason: limit ? limit + ", graded on the shipped diff" : b.exc ? b.exc + ", graded on the shipped diff" : "graded" };
 };
 
-export function claudeRow(dir: string, ctx: { part: string | null; sessions: Map<string, SessionRow[]>; home: string }): B2Row {
+export function claudeRow(dir: string, ctx: Ctx): B2Row {
   const b = base(dir, ctx, "claude");
   const sdk = readText(join(b.ev, "sdk-messages.jsonl")) ?? "";
   const recs = parseLog(sdk);
@@ -183,7 +187,7 @@ export function claudeRow(dir: string, ctx: { part: string | null; sessions: Map
   const hookLog = readText(join(b.ev, "gstack-hooks", "hooks", "skill-route.log"));
   return {
     schema: "b2-session/1", host: "claude", label: b.d.label, arm: b.d.arm, part: ctx.part, task: b.task, repo: b.repo, trial: b.trial,
-    model, cli_version: cli, sdk_version: null, effort: null, ...o, pass, reward: b.reward, ...regression(b.patch, pass),
+    model, cli_version: cli, sdk_version: null, effort: null, metered_effort: null, ...o, pass, reward: b.reward, ...regression(b.patch, pass),
     followed: det ? det.followed : null, followed_b2: det ? det.followed_b2 ?? null : null, followed_as_merged: det ? det.followed_as_merged : null, detect: det, unreadable_items: null,
     steps_seen: transcript === null ? null : ccSteps(transcript), line_seen: sdk.includes(LINE) || (transcript ?? "").includes(LINE), skills_listed: Array.isArray(init?.skills) ? init.skills.map(String) : [], prove_it_loads: loads.prove_it, gstack_loads: loads.others,
     routing_named: b.d.gstack ? namedOf(hookLog) : null, start_seen: claudeStartSeen(sdk),
@@ -194,7 +198,7 @@ export function claudeRow(dir: string, ctx: { part: string | null; sessions: Map
   };
 }
 
-export function codexRow(dir: string, ctx: { part: string | null; sessions: Map<string, SessionRow[]> }): B2Row {
+export function codexRow(dir: string, ctx: Omit<Ctx, "home">): B2Row {
   const b = base(dir, ctx, "codex");
   const files = walk(join(b.ev, "codex-sessions")).filter((f) => /rollout-.*\.jsonl$/.test(f));
   const threads: Thread[] = files.map(readThread), texts = files.map((f) => readFileSync(f, "utf8"));
@@ -216,7 +220,7 @@ export function codexRow(dir: string, ctx: { part: string | null; sessions: Map<
   const events = readText(join(b.ev, "codex-events.jsonl")) ?? "";
   return {
     schema: "b2-session/1", host: "codex", label: b.d.label, arm: b.d.arm, part: ctx.part, task: b.task, repo: b.repo, trial: b.trial,
-    model: root?.models[0] ?? null, cli_version: root?.cli_version ?? null, sdk_version: null, effort: efforts, ...o, pass, reward: b.reward, ...regression(b.patch, pass),
+    model: root?.models[0] ?? null, cli_version: root?.cli_version ?? null, sdk_version: null, effort: efforts, metered_effort: ctx.metered ? [...(ctx.metered.get(b.trial) ?? [])].sort() : null, ...o, pass, reward: b.reward, ...regression(b.patch, pass),
     followed: det ? det.followed : null, followed_b2: det ? det.followed_b2 ?? null : null, followed_as_merged: det ? det.followed_as_merged : null, detect: det, unreadable_items: unreadable,
     steps_seen: loads ? loads.steps_arrived || loads.loads["prove-it"].loaded : null, line_seen: texts.some((x) => x.includes(LINE)), skills_listed: codexListed(texts), prove_it_loads: loads?.loads["prove-it"].loaded ? 1 : 0, gstack_loads: codexGstackLoads(texts),
     routing_named: hook && hook.position !== "log missing" ? hook.named : null, start_seen: codexStartSeen(texts),
@@ -227,7 +231,7 @@ export function codexRow(dir: string, ctx: { part: string | null; sessions: Map<
 }
 
 /** One row per trial dir of B2's agents; any other agent's trial is left out. */
-export function b2Row(dir: string, ctx: { part: string | null; sessions: Map<string, SessionRow[]>; home: string }): B2Row | null {
+export function b2Row(dir: string, ctx: Ctx): B2Row | null {
   const name = readJson(join(dir, "config.json"))?.agent?.name;
   if (name === CLAUDE_AGENT) return claudeRow(dir, ctx);
   if (name === CODEX_AGENT.name) return codexRow(dir, ctx);
@@ -238,18 +242,31 @@ export function buildB2Table(cfg: B2TableConfig): B2Row[] {
   if (!Array.isArray(cfg.jobs) || !cfg.jobs.length) throw new Error("E_USAGE b2 table: the config needs jobs, each {dir, part}");
   if (!Array.isArray(cfg.sessions)) throw new Error("E_USAGE b2 table: the config needs sessions, the proxy-sessions.jsonl files of the runs in jobs");
   const sessions = sessionsByTrial(readSessionRows(cfg.sessions));
+  const metered = cfg.requests ? meteredEfforts(cfg.requests) : undefined;
   const out: B2Row[] = [];
   for (const job of cfg.jobs) for (const name of readdirSync(job.dir).sort()) {
     const d = join(job.dir, name);
     if (!statSync(d).isDirectory()) continue;
-    const row = b2Row(d, { part: job.part ?? null, sessions, home: cfg.home ?? "/root" });
+    const row = b2Row(d, { part: job.part ?? null, sessions, home: cfg.home ?? "/root", metered });
     if (row) out.push(row);
   }
   return out;
 }
-/** A pulled part dir's Harbor jobs and its proxy's session rows, as buildB2Table takes them. */
+/** The proxy's metered Responses requests (its "request" and "late_usage" lines) by trial: each reasoning.effort sent. */
+export function meteredEfforts(paths: string[]): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const p of paths) for (const l of readFileSync(p, "utf8").split("\n")) {
+    if (!l.trim()) continue;
+    const e = JSON.parse(l);
+    if ((e.event !== "request" && e.event !== "late_usage") || e.wire !== "responses" || typeof e.trial !== "string") continue;
+    const key = e.trial.replace(/__env$/, "");
+    out.set(key, (out.get(key) ?? new Set()).add(typeof e.reasoning_effort === "string" ? e.reasoning_effort : "none"));
+  }
+  return out;
+}
+/** A pulled part dir's Harbor jobs and its proxy's session rows and request log, as buildB2Table takes them. */
 export function pulledInputs(pulled: string, part: string): B2TableConfig {
-  const d = join(pulled, "jobs"), s = join(pulled, "out/proxy-sessions.jsonl");
-  return { jobs: existsSync(d) ? readdirSync(d).filter((j) => statSync(join(d, j)).isDirectory()).map((j) => ({ dir: join(d, j), part })) : [], sessions: existsSync(s) ? [s] : [] };
+  const d = join(pulled, "jobs"), s = join(pulled, "out/proxy-sessions.jsonl"), q = join(pulled, "out/proxy-requests.jsonl");
+  return { jobs: existsSync(d) ? readdirSync(d).filter((j) => statSync(join(d, j)).isDirectory()).map((j) => ({ dir: join(d, j), part })) : [], sessions: existsSync(s) ? [s] : [], requests: existsSync(q) ? [q] : [] };
 }
 export { PROVE_IT };
