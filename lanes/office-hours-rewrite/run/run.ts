@@ -28,7 +28,7 @@
 //   image with the Sol driver (run/codex.ts), its model calls through the lane's model tap (run/tap.ts) to the same
 //   proxy slot. run/codex.ts says what differs from the Claude Code arms.
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { claudeCodeDriver, claudeCodeEnv, type ClaudeProvider, type NextUser } from "../../../src/adapters/claude-code/driver.ts";
 import type { ReasonCode } from "../../../src/errors/codes.ts";
 import { armNamespaces, slotModels, type HostRig } from "../../../src/skill-eval/cli/run-host.ts";
@@ -58,6 +58,7 @@ import { offPin } from "../pinned.ts";
 import { attemptOutcome, closingLoop, firstMessage, safetyStop, sessionKindOf, settle, type AttemptRead, type Line, type Outcome } from "./session.ts";
 import type { PersonSheet, SimCall } from "../../../src/persona-sim/sim.ts";
 import { loadPerson } from "../sim/founder.ts";
+import { CLAUDE_SESSION } from "../read/load.ts";
 
 export { copyReceipts, receiptsAfter };
 
@@ -171,8 +172,11 @@ export function priorOf(dir: string, meta: BriefMeta): PriorSession | null {
   return JSON.parse(readFileSync(path, "utf8")) as PriorSession;
 }
 
-/** The sandbox with each agent container probed once, just before it stops: the founder lane's probe, the arm env names and, on a skill arm, its pin check. bearer names the one key-shaped variable that carries the slot's session bearer (Sol's OPENAI_API_KEY). */
-export function ohrProbed(sandbox: Sandbox, o: { docker: string; home: string; pin: Pin | null; root: string | null; check?: { command: string; problems: (printed: string) => string[] }; bearer?: string; onProbe: (p: { contained: string[] | null; pin: string[] | null }) => void }): Sandbox {
+/** The container step that prints Claude Code's own session files under HOME, where the /office-hours expansion A8 reads is kept (the SDK stream never carries it). */
+export const claudeSessionCommand = (home: string): string => "cat " + JSON.stringify(home) + "/.claude/projects/*/*.jsonl";
+
+/** The sandbox with each agent container probed once, just before it stops: the founder lane's probe, the arm env names and, on a skill arm, its pin check. bearer names the one key-shaped variable that carries the slot's session bearer (Sol's OPENAI_API_KEY). session, on a Claude Code container, is the host path its session files are copied to for A8; a failed read writes nothing, so A8 finds no copy. */
+export function ohrProbed(sandbox: Sandbox, o: { docker: string; home: string; pin: Pin | null; root: string | null; check?: { command: string; problems: (printed: string) => string[] }; bearer?: string; session?: string; onProbe: (p: { contained: string[] | null; pin: string[] | null }) => void }): Sandbox {
   return {
     ...sandbox,
     agent(task, opts) {
@@ -189,6 +193,11 @@ export function ohrProbed(sandbox: Sandbox, o: { docker: string; home: string; p
             const env = names.exitCode === 0 ? armEnvProblems(names.stdout.split("\n").map((s) => s.trim()).filter(Boolean)) : null;
             const pinned = o.check ? session.exec(o.check.command, 60_000) : o.pin && o.root ? session.exec(containerPinCommand(o.root, o.pin), 60_000) : null;
             o.onProbe({ contained: p && env ? [...departures(p), ...env.map((e) => "arm env: " + e)] : null, pin: o.check ? (pinned && pinned.exitCode === 0 ? o.check.problems(pinned.stdout) : null) : !o.pin ? [] : pinned && pinned.exitCode === 0 ? containerPinProblems(pinned.stdout, o.pin) : null });
+            const kept = o.session ? session.exec(claudeSessionCommand(o.home), 60_000) : null;
+            if (o.session && kept?.exitCode === 0 && kept.stdout) {
+              mkdirSync(dirname(o.session), { recursive: true });
+              writeFileSync(o.session, kept.stdout);
+            }
           }
           session.stop();
         },
@@ -262,7 +271,7 @@ export const dockerLaunch: Launch = async (o) => {
   const home = base.homePath(o.dir);
   const install = o.rig.arms[o.entry.arm]!;
   let found: { contained: string[] | null; pin: string[] | null } = { contained: null, pin: null };
-  const sandbox = ohrProbed(base, { docker: o.docker, home, pin: skillArm ? o.pin : null, root: skillArm && install.gstack ? containerRoot(home, install.gstack) : null, onProbe: (p) => (found = p) });
+  const sandbox = ohrProbed(base, { docker: o.docker, home, pin: skillArm ? o.pin : null, root: skillArm && install.gstack ? containerRoot(home, install.gstack) : null, session: join(o.dir, "host", CLAUDE_SESSION), onProbe: (p) => (found = p) });
   const skill = skillArm && install.skill ? { name: "office-hours", roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
   const proxy = { baseUrl: o.rig.baseUrl, slot: binding.slot, token: binding.token };
   const envProblems = armEnvProblems(claudeCodeEnv({ model, provider, proxy, disable1mContext: true }));

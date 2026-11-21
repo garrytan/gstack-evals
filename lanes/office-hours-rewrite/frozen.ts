@@ -85,6 +85,17 @@ export const CODEX_RENDERED: Readonly<Record<SkillArm, { sha256: string; bytes: 
   current: { sha256: "ba7f2e3cd426f871deb5bb5c65c6dbca3a3c676d71eae9ac307133a02b696f9a", bytes: 48_068 },
   new: { sha256: "c8b25fa81d3143c908b824955898e564702d9585858705cc0a9984137e9dbb26", bytes: 48_058 },
 };
+/**
+ * A8's body on Claude Code (the second attempt's pre-run change 3): each pin's office-hours/SKILL.md less its frontmatter
+ * (the lines from the opening --- to the closing --- and one blank line after it), which is what Claude Code 2.1.314
+ * expands /office-hours into. The expansion is one user-side message in Claude Code's own session file: "Base directory
+ * for this skill: <dir>", a blank line, this body, then "\n\nARGUMENTS: " and the rest of the first message. A keyless
+ * capture on that binary showed the body arrives byte for byte, with no substitution. chars counts UTF-16 code units.
+ */
+export const CLAUDE_BODY: Readonly<Record<SkillArm, { sha256: string; chars: number }>> = {
+  current: { sha256: "ff57c98d797dbf55ded81fe8f591bc7a6348ba383504c534836b0f216681b3e9", chars: 42_600 },
+  new: { sha256: "5e0e5b6a7889418836171dc2d33f85b4c9ddb5f80ab901ca4cfeb7f2ad85af49", chars: 42_526 },
+};
 /** Changed lines in the unified diff from current to new, the same for the pins' office-hours/SKILL.md and for Codex's render of it. */
 export const RENDER_GAP = 62;
 

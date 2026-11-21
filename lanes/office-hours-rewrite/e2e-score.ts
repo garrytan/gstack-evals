@@ -18,6 +18,7 @@ import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { SEED } from "./frozen.ts";
 import { admission } from "./read/admission.ts";
+import { skillLoads } from "./read/load.ts";
 import { decide } from "./read/decision.ts";
 import { runE2e, type Check } from "./run/e2e.ts";
 import { loadBriefs } from "./run/manifest.ts";
@@ -131,7 +132,7 @@ export async function scorePass(o: { out: string; briefsDir: string }): Promise<
 
     let refused = "";
     try {
-      admission({ rows: scoredAll, sessions: all, audit: { pass: true }, judges: { astra: true, opus: true }, label_usd: 0.06 });
+      admission({ rows: scoredAll, sessions: all, loads: skillLoads(all), audit: { pass: true }, judges: { astra: true, opus: true }, label_usd: 0.06 });
     } catch (e) {
       refused = (e as Error).message;
     }

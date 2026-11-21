@@ -61,6 +61,10 @@ Copied and adapted, because the shapes differ:
   (E_OHR_T8_SEED).
 - The seeded profile is written into the work repo's state root before the trial starts.
 - The container's pin check runs sha256sum when the container stops; the host tree is checked once at rig open.
+- A Claude Code container's end step also copies Claude Code's own session files (HOME's .claude/projects/*/*.jsonl)
+  to host/claude-session.jsonl beside the transcript, for A8; the SDK stream never carries the skill expansion. A failed
+  read writes nothing, so A8 finds no copy and fails that session. Sol containers copy nothing: their transcript holds
+  the <skill> item.
 - The arm env is checked on the driver's env and on the container's env names.
 - Manifest-level drops come in as a list; the reserve rule fills them, and a brief with a stage 2 session cannot drop.
 - --models and --arms filters are allowed, and become part of the frozen manifest.

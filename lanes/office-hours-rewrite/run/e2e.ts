@@ -11,14 +11,16 @@
 //       runs Bash in the container: gstack-session-kind, gstack-slug, the profile's --kill-check and --read.
 //   fx-build (a builder brief)                  none: no block after the first closing message, a block after the
 //       second; current and new: as fx-t8.
-// Every key variable is removed from this process first; the only key-shaped values are placeholders the proxy and the
-// meter hand the stub. It prints one PASS or FAIL line per check, or one SKIP line when Docker is not there. The rig
-// finds both pin commits in a local repository (a gstack checkout, or one under <state>/sources/); it never fetches.
+// A8's reader runs on every skill row: Claude Code's copied session file against the frozen body on Opus, and the
+// transcript's <skill> item against the rendered file on Sol. Every key variable is removed from this process first;
+// the only key-shaped values are placeholders the proxy and the meter hand the stub. It prints one PASS or FAIL line
+// per check, or one SKIP line when Docker is not there. The rig finds both pin commits in a local repository (a gstack
+// checkout, or one under <state>/sources/); it never fetches.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, posix } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { sse, type Block } from "../../../quick/laneb/runner/fake_upstream.ts";
 import { recordApproval } from "../../../src/runner/ledger/ledger.ts";
 import { ledgerPath, recordPath } from "../../../src/runner/ledger/paths.ts";
@@ -28,7 +30,8 @@ import { dockerRig, type HostRig } from "../../../src/skill-eval/cli/run-host.ts
 import { readJournalLines } from "../../../src/trial/review/cost.ts";
 import { openMeter } from "../../product-value/meter.ts";
 import { createHash } from "node:crypto";
-import { ARMS, CLOSING, CODEX, CODEX_RENDERED, DENIED_TOOLS, firstMessage, LENS_LINE, MODEL_KEYS, PINS } from "../frozen.ts";
+import { ARMS, CLAUDE_BODY, CLOSING, CODEX, CODEX_RENDERED, DENIED_TOOLS, firstMessage, LENS_LINE, MODEL_KEYS, PINS } from "../frozen.ts";
+import { CLAUDE_SESSION, skillLoad } from "../read/load.ts";
 import { withCodex } from "./codex-rig.ts";
 import { parseBlock } from "../score/block.ts";
 import { simTurn } from "../sim/founder.ts";
@@ -258,9 +261,12 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
       const r = row(arm, brief);
       check(arm + " on " + brief + ": the container printed SESSION_KIND: interactive and the row reads it", r?.session_kind === "interactive", String(r?.session_kind));
       check(arm + " on " + brief + ": gstack-slug prints idea in the work repo", /SLUG: idea\b/.test(transcript(arm, brief)), (/SLUG: [\w-]+/.exec(transcript(arm, brief)) ?? ["no SLUG line"])[0]);
+      const load = r ? skillLoad(r) : null;
+      check(arm + " on " + brief + ": Claude Code's session file came out as host/claude-session.jsonl, and A8 reads the pin's whole skill body in it", load?.pass === true && load.sha256 === CLAUDE_BODY[arm].sha256, load ? load.why + " (" + load.sha256?.slice(0, 12) + ")" : "no row");
       check(arm + " on " + brief + ": the pin check in the container passed and the state root was copied out", lines.find((l) => l.id === "s1/opus/" + arm + "/" + brief)?.attempts.every((a) => a.contained !== null) === true && !!r?.state_root && existsSync(r.state_root), r?.state_root ?? "no row");
     }
   }
+  check("none rows: Claude Code's session file came out for them too", ["fx-t8", "fx-build"].every((b) => { const t = row("none", b)?.transcript; return !!t && existsSync(join(dirname(t), CLAUDE_SESSION)); }), ["fx-t8", "fx-build"].map((b) => String(row("none", b)?.transcript ?? "no transcript")).join(", "));
   check("none rows have no session kind", ["fx-t8", "fx-build"].every((b) => row("none", b)?.session_kind === null), ["fx-t8", "fx-build"].map((b) => String(row("none", b)?.session_kind)).join(", "));
   check("new on fx-t8: the seeded commitment is due (KILL_DUE: yes)", transcript("new", "fx-t8").includes("KILL_DUE: yes"), (/KILL_DUE: \w+/.exec(transcript("new", "fx-t8")) ?? ["no KILL_DUE line"])[0]);
   check("new on fx-build: no seed, so nothing is due", !transcript("new", "fx-build").includes("KILL_DUE: yes"), (/KILL_DUE: \w+/.exec(transcript("new", "fx-build")) ?? ["no KILL_DUE line"])[0]);
@@ -275,6 +281,11 @@ export async function runE2e(o: E2eOptions = {}): Promise<{ checks: Check[]; dir
   const NL = String.fromCharCode(10);
   const bodies = new Set(sol.flatMap((r) => r.skills).map((s) => sha(s.split("</path>" + NL)[1]?.split(NL + "</skill>")[0] ?? "")));
   check("Sol: each skill arm's whole rendered office-hours SKILL.md arrived as Codex's <skill> item, and the none arm got none", bodies.size === 2 && bodies.has(CODEX_RENDERED.current.sha256) && bodies.has(CODEX_RENDERED.new.sha256) && sol.filter((r) => !r.founder[0]?.startsWith("$office-hours")).every((r) => r.skills.length === 0), [...bodies].map((b) => b.slice(0, 12)).join(", "));
+  for (const arm of ["current", "new"] as const) {
+    const r = solRow(arm)?.row;
+    const load = r ? skillLoad(r) : null;
+    check("Sol " + arm + ": A8 reads the whole rendered SKILL.md in the transcript's <skill> item", load?.pass === true && load.sha256 === CODEX_RENDERED[arm].sha256, load ? load.why + " (" + load.sha256?.slice(0, 12) + ")" : "no row");
+  }
   check("Sol: every request named gpt-6.1-sol at low effort, with no web search and no sleep tool", sol.length > 0 && sol.every((r) => r.model === CODEX.model && r.effort === "low" && !r.tools.some((t) => /web_search|sleep/.test(t))), sol.length + " requests; models " + [...new Set(sol.map((r) => r.model))].join() + "; efforts " + [...new Set(sol.map((r) => r.effort))].join());
   check("Sol none: no request names gstack", sol.filter((r) => !r.founder[0]?.startsWith("$office-hours")).every((r) => !/gstack/i.test(r.text)), sol.filter((r) => !r.founder[0]?.startsWith("$office-hours")).length + " none-arm requests");
   for (const arm of ARMS) {

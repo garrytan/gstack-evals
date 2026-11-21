@@ -21,6 +21,7 @@ import { authorRun, checkAnswers, haltOf, type Checkpoint, type Reuse } from "./
 import { gitReader, loadScreen } from "./author/screens.ts";
 import { GOLD_EFFORT, JUDGE_EFFORT, REUSE_PLAINTEXT_SHA256, SEED } from "./frozen.ts";
 import { admission, admissionState, type AdmissionReading } from "./read/admission.ts";
+import { skillLoads } from "./read/load.ts";
 import { decide } from "./read/decision.ts";
 import { authoringEnd, readStops } from "./read/stops.ts";
 import { SPLIT } from "./ledger.ts";
@@ -327,11 +328,14 @@ function read(argv: string[], io: Io): number {
     const out = fresh("--out", one(f, "--out")!);
     const label_usd = Number(one(f, "--label-usd"));
     if (!(label_usd >= 0)) usage("--label-usd is the measured label dollars a session");
-    const reading = admission({ rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)), sessions: launchRows(f.get("--launch")!.map((d) => outside("--launch", d))), audit: { pass: readJson<{ read: string }>(outside("--audit", one(f, "--audit")!)).read === "pass" }, judges: passed(outside("--judge-check", one(f, "--judge-check")!)), label_usd });
+    const sessions = launchRows(f.get("--launch")!.map((d) => outside("--launch", d)));
+    const reading = admission({ rows: readJson<ScoredSession[]>(outside("--scored", one(f, "--scored")!)), sessions, loads: skillLoads(sessions), audit: { pass: readJson<{ read: string }>(outside("--audit", one(f, "--audit")!)).read === "pass" }, judges: passed(outside("--judge-check", one(f, "--judge-check")!)), label_usd });
     const reads = [...(f.has("--prior") ? [readJson<AdmissionReading>(one(f, "--prior")!)] : []), reading];
     const state = admissionState(reads);
     writeJson(out, { ...reading, state });
     for (const c of reading.conditions) io.out(c.id + " " + (c.pass ? "pass" : "FAIL") + " " + JSON.stringify(c.values));
+    const a8 = reading.conditions.find((c) => c.id === "A8")!.values as { left_out: string[]; stage2_particle_arms: string[] };
+    if (a8.left_out.length) io.out("ohr read admission: A8 leaves " + a8.left_out.join(", ") + " out of stage 2; launch particle-1's stage 2 with --arms " + a8.stage2_particle_arms.join(" "));
     io.out("ohr read admission: " + state);
     return state === "admitted" ? 0 : 2;
   }

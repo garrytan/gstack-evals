@@ -3,7 +3,8 @@
 This folder turns scored sessions into the readings the preregistration freezes
 (wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg, sections 7, 8, 9's re-reading note, 10, 11 and 12's
 admission list). Every function is pure over ScoredSession rows from ../types.ts, plus small inputs a row does not
-carry: admission flags, the cap stop, the judge-check results and G1's hand reads. Nothing here calls a model or spends.
+carry: admission flags, the cap stop, the judge-check results and G1's hand reads. The one exception is load.ts, which
+reads the host files a stage 1 skill session left for A8. Nothing here calls a model or spends.
 The only subprocess is the power.py re-read, and its runner is injected, so tests spawn nothing.
 
 ## Modules
@@ -19,19 +20,25 @@ The only subprocess is the power.py re-read, and its runner is injected, so test
 - builder.ts: section 7. Kept whole on the brief-and-model pairs where both skill arms scored, read by the corrected
   method 10 against the -15 point margin; the builder right call through the estimator, each brief its own cluster.
 - guards.ts: G1 to G3 (section 10) and the missing limits (section 8), each held or broken with its numbers.
-- admission.ts: A1 to A7 (section 12) over stage 1's scored rows, stage 1's run rows and four flags, and the one-repair
-  rule (admitted, repair, or FIX-METHOD after a second failure).
+- admission.ts: A1 to A7 (section 12) and the second attempt's A8 (its pre-run change 3) over stage 1's scored rows,
+  stage 1's run rows, A8's reads and four flags, and the one-repair rule (admitted, repair, or FIX-METHOD after a second
+  failure).
+- load.ts: A8's reader. On Claude Code it reads Claude Code's own session file, which the container's end step copies
+  to host/claude-session.jsonl, for the "Base directory for this skill" message and checks its body against
+  CLAUDE_BODY; on Codex CLI it checks the <skill> item in host/transcript.ndjson against CODEX_RENDERED.
 - decision.ts: section 10's ordered table. Every row's condition is computed and returned; the first that holds decides.
   Beside the outcome go the two readings: new minus none not shown to beat no gstack by the bar, and current minus none
   wholly below zero.
 - report.ts: section 11's lead table (three contrasts, pooled then each model, particle-1 marked descriptive) and R1,
   R2, R3 and R by arm, as data.
 - reread.ts: section 9's re-read of power.py at stage 1's observed control rates, at rho 0.5 and 0.843.
-- seams.ts: `export const seams: Seam[]`, 57 seams. Both worked examples and section 7's example; all 21 planted cases of
+- seams.ts: `export const seams: Seam[]`, 74 seams. Both worked examples and section 7's example; all 21 planted cases of
   section 10 (every row reachable, and each case where a lower row also holds names it, so the order is driven); every
   guardrail, missing limit and builder check on a known-good and a known-bad side; every admission condition on both
-  sides (A7 twice: session kind and none-arm read) and the one-repair rule. Its fixture builders (row, founderRows,
-  builderRows, sessionRow, stage1Input, PLANTED, plant) are exported for tests/ohr/read.
+  sides (A7 twice: session kind and none-arm read; A8 through planted host files on both hosts: a whole body, one cut
+  short, a missing copy and an unreadable one, plus a particle-1 arm left out and a session with no read) and the
+  one-repair rule. Its fixture builders (row, founderRows, builderRows, sessionRow, stage1Input, plantLoad, PLANTED,
+  plant) are exported for tests/ohr/read.
 
 ## Pinned to published numbers
 
@@ -99,11 +106,18 @@ The only subprocess is the power.py re-read, and its runner is injected, so test
 16. Row 6 holds when no row above it does. Its condition also prints as the preregistration words it: the interval
     includes zero and reaches +15.
 17. Admission reads once and at most once more after its one repair; a third read refuses.
+18. A8 reads every stage 1 skill session that left a transcript. A skill session that ended missing with no transcript
+    never reached the model, so it is listed as never started and read for nothing, as A7 lists it. A session with no
+    read, or whose copy is missing, unreadable, cut, changed or the other pin's, fails. Claude Code's body is read by
+    length from the frozen figure, so an ARGUMENTS line inside the body cannot end it early, and what follows must be
+    nothing or a new ARGUMENTS line. A8 decides on Opus 5.5 and Sol; a particle-1 failure leaves that arm out of
+    particle-1's stage 2 (stage2_particle_arms names the arms its --arms keeps) and admission holds.
 
 ## What other modules must hand in
 
 - The scorer: one ScoredSession per manifest entry for stage 1 and stage 2, with kind, cluster, set and traction equal
   on every row of a brief (the readings refuse otherwise), and kept_whole.startup_only holding the detector's hits.
-- The run side: stage 1's SessionRow list, and whether any ledger item stopped on its cap.
+- The run side: stage 1's SessionRow list, and whether any ledger item stopped on its cap. For A8, each Claude Code
+  session's host/claude-session.jsonl beside its transcript, and each Codex session's transcript.
 - The judge check: pass or fail per production judge. The simulator audit: pass or fail.
 - A person: G1's hand read of every flagged new-arm builder transcript.
