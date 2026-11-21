@@ -347,6 +347,12 @@ describe("tighter parsing", () => {
     expect(has(check(prereg(swap("Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5", "<!--\n-->"))), 'practice 5: "## Judge check" has no "Judge:" line')).toBe(true);
   });
 
+  test("a backtick inside a closed comment does not hide the text after it", () => {
+    const body = "# The hook raised loads\n\n<!-- A literal backtick: ` --> and `inline code`\n\n" + PASSING_RESULTS.replace(/^# [^\n]*\n\n/, "");
+    expect(check({ [RESULTS]: post(RESULTS_ID, "finding", body) })).toEqual([]);
+    expect(check(prereg("Write `` <!-- `` to hide a note.\n\n" + PASSING_PREREG))).toEqual([]);
+  });
+
   test("a fenced <!-- does not hide the real sections after it", () => {
     expect(check(prereg("```\n<!-- a template note\n```\n\n" + PASSING_PREREG))).toEqual([]);
   });

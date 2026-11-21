@@ -350,15 +350,31 @@ function bodyLines(text: string): string[] {
   let fence = "";
   let comment = false;
   const visible = (l: string) => {
-    const masked = l.replace(/`[^`]*`/g, (m) => " ".repeat(m.length));
     let kept = "";
-    let at = 0;
-    for (const m of masked.matchAll(/<!--.*?(-->|$)/g)) {
-      kept += l.slice(at, m.index);
-      at = m.index + m[0].length;
-      if (!m[1]) comment = true;
+    let i = 0;
+    while (i < l.length) {
+      if (l.startsWith("<!--", i)) {
+        const end = l.indexOf("-->", i + 4);
+        if (end < 0) {
+          comment = true;
+          return kept;
+        }
+        i = end + 3;
+        continue;
+      }
+      const run = l.slice(i).match(/^`+/)?.[0];
+      if (!run) {
+        kept += l[i++];
+        continue;
+      }
+      const closer = new RegExp("(?<!`)" + run + "(?!`)", "g");
+      closer.lastIndex = i + run.length;
+      const shut = closer.exec(l);
+      const stop = shut ? shut.index + run.length : i + run.length;
+      kept += l.slice(i, stop);
+      i = stop;
     }
-    return kept + l.slice(at);
+    return kept;
   };
   return lines.slice(close + 1).flatMap((l) => {
     const f = l.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
