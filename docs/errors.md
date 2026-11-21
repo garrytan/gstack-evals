@@ -463,6 +463,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_DROP_CONTAINMENT](#e_cso_drop_containment) | 2 | U20 |
 | [E_CSO_SUPPLY](#e_cso_supply) | 2 | U20 |
 | [E_CSO_DRAW](#e_cso_draw) | 2 | U20 |
+| [E_CSO_ARM](#e_cso_arm) | 2 | U20 |
 | [E_CSO_SCAN](#e_cso_scan) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
 | [E_CSO_DROP_INSTALL_DEP](#e_cso_drop_install_dep) | 2 | U20 |
@@ -3605,6 +3606,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 A /cso eval draw was asked for something the plan does not allow: n2 outside 48 to 100 or not a multiple of 4, a re-pilot restriction other than floor or ceiling, or more positions than the built units fill.
 
 Fix: Read section 12's cost and headroom rules and ask for a draw they allow.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ARM
+
+A /cso eval arm is not the frozen one: a gstack home lacks a pinned file or holds it at another sha256, the clean-room home holds a gstack checkout, the home's tree hash differs from its install record, or a Codex arm was asked to run at latest or with no recorded model or CLI version.
+
+Fix: Reinstall the arm with its recipe at prereg.json's pin and verify it again. A Codex arm takes its model and CLI version from the session record.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 

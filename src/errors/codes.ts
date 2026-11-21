@@ -3941,6 +3941,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CSO_ARM: {
+    exit: 2,
+    meaning: "A /cso eval arm is not the frozen one: a gstack home lacks a pinned file or holds it at another sha256, the clean-room home holds a gstack checkout, the home's tree hash differs from its install record, or a Codex arm was asked to run at latest or with no recorded model or CLI version.",
+    fix: "Reinstall the arm with its recipe at prereg.json's pin and verify it again. A Codex arm takes its model and CLI version from the session record.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_CSO_SCAN: {
     exit: 2,
     meaning: "A /cso eval id scan did not finish: the tree is missing, a find, grep or git cat-file step failed, or the scan script exited non-zero. Containment fails closed, so no unit counts as clean on that tree.",
