@@ -2,8 +2,10 @@
 // Part R's load detector (section 4.5) against rollouts real Codex 0.170 wrote in the gstack arm images, driven by a
 // scripted stub model (fixtures/README.md).
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detect, hasWildcard, namesFile, namesOther, outputText } from "../../../lanes/codex-hooks/r/detect.ts";
+import { detect, hasWildcard, namesFile, namesOther, outputText, readHookLog, split, whyNoLoad } from "../../../lanes/codex-hooks/r/detect.ts";
 
 const FX = join(import.meta.dir, "fixtures");
 const d = (name: string) => detect(join(FX, name));
@@ -76,5 +78,50 @@ describe("loads in real Codex 0.170 rollouts", () => {
     expect(d("route").line_delivered).toBe(true);
     expect(d("route-off").line_delivered).toBe(false);
     expect(pi("route").loaded).toBe(false);
+  });
+});
+
+describe("hook log, reasons and split", () => {
+  const ROOT = "01a1fcf3-6f7a-7840-925b-97840f71d550";
+  test("the session's own first line gives the position", () => {
+    expect(readHookLog(join(FX, "direct"), d("direct").root)).toMatchObject({ position: "alone", event: "routed", named: ["prove-it"], lines: 1 });
+    expect(readHookLog(join(FX, "route-off"), d("route-off").root).position).toBe("log missing");
+    expect(readHookLog(join(FX, "direct"), "another-session").position).toBe("log missing");
+  });
+  test("two routes, no route and later lines", () => {
+    const dir = mkdtempSync(join(tmpdir(), "r-hook-"));
+    const at = (lines: string[]) => {
+      mkdirSync(join(dir, "gstack-hooks", "hooks"), { recursive: true });
+      writeFileSync(join(dir, "gstack-hooks", "hooks", "skill-route.log"), lines.join("\n") + "\n");
+      return readHookLog(dir, ROOT);
+    };
+    const t = "2026-11-21T07:12:54.834Z session=" + ROOT;
+    expect(at([t + " event=routed skill=prove-it score=2 source=x also=verify also_score=1 also_source=gstack host=codex"])).toMatchObject({ position: "first of two", named: ["prove-it", "verify"] });
+    expect(at([t + " event=routed skill=verify score=2 source=gstack also=prove-it also_score=1 also_source=y host=codex"]).position).toBe("second of two");
+    expect(at([t + " event=no-route reason=below-threshold chars=40 top=none host=codex", t + " event=routed skill=prove-it score=1"])).toMatchObject({ position: "not named", event: "no-route", lines: 2 });
+    expect(at(["2026-11-21T07:12:54.834Z session=other event=routed skill=prove-it", t + " event=routed skill=prove-it score=1"]).position).toBe("alone");
+    rmSync(dir, { recursive: true, force: true });
+  });
+  test("reasons in section 4.6's order", () => {
+    const why = (name: string) => whyNoLoad(d(name), readHookLog(join(FX, name), d(name).root));
+    expect(why("direct")).toBeNull();
+    expect(why("route-off")).toBe("hook log missing");
+    expect(why("two")).toBe("loaded /verify instead");
+    expect(why("fail")).toBe("load failed");
+    expect(why("named")).toBe("named, not loaded");
+    expect(why("route")).toBe("never named");
+    const quiet = { ...d("route"), line_delivered: false };
+    expect(whyNoLoad(quiet, readHookLog(join(FX, "route"), quiet.root))).toBe("line not delivered");
+  });
+  test("the split counts each position's loads", () => {
+    const rows = split([
+      { position: "alone", prove_it: true, verify: false },
+      { position: "alone", prove_it: false, verify: false },
+      { position: "first of two", prove_it: true, verify: true },
+      { position: "log missing", prove_it: false, verify: true },
+    ]);
+    expect(rows.map((r) => [r.position, r.sessions, r.prove_it, r.verify, r.neither])).toEqual([
+      ["alone", 2, 1, 0, 1], ["first of two", 1, 1, 1, 0], ["second of two", 0, 0, 0, 0], ["not named", 0, 0, 0, 0], ["log missing", 1, 0, 1, 0],
+    ]);
   });
 });

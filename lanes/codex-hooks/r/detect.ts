@@ -4,10 +4,13 @@
 // of its lines and the call that made it names its SKILL.md alone, with no wildcard path, or (c) Codex injected it as a
 // <skill> user message. A call that names the file and whose result holds none of its lines is a failed load. The skills'
 // lines come from the gstack arm's tar (arms.ts skillLines, quick/laneb/arms/manifests/codex-hooks-r/skill-lines.json).
+// The session's hook log (gstack-hooks/hooks/skill-route.log) gives what the hook named, and section 4.6's reasons and split
+// follow from both.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { SKILL_LINES, type SkillLines } from "./arms.ts";
 import { DETECT_SKILLS, PROVE_IT, type DetectSkill } from "./pins.ts";
+import type { Position } from "./routes.ts";
 
 export const HOOK_LINE = "gstack skill routing (UserPromptSubmit hook;";
 
@@ -154,4 +157,56 @@ export function detect(ev: string, skills: Record<DetectSkill, SkillLines> = rea
   }
   const steps_arrived = outputs.some((o) => o.text.includes(PROVE_IT.stepLine));
   return { root, threads, first_call, loads, steps_arrived, named_in_text, line_delivered };
+}
+
+/** Where the session's own hook log put prove-it, from the first line it wrote for the root thread (the task's prompt;
+ *  question replies by resume add later lines). A log with no line for the session counts as missing. */
+export type HookPosition = Position | "log missing";
+export type HookRead = { position: HookPosition; event: string | null; named: string[]; lines: number };
+export const HOOK_LOG = join("gstack-hooks", "hooks", "skill-route.log");
+
+export function hookFields(line: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of line.matchAll(/(?:^|\s)([\w-]+)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
+    let v = m[2];
+    if (v.startsWith('"')) try { v = JSON.parse(v); } catch {}
+    out[m[1]] ??= v;
+  }
+  return out;
+}
+
+export function readHookLog(ev: string, root: string | null): HookRead {
+  const file = join(ev, HOOK_LOG);
+  if (!existsSync(file)) return { position: "log missing", event: null, named: [], lines: 0 };
+  const lines = readFileSync(file, "utf8").split("\n").filter((l) => l.trim()).map(hookFields);
+  const mine = lines.filter((f) => root !== null && f.session === root);
+  const f = mine[0];
+  if (!f) return { position: "log missing", event: null, named: [], lines: lines.length };
+  const named = f.event === "routed" ? [f.skill, f.also].filter((s): s is string => !!s) : [];
+  const position: Position = named[0] === "prove-it" ? (named.length > 1 ? "first of two" : "alone") : named[1] === "prove-it" ? "second of two" : "not named";
+  return { position, event: f.event ?? null, named, lines: mine.length };
+}
+
+/** Why a graded r-on session on a covered task didn't load prove-it: the first of section 4.6's reasons that applies. */
+export const REASONS = ["hook log missing", "line not delivered", "loaded /verify instead", "load failed", "named, not loaded", "never named"] as const;
+export type Reason = (typeof REASONS)[number];
+export function whyNoLoad(d: Detection, hook: HookRead): Reason | null {
+  if (d.loads["prove-it"].loaded) return null;
+  if (hook.position === "log missing") return "hook log missing";
+  if (!d.line_delivered) return "line not delivered";
+  if (d.loads["gstack-verify"].loaded) return "loaded /verify instead";
+  if (d.loads["prove-it"].failed > 0) return "load failed";
+  if (d.named_in_text) return "named, not loaded";
+  return "never named";
+}
+
+/** Section 4.6's split: loads for each position (r-on's from its hook logs, r-off's from the route table). A session that
+ *  loaded both skills counts in both columns. */
+export const POSITIONS: HookPosition[] = ["alone", "first of two", "second of two", "not named", "log missing"];
+export type SplitRow = { position: HookPosition; sessions: number; prove_it: number; verify: number; neither: number };
+export function split(rows: { position: HookPosition; prove_it: boolean; verify: boolean }[]): SplitRow[] {
+  return POSITIONS.map((position) => {
+    const at = rows.filter((r) => r.position === position);
+    return { position, sessions: at.length, prove_it: at.filter((r) => r.prove_it).length, verify: at.filter((r) => r.verify).length, neither: at.filter((r) => !r.prove_it && !r.verify).length };
+  });
 }
