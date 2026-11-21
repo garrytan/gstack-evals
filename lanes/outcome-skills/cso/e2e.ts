@@ -3,10 +3,11 @@
 // config path among its files) runs through gstack-evals cso rerun's wired runner: the session image on the pinned base,
 // the pinned Claude Code on the real Agent SDK inside Harbor, and a temporary ledger whose driver serves cso-smoke at the
 // Docker bridge gateway. A stub upstream (no network, no key) plays the model. In none it answers with a finding and DONE;
-// in cso (given --home cso=<dir>, an installed gstack home) it runs the helper through the launcher (start, inspect,
-// finish) and then answers. Per arm and model it prints one PASS or FAIL line: the session ends completed with DONE; the
+// in cso and untold (given --home cso=<dir>, an installed gstack home they share) it runs the helper through the
+// launcher (start, inspect, read, finish) and then answers. Per arm and model it prints one PASS or FAIL line: the session ends completed with DONE; the
 // slot closed finalized; node, bun, python3 and gh resolve in the container; the record names the model id and Claude Code
-// version the session reported; exposure reads loaded and the procedure ran in cso and neither in none. Then teardown:
+// version the session reported; exposure reads neither loaded nor a procedure in none, the procedure ran on a daily
+// default-scope run with no tooling error in cso and untold, and loaded in cso. Then teardown:
 // the driver stops with exit 0. It exits 1 (E_CSO_E2E_FAIL) on any FAIL.
 // Usage: bun lanes/outcome-skills/cso/e2e.ts [--home cso=<dir>] [--models opus,particle] [--out <dir>] [--harbor <bin>]
 import { spawnSync } from "node:child_process";
@@ -52,7 +53,7 @@ export async function main(argv: string[]): Promise<number> {
   process.env.PATH = dirname(harbor) + ":" + process.env.PATH;
   const home = arg("--home")?.replace(/^cso=/, "");
   const models = (arg("--models")?.split(",") ?? ["opus", "particle"]) as CsoModel[];
-  const arms: CsoArm[] = home ? ["none", "cso"] : ["none"];
+  const arms: CsoArm[] = home ? ["none", "cso", "untold"] : ["none"];
   const W = arg("--out") ?? mkdtempSync(join(homedir(), ".capy/work/cso-e2e-"));
   mkdirSync(join(W, "arms"), { recursive: true });
   fixture(W);
@@ -82,6 +83,7 @@ export async function main(argv: string[]): Promise<number> {
     const bash = (command: string) => reply([{ type: "tool_use", id: ID(), name: "Bash", input: { command, description: "cso helper" } }]);
     if (!run) return bash(LAUNCHER + " start --repo /work/repo");
     if (!said.includes(" inspect " + run)) return bash(LAUNCHER + " inspect " + run);
+    if (!said.includes(" read " + run)) return bash(LAUNCHER + " read " + run + " index.js");
     if (!said.includes(" finish " + run)) return bash(LAUNCHER + " finish " + run);
     return done;
   };
@@ -116,7 +118,7 @@ export async function main(argv: string[]): Promise<number> {
           ["slot finalized", x.slot?.close?.finalized === true],
           ["runtimes on PATH", (["node", "bun", "python3", "gh"] as const).every((t) => !!rt[t]?.path)],
           ["session identity", !!rec && rec.harness_version === "2.1.325" && rec.model_id.length > 0],
-          ["exposure " + (arm === "none" ? "not loaded, no procedure" : "procedure ran"), !!rec && (arm === "none" ? !rec.exposure.loaded && !rec.exposure.procedure_ran : rec.exposure.procedure_ran)],
+          ["exposure " + (arm === "none" ? "not loaded, no procedure" : "procedure ran daily/default" + (arm === "cso" ? ", loaded" : "")), !!rec && (arm === "none" ? !rec.exposure.loaded && !rec.exposure.procedure_ran : rec.exposure.procedure_ran && rec.exposure.scope === "daily/default" && rec.exposure.tooling_errors === 0 && (arm !== "cso" || rec.exposure.loaded))],
         ];
         const failed = checks.filter(([, ok]) => !ok).map(([n]) => n);
         rule(name, failed.length === 0, (failed.length ? "failed " + failed.join(", ") + "; " : "") + "end " + rec?.end + ", model " + rec?.model_id + ", Claude Code " + rec?.harness_version + ", " + s.requests + " main requests, exposure " + JSON.stringify(rec?.exposure) + ", runtimes " + Object.keys(rt).join(" ") + ", cost $" + rec?.cost_usd + ", " + ((Date.now() - t0) / 1000).toFixed(0) + " s; " + dir);

@@ -21,7 +21,7 @@ const unit = (id: string, repo: string): UnitRecord => ({ unit: id, repo } as Un
 const score = (u: UnitRecord, arm: CsoArm, model: CsoModel, v: V, stage: CsoScore["stage"] = "stage2", o: Partial<CsoScore> = {}): CsoScore =>
   ({ schema: "cso-score.v1", unit: u.unit, repo: u.repo, arm, model, stage, gap: v === null ? "session" : null, named: v === null ? null : v === 1, unsupported: 0, supported: 0, phantoms: { paths: 0, lines: 0, cited: 0, items: [] }, ...o } as CsoScore);
 const session = (u: string, arm: CsoArm, model: CsoModel, ran: boolean, stage: SessionRecord["stage"] = "stage2", o: Partial<SessionRecord> = {}): SessionRecord =>
-  ({ schema: "cso-session.v1", unit: u, arm, model, stage, end: "completed", cost_usd: 1, exposure: { loaded: ran, procedure_ran: ran, run_id: ran ? "r" : null, completeness: "complete", findings_submitted: 0, tooling_errors: 0, host_reads_after_start: 0 }, ...o } as SessionRecord);
+  ({ schema: "cso-session.v1", unit: u, arm, model, stage, end: "completed", cost_usd: 1, exposure: { loaded: ran, procedure_ran: ran, run_id: ran ? "r" : null, completeness: "complete", findings_submitted: 0, tooling_errors: 0, host_reads_after_start: 0, scope: ran ? "daily/default" : null }, ...o } as SessionRecord);
 
 /** One model's rows for Opus; particle gets the same rows unless given its own. */
 function build(rows: Row[], o: { particle?: Row[]; ran?: number; judge?: Partial<AnalysisInput["judge"]>; extra?: Partial<AnalysisInput> } = {}): AnalysisInput {

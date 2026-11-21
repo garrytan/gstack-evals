@@ -107,7 +107,7 @@ describe("cso sessions: the record", () => {
   test("model id and harness version come from the session's own init record, never the plan", () => {
     expect(sessionIdentity(recs)).toEqual({ model_id: "claude-opus-5-5-20261101", harness_version: "2.1.325" });
     expect(() => sessionIdentity(recs.slice(1))).toThrow(/^E_CSO_SESSION /);
-    const exposure = { loaded: false, procedure_ran: false, run_id: null, completeness: null, findings_submitted: null, tooling_errors: 0, host_reads_after_start: 0 };
+    const exposure = { loaded: false, procedure_ran: false, run_id: null, completeness: null, findings_submitted: null, tooling_errors: 0, host_reads_after_start: 0, scope: null };
     const r = csoSessionRecord({ unit: "u", arm: "none", model: "opus", stage: "stage0", attempts: 2, end: { end: "completed", reason: null, retry: false }, summary: { turns: [{}, {}], continuations: 1, done: true }, records: recs, repoDir: "/work/repo", exposure, helper: { snapshot_root: null, handles: {} }, usage: [{ spent_micros: 1_500_000, tokens: { input: 1, output: 2, cache_read: 3, cache_write: 4 } }, { spent_micros: 500_000, tokens: { input: 1, output: 2, cache_read: 3, cache_write: 4 } }], wall_sec: 30 });
     expect(r).toMatchObject({ schema: "cso-session.v1", model_id: "claude-opus-5-5-20261101", harness: "claude-code", harness_version: "2.1.325", cost_usd: 2, attempts: 2, continuations: 1, done_seen: true, turns: 2, tokens: { input: 2, output: 4, cache_read: 6, cache_write: 8 } });
   });

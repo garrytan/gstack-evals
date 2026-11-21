@@ -34,7 +34,7 @@ const full = [
 describe("cso exposure", () => {
   test("a full run: loaded, procedure ran, completeness, findings submitted, helper records", () => {
     const r = csoExposure(full, TREE);
-    expect(r.exposure).toEqual({ loaded: true, procedure_ran: true, run_id: RUN, completeness: "complete", findings_submitted: 2, tooling_errors: 0, host_reads_after_start: 0 });
+    expect(r.exposure).toEqual({ loaded: true, procedure_ran: true, run_id: RUN, completeness: "complete", findings_submitted: 2, tooling_errors: 0, host_reads_after_start: 0, scope: "daily/default" });
     expect(r.helper).toEqual({ snapshot_root: "<REDACTED-internal.user_path>", handles: { [SECRET]: "config/secrets/prod.env" } });
     expect(csoExposure(full).helper.handles).toEqual({});
   });
@@ -70,6 +70,16 @@ describe("cso exposure", () => {
     expect(untoldTriggered(csoExposure([]).exposure)).toBe(false);
     expect(untoldTriggered(csoExposure(full.slice(1)).exposure)).toBe(true);
     expect(untoldTriggered(csoExposure(LOADED).exposure)).toBe(true);
+  });
+  test("the start's mode and scope come from its printed policy, else from its argv as the pinned parseStart reads it", () => {
+    const start = (args: string, out: string) => csoExposure([...LOADED, ...call(L + " start --repo /work/repo" + args, out)]).exposure.scope;
+    expect(start("", startOut)).toBe("daily/default");
+    expect(start(" --comprehensive", JSON.stringify({ runId: RUN, policy: { mode: "comprehensive", scope: "default" } }))).toBe("comprehensive/default");
+    expect(start("", JSON.stringify({ runId: RUN, policy: { mode: "daily", scope: "domain:auth" } }))).toBe("daily/domain:auth");
+    expect(start(" --code", startOut)).toBe("daily/code");
+    expect(start(" --comprehensive --scope auth", startOut)).toBe("comprehensive/domain:auth");
+    expect(start("", "")).toBeNull();
+    expect(csoExposure(LOADED).exposure.scope).toBeNull();
   });
   test("helper JSON is read from pretty-printed output with text around it", () => {
     expect(helperJson("note\n" + startOut + "\n")?.runId).toBe(RUN);

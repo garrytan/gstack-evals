@@ -59,6 +59,16 @@ const COMPLETENESS: Record<string, Exposure["completeness"]> = { complete: "comp
 /** Whether the cso skill body expanded in the session. */
 export const loaded = (evs: readonly Ev[]): boolean => evs.some((e) => (e.kind === "context" || e.kind === "tool_result") && (COMMAND_BLOCK.test(e.text) || BASE_DIR.test(e.text)));
 
+const SCOPE_FLAGS = ["--infra", "--code", "--skills", "--supply-chain", "--owasp"];
+/** A start's mode and scope as the pinned helper's parseStart reads them: --comprehensive or daily, then one scope flag,
+ *  --scope DOMAIN as domain:DOMAIN, or default. */
+export function startScope(args: readonly string[], out: Rec | null): string {
+  const pol = out?.policy;
+  if (typeof pol?.mode === "string" && typeof pol?.scope === "string") return pol.mode + "/" + pol.scope;
+  const named = args.includes("--scope") ? args[args.indexOf("--scope") + 1] : undefined;
+  return (args.includes("--comprehensive") ? "comprehensive" : "daily") + "/" + (named ? "domain:" + named : (SCOPE_FLAGS.find((f) => args.includes(f))?.slice(2) ?? "default"));
+}
+
 /** Section 8's exposure and the helper records from one session's events (both transcripts, read in order). A handle
  *  the helper printed is recorded under the tree path whose id it carries; one that names no path in tree stays unrecorded. */
 export function csoExposure(records: readonly Rec[], tree: readonly string[] = []): { exposure: Exposure; helper: HelperRecords } {
@@ -91,6 +101,7 @@ export function csoExposure(records: readonly Rec[], tree: readonly string[] = [
     findings_submitted: submits.length ? Number(submits.at(-1)!.findings) : start ? 0 : null,
     tooling_errors: calls.filter((c) => c.error && !HELPER_REFUSAL.test(c.out)).length,
     host_reads_after_start: hostReads,
+    scope: start ? startScope(start.args, helperJson(start.out)) : null,
   };
   return { exposure, helper };
 }

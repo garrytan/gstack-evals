@@ -3,7 +3,8 @@
 // unit, its install verified (a cso-arm.v1 record for that arm's home), its entry resolved (for cso, section 8's
 // exposure shows the skill loaded and the helper procedure ran), its report landed in assistant text, the session ended
 // scored with no infra gap, and, for cso, every snapshot or handle citation resolved (section 5's stage 0 citation gate).
-// Each failure is named. SessionRecord's exposure records no helper scope, so default scope is not checked here.
+// Each failure is named. A cso session whose helper run started in any mode or scope but daily with default scope fails
+// with its own reason.
 import type { CsoPrereg } from "../prereg.ts";
 import type { CsoArm, CsoModel, SessionRecord } from "../types.ts";
 import type { CsoArmRecord } from "../arms.ts";
@@ -34,6 +35,7 @@ export function stage0Readout(i: Stage0Input, p: CsoPrereg): Stage0Cell[] {
       }
       if (arm === "cso" && !s.exposure.loaded) reasons.push({ unit, reason: "entry not resolved: the cso skill did not load" });
       if (arm === "cso" && !s.exposure.procedure_ran) reasons.push({ unit, reason: "entry not resolved: the helper procedure did not run" });
+      if (arm === "cso" && s.exposure.scope !== null && s.exposure.scope !== "daily/default") reasons.push({ unit, reason: "not the default run: the helper started " + s.exposure.scope + ", not daily/default" });
       if (!s.texts.some((t) => t.trim())) reasons.push({ unit, reason: "no report in assistant text" });
       if (s.end === "gap") reasons.push({ unit, reason: "infra gap: " + (s.reason ?? "session gap") });
       const sc = i.scores.find((x) => x.stage === "stage0" && x.unit === unit && x.arm === arm && x.model === model);

@@ -28,7 +28,7 @@ const UNIT: UnitRecord = {
 const session = (o: Partial<SessionRecord> = {}): SessionRecord => ({
   schema: "cso-session.v1", unit: "u1", arm: "cso", model: "opus", stage: "stage2", model_id: "claude-opus-5-5", harness: "claude-code", harness_version: "x", end: "completed", reason: null,
   attempts: 1, continuations: 0, done_seen: true, texts: ["Report\nDONE"], opened: ["src/parse.js"], helper: { snapshot_root: ROOT, handles: { [H]: ROOT + "/src/parse.js" } },
-  exposure: { loaded: true, procedure_ran: true, run_id: null, completeness: "complete", findings_submitted: 1, tooling_errors: 0, host_reads_after_start: 0 },
+  exposure: { loaded: true, procedure_ran: true, run_id: null, completeness: "complete", findings_submitted: 1, tooling_errors: 0, host_reads_after_start: 0, scope: "daily/default" },
   cost_usd: 1, wall_sec: 10, turns: 3, tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 }, ...o,
 });
 const yes: FindingLabels = { location: "yes", class: "yes", same_defect: "yes", grounding: "yes", file_level: "yes", known: null, validity: "supported", quotes: {} };

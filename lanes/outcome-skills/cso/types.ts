@@ -50,6 +50,9 @@ export interface Exposure {
   findings_submitted: number | null;
   tooling_errors: number;
   host_reads_after_start: number;
+  /** The started run's mode and scope as "<mode>/<scope>" from the helper's start output (policy.mode and policy.scope),
+   *  or from its start argv when the output holds no policy: "daily/default" is section 12's default run. Null with no start. */
+  scope: string | null;
 }
 
 /** The helper's own records for path normalization (section 5): its snapshot root and the handles it printed. */
