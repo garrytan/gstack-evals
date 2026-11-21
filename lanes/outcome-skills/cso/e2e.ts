@@ -9,9 +9,10 @@
 // version the session reported; exposure reads neither loaded nor a procedure in none, the procedure ran on a daily
 // default-scope run with no tooling error in cso and untold, and loaded in cso. Then teardown:
 // the driver stops with exit 0. It exits 1 (E_CSO_E2E_FAIL) on any FAIL.
-// Usage: bun lanes/outcome-skills/cso/e2e.ts [--home cso=<dir>] [--models opus,particle] [--out <dir>] [--harbor <bin>]
+// With --work <cso units work dir> --unit <id>, it runs that built unit's tree and record instead of the fixture.
+// Usage: bun lanes/outcome-skills/cso/e2e.ts [--home cso=<dir>] [--work <dir> --unit <id>] [--models opus,particle] [--out <dir>] [--harbor <bin>]
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { sse } from "../../../quick/laneb/runner/fake_upstream.ts";
@@ -30,7 +31,7 @@ import type { CsoArm, CsoModel, SessionRecord } from "./types.ts";
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE|EXA|AGENTRUN)_[A-Z_]*KEY$|_TOKEN$/;
 const LAUNCHER = "~/.claude/skills/gstack/bin/gstack-cso-launcher";
 const ID = () => "toolu_" + crypto.randomUUID().replace(/-/g, "").slice(0, 20);
-const UNIT = "e2e-fixture";
+let UNIT = "e2e-fixture";
 
 /** The fixture unit: a two-file tree committed once, and a unit record with only what the runner reads. */
 function fixture(work: string): void {
@@ -57,7 +58,13 @@ export async function main(argv: string[]): Promise<number> {
   const arms: CsoArm[] = home ? ["none", "cso", "untold"] : ["none"];
   const W = arg("--out") ?? mkdtempSync(join(homedir(), ".capy/work/cso-e2e-"));
   mkdirSync(join(W, "arms"), { recursive: true });
-  fixture(W);
+  const real = arg("--work");
+  if (real) {
+    UNIT = arg("--unit") ?? (console.error("E_USAGE --work needs --unit <id>"), process.exit(2));
+    cpSync(join(real, "trees", UNIT), join(W, "trees", UNIT), { recursive: true, verbatimSymlinks: true });
+    mkdirSync(join(W, "units"), { recursive: true });
+    cpSync(join(real, "units", UNIT + ".json"), join(W, "units", UNIT + ".json"));
+  } else fixture(W);
   writeFileSync(join(W, "arms", "none.json"), JSON.stringify({ arm: "none", home_tree_sha256: "none" }));
   if (home) writeFileSync(join(W, "arms", "cso.json"), JSON.stringify({ arm: "cso", home_tree_sha256: homeTreeSha256(home) }));
   writeFileSync(join(W, "units.json"), JSON.stringify([UNIT]));
