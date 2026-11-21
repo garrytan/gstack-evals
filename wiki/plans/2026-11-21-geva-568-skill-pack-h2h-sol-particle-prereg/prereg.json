@@ -428,9 +428,9 @@
   },
   {
    "id": "h2hx-vms",
-   "what": "runner and Part L walk builder",
-   "central_usd": 300,
-   "cap_usd": 400
+   "what": "runner, Part L walk builder and the rebuild of parts S and P's units",
+   "central_usd": 350,
+   "cap_usd": 450
   },
   {
    "id": "h2hx-crew",
@@ -439,5 +439,6 @@
    "cap_usd": 650
   }
  ],
- "approved_all_in_cap_usd": 3450
+ "approved_all_in_cap_usd": 3450,
+ "unit_images": "parts S and P rebuild each head-to-head unit's image from its frozen recipe and re-run the base oracle (3 base fail, 3 fixed pass) before use; both digests recorded; a unit that fails drops for every arm of both parts"
 }

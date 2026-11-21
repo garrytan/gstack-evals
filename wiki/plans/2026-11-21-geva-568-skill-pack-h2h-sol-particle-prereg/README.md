@@ -9,7 +9,7 @@ captain: GEVA-2
 date: 2026-11-21
 status: open
 attachments:
-  - 87b66634fa027df1fd9c5f66d6eb770e51a77a66260c19193a68d9908f86278c  prereg.json
+  - 2d9079e981709c9ef7a78cc4d482975d81372cd6937bf5e1e25ea9fe32157ed1  prereg.json
 links:
   - 2026-11-15-geva-538-skill-pack-h2h-prereg
   - 2026-11-19-geva-540-skill-pack-h2h-results
@@ -146,7 +146,9 @@ agent-skills' Codex docs say to invoke a skill with @ or by naming it; Codex 0.1
 
 ### 5. Units
 
-**Parts S and P** use the head-to-head's frozen units: the same 100 O units and 60 B2 units, with their image digests (units.json in the head-to-head's session data), and its stage 1 units as the pilot units (section 11). No unit is redrawn.
+**Parts S and P** use the head-to-head's frozen units: the same 100 O units and 60 B2 units (units.json in the head-to-head's session data), and its stage 1 units as the pilot units (section 11). No unit is redrawn.
+
+**Rebuilt images, a deviation from the base plan's section 6.** The head-to-head's runner and its image registry were destroyed when that run ended, so the units' images no longer exist and the base plan's rule that an image is never rebuilt can't be kept. Each unit is rebuilt from the same frozen recipe (the state machines conversion for O units, the breadth recipes for B2 units, at the same commits) and passes the base plan's oracle again (3 base runs fail and 3 fixed runs pass on the same tests) before any session uses it. Both digests are recorded. A unit that fails the oracle or containment after rebuilding drops for every arm of both parts and is listed with its reason. Nothing else about a unit changes. Particle-1's gap to the published Opus rows (section 9) carries this caveat, since those rows ran on the original images.
 
 **Part L** uses fresh units: none of them is among the 100 O units the head-to-head counted. Three pools, all through the base plan's gates (exclusion list, permissive licence list with its second read, told-mode screen, feature screen, oracle with 3 base and 3 fixed runs, containment over every Part L home):
 
@@ -277,6 +279,7 @@ The base plan's sections 12 and 16 hold. Codex CLI is Apache-2.0; GPT-6.2 Sol ru
 - Sol's pack rows compare today's gstack with packs pinned on 2026-11-15 (section 2).
 - The frozen tests-added rule counts one more session than the correction post's recount in three arms of the published data (section 7); both counts are reported.
 - B1 browser units are not run on Sol or particle-1; B means B2 throughout.
+- Parts S and P run on rebuilt images of the head-to-head's units (section 5).
 - "Not ahead" is the likely Sol reading before any data (section 9).
 
 ## Review record
@@ -358,9 +361,9 @@ Disclosure: Y Combinator, which Garry Tan runs, is an investor in T3 Chat (Ping 
 | l-smoke and l-pilot | 8 smoke and 24 pilot Opus sessions | $13 | $168 |
 | l-main | 400 Opus sessions | $160 | $366 |
 | **Paid** | | **$1,316** | **$2,317** |
-| vms | the runner (standard-60) for about 110 hours, a keyless builder for Part L's walk | $300 | $400 |
+| vms | the runner (standard-60) for about 110 hours, and a keyless builder for Part L's walk and the rebuild of parts S and P's units | $350 | $450 |
 | crew | this thread's model use: build, both /ship runs, the run, the results | $400 | $650 |
-| **All-in** | | **about $2,020** | **about $3,370** |
+| **All-in** | | **about $2,070** | **about $3,420** |
 
 The Captain approved 3,450 dollars all-in at caps at the plan gate on 2026-11-21, inside the head-to-head line (8,900 dollars at caps, about 600 paid used). A projection past 3,450, or past 5,000 for the thread, goes back to the Captain before the paid stage.
 
