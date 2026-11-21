@@ -54,6 +54,10 @@ export const B1E_SMOKE = ["a2aproject__a2a-python-682_interface", "stanfordnlp__
 export const B1E = { bar: 39, partTasks: 20, hostRoot: "b1e", ledgerPort: "9951", armManifests: "arms/manifests/b1e" } as const;
 export const B1E_CAPS_USD = { "b1e-smoke": 30, "b1e-in": 90, "b1e-fresh": 110 } as const;
 export type B1eItem = keyof typeof B1E_CAPS_USD;
+// The prereg's per-arm pilot caps (its Pilots table): the most each arm's pilot sessions may settle. Dated change, 2026-11-21,
+// on the results branch before the pilot ran, by the Captain's ruling on the prereg's review: the b1e-smoke report prints FAIL
+// for an arm whose sessions settle above its cap. The b1e-smoke ledger cap stays the hard money stop.
+export const PILOT_CAPS_USD = { "gstack-main": 5, none: 3 } as const;
 export const B1E_ITEMS = Object.keys(B1E_CAPS_USD) as B1eItem[];
 export const isB1eItem = (x: string): x is B1eItem => Object.hasOwn(B1E_CAPS_USD, x);
 

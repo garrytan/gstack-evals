@@ -5,13 +5,23 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { barReading, b1dInRows, b1eApprove, b1eCap, b1eMain, b1ePlan, decision, freshTasks, partProblems, R48, routeRows } from "../../lanes/delivery-route/b1e.ts";
-import { routeCounts, smokeOf, type Stat } from "../../lanes/delivery-route/b1d.ts";
+import { barReading, b1dInRows, b1eApprove, b1eCap, b1eMain, b1ePlan, decision, freshTasks, partProblems, pilotCapCheck, R48, routeRows } from "../../lanes/delivery-route/b1e.ts";
+import { routeCounts, smokeOf, type B1dRow, type Stat } from "../../lanes/delivery-route/b1d.ts";
 import { GSTACK_ARM as B1D_GSTACK } from "../../lanes/delivery-route/b1d-pins.ts";
 import { B1E_BUNDLE, B1E_CAPS_USD, B1E_ITEMS, B1E_SMOKE, COVERAGE, FRESH, GSTACK_ARM } from "../../lanes/delivery-route/b1e-pins.ts";
 import { REPO } from "../../lanes/delivery-route/pins.ts";
 
 const stat = (loaded: number, graded = 60, cap_stops = 0) => ({ arm: "gstack-main", planned: 60, graded, gaps: 60 - graded, cap_stops, incomplete: cap_stops > 0 || 60 - graded > 6, loaded } as unknown as Stat);
+
+describe("b1e pilot caps", () => {
+  const row = (arm: string, cost_usd: number) => ({ arm, cost_usd } as unknown as B1dRow);
+  test("an arm settling above its pilot cap fails, at or under passes", () => {
+    expect(pilotCapCheck([row("gstack-main", 2.5), row("gstack-main", 2.5), row("none", 1)]).failed).toEqual([]);
+    const r = pilotCapCheck([row("gstack-main", 2.5), row("gstack-main", 2.51), row("none", 3.01)]);
+    expect(r.failed).toEqual(["gstack-main", "none"]);
+    expect(r.lines.some((l) => l.includes("FAIL gstack-main"))).toBe(true);
+  });
+});
 
 describe("b1e bar and decision", () => {
   test("the bar is a point count at 39, INCOMPLETE first", () => {
