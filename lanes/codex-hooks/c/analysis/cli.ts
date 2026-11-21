@@ -29,7 +29,7 @@ const USAGE = [
   "  check --states <pilot states> --dir <dir> --pilot [--route A|B]",
   "  confirm --states <file> --dir <dir> [--route A|B]",
   "  route --check A=<check.json> --confirm A=<confirm.json> [--check B=<file> --confirm B=<file>]",
-  "  analyze --states <file> --dir <dir> --route <route.json> [--json]",
+  "  analyze --states <file> --dir <dir> --route-file <route.json> [--json]",
   "  pilot --states <pilot states> --hand <hand.json> [--dir <dir>] [--json]",
   "  judge-item [--run-id <id>]",
   "  power",
@@ -118,7 +118,8 @@ function counted(c: Ctx): { counted: Counted; mechanical: string[]; gaps: string
   return { counted: out, mechanical, gaps, extractBatch };
 }
 
-function gitCodeAt(sources: Map<string, string>): CodeAt {
+/** The evidence sheet's code: the finding's file at the unit's head in a local clone, 30 lines either side of its line. */
+export function gitCodeAt(sources: Map<string, string>): CodeAt {
   return (unit: Unit, path: string | null, line: number | null) => {
     if (!path) return { code: null, code_note: "the finding names no file, so the sheet shows no code" };
     const clone = sources.get(unit.repo) ?? usage("no --source clone for " + unit.repo + ", which unit " + unit.id + " needs at head " + unit.head);
@@ -300,7 +301,7 @@ export async function main(argv: string[], io: Io = { out: (s) => console.log(s)
     } else if (cmd === "analyze") {
       const c = context(flags);
       const judged = readJson<Judged>(join(c.dir, "judged.json"));
-      const route = readJson<{ route: RouteName | null }>(one(flags, "--route")).route;
+      const route = readJson<{ route: RouteName | null }>(one(flags, "--route-file")).route;
       if (route !== null && route !== judged.route) throw new Error("E_CH_C_CHECK the route that passed is " + route + ", but judged.json was judged on route " + judged.route);
       const a = analyze(c.suite, c.states, scoreSessions(c.states, judged, c.maps), { units: c.units, passes: c.passes });
       if (flags.has("--json")) io.out(JSON.stringify({ analysis: a, contract: contractReading(a, route), e3: e3Reading(a, route) }, null, 2));

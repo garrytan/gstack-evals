@@ -69,6 +69,9 @@ export function pairedStats(pairs: readonly PairedItem[], o: { seed?: number; dr
   return { pairs: d.n_pairs, clusters: d.n_clusters, mean_a: d.mean_a, mean_b: d.mean_b, delta: d.delta, ci95: d.ci95, p: t.p, min_p: t.min_p, informative_clusters: t.informative_clusters, gains: pairs.filter((p) => p.b > p.a).length, losses: pairs.filter((p) => p.b < p.a).length };
 }
 
+/** Check A fails when its interval excludes 0 or its sign-flip p is under 0.05 (section 1). */
+export const checkAFails = (s: Stats | null): boolean => s !== null && ((s.ci95 !== null && (s.ci95[0] > 0 || s.ci95[1] < 0)) || (s.p !== null && s.p < ALPHA));
+
 type Index = Map<string, Record<CState, StateScore>>;
 const cellKey = (arm: CArm, unit: string, pass: number) => arm + " " + unit + " " + pass;
 
@@ -224,7 +227,7 @@ export function analyze(suite: Suite, states: StatesFile, scored: Scored, o: { u
     arms,
     primary,
     check_a: checkA,
-    check_a_fails: checkA.stats !== null && ((checkA.stats.ci95 !== null && (checkA.stats.ci95[0] > 0 || checkA.stats.ci95[1] < 0)) || (checkA.stats.p !== null && checkA.stats.p < ALPHA)),
+    check_a_fails: checkAFails(checkA.stats),
     within: METRICS.filter((m) => m !== "found").map((m) => contrast("within c-on, " + m + ": final minus first stop", m, S("c-on", fs), S("c-on"), run)),
     between: BETWEEN.flatMap((c) => METRICS.map((m) => contrast(c.name + ", " + m, m, c.a, c.b, run))),
     e3,

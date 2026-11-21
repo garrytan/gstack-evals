@@ -144,9 +144,19 @@ const inside = (child: string, dir: string) => resolve(child) === resolve(dir) |
 export const mappingDigest = (k: Pick<Key, "packets" | "entries">) => sha256(JSON.stringify({ packets: k.packets.map((p) => [p.file, p.state, p.anchor, p.sheet ?? null]), entries: k.entries }));
 export const batchDigest = (k: Omit<Key, "batch" | "entries" | "arms" | "version">) => sha256(JSON.stringify({ version: JUDGING_VERSION, stage: k.stage, suite: k.suite, seed: k.seed, states_sha256: k.states_sha256, mapping_sha256: k.mapping_sha256, packets: k.packets.map((p) => [p.file, p.unit, p.sha256]) }));
 
+/** The suite's catalog cases, read once per suite: suiteCases reads the whole catalog each call. */
+const casesBySuite = new WeakMap<Suite, ReturnType<typeof suiteCases>["cases"]>();
+function casesOf(suite: Suite): ReturnType<typeof suiteCases>["cases"] {
+  const cached = casesBySuite.get(suite);
+  if (cached) return cached;
+  const cases = suiteCases(suite).cases;
+  casesBySuite.set(suite, cases);
+  return cases;
+}
+
 /** A blocker as packets show it: R2's form, with the case's catalog summary as its cause. */
 export function knownBlocker(suite: Suite, b: Unit["blockers"][number]): { id: string; paths: string[]; file: string; line: number; cause: string } {
-  const c = suiteCases(suite).cases.get(b.case);
+  const c = casesOf(suite).get(b.case);
   return { id: b.id, paths: b.paths, file: b.file, line: b.line, cause: c?.defect.summary ?? "" };
 }
 
@@ -218,7 +228,7 @@ export interface AnchorFinding {
  * bug's catalog summary drawn by seed from another unit. Pairs drop by seed until anchors are at most maxShare of the set.
  */
 export function anchorsFor(suite: Suite, units: readonly Unit[], nonAnchorItems: number, o: { seed: number; offset: number; maxShare: number }): AnchorFinding[] {
-  const cases = suiteCases(suite).cases;
+  const cases = casesOf(suite);
   const rng = seededRandom(o.seed + 2);
   const others = suite.units.flatMap((u) => u.blockers.filter((b) => b.counts === "blocking").map((b) => ({ u, b })));
   const pairs = units.flatMap((u) =>
