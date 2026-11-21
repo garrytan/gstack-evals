@@ -27,9 +27,11 @@ export function hostOfModel(model: string): Host {
   return m ? m.host : prepErr("model " + model + " is not one of B2's");
 }
 
-/** The session's Codex argv and env for an arm (gstack: the hook-trust bypass and the unattended session kind). */
+/** The session's Codex argv and env for an arm (gstack: the hook-trust bypass and the unattended session kind). Every arm
+ *  sets allow_login_shell=false (pre-run change 2): Codex runs exec_command in a login shell by default, and the task image's
+ *  /etc/profile then resets PATH, dropping the task setup's own entries (/opt/laneb/bin with Bun, the testbed prefixes). */
 export function codexSession(gstack: boolean) {
-  const o = { model: MODELS.sol.id, provider: "openai" as const, proxy: { baseUrl: "http://__GATEWAY__:8787", slot: PROXY_SLOT, token: "" }, effort: SOL_EFFORT, settings: {}, hookTrust: gstack };
+  const o = { model: MODELS.sol.id, provider: "openai" as const, proxy: { baseUrl: "http://__GATEWAY__:8787", slot: PROXY_SLOT, token: "" }, effort: SOL_EFFORT, settings: { allow_login_shell: false }, hookTrust: gstack };
   return { argv: codexArgs(o), resume: codexArgs(o, "__THREAD__"), env: codexEnv({ proxy: { ...o.proxy, token: "__SESSION_TOKEN__" }, ...(gstack ? { sessionKind: "unattended" as const } : {}) }) };
 }
 

@@ -13,11 +13,11 @@ import { ARMS_DIR, armProblems, buildCodex, buildPlain, check, MANIFESTS, writeM
 import { runSessions } from "./sessions.ts";
 import { buildImages, imagesRecord, readImagesRecord, writeImagesRecord } from "./images.ts";
 import { approve, dryRun, guardParts, itemTotals, launchGuard, markDone, planLines, type Order } from "./money.ts";
-import { B2, drawnTasks, isItem, ITEM_NAMES, LABELS, MODELS, PILOT_TASKS, sha256, type Item } from "./pins.ts";
-import { B2_PROFILE } from "./plans.ts";
+import { B2, CAPS_USD, drawnTasks, isItem, ITEM_NAMES, LABELS, MODELS, PILOT_TASKS, sha256, type Item } from "./pins.ts";
+import { B2_PROFILE, carryPilot } from "./plans.ts";
 import { buildB2Table, type B2Row } from "./table.ts";
 
-const USAGE = "E_USAGE usage: b2 arms build|manifests <dir> [--register] | arms check [<dir>] | sessions run --out <dir> [--arms <dir>] [--codex <vendor dir>] [--record] | plan | dry-run | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> [--part <part>] --counter-usd <dollars> --counter-as-of <time> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> (host-up, launch and relaunch also --counter-usd and --counter-as-of) | images --out <dir> [--shard k/n] | images --record <file> <dir>... | table <config.json> <out.jsonl> | look <table.jsonl> --out <record> | report <table.jsonl> [--stage end|look] [--item b2-pilot] [--out <md>]";
+const USAGE = "E_USAGE usage: b2 arms build|manifests <dir> [--register] | arms check [<dir>] | sessions run --out <dir> [--arms <dir>] [--codex <vendor dir>] [--record] | plan | dry-run | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | carry --ledger <new jsonl> --from <first pilot jsonl> --run <run id> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> [--part <part>] --counter-usd <dollars> --counter-as-of <time> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> (host-up, launch and relaunch also --counter-usd and --counter-as-of) | images --out <dir> [--shard k/n] | images --record <file> <dir>... | table <config.json> <out.jsonl> | look <table.jsonl> --out <record> | report <table.jsonl> [--stage end|look] [--item b2-pilot] [--out <md>]";
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "rerun", "recover", "host-down"];
 const GUARDED = ["host-up", "launch", "relaunch"];
 const COUNTER_FLAGS = ["--counter-usd", "--counter-as-of"];
@@ -107,6 +107,13 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (cmd === "dry-run") { for (const l of dryRun()) console.log(l); return 0; }
+    if (cmd === "carry") {
+      const ledger = opt("ledger"), from = opt("from"), run = opt("run") ?? "";
+      if (!ledger || !from || !/^[0-9a-f]{16}$/.test(run)) throw new Error(USAGE);
+      const micros = carryPilot(resolve(ledger), readRows(resolve(from)), run, opt("approved-by") ?? "");
+      console.log("b2-pilot re-pilot ledger " + ledger + ": approval $" + CAPS_USD["b2-pilot"] + ", carried $" + (micros / 1e6).toFixed(2) + " from run " + run);
+      return 0;
+    }
     if (cmd === "approve" || cmd === "done") {
       const ledger = opt("ledger"), item = opt("item") ?? "";
       if (!ledger || !isItem(item)) throw new Error(USAGE);

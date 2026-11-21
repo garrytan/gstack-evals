@@ -23,12 +23,14 @@ describe("Codex agents", () => {
     expect(k.codex_argv.slice(k.codex_argv.indexOf("-m"), k.codex_argv.indexOf("-m") + 2)).toEqual(["-m", "gpt-6.2-sol"]);
     expect(k.codex_argv).toContain('model_reasoning_effort="low"');
     expect(k.codex_env).toEqual({ OPENAI_API_KEY: "__SESSION_TOKEN__", GSTACK_SESSION_KIND: "unattended" });
+    for (const argv of [k.codex_argv, k.codex_resume_argv]) expect(argv).toContain("allow_login_shell=false");
     expect([k.hook_trust, k.gstack_pin, k.arm_tree_sha256, k.prompt_input_sha256]).toEqual([true, GSTACK.sha, "t".repeat(64), "p".repeat(64)]);
     expect(["max_output_tokens", "sdk_max_turns", "system_prompt", "told_skill"].filter((x) => x in k)).toEqual([]);
   });
   test("a no-gstack arm gets neither, and the prove-it arm keeps its typed skill", () => {
     const k = codexAgent(base("cx-none"), manifest).kwargs as Record<string, any>;
     expect(k.codex_argv).not.toContain("--dangerously-bypass-hook-trust");
+    expect(k.codex_argv).toContain("allow_login_shell=false");
     expect(k.codex_env).toEqual({ OPENAI_API_KEY: "__SESSION_TOKEN__" });
     expect([k.hook_trust, k.gstack_pin]).toEqual([false, ""]);
     expect((codexAgent(base("cx-prove-it", "prove-it"), manifest).kwargs as Record<string, any>).told_skill).toBe("prove-it");

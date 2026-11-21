@@ -650,6 +650,9 @@
     "wiki/plans/2026-11-21-geva-569-b2-test-first-change-1.md": [
       "tests/test-first/plan-pins.test.ts"
     ],
+    "wiki/plans/2026-11-21-geva-569-b2-test-first-change-2.md": [
+      "tests/test-first/change-2.test.ts"
+    ],
     "quick/laneb/tests/fixtures/l1/**": [
       "tests/test-first/launch.test.ts"
     ]
