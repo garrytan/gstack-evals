@@ -21,8 +21,8 @@ attachments:
   - 945a93e5858a674780010323b13b82f28349286bcb9c86dbd94977dbeda4c811  draw.py
   - 1a8f0a63c8e7fafdac3c2beb7190f4e8d688826b407d96c74b21249735f37025  draw.txt
   - ef74c5c64f6fe50d0d462af450ef65a082476b3d250df8e576de5e337f0cf886  hm-screened.txt
-  - f7c84a325626de5f26a6c312d02a397ca65c2a2b004cd0ae650196be29f5df3c  power.py
-  - 350ea5219438ab26484420a1de7c501840518b231683f32ef72bc162108589a8  power.txt
+  - 69c13a1bfdc45d93ed3fc68d745544c15e7e7ecff6a53385d8b35151fd8324a5  power.py
+  - f4884baeee32253c095d0900ec76d842f10f15856bc41e1baa0677d36584d645  power.txt
   - fd5c70d89e2d2fe8ba9575ceba3b51a38dd4480ae42206166f2f427b89ca7c53  tasks.txt
 ---
 
@@ -52,6 +52,8 @@ Read on the pooled contrast over the three models, gstack with prove-it minus gs
 | Passes above 0 | Test-first fixes more bugs. KEEP and strengthen: gstack ships its own prove-it skill and keeps routing bug reports to it. If prove-it minus the one line on passes is also above 0 (section 9), the procedure ships as that skill; otherwise gstack ships the one line in its CLAUDE.md block and Codex AGENTS.md text in place of its bug line, and no new skill. |
 | Passes not shown either way, and passes with a regression test above 0 | Test-first leaves the same number of fixes and more of them carry a test. KEEP as it is: the routing rule and the bug line stay, gstack doesn't ship its own skill, and its docs claim tests, not fixes. |
 | Neither shown | A null. One "Why null?" cycle (section 9.4), then CUT-CANDIDATE for the same two parts, unless the cycle finds an exposure, task-fit or power cause (FIX-METHOD), or a ceiling (FIX-METHOD once, with one attempt to raise it, R61). |
+
+If passes are above 0 while passes with a regression test are below 0, the reading is not made by the table: the result goes to the Captain with both contrasts.
 
 "Above 0" and "below 0" for passes use the group-sequential bounds of the interim look (2.917 at the look, 2.068 at the end); for passes with a regression test, |z| of at least 2.576 at the end of a run that went past the look (section 9).
 
@@ -179,7 +181,7 @@ Stop bounds: |z| of at least 2.917 at the look and 2.068 at the end, on the pool
 
 Other looks: none
 
-Each model's first four parts hold tasks 1 to 92. The look is taken once all of them have settled for every model, on the tasks graded in both arms, before any later part starts. If |z| is at least 2.917 either way, the run stops there and the reading rests on passes alone: passes with a regression test are reported on those units as descriptive, with their 95% interval, and take no part in the decision table. Otherwise the run goes on to the end. Nobody reads any outcome before the look or between the look and the end; the run's controllers print progress counts only.
+Each model's first four parts hold tasks 1 to 92. The look is taken once all of them have settled for every model, on the tasks graded in both arms, before any later part starts. At the look, section 8's INCOMPLETE test is applied to each model's first 92 tasks. An INCOMPLETE model enters no look z, and if Opus 5.5 or GPT-6.2 Sol is INCOMPLETE there, the look stops nothing and the run goes on. If |z| is at least 2.917 either way, the run stops there and the reading rests on passes alone: passes with a regression test are reported on those units as descriptive, with their 95% interval, and take no part in the decision table. Otherwise the run goes on to the end. Nobody reads any outcome before the look or between the look and the end; the run's controllers print progress counts only.
 
 ## 12. Pilots
 
@@ -191,6 +193,8 @@ The pilot (b2-pilot) runs before any counted session: the three pilot tasks on t
 | line | $275.73 | $13.79 | the line arrives in each session's start (Claude Code's user-instructions reminder, Codex's AGENTS.md instructions item), and nothing else differs from none | none | as none |
 | gstack | $345.40 | $17.27 | gstack's skill listing reached the model, its routing hook logged an event on each prompt, and the start step of any gstack skill that loaded is seen, by its injected output on Claude Code (gstack's load-time start, 7f9c1bc5 and later) or its gstack-skill-start run on Codex; telemetry reads off | none | as none |
 | prove-it | $402.95 | $20.14 | the step text arrived in every session, the followed detector reads every session through to a reading (followed or not, with the reason), at least one session on each model reads as followed, and prove-it's own load is seen as gstack's arm's loads are | none | as none |
+
+In every arm, Part ran also requires every metered Sol request at low effort.
 
 \`b2 report --item b2-pilot\` prints a PASS or FAIL line per arm and model. An arm that fails is fixed or left out of the counted run, and a left-out arm is reported as left out, never as a loss. Every failure goes to the Captain first; a fix comes back as a dated pre-data change on the results branch with its own pilot. Pilot sessions never enter a reading. No arm has a model judge.
 

@@ -49,16 +49,19 @@ t = HALF / T
 A_PASS, A_PWT = 0.04, 0.01
 b1, b2 = obf(A_PASS, t)
 out.append('passes, alpha %.2f two-sided, look at %d of %d tasks (t = %.4f): look |z| >= %.3f, end |z| >= %.3f' % (A_PASS, HALF, T, t, b1, b2))
-lo, hi = 1.0, 4.0
-for _ in range(60):
-    c = (lo + hi) / 2
-    if 2 * (1 - Phi(c)) > A_PWT: lo = c
-    else: hi = c
-c_pwt = (lo + hi) / 2
+def z_two_sided(alpha):
+    lo, hi = 1.0, 4.0
+    for _ in range(60):
+        c = (lo + hi) / 2
+        if 2 * (1 - Phi(c)) > alpha: lo = c
+        else: hi = c
+    return (lo + hi) / 2
+
+c_pwt = z_two_sided(A_PWT)
 out.append('passes with a regression test, alpha %.2f two-sided, read at the end only: |z| >= %.3f' % (A_PWT, c_pwt))
 th = drift80(b1, b2, t)
 z80 = 0.8416212335729143
-out.append('drift for 80%% power under the passes bounds: %.3f standard errors (one look at the end alone needs %.3f)' % (th, 1.96 + z80))
+out.append('drift for 80%% power under the passes bounds: %.3f standard errors (one look at the end alone, alpha %.2f two-sided, needs %.3f)' % (th, A_PASS, z_two_sided(A_PASS) + z80))
 
 out.append('')
 out.append('Pooled passes contrast over the three models, %d tasks, %d repositories. Var(D) = sum over models of the' % (T, G))
