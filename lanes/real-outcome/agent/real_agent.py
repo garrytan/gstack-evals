@@ -217,7 +217,7 @@ gitdir=$(git rev-parse --absolute-git-dir)
 d=$(mktemp -d)
 trap 'rm -rf "$d"' EXIT
 mkdir -p "$d/objects"
-if [ -f "$gitdir/index" ]; then cp "$gitdir/index" "$d/index"; else GIT_INDEX_FILE="$d/index" git read-tree HEAD; fi
+if [ -f "$gitdir/index" ]; then cp -p "$gitdir/index" "$d/index"; else GIT_INDEX_FILE="$d/index" git read-tree HEAD; fi
 export GIT_INDEX_FILE="$d/index" GIT_OBJECT_DIRECTORY="$d/objects" GIT_ALTERNATE_OBJECT_DIRECTORIES="$gitdir/objects"
 git add -A >/dev/null 2>&1
 {exclude}tree=$(git write-tree)
