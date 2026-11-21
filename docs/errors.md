@@ -310,6 +310,24 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_PROVIDER_DRIFT](#e_of_provider_drift) | 2 | U20 |
 | [E_OF_SUPPLY_SHORT](#e_of_supply_short) | 2 | U20 |
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
+| [E_H2HX_PREREG](#e_h2hx_prereg) | 2 | U20 |
+| [E_H2HX_INPUT](#e_h2hx_input) | 2 | U20 |
+| [E_H2HX_RUN](#e_h2hx_run) | 2 | U20 |
+| [E_H2HX_CODEX_RUNTIME](#e_h2hx_codex_runtime) | 2 | U20 |
+| [E_H2HX_CODEX_CONFIG](#e_h2hx_codex_config) | 2 | U20 |
+| [E_H2HX_CODEX_INSTALL](#e_h2hx_codex_install) | 2 | U20 |
+| [E_H2HX_CODEX_EXPOSURE](#e_h2hx_codex_exposure) | 2 | U20 |
+| [E_H2HX_UNITS_INPUT](#e_h2hx_units_input) | 2 | U20 |
+| [E_H2HX_UNITS_RECIPE](#e_h2hx_units_recipe) | 2 | U20 |
+| [E_H2HX_UNITS_ORACLE](#e_h2hx_units_oracle) | 2 | U20 |
+| [E_H2HX_UNITS_CONTAIN](#e_h2hx_units_contain) | 2 | U20 |
+| [E_H2HX_UNITS_POOL](#e_h2hx_units_pool) | 2 | U20 |
+| [E_H2HX_UNITS_PENDING](#e_h2hx_units_pending) | 2 | U20 |
+| [E_H2HX_UNITS_SHORT](#e_h2hx_units_short) | 2 | U20 |
+| [E_H2HX_ROUTE_CONFIG](#e_h2hx_route_config) | 2 | U20 |
+| [E_H2HX_ROUTE_PROVIDER](#e_h2hx_route_provider) | 2 | U20 |
+| [E_H2HX_ROUTE_RECORD](#e_h2hx_route_record) | 2 | U20 |
+| [E_H2HX_ANALYSIS_INPUT](#e_h2hx_analysis_input) | 2 | U20 |
 | [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
 | [E_H2H_INSTALL](#e_h2h_install) | 2 | U20 |
 | [E_H2H_PIN](#e_h2h_pin) | 2 | U20 |
@@ -2449,6 +2467,150 @@ An office-hours founder eval dry-run case printed FAIL: a frozen rule did not ho
 Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2HX_PREREG
+
+The skill-pack head-to-head extension (Sol in Codex, particle-1, the smallest-change sentence) found no usable preregistration: its prereg.json is missing, is not h2h-ext-prereg.v1, lacks a seed, lists other arms for a part than the lane's, or lacks an entry, model, limits, gstack pin, pilot cap or item.
+
+Fix: Change the extension's prereg.json only through its preregistration's own pull request. Nothing runs on values chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_INPUT
+
+An extension command got input it can't use: an unknown part, stage or arm, a unit listed twice, a B1 unit, a non-O unit in part L, or an empty problem statement.
+
+Fix: Pass the part's own units and arms, each once, as the extension's preregistration lists them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_RUN
+
+h2h x-run stopped an extension stage: a precondition failed before anything opened (the part's environment, Docker, Harbor, the driver, a unit dir or tree volume), its plan.json holds another plan, a session dir exists with no session.json or holds another session, or an arm's home holds a confirmed answer-key hit for the unit.
+
+Fix: Meet a named precondition and run again. Otherwise bring the stage's out dir to the Captain: a stopped session is ruled on before the stage goes on, and a unit with an answer-key hit drops for every arm by the frozen rule.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_RUNTIME
+
+Part S's Codex runtime is not its pin: the platform tarball's sha256 differs from prereg.json, the binary does not print codex-cli 0.170.0, the runtime volume reads another version or digest or holds a file named codex on PATH, or a session's sol-agent link reads another version.
+
+Fix: Rebuild the runtime volume from the pinned tarball (ext/runtimes.ts buildExtRuntimeVolume). Change the pin only through the extension's preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_CONFIG
+
+A part S session's Codex config could not be made: the pack's own config.toml and the harness's settings do not make one TOML file, the pack sets a harness key (model, provider, effort, approvals, sandbox, update check, analytics, web search, bundled skills) to another value, or the file could not be written.
+
+Fix: Read the arm's installed config.toml. A pack that sets a harness key needs a dated change to the plan before its sessions run; never edit the pack's config by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_INSTALL
+
+A part S arm's Codex install did not build or does not match its pin: a clone is at another commit, a recipe step failed, the installed home holds a file the arm's rule refuses (a global AGENTS.md in s-gstack, other bytes than prereg.json's in s-gstack-line), or the home's tree hash is not its recorded pin.
+
+Fix: Rebuild the arm's home from its recipe (ext/codex-arms.ts) and read the step's output. A pin changes only through the extension's preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_EXPOSURE
+
+A part S session's exposure could not be read from its Codex rollouts: no rollout was copied out, a rollout line is not JSON, or the arm is not a part S arm.
+
+Fix: Read the session's codex-sessions/ folder and h2h-summary.json; a session whose exposure can't be read is never read as not exercised.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_INPUT
+
+The extension's unit builder got records it can't use: a frozen file is missing or has another schema, a count does not match the head-to-head's (100 O and 60 B2 stage 2 units, 12 and 12 stage 1 units), a unit is listed twice or has no recipe input, or a draw position does not follow the frozen order.
+
+Fix: Build from the head-to-head's committed frames, orders and session data and the run's exported records, unchanged. A record that disagrees with the frozen files goes to the Captain; nothing is filled in by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_RECIPE
+
+A rebuilt unit is not the unit the head-to-head ran: its recipe did not build, or a payload file it wrote (fix.patch, test.patch, issue.md, parser.py) hashes differently from the original. The unit drops for every arm of parts S and P.
+
+Fix: None inside the run: the unit is listed with its reason. Check the recipe pins (dataset revision, advisory commit, fix commit) before rebuilding anything else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_ORACLE
+
+A rebuilt or fresh unit failed the base plan's oracle: its verdict was not kept, or it did not run 3 base and 3 fixed runs. A rebuilt unit drops for every arm of parts S and P; a part L candidate drops at that position.
+
+Fix: None inside the run: the unit is listed with the oracle's verdict. Infrastructure faults are not drops; they leave the unit pending for a rerun.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_CONTAIN
+
+A unit failed containment: a ref or commit object past the base, an alternate or another object store, a nested .git, or a hidden test name or marker outside the repository or in an arm's home. The unit drops for every arm of its part (both parts S and P for a rebuilt unit).
+
+Fix: None inside the run: the unit is listed with the failed check. Never patch an image to pass containment.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_POOL
+
+Part L's frame is not complete: a pool's ids could not all be recovered from the surviving records, so its seeded order is provisional and no walk may use it.
+
+Fix: Recover the missing ids from a record that holds them (the head-to-head's walk logs) or change the plan's pool by a dated change before the walk. Never fill a pool by guessing.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_PENDING
+
+Part L's walk stopped at a candidate whose gate has no result yet (a licence read, row text, oracle or containment reading); positions after it are not drawn.
+
+Fix: Run the named gate on the named unit, then walk again. The walk never skips a pending unit.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2HX_UNITS_SHORT
+
+Part L's walk ran out of candidates before it filled its 6 pilot units, 100 counted units and 5 reserves. The counted units are what is left after the pilot and the reserves; under 60 makes part L underpowered.
+
+Fix: Report the restated counts and MDDs as the plan's section 5 says. Under 60 counted units, part L is descriptive only and goes back to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ROUTE_CONFIG
+
+Part P's particle-1 route in the extension's prereg.json does not match the metering proxy's: it goes somewhere other than OpenRouter, pins a provider with no known OpenRouter slug, or pins providers, fallbacks or data collection other than the proxy's price row sends.
+
+Fix: Make the price row in src/runner/pricing/prices.ts and prereg.json's parts.P.route agree, through a dated plan change if prereg.json is the one that moves. No particle-1 session runs until they do.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ROUTE_PROVIDER
+
+A particle-1 answer was served by a provider other than the one part P pins (OpenRouter's generation record names another provider_name).
+
+Fix: Part P's items stop. Bring the session, its answer id and the generation record to the Captain; nothing is retried to get another provider.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ROUTE_RECORD
+
+A particle-1 answer has no readable OpenRouter generation record, so the provider that served it is unknown: the answer id is malformed, the lookup did not answer 200, or the record names another id or no provider.
+
+Fix: Part P's items stop. Read the generation record by hand through the proxy's free route and bring it to the Captain before any more particle-1 sessions open.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ANALYSIS_INPUT
+
+The extension's analysis or its interim look got records it can't use: a unit listed twice or of a kind the part does not run, a record for an unknown unit or for an arm that does not run on that unit, two records for one session, a record of another schema, or a scored session with no tests-added record.
+
+Fix: Pass the part's own units, sessions, scores and tests-added records, one of each per session, as the scorer and the tests-added module wrote them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_H2H_PREREG
 

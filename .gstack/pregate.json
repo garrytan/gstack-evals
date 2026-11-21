@@ -69,6 +69,75 @@
     }
   ],
   "dependencies": {
+    "wiki/plans/2026-11-21-geva-568-skill-pack-h2h-sol-particle-prereg/**": [
+      "tests/outcome-skills/h2hx-analysis.test.ts",
+      "tests/outcome-skills/h2hx-codex-arms.test.ts",
+      "tests/outcome-skills/h2hx-codex.test.ts",
+      "tests/outcome-skills/h2hx-driver.test.ts",
+      "tests/outcome-skills/h2hx-exposure.test.ts",
+      "tests/outcome-skills/h2hx-items.test.ts",
+      "tests/outcome-skills/h2hx-lhomes.test.ts",
+      "tests/outcome-skills/h2hx-lwalk.test.ts",
+      "tests/outcome-skills/h2hx-power.test.ts",
+      "tests/outcome-skills/h2hx-prereg.test.ts",
+      "tests/outcome-skills/h2hx-route.test.ts",
+      "tests/outcome-skills/h2hx-run.test.ts",
+      "tests/outcome-skills/h2hx-runtimes.test.ts",
+      "tests/outcome-skills/h2hx-session.test.ts",
+      "tests/outcome-skills/h2hx-units.test.ts"
+    ],
+    "wiki/plans/2026-11-15-geva-538-skill-pack-h2h-prereg/**": [
+      "tests/outcome-skills/h2hx-analysis.test.ts",
+      "tests/outcome-skills/h2hx-codex-arms.test.ts",
+      "tests/outcome-skills/h2hx-codex.test.ts",
+      "tests/outcome-skills/h2hx-driver.test.ts",
+      "tests/outcome-skills/h2hx-exposure.test.ts",
+      "tests/outcome-skills/h2hx-items.test.ts",
+      "tests/outcome-skills/h2hx-lhomes.test.ts",
+      "tests/outcome-skills/h2hx-lwalk.test.ts",
+      "tests/outcome-skills/h2hx-power.test.ts",
+      "tests/outcome-skills/h2hx-prereg.test.ts",
+      "tests/outcome-skills/h2hx-route.test.ts",
+      "tests/outcome-skills/h2hx-run.test.ts",
+      "tests/outcome-skills/h2hx-runtimes.test.ts",
+      "tests/outcome-skills/h2hx-session.test.ts",
+      "tests/outcome-skills/h2hx-units.test.ts"
+    ],
+    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/**": [
+      "tests/outcome-skills/h2hx-analysis.test.ts",
+      "tests/outcome-skills/h2hx-units.test.ts"
+    ],
+    "tests/outcome-skills/fixtures/h2hx-codex/**": [
+      "tests/outcome-skills/h2hx-exposure.test.ts",
+      "tests/outcome-skills/h2hx-session.test.ts"
+    ],
+    "tests/outcome-skills/fixtures/h2hx-l/**": [
+      "tests/outcome-skills/h2hx-lhomes.test.ts"
+    ],
+    "tests/outcome-skills/h2hx_codex_test.py": [
+      "tests/outcome-skills/h2hx-codex.test.ts"
+    ],
+    "lanes/outcome-skills/h2h/ext/h2h_codex.py": [
+      "tests/outcome-skills/h2hx-codex.test.ts",
+      "tests/outcome-skills/h2hx-driver.test.ts"
+    ],
+    "lanes/outcome-skills/h2h/ext/codex-pins.json": [
+      "tests/outcome-skills/h2hx-codex-arms.test.ts",
+      "tests/outcome-skills/h2hx-session.test.ts"
+    ],
+    "lanes/outcome-skills/h2h/sessions/markers.json": [
+      "tests/outcome-skills/h2hx-exposure.test.ts",
+      "tests/outcome-skills/h2hx-session.test.ts"
+    ],
+    "lanes/outcome-skills/h2h/sessions/h2h_turns.py": [
+      "tests/outcome-skills/h2hx-session.test.ts"
+    ],
+    "lanes/outcome-skills/h2h/sessions/sh/**": [
+      "tests/outcome-skills/h2hx-driver.test.ts"
+    ],
+    "lanes/outcome-skills/pfchecks/sh/**": [
+      "tests/outcome-skills/h2hx-driver.test.ts"
+    ],
     "lanes/codex-hooks/cli.ts": [
       "tests/cli.test.ts"
     ],
