@@ -161,6 +161,35 @@ bun lanes/delivery-route/cli.ts b1d report <table.jsonl> --item <b1d-smoke|b1d-i
 
 The launcher commands are L1's under B1d's profile: host root ~/b1d, ledger port 9950, ARMS holding the four held-out tars. The launch guard reads B1D_LEDGERS and B1D_CREW, and refuses when the run commit's or the checkout's harness differs from B1c's run or B1's (`b1d reuse`) or the checkout holds uncommitted changes to those paths or B1d's own. Its all-in stop is $400 (b1d-pins.ts B1D.stopUsd, raised from $340 on 2026-11-19 before the pilot). A relaunch is never refused on money: when it would pass its item's cap or the all-in stop, the guard prints `B1D_LAUNCH OVERSHOOT` and the reasons for the Captain, and the relaunch runs its salvage. A fresh launch past either still refuses. Held-out commands read the sealed list from B1D_HELDOUT and refuse it unless it is the committed draw. `routes` needs the built tree and an export holding each task's instruction.md; `sessions run` needs Docker, the hm-session image and the built tars. None of them makes a model call.
 
+## B1e: a rewritten description against the hook
+
+B1e asks whether rewriting prove-it's description, with gstack's routing hook off, gets Opus 5.5 to follow prove-it's steps as often as the hook does, without loading prove-it on feature requests it doesn't fit. It installs gstack v1.102.1.0 the way a user does, with B1's prove-it beside it, in four arms that differ only in how prove-it can be found: hook (gstack's default), own (routing off, prove-it's own description), long and required (routing off, a rewritten description), plus B1's none arm. The plan, the decision rules, the task sets and the frozen numbers are in [its preregistration](../../wiki/plans/2026-11-21-capy-b1e-description-rewrite-prereg/README.md). B1's to B1d's files stay as merged.
+
+| File | What it does |
+|---|---|
+| b1e-pins.ts | Frozen values: gstack's tag, sha and the blobs of its route files, the hook registrations, the five arms and their rates, the description lengths and digests, the task sets, reserve and supply sample, the items, caps, all-in stop, margin and over-loading bound |
+| b1e-build.sh | Builds the four gstack tars from one gstack setup: the hook tree, own with routing off, and long and required with prove-it's file swapped |
+| arms/b1e/prove-it-long.md, arms/b1e/prove-it-required.md | B1's gstack-shaped prove-it with only its description line rewritten |
+| b1e.ts | The arm checks, the keyless route table, the plan, caps and launch guard, the session rows (steps followed, loads, what the hook named, routing off, the arm's tar), the pilot check with its supply sample, the main report with each rewrite's decision, the power table and six keyless scripted sessions |
+
+```
+lanes/delivery-route/b1e-build.sh
+bun lanes/delivery-route/cli.ts b1e arms manifest|check [--out <dir>]
+bun lanes/delivery-route/cli.ts b1e routes --export <SWE-rebench export> [--out <tsv>] [--check]
+bun lanes/delivery-route/cli.ts b1e sessions run --out <dir> [--cut tests/delivery-route/fixtures/b1e-sessions]
+bun lanes/delivery-route/cli.ts b1e plan | power | reuse [--head <commit>]
+bun lanes/delivery-route/cli.ts b1e approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who>
+bun lanes/delivery-route/cli.ts b1e prepare <work> --item <item>
+bun lanes/delivery-route/cli.ts b1e host-up|attach|recover|host-down <work>
+bun lanes/delivery-route/cli.ts b1e launch|relaunch|rerun <work> --part <part>
+bun lanes/delivery-route/cli.ts b1e guard <work>
+bun lanes/delivery-route/cli.ts b1e done --ledger <jsonl> --item <item>
+bun lanes/delivery-route/cli.ts b1e table <config.json> <out.jsonl>
+bun lanes/delivery-route/cli.ts b1e report <table.jsonl> --item <b1e-pilot|b1e-main> [--out <dir>]
+```
+
+The launcher commands are L1's under B1e's profile: host root ~/b1e, ledger port 9951, and B1E_ARMS_DIR holding the built tars. The launch guard reads B1E_LEDGERS and B1E_CREW, and refuses when the run commit's or the checkout's harness differs from B1's run (`b1e reuse`), when the checkout holds uncommitted harness changes, when b1e-main starts before b1e-pilot is marked done, or when the projections pass an item's cap or the $700 all-in stop. `routes` needs the built hook and own trees and an export holding each task's instruction.md; `sessions run` needs Docker, the hm-session image and the built tars. None of them makes a model call.
+
 ## Credits
 
 The Prove-It steps, the /test front matter and the test-driven-development description are from [agent-skills](https://github.com/addyosmani/agent-skills) by Addy Osmani (MIT). The gstack-shaped setup text is gstack's own /verify setup. B1b's routing block and prompt-routing hook are gstack's own, at bbf48aa7ef19, and B1d installs gstack itself at 5afef04e31de. NOTICE.md has the rows.

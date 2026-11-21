@@ -1,0 +1,200 @@
+{
+  "arm": "long",
+  "claude_code": "2.1.312",
+  "typed": false,
+  "spec": "long:tar=long:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status",
+  "tar_gz_sha256": "8aa089d0053d64df50784a272146c7edb1e4fd6bcbbe747d2750905fed14a266",
+  "gstack": {
+    "repo": "https://github.com/garrytan/gstack.git",
+    "tag": "v1.102.1.0",
+    "sha": "29bff55dd8a14b32ff282d5a37097e3a53e3250a",
+    "version": "1.102.1.0",
+    "setup": "./setup --host claude --no-browser --loadout full",
+    "git_archive_sha256": "12e552dcb081f9ecda0c301b691546407022f84dda0b397ac4be3948e7fd55f7",
+    "fetch": "git init; git fetch --depth 1 <repo> <sha>; git checkout FETCH_HEAD"
+  },
+  "update_check": "false",
+  "routing_declined": "true",
+  "onboarding_markers": ".gstack/.activated .gstack/.completeness-intro-seen .gstack/.feature-prompted-model-overlay .gstack/.first-loop-tip-shown .gstack/.proactive-prompted .gstack/.telemetry-prompted",
+  "gstack_config": {
+    "skill_routing": "off",
+    "skill_contracts": "on",
+    "telemetry": "off"
+  },
+  "loadout_lock_sha256": "28b55f4232905d01caa9651c847dce272de56a7ce0928b085b33e4b3ddadfe33",
+  "steps": {
+    "sha256": "47bfc31f877aef8938dfabc4984a759eaaa1f8f7588a408c542199bde6e34557",
+    "bytes": 203,
+    "source": "https://github.com/addyosmani/agent-skills 39b723ceebf81474d0557c1fecd01eddab585563 .claude/commands/test.md lines 13-18"
+  },
+  "carrier": {
+    "path": ".claude/skills/prove-it/SKILL.md",
+    "source": "b1e/prove-it-long.md",
+    "sha256": "b6862147bc42dd9de1b76adb41a7ec8f300b69b00307fa68257d3a2ecd415e3f",
+    "description_chars": 546
+  },
+  "route": {
+    "files": [
+      {
+        "path": ".claude/skills/gstack/lib/skill-route.ts",
+        "sha256": "ca6a6ae4969772efd247f78eab4dfae6428d7976508f3f5ec46cb1166baf9a0a"
+      },
+      {
+        "path": ".claude/skills/gstack/lib/skill-triggers.ts",
+        "sha256": "b2a492f2ec3d7713d228e439902791f91421d4f7d7dd49a1ce5d344ff13464b0"
+      },
+      {
+        "path": ".claude/skills/gstack/hosts/claude/hooks/skill-route-hook",
+        "sha256": "27e255325a97ca830e3947a100c93446501548bb46abc2ca247efac0c3223673"
+      },
+      {
+        "path": ".claude/skills/gstack/hosts/claude/hooks/skill-route-hook.ts",
+        "sha256": "aca03aa83bf31870e5d19014b147d25f290382a0975680361a420cfd64743e3b"
+      },
+      {
+        "path": ".claude/skills/gstack/hosts/claude/hooks/destructive-guard-hook",
+        "sha256": "94681b1aa3662cf91b932d4c74e2169f500dc6b03ce9c98d377397e7415bb952"
+      },
+      {
+        "path": ".claude/skills/gstack/bin/gstack-skill-start",
+        "sha256": "5468478202f4e5331a4a06b9e14c89595f3425928214e5dbd53015eba1a92ded"
+      },
+      {
+        "path": ".claude/skills/gstack/bin/gstack-skill-load",
+        "sha256": "b987bdec59390e3096184930fb9dd5a6ef62663766fc43b4a442a5290848fa22"
+      },
+      {
+        "path": ".claude/skills/gstack/bin/gstack-config",
+        "sha256": "febf685197e8d7f0a98d349944287adb37a4d75a53d2ee43a807b9084eb96368"
+      },
+      {
+        "path": ".claude/skills/gstack/bin/gstack-session-kind",
+        "sha256": "455e02bbe35e50a92a6650b9c2690358091ca090b7a33aa6f09d3b3662dbbc67"
+      },
+      {
+        "path": ".claude/skills/gstack/setup",
+        "sha256": "907971033f2e9d327f712f230ebeb0ec35879f8ddc01a410f7645ceb286252c1"
+      }
+    ]
+  },
+  "derived": "the own tree with .claude/skills/prove-it/SKILL.md replaced by b1e/prove-it-long.md",
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -cf <arm>.tar .claude .gstack (tar (GNU tar) 1.35, in quick/laneb/arms/Dockerfile's builder image)",
+  "tar": {
+    "file": "long.tar",
+    "bytes": 1372733440,
+    "sha256": "d9e036945e7483c5fc01dbd4c5d921bf4a8e59acc8edb127e942914cc36032fa"
+  },
+  "tree": {
+    "files": 14631,
+    "symlinks": 9,
+    "dirs": 1729,
+    "bytes": 1358707207,
+    "digest": "69be3e3b755707e12d6481eca16831eda8ad3858e1d381bce82b90374693d8f8"
+  },
+  "skills": {
+    "count": 65,
+    "tree_digest": "48c2939c8ce4d05fb2ca99b059089e330753e221caccf8bd33895b8102644b09",
+    "skill_md_digest": "a2b3f4cc71a3049987438a4900fdbbf589a898b97bfb072d459be4d41860509b",
+    "names": [
+      "_gstack-command",
+      "autoplan",
+      "benchmark",
+      "benchmark-models",
+      "browse",
+      "canary",
+      "careful",
+      "codex",
+      "connect-chrome",
+      "context-restore",
+      "context-save",
+      "cso",
+      "design-consultation",
+      "design-html",
+      "design-motion",
+      "design-review",
+      "design-shotgun",
+      "deslop-shared-libs",
+      "devex-review",
+      "diagram",
+      "document-generate",
+      "document-release",
+      "eval-plan",
+      "freeze",
+      "gstack",
+      "gstack-upgrade",
+      "guard",
+      "health",
+      "ios-clean",
+      "ios-design-review",
+      "ios-fix",
+      "ios-qa",
+      "ios-sync",
+      "land-and-deploy",
+      "landing-report",
+      "learn",
+      "make-pdf",
+      "modernize",
+      "office-hours",
+      "open-gstack-browser",
+      "pair-agent",
+      "plan-ceo-review",
+      "plan-design-review",
+      "plan-devex-review",
+      "plan-eng-review",
+      "plan-tune",
+      "prove-it",
+      "qa",
+      "qa-only",
+      "retro",
+      "review",
+      "runaway-stopper",
+      "scrape",
+      "setup-browser-cookies",
+      "setup-deploy",
+      "setup-gbrain",
+      "ship",
+      "skillify",
+      "spec",
+      "sync-gbrain",
+      "test-audit",
+      "ubicloud",
+      "unfreeze",
+      "verify",
+      "write-skill"
+    ]
+  },
+  "settings": {
+    "sha256": "50464312bcbed69140e18c9cfc42de124c3848129406b22379dc34d18d1ee05e",
+    "hooks": [
+      {
+        "event": "Stop",
+        "matcher": "",
+        "command": "/root/.claude/skills/gstack/hosts/claude/hooks/timeline-stop-hook",
+        "timeout": 5,
+        "source": null
+      },
+      {
+        "event": "Stop",
+        "matcher": "",
+        "command": "/root/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook",
+        "timeout": 10,
+        "source": null
+      },
+      {
+        "event": "UserPromptSubmit",
+        "matcher": "",
+        "command": "/root/.claude/skills/gstack/hosts/claude/hooks/skill-route-hook",
+        "timeout": 5,
+        "source": null
+      },
+      {
+        "event": "PreToolUse",
+        "matcher": "Bash|PowerShell",
+        "command": "/root/.claude/skills/gstack/hosts/claude/hooks/destructive-guard-hook",
+        "timeout": 10,
+        "source": null
+      }
+    ]
+  },
+  "inventory_sha256": "b310a1d6e1aeabde1f9cd0fce54cfe75127abd43d6cfc77c92b8446e0fc8023c"
+}
