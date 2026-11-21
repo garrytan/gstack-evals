@@ -392,8 +392,9 @@ function readings(f: Map<string, string[]>, io: Io): number {
   const blocked: string[] = [];
   const validation = receipt("--validation-receipt", "validation.json");
   if (validation?.admitted !== true) blocked.push("the checker validation (section 6) has no passing receipt");
-  else if (Array.isArray(validation.tags) && !validation.tags.every((t: string) => tagsOf(f).includes(t))) blocked.push("the checker validation scored " + validation.tags.join(", ") + ", not this reading's check stages");
-  else if (Array.isArray(validation.tags) && (typeof validation.checker_sha256 !== "string" || checkers.some((c) => c !== validation.checker_sha256))) blocked.push("the checker validation scored checker " + (validation.checker_sha256 ?? "none") + ", and this reading's check stages ran " + [...new Set(checkers.map((c) => c ?? "none"))].join(", "));
+  else if (!Array.isArray(validation.tags) || validation.tags.length === 0) blocked.push("the checker validation names no check stages it scored");
+  else if (!validation.tags.every((t: string) => tagsOf(f).includes(t))) blocked.push("the checker validation scored " + validation.tags.join(", ") + ", not this reading's check stages");
+  else if (typeof validation.checker_sha256 !== "string" || checkers.some((c) => c !== validation.checker_sha256)) blocked.push("the checker validation scored checker " + (validation.checker_sha256 ?? "none") + ", and this reading's check stages ran " + [...new Set(checkers.map((c) => c ?? "none"))].join(", "));
   if (receipt("--fixtures-receipt", FIXTURES_RECEIPT)?.passed !== true) blocked.push("the fixtures with the real checker have no passing receipt");
   io.out(JSON.stringify(read(builds, arms, blocked), null, 2));
   return 0;

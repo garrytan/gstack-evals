@@ -39,7 +39,7 @@ const withDir = async (fn: (dir: string) => Promise<void>) => {
   }
 };
 
-// Value: protects=pin change 2, item B: every planning session, whatever its arm, stays open while background work it started still runs, up to its own time limit, and builds and checks still end at their first reply; fails_when=an arm's planning session ends at its first result with work still out, the hold outlasts the session's minutes, or a build or check holds; why_new=the day-one smoke, where an A session ran its second-model review in the background and the session ended with it still running; seam=runStage's launch input and launchSession's driver options; no_claim=the driver's hold itself, which tests/adapters/claude-code.test.ts covers
+// Value: protects=section 7, item B, of the first pin change: every planning session, whatever its arm, stays open while background work it started still runs, up to its own time limit, and builds and checks still end at their first reply; fails_when=an arm's planning session ends at its first result with work still out, the hold outlasts the session's minutes, or a build or check holds; why_new=the day-one smoke, where an A session ran its second-model review in the background and the session ended with it still running; seam=runStage's launch input and launchSession's driver options; no_claim=the driver's hold itself, which tests/adapters/claude-code.test.ts covers
 describe("the background hold", () => {
   test("a held session gets the driver's background wait at its own time limit, and any other session gets none", async () =>
     withDir(async (dir) => {
@@ -78,13 +78,16 @@ describe("the background hold", () => {
     }));
 });
 
-// Value: protects=pin change 2, item B: a held session that reaches its time limit with background work still out is a gap row that names its cause, and it does not retry; fails_when=the deadline reads as an upstream failure, retries, or scores as the arm's plan; why_new=the hold's bound, which the Captain's ruling sets at each session's time limit; seam=attemptOutcome and settle; no_claim=which work held the session, which the driver's session_end records
+// Value: protects=section 7, item B, of the first pin change as the follow-up changed it: a held session that reaches its time limit with background work still out gets the one retry every retryable failure gets, and on the retry it is a gap row that names its cause; fails_when=the deadline reads as an upstream failure, is a gap with no retry, or scores as the arm's plan; why_new=the day-one results review, which found that held timeouts became gaps with no retry and could fall unevenly by arm; seam=attemptOutcome and settle; no_claim=which work held the session, which the driver's session_end records
 describe("a held session that reaches its time limit", () => {
-  test("is a missing row, E_DAYONE_BACKGROUND, with its cause and no retry", () => {
+  test("retries once, then is a missing row, E_DAYONE_BACKGROUND, with its cause", () => {
     const read = { web: 0, gstack_reads: [], contained: [], micros: 0, voice: null, out: null };
+    const why = "background work the session started still ran at its time limit";
     const o = attemptOutcome({ ...read, termination: { kind: "missing", code: "E_BACKGROUND_DEADLINE" } }, null);
-    expect(o).toEqual({ state: "missing", code: "E_DAYONE_BACKGROUND", why: "background work the session started still ran at its time limit" });
+    expect(o).toEqual({ state: "retry", why, code: "E_DAYONE_BACKGROUND" });
     expect(settle(o, 1)).toEqual(o);
+    expect(settle(o, 2)).toEqual({ state: "missing", code: "E_DAYONE_BACKGROUND", why: why + ", on the retry" });
     expect(attemptOutcome({ ...read, contained: null, termination: { kind: "missing", code: "E_BACKGROUND_DEADLINE" } }, null)).toEqual(o);
+    expect(settle({ state: "retry", why: "an upstream failure" }, 2)).toEqual({ state: "missing", code: "E_DAYONE_GAP", why: "an upstream failure, on the retry" });
   });
 });

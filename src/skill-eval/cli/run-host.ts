@@ -19,7 +19,11 @@
 // - Every finished session is journaled to <out>/cells.ndjson with its session key (src/trial/cache.ts); a judged
 //   session is journaled only with its judgment, so --resume reruns one whose judge failed or hit the cap. --resume reuses
 //   a journaled cell whose key still matches; a changed key refuses before any spend (E_CACHE_STALE) unless --repair
-//   names the repair, which reruns those cells.
+//   names the repair, which reruns those cells. The judge model and the rubric are not in the session key: a reused
+//   judged cell whose judgment key (the judge model, the rubric and the judge's code) changed is judged again from its
+//   journaled answer and evidence, and its session is not rerun.
+// - The judge's prompt starts with the part every run of its task shares (judgePrefix), which the judge's request marks
+//   for the provider's prompt cache.
 // - Arms on a real host are loose skill folders, a gstack base at a sha with the target skill overlaid or removed, stacks,
 //   placebo, none and bare. A loadout arm has no installer yet; hostReadiness refuses it with E_USAGE before anything is
 //   spent.
@@ -36,7 +40,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, posix, resolve } from "node:path";
+import { dirname, join, posix, relative, resolve, sep } from "node:path";
 import { calibrationProbes, judgeCalibration, sentinelFor, withSentinel, type CalibrationFailure, type ProbeRun } from "../../adapters/calibration.ts";
 import { dockerInstaller, installArms, releaseInstalls, runHold, sentinelLayer, stackSources, type ArmInstall, type Layer } from "../../arms/install.ts";
 import { cellFor, cellSettings, type CellSettings } from "../../arms/cells.ts";
@@ -47,17 +51,19 @@ import { openLease, settleLease } from "../../runner/ledger/ledger.ts";
 import { rigAdmission } from "../../rig/admission.ts";
 import { openLocalLedger } from "../../runner/ledger/local.ts";
 import { ProxyControl, type BindRequest, type Binding, type Meter } from "../../runner/proxy/metering-proxy.ts";
-import { cacheStale, dirTreeSha256, envValuesHash, newProgress, recordSession, sessionKey, staleParts, writeProgress, type CacheStop, type SessionKey } from "../../trial/cache.ts";
-import { judgePrompt, parseJudgment, redact } from "../../grade/adjudicate.ts";
+import { cacheStale, dirTreeSha256, envValuesHash, judgeKey, newProgress, recordSession, sessionKey, staleParts, writeProgress, type CacheStop, type SessionKey } from "../../trial/cache.ts";
+import { judgePrefix, judgePrompt, parseJudgment, redact } from "../../grade/adjudicate.ts";
 import { JUDGE_REASONING_EFFORT, JUDGE_ROUTE, judgeDriver } from "../../adapters/judge.ts";
 import { PERSONA_MAX_OUTPUT_TOKENS, PERSONA_REASONING_EFFORT, PERSONA_TIMEOUT_S, personaAnswer, personaPrompt, type PersonaAnswer } from "../../usersim/persona.ts";
 import { buildArmImage, checkImagePin, dockerRun, retainImage, retainTree, stateRoot } from "../../trial/image.ts";
 import { createTrialNetwork, recoverRun, removeTrialNetwork, startProxyContainer } from "../../trial/proxy.ts";
 import { dockerSandbox, type Sandbox } from "../../trial/sandbox.ts";
+import type { Delta } from "../../trial/delta.ts";
 import { runTrial, type AgentDriver, type TrialRun } from "../../trial/trial.ts";
 import type { ArmSpec, CalibrationResult, Host, TrialRecord } from "../../types.ts";
-import type { SidecarTask } from "../contract/sidecar.ts";
+import { SIDECAR_FILE, type SidecarTask } from "../contract/sidecar.ts";
 import type { ContractTask } from "../contract/tasks.ts";
+import { LOCK_FILE } from "../lock/lock.ts";
 import { rerunPlan, type Stop, type VerdictInput } from "../verdict/gates.ts";
 import { gradeScope, gradeTrial, type VerdictTask } from "../verdict/grade.ts";
 import type { GateEvidence } from "../verdict/lock.ts";
@@ -105,6 +111,8 @@ export interface HostRunInput {
   runId: string;
   out: string;
   tasksDir: string;
+  /** The loaded sidecar's path, left out of the fixture tree, which always leaves out tasks.ext.json and the lock too; null or unset when none was loaded. */
+  sidecar?: string | null;
   policy: LoadedPolicy;
   arms: ArmSpec[];
   /** The target skill's name; null when no arm holds a skill. */
@@ -140,6 +148,10 @@ export interface JournalEntry {
   cell: Cell;
   key: SessionKey;
   record: TrialRecord;
+  /** The files the session added, changed and deleted: the judge's evidence, kept so a changed judge can judge the session again. */
+  delta: Pick<Delta, "added" | "changed" | "deleted"> | null;
+  /** The judgment's key (judgeKey) for a judged session, else null. */
+  judge_key: string | null;
 }
 
 export const cellId = (c: Cell): string => JSON.stringify([c.model, c.arm, c.task, c.round, c.trial]);
@@ -271,6 +283,8 @@ interface SessionSpec {
   sentinel?: string;
   dir: string;
   tasksDir: string;
+  /** A judge session's shared prompt prefix, marked for the provider's prompt cache. */
+  cachePrefix?: string;
 }
 
 const JUDGE_ARM = "judge";
@@ -291,11 +305,15 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     return micros;
   };
   const byId = new Map(o.tasks.map((t) => [t.id, t]));
-  const fixtureTree = dirTreeSha256(o.tasksDir);
+  const sidecar = o.sidecar ? relative(o.tasksDir, resolve(o.sidecar)).split(sep).join("/") : null;
+  const fixtureTree = dirTreeSha256(o.tasksDir, new Set([LOCK_FILE, SIDECAR_FILE, ...(sidecar && !/^\.\.(\/|$)/.test(sidecar) ? [sidecar] : [])]));
   const keyOf = (model: string, arm: ArmSpec, task: ContractTask): SessionKey => {
     const entry = o.entries[task.id];
-    return sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task, sidecar_entry: entry ?? null, fixture_tree: fixtureTree, model, timeout_s: o.timeoutS, env_values: envValuesHash(entry?.env ?? [], process.env), judge_model: entry?.judge ? o.judgeModel : null, policy: o.policy.sha256 });
+    const { judge: _rubric, ...agentEntry } = entry ?? {};
+    return sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task, sidecar_entry: entry ? agentEntry : null, fixture_tree: fixtureTree, model, timeout_s: o.timeoutS, env_values: envValuesHash(entry?.env ?? [], process.env), policy: o.policy.sha256 });
   };
+  const judgeCode = judgeSha256();
+  const judgeKeyOf = (taskId: string): string => judgeKey({ model: o.judgeModel, rubric: o.entries[taskId]?.judge ?? "", code: judgeCode });
 
   const reuse = new Map<string, JournalEntry>();
   for (const [id, e] of o.reuse ?? []) {
@@ -352,7 +370,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const skill = o.skill && s.arm && (holds || s.watchSkill) ? { name: o.skill, roots: installed ? installed.roots.map((r) => posix.join(home, r)) : [skillRoot(s.host, home, o.skill)], home, dir: installed?.dir ?? null, ...(s.sentinel ? { sentinel: s.sentinel } : {}), namespaces: armInstall ? armNamespaces(armInstall) : [] } : null;
     const proxy = { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token };
     const usersim = s.arm !== null && hasPersona(s.task.id) ? persona(s, armName) : null;
-    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy, effort: JUDGE_REASONING_EFFORT }) : (rig.driver ?? hostDriver)({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.host === "codex" ? { effort: catalogEffort(s.model) } : {}), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
+    const agent = s.arm === null ? judgeDriver({ provider, model: s.model, proxy, effort: JUDGE_REASONING_EFFORT, ...(s.cachePrefix ? { cachePrefix: s.cachePrefix } : {}) }) : (rig.driver ?? hostDriver)({ host: s.host, model: s.model, provider, proxy, interactive: s.interactive, skill, out: join(s.dir, "host"), ...(s.host === "codex" ? { effort: catalogEffort(s.model) } : {}), ...(s.entry ? { entry: s.entry } : {}), ...(usersim ? { freeform: usersim.answer } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}) });
     const stateConfig = cell && Object.keys(cell.gstack_config).length ? { stateConfig: cell.gstack_config } : {};
     const run = await runTrial({ cell: { model: s.model, arm: armName, round: s.round, trial: s.trial }, task: s.task, ...(s.entry ? { entry: s.entry } : {}), tasksDir: s.tasksDir, sandbox: s.sandbox, agent, dir: s.dir, timeoutS: o.timeoutS, network: rig.network, ...stateConfig });
     const meter = await rig.finalize(binding.meter_id);
@@ -394,15 +412,16 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
   mkdirSync(o.out, { recursive: true });
 
   let capped = false;
-  const adjudicate = async (cell: Cell, task: VerdictTask, run: TrialRun, dir: string): Promise<void> => {
-    const rec = run.record;
+  const needsJudgment = (task: VerdictTask, e: JournalEntry): boolean => judges(task) && e.record.termination.kind === "completed" && e.judge_key !== judgeKeyOf(task.id);
+  const adjudicate = async (cell: Cell, task: VerdictTask, rec: TrialRecord, delta: JournalEntry["delta"]): Promise<void> => {
     if (!judges(task) || rec.termination.kind !== "completed") return;
     const names = [o.skill ?? "", "gstack"];
     const answer = redact(gradeScope(task) === "turns" ? rec.turns.join("\n\n") : (rec.turns.at(-1) ?? ""), names);
-    const evidence = redact(JSON.stringify({ files_added: run.delta?.added ?? [], files_changed: run.delta?.changed ?? [], files_deleted: run.delta?.deleted ?? [], check_passed: rec.check }, null, 2), names);
-    const prompt = judgePrompt({ prompt: byId.get(task.id)!.prompt, rubric: o.entries[task.id]?.judge ?? "", answer: answer.text, evidence: evidence.text, nonce: randomUUID().slice(0, 8) });
+    const evidence = redact(JSON.stringify({ files_added: delta?.added ?? [], files_changed: delta?.changed ?? [], files_deleted: delta?.deleted ?? [], check_passed: rec.check }, null, 2), names);
+    const shared = { prompt: byId.get(task.id)!.prompt, rubric: o.entries[task.id]?.judge ?? "" };
+    const prompt = judgePrompt({ ...shared, answer: answer.text, evidence: evidence.text, nonce: randomUUID().slice(0, 8) });
     const judgeDir = join(o.out, "judge", randomUUID());
-    const jr = await session({ host: o.host, model: o.judgeModel, arm: null, round: cell.round, trial: cell.trial, task: { id: task.id + "-judge", prompt }, interactive: false, sandbox: rig.judgeSandbox(), allowance: judgeAllowance, watchSkill: false, dir: judgeDir, tasksDir: empty });
+    const jr = await session({ host: o.host, model: o.judgeModel, arm: null, round: cell.round, trial: cell.trial, task: { id: task.id + "-judge", prompt }, interactive: false, sandbox: rig.judgeSandbox(), allowance: judgeAllowance, watchSkill: false, dir: judgeDir, tasksDir: empty, cachePrefix: judgePrefix(shared) });
     const kind = jr.record.termination.kind;
     rec.judge = kind === "completed" ? parseJudgment(jr.record.turns.at(-1) ?? "") : null;
     if (kind === "cap_stop") capped = true;
@@ -414,23 +433,30 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     for (let trial = 0; trial < o.trials; trial++) {
       const batch = models.flatMap((model) => o.verdict.flatMap((task) => o.arms.map((arm) => ({ cell: { model, arm: arm.name, task: task.id, round: r, trial } as Cell, task, arm }))));
       const fresh = batch.filter((c) => !reuse.has(cellId(c.cell)));
-      const worst = fresh.reduce((s, c) => s + allowance(c.cell.model) + (judges(c.task) ? judgeAllowance : 0) + (hasPersona(c.task.id) ? allowance(o.usersimModel, USERSIM_ALLOWANCE) : 0), 0);
+      const rejudged = batch.filter((c) => reuse.has(cellId(c.cell)) && needsJudgment(c.task, reuse.get(cellId(c.cell))!)).length;
+      const worst = fresh.reduce((s, c) => s + allowance(c.cell.model) + (judges(c.task) ? judgeAllowance : 0) + (hasPersona(c.task.id) ? allowance(o.usersimModel, USERSIM_ALLOWANCE) : 0), rejudged * judgeAllowance);
       if (o.cap !== null && spent + worst > o.cap) {
         stops.push({ code: "CAP_STOP", model: null, subject: null });
         return false;
       }
       const runs = await pool(batch, o.parallel, async (c) => {
         const reused = reuse.get(cellId(c.cell));
-        if (reused) return reused.record;
+        if (reused && !needsJudgment(c.task, reused)) return reused.record;
+        if (reused) {
+          await adjudicate(c.cell, c.task, reused.record, reused.delta);
+          if (reused.record.judge !== null) appendFileSync(journal, JSON.stringify({ ...reused, judge_key: judgeKeyOf(c.task.id) } satisfies JournalEntry) + "\n");
+          return reused.record;
+        }
         const dir = join(o.out, "runs", c.cell.model.replaceAll("/", "_"), c.arm.name, c.task.id, "r" + r + "-t" + trial);
         const run = await session({ host: o.host, model: c.cell.model, arm: c.arm, round: r, trial, task: byId.get(c.task.id)!, ...(o.entries[c.task.id] ? { entry: o.entries[c.task.id] } : {}), interactive: c.task.interactive, sandbox: rig.sandbox(c.arm.name, false, c.cell.model), allowance: allowance(c.cell.model), watchSkill: false, dir, tasksDir: o.tasksDir });
-        await adjudicate(c.cell, c.task, run, dir);
+        const delta = run.delta ? { added: run.delta.added, changed: run.delta.changed, deleted: run.delta.deleted } : null;
+        await adjudicate(c.cell, c.task, run.record, delta);
         const g = gradeTrial(c.task, run.record);
         wall += run.record.wall_ms ?? 0;
         progress = recordSession(progress, cellName(c.cell), run.record.termination.kind === "completed" ? (g.outcome === "pass" ? "pass" : "fail") : run.record.termination.kind === "timeout" ? "timeout" : "missing", wall / 1000 / (records.length + 1), o.parallel);
         writeProgress(o.out, progress);
         const unjudged = judges(c.task) && run.record.termination.kind === "completed" && run.record.judge === null;
-        if (run.record.termination.kind !== "cap_stop" && !unjudged) appendFileSync(journal, JSON.stringify({ cell: c.cell, key: keyOf(c.cell.model, c.arm, byId.get(c.task.id)!), record: run.record } satisfies JournalEntry) + "\n");
+        if (run.record.termination.kind !== "cap_stop" && !unjudged) appendFileSync(journal, JSON.stringify({ cell: c.cell, key: keyOf(c.cell.model, c.arm, byId.get(c.task.id)!), record: run.record, delta, judge_key: judges(c.task) ? judgeKeyOf(c.task.id) : null } satisfies JournalEntry) + "\n");
         return run.record;
       });
       records.push(...runs);
@@ -446,6 +472,12 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     if (red.length) await round(2, red);
   }
   return result();
+}
+
+/** sha256 over the judge's prompt, answer parsing and request code: the code part of a judgment's key. */
+export function judgeSha256(): string {
+  const src = join(import.meta.dir, "..", "..");
+  return createHash("sha256").update(readFileSync(join(src, "grade", "adjudicate.ts"))).update(readFileSync(join(src, "adapters", "judge.ts"))).digest("hex");
 }
 
 /** sha256 over the check runner and delta import code: the session key's verifier part. */

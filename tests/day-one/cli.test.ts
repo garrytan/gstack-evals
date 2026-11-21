@@ -39,7 +39,7 @@ describe.skipIf(!onShm)("day-one read", () => {
       const out = join(dir, "out");
       stageDir(out, "base-counted", [planRow("base", "cccccc", "n", 100)]);
       stageDir(out, "review-counted", [planRow("review", "cccccc", "d", 100)]);
-      stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1] });
+      stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1], checker_sha256: "repaired" });
       stageDir(out, "base-smoke", [planRow("base", "pppppp", "n", 0)]);
       stageDir(out, "review-smoke", [planRow("review", "pppppp", "d", 0)]);
       stageDir(out, "check-smoke", [], { units: ["pppppp"], reps: [1] });
@@ -56,7 +56,7 @@ describe.skipIf(!onShm)("day-one read", () => {
       expect(c.r107).toBe("not counted");
       expect(c.blocked.length).toBe(2);
 
-      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true }));
+      writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"], checker_sha256: "repaired" }));
       writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true }));
       const gated = JSON.parse((await run(argv("counted"))).out);
       expect(gated.counted).toBe(true);
@@ -118,6 +118,28 @@ describe.skipIf(!onShm)("day-one read", () => {
       expect(shared.arms.d.share).toBe(0.4);
       writeFileSync(join(out, "validation.json"), JSON.stringify({ admitted: true, tags: ["counted"] }));
       expect(JSON.parse((await run(argv("counted"))).out).blocked).toEqual(["the checker validation scored checker none, and this reading's check stages ran repaired"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Value: protects=the validation gate's binding (pin change section 14): a passing receipt counts a reading only when it names the check stages it scored and the checker they ran; fails_when=an admitted receipt with no tags, or with an empty tag list, counts a reading; why_new=the day-one results review, which found that a receipt with no tags skipped both checks; seam=readings in lanes/day-one/cli.ts; no_claim=receipts that name their tags, which the tests above cover
+  test("an admitted receipt that names no check stages counts nothing", async () => {
+    const dir = mkdtempSync("/dev/shm/day-one-read-");
+    try {
+      const units = join(dir, "units");
+      fixtureUnit(units, "cccccc", 2);
+      const out = join(dir, "out");
+      stageDir(out, "base-counted", [planRow("base", "cccccc", "n", 100)]);
+      stageDir(out, "review-counted", [planRow("review", "cccccc", "d", 100)]);
+      stageDir(out, "check-counted", [checkRow("cccccc", "n", [true, false, false, false, false]), checkRow("cccccc", "d", [true, true, false, false, false])], { units: ["cccccc"], reps: [1], checker_sha256: "repaired" });
+      writeFileSync(join(out, "fixtures-real.json"), JSON.stringify({ passed: true }));
+      const argv = ["read", "--out", out, "--units-dir", units, "--tag", "counted", "--arms", "n", "d"];
+      for (const receipt of [{ admitted: true }, { admitted: true, checker_sha256: "repaired" }, { admitted: true, tags: [], checker_sha256: "repaired" }]) {
+        writeFileSync(join(out, "validation.json"), JSON.stringify(receipt));
+        const r = JSON.parse((await run(argv)).out);
+        expect([receipt, r.counted, r.blocked]).toEqual([receipt, false, ["the checker validation names no check stages it scored"]]);
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
