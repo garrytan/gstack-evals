@@ -163,12 +163,12 @@ The launcher commands are L1's under B1d's profile: host root ~/b1d, ledger port
 
 ## B1e: B1d on gstack's matcher fix
 
-B1e runs B1d's gstack-main arm again, built by `B1_PINS=b1e-pins.ts lanes/delivery-route/b1d-build.sh` into ~/.capy/work/b1e/arms from gstack main at 5df6b5a8, which names the installed bug-fix skill alone on bug reports. It runs on B1's 60 run tasks against the same bar of 39, and on a fresh draw of 60 tasks no B1 run has used, beside B1's no-gstack arm. The plan and the decision are in [its preregistration](../../wiki/plans/2026-11-20-capy-b1e-matcher-fix-prereg/README.md). The session rows, load detector and readers are B1d's; b1d.ts's arm checks take the gstack pin as an argument, and its pilot check takes the arms.
+B1e runs B1d's gstack-main arm again, built by `B1_PINS=b1e-pins.ts lanes/delivery-route/b1d-build.sh` into ~/.capy/work/b1e/arms from gstack main at 5df6b5a8, which names the installed bug-fix skill alone on bug reports. It runs on B1's 60 run tasks against the same bar of 39, and on a fresh draw of 60 tasks no B1 run has used, beside B1's no-gstack arm. The plan and the decision are in [its preregistration](../../wiki/plans/2026-11-20-capy-b1e-matcher-fix-prereg/README.md), and the outcome is in [its results](../../wiki/board/2026-11-21-capy-b1e-matcher-fix-results/README.md). The session rows, load detector and readers are B1d's; b1d.ts's arm checks take the gstack pin as an argument, and its pilot check takes the arms.
 
 | File | What it does |
 |---|---|
-| b1e-pins.ts | Frozen values: the gstack pin and its blobs, the arms, the keyless coverage, the fresh draw's digests, the smoke tasks, the items and caps, and B1d's run whose in-sample rows are a paired reference |
-| b1e.ts | The arm manifest and check, the route table with the fresh draw, the plan, profile and caps, the launch check, the reports, the decision and its R48 verdict, and the power table |
+| b1e-pins.ts | Frozen values: the gstack pin and its blobs, the arms, the keyless coverage, the fresh draw's digests, the smoke tasks, the items and caps, the per-arm pilot caps, and B1d's run whose in-sample rows are a paired reference |
+| b1e.ts | The arm manifest and check, the route table with the fresh draw, the plan, profile and caps, the launch check, the reports (the pilot's prints FAIL for an arm that settled above its pilot cap), the decision and its R48 verdict, and the power table |
 
 ```
 bun lanes/delivery-route/cli.ts b1e arms manifest|check [--out <dir>]
