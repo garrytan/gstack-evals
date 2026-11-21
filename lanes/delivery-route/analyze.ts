@@ -104,8 +104,12 @@ export function reading(stats: ArmStat[], contrasts: Contrast[], guard = true): 
 
 const pct = (x: number | null) => (x === null ? "n/a" : (100 * x).toFixed(1) + "%");
 const pts = (x: number) => (x >= 0 ? "+" : "") + (100 * x).toFixed(1);
-/** The rows with the primary under the rule as merged, before deviation D1, for the report's sensitivity lines. */
-export const asMerged = (rows: B1Row[]): B1Row[] => rows.map((r) => ({ ...r, detect: { ...r.detect, followed: r.detect.followed_as_merged } }));
+/** The rows with the primary under the rule as merged, before deviation D1, for the report's sensitivity lines. A row whose
+ *  detection has no followed_as_merged (a table written before D1) is refused, so the table never prints an unread zero. */
+export const asMerged = (rows: B1Row[]): B1Row[] => rows.map((r) => {
+  if (typeof r.detect?.followed_as_merged !== "boolean") throw new Error("E_B1_AS_MERGED_UNREAD " + r.trial + " has no followed_as_merged field; rescore its session with detect.ts before reading the rule as merged");
+  return { ...r, detect: { ...r.detect, followed: r.detect.followed_as_merged } };
+});
 type ModelReport = { stats: ArmStat[]; contrasts: Contrast[]; reading: Reading };
 export function report(rows: B1Row[], planned = B1.tasks) {
   const lines: string[] = [];
