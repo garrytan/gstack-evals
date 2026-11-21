@@ -457,6 +457,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_ADVISORY](#e_cso_advisory) | 2 | U20 |
 | [E_CSO_DROP_FIX_DATE](#e_cso_drop_fix_date) | 2 | U20 |
 | [E_CSO_DROP_FETCH_LAZY](#e_cso_drop_fetch_lazy) | 2 | U20 |
+| [E_CSO_DROP_SCAN](#e_cso_drop_scan) | 2 | U20 |
 | [E_CSO_DROP_FETCH](#e_cso_drop_fetch) | 2 | U20 |
 | [E_CSO_DROP_SAME_FIX](#e_cso_drop_same_fix) | 2 | U20 |
 | [E_CSO_DROP_CWE](#e_cso_drop_cwe) | 2 | U20 |
@@ -3579,6 +3580,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 Section 3, gate 2's named repair: the session tree's checkout failed in the blobless clone (a lazy blob fetch from the promisor remote), and failed again after one full re-clone of that repository. The unit is not usable and takes no position.
 
 Fix: None for the unit. The build records the drop and goes on; read both failures in the gate row's reason.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_SCAN
+
+Section 3, gate 6, failing closed for one unit: the id scan of the unit's session tree did not finish (a git object store under it that git cannot read, or a tool that failed), so the tree can't be shown free of the unit's ids. The unit is not usable and takes no position.
+
+Fix: None for the unit. The build records the drop and goes on; the gate row's reason names the step that failed. A scan of an arm's installed home that does not finish still refuses (E_CSO_SCAN).
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 

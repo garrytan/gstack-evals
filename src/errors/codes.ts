@@ -3887,6 +3887,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CSO_DROP_SCAN: {
+    exit: 2,
+    meaning: "Section 3, gate 6, failing closed for one unit: the id scan of the unit's session tree did not finish (a git object store under it that git cannot read, or a tool that failed), so the tree can't be shown free of the unit's ids. The unit is not usable and takes no position.",
+    fix: "None for the unit. The build records the drop and goes on; the gate row's reason names the step that failed. A scan of an arm's installed home that does not finish still refuses (E_CSO_SCAN).",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_CSO_DROP_FETCH: {
     exit: 2,
     meaning: "Section 3, gate 2: the repository did not clone, or the fix commit or its first parent is missing from it, or the frame's parent is not the fix's first parent. The unit is not usable and takes no position.",

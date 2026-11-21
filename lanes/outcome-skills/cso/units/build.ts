@@ -261,7 +261,15 @@ export function buildUnits(inputs: readonly UnitInput[], o: BuildOptions): Build
     const co = checkoutTree(work, c.row.repo, fix.commit, fix.parent, out, o.remote);
     if ("why" in co) { drop("fetch", co.why, "E_CSO_DROP_FETCH_LAZY"); continue; }
     const t = co.tree;
-    const scan = scanIds(out, [{ unit: c.unit, ghsa: c.row.ghsa, cves: cveIds(advisory), fix_commit: fix.commit }]);
+    let scan: ReturnType<typeof scanIds>;
+    try {
+      scan = scanIds(out, [{ unit: c.unit, ghsa: c.row.ghsa, cves: cveIds(advisory), fix_commit: fix.commit }]);
+    } catch (e) {
+      if (!(e instanceof CsoError && e.code === "E_CSO_SCAN")) throw e;
+      drop("containment", "the session tree's id scan did not finish, so the tree can't be shown clean: " + e.message.slice(0, 300), "E_CSO_DROP_SCAN");
+      rmSync(out, { recursive: true, force: true });
+      continue;
+    }
     if (scan.hits.length) { drop("containment", "the session tree holds " + scan.hits.map((h) => h.needle + " at " + h.where + " " + h.path).slice(0, 5).join(", ")); rmSync(out, { recursive: true, force: true }); continue; }
     fixes.add(fix.commit);
     trees.add(parentTree);
