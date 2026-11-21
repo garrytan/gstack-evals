@@ -1,16 +1,18 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // B1e (lanes/delivery-route/b1e.ts): the frozen task sets and rewrite files, the route table at the pin, the decision table
-// and the readings, the plan, caps and launch guard, the pilot's pass rules, the power table, and the six scripted sessions'
-// captures, each also changed so a check must fail.
-import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+// and the readings, the plan, caps and launch guard, the pilot's pass rules, the power table, the six scripted sessions'
+// captures, each also changed so a check must fail, and the table read from trial folders built on those captures.
+import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { B1E_CASES, B1E_FILES, b1eApprove, b1eCap, b1eCaseProblems, b1eDone, b1eGuard, b1ePlan, b1eStats, b1eTotals, checkB1eRows, committedRoutes, counts, descriptionOf, inventoryDiff, listingFacts, loadB1eCaptured, mainReport, mdd, pairPower, pilotCells, pilotCheck, powerLines, reserveList, skillFile, skillProblems, supplyCells, taskList, verdictOf, VERDICTS, type B1eRow } from "../../lanes/delivery-route/b1e.ts";
+import { B1E_CASES, B1E_FILES, B1E_PROFILE, b1eApprove, b1eCap, b1eCaseProblems, b1eDone, b1eGuard, b1ePlan, b1eStats, b1eTotals, buildB1eTable, checkB1eRows, committedRoutes, counts, descriptionOf, inventoryDiff, listingFacts, loadB1eCaptured, mainReport, mdd, pairPower, pilotCells, pilotCheck, powerLines, reserveList, skillFile, skillProblems, supplyCells, taskList, verdictOf, VERDICTS, type B1eRow } from "../../lanes/delivery-route/b1e.ts";
 import { B1E, B1E_ARM_NAMES, B1E_CAPS_USD, B1E_PILOT, DESCRIPTIONS, EXT_ARMS, GSTACK_ARMS, GSTACK_STABLE, RESERVE, SUPPLY, TASK_SETS } from "../../lanes/delivery-route/b1e-pins.ts";
 import { twoArmPower, routeCounts } from "../../lanes/delivery-route/b1d.ts";
 import { B1D } from "../../lanes/delivery-route/b1d-pins.ts";
-import { sha256 } from "../../lanes/delivery-route/pins.ts";
+import { MODELS, sha256 } from "../../lanes/delivery-route/pins.ts";
+import { b1Row, pulledInputs } from "../../lanes/delivery-route/table.ts";
 import { plannedCells } from "../../quick/laneb/l1/l1.ts";
 import { readRows } from "../../quick/laneb/runner/ledger.ts";
 
@@ -48,6 +50,19 @@ describe("the task sets and the rewrites", () => {
     expect(statSync(join(import.meta.dir, "..", "..", f)).mode & 0o111).not.toBe(0);
     expect(B1E_FILES).toContain(f);
   });
+  test("b1e-build.sh refuses a folder that already holds any arm's tar or tar.gz", () => {
+    const f = join(import.meta.dir, "..", "..", "lanes/delivery-route/b1e-build.sh");
+    for (const t of ["hook.tar", "own.tar.gz", "required.tar", "long.tar.gz"]) {
+      const d = mkdtempSync(join(tmpdir(), "b1e-build-"));
+      try {
+        writeFileSync(join(d, t), "");
+        const r = spawnSync("bash", [f, d], { encoding: "utf8", timeout: 60_000 });
+        expect([r.status, r.stderr]).toEqual([1, expect.stringContaining("refusing: " + join(d, t) + " exists")]);
+      } finally {
+        rmSync(d, { recursive: true, force: true });
+      }
+    }
+  }, 120000);
   test("a file inventory diff names only the paths whose rows differ", () => {
     const a = "sha256\tbytes\tmode\ttype\tpath\nx\t1\t644\tfile\ta\ny\t1\t644\tfile\tb\n";
     expect(inventoryDiff(a, a.replace("y\t1", "z\t1"))).toEqual(["b"]);
@@ -252,5 +267,55 @@ describe("the scripted sessions at the pin", () => {
   });
   test("the captures are the committed ones", () => {
     for (const c of B1E_CASES) expect(sha256(readFileSync(join(FIX, c.name, "capture.json")))).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("the table on trial folders", () => {
+  const roots: string[] = [];
+  afterAll(() => { for (const d of roots) rmSync(d, { recursive: true, force: true }); });
+  const rig = () => {
+    const root = mkdtempSync(join(tmpdir(), "b1e-table-")), sessions: object[] = [];
+    roots.push(root);
+    let n = 0;
+    const trial = (arm: string, task: string, o: { capture?: string; edit?: (s: string) => string; result?: boolean; ok?: number } = {}) => {
+      const name = task + "__" + ++n, dir = join(root, "jobs", "job1", name);
+      mkdirSync(join(dir, "evaluator"), { recursive: true });
+      writeFileSync(join(dir, "config.json"), JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm, upstream_model: MODELS.opus.id } }, task: { path: "tasks/" + task } }));
+      if (o.result !== false) writeFileSync(join(dir, "result.json"), JSON.stringify({ trial_name: name, verifier_result: { rewards: { reward: 0 } } }));
+      if (o.capture) writeFileSync(join(dir, "evaluator", "sdk-messages.jsonl"), (o.edit ?? ((s: string) => s))(readFileSync(join(FIX, o.capture, "sdk-messages.jsonl"), "utf8")));
+      if (o.ok !== undefined) sessions.push({ id: "s" + n, trial: name, opened_at: String(n).padStart(3, "0"), ok_responses: o.ok, refused_budget: 0, spent_micros: 480_000 });
+      return dir;
+    };
+    const table = () => {
+      mkdirSync(join(root, "out"), { recursive: true });
+      writeFileSync(join(root, "out", "proxy-sessions.jsonl"), sessions.map((s) => JSON.stringify(s) + "\n").join(""));
+      return buildB1eTable(pulledInputs(root, "b1e-main"));
+    };
+    return { root, trial, table };
+  };
+  test("every arm reads from a trial folder built on its captured session, and B1's own table still refuses the rewrites", () => {
+    const t = rig(), task = PRIMARY[0]!, caps = { hook: "hook-load", own: "own-load", long: "long-load", required: "required-stop", none: "none-stop" } as const;
+    const dirs = B1E_ARM_NAMES.map((a) => t.trial(a, task, { capture: caps[a], ok: 3 }));
+    const rows = t.table();
+    expect(rows.map((r) => [r.arm, r.set, r.outcome, r.responded, r.load.loaded, r.audit_hits])).toEqual([["hook", "primary", "graded", true, true, []], ["own", "primary", "graded", true, true, []], ["long", "primary", "graded", true, true, []], ["required", "primary", "graded", true, false, []], ["none", "primary", "graded", true, false, []]]);
+    expect(checkB1eRows(rows, B1E_ARM_NAMES.map((arm) => ({ task, arm })))).toEqual([]);
+    expect(() => b1Row(dirs[1]!, { part: null, sessions: new Map(), home: "/root" })).toThrow(/has arm "own", not one of none/);
+  });
+  test("a non-fit session counts once a model response reached it, with or without result.json; one with no response reruns, as does a bug-fix session with no result.json", () => {
+    const t = rig();
+    t.trial("own", NONFIT[0]!, { capture: "own-load", result: false, ok: 2 });
+    t.trial("required", NONFIT[1]!, { capture: "required-stop", result: false });
+    t.trial("long", NONFIT[2]!, { ok: 0 });
+    t.trial("hook", PRIMARY[0]!, { capture: "hook-load", result: false, ok: 2 });
+    const by = Object.fromEntries(t.table().map((r) => [r.arm, [r.set, r.reason, r.responded, counts(r)]]));
+    expect(by).toEqual({ own: ["nonfit", "no result.json", true, true], required: ["nonfit", "no result.json", true, true], long: ["nonfit", "no model response reached the agent", false, false], hook: ["primary", "no result.json", true, false] });
+    const owed = B1E_PROFILE.attempt2!.owed([{ dir: t.root, part: "b1e-main" }]).owed.sort((a, b) => a.arm.localeCompare(b.arm));
+    expect(owed).toEqual([{ task: PRIMARY[0]!, arm: "hook", reason: "no result.json" }, { task: NONFIT[2]!, arm: "long", reason: "no model response reached the agent" }]);
+  });
+  test("a hook session that loads another gstack skill has no audit hit, because each gstack arm installs all of gstack", () => {
+    const t = rig(), dir = t.trial("hook", PRIMARY[0]!, { capture: "hook-load", edit: (s) => s.replaceAll("prove-it", "verify"), ok: 3 });
+    const [r] = t.table();
+    expect([r!.load.loaded, r!.audit_hits]).toEqual([false, []]);
+    expect(b1Row(dir, { part: null, sessions: new Map(), home: "/root", arms: B1E_ARM_NAMES })!.audit_hits).toEqual(["Skill verify -> /root/.claude/skills/verify"]);
   });
 });

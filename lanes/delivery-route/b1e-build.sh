@@ -23,10 +23,12 @@ pin() { (cd "$ROOT" && bun -e 'import { GSTACK_STABLE, B1E_ARMS } from "./lanes/
 SHA=$(pin sha) REPO=$(pin repo) LOADOUT=$(pin loadout) DEST=$(pin prove_it)
 DIR=${1:-${B1E_ARMS_DIR:-$HOME/.capy/work/b1e/arms}}
 OUT=$(mkdir -p "$DIR" && cd "$DIR" && pwd)
-if [ -e "$OUT/hook.tar" ]; then
-  echo "refusing: $OUT/hook.tar exists. gstack's setup is not byte for byte, so a rebuild would replace the hook tar the committed manifests pin. Build into an empty folder: lanes/delivery-route/b1e-build.sh <new-dir>" >&2
-  exit 1
-fi
+for f in "$OUT"/{hook,own,long,required}.tar{,.gz}; do
+  if [ -e "$f" ]; then
+    echo "refusing: $f exists. gstack's setup is not byte for byte, so a rebuild would replace the tars the committed manifests pin. Build into an empty folder: lanes/delivery-route/b1e-build.sh <new-dir>" >&2
+    exit 1
+  fi
+done
 BUILDER=$(sed -n 's/^ARG BUILDER_IMAGE=//p' "$DF/Dockerfile")
 in_builder() { docker run --rm --network none -u "$(id -u):$(id -g)" -v "$OUT:/out" -w /out "$@"; }
 

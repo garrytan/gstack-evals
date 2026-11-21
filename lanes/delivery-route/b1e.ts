@@ -13,7 +13,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { hostTtlHours, itemCheck, L1, l1Main, plannedCells, prefixOf, seeded, type ItemDef, type PartPlan, type Profile } from "../../quick/laneb/l1/l1.ts";
-import { parseLog, type Rec } from "../../quick/laneb/l1/probes.ts";
+import { parseLog, runProbes, type Rec } from "../../quick/laneb/l1/probes.ts";
 import { readSessionRows, sessionsByTrial } from "../../quick/laneb/analysis/analyze.ts";
 import { appendRow, fromMicros, Ledger, readRows, toMicros, type Row } from "../../quick/laneb/runner/ledger.ts";
 import { ROUTE_CONTEXT, ROUTE_MARK } from "../../quick/laneb/runner/proxy.ts";
@@ -315,8 +315,9 @@ export function b1eRow(dir: string, ctx: Parameters<typeof b1Row>[1], nonfit: Se
   const msgs = join(dir, "evaluator", "sdk-messages.jsonl"), recs = existsSync(msgs) ? parseLog(readFileSync(msgs, "utf8")) : [], load = loadsOf(recs);
   const last: any = ctx.sessions.get(row.trial)?.at(-1), logFile = join(dir, "evaluator", "gstack-hooks", "hooks", "skill-route.log");
   const log = isGstackArm(row.arm) && existsSync(logFile) ? readFileSync(logFile, "utf8") : null;
-  const responded = row.outcome === "graded" || row.reason.startsWith("no verifier reward");
-  return { ...row, arm: row.arm, set: setOf(row.task, nonfit), responded, load, named: namedOf(log), routed_events: log === null ? null : log.split("\n").filter((l) => /\bevent=routed\b/.test(l)).length, route_mark: isGstackArm(row.arm) ? (last ? (last.route_mark_before_output ?? false) : null) : null, tar_sha256: armEvent(dir), first_call: load.loaded && load.at_call === 1 };
+  const p = runProbes(recs, { gstackRoots: [], investigatePrefix: null, home: ctx.home }), responded = row.outcome !== "cap_stop" && (last ? (last.ok_responses ?? 0) > 0 : p.model_text);
+  const audit_hits = isGstackArm(row.arm) ? p.audit_hits.filter((h) => !["/.claude/skills", "/.gstack"].some((o) => h.includes(ctx.home + o + "/") || h.endsWith(ctx.home + o))) : row.audit_hits;
+  return { ...row, arm: row.arm, set: setOf(row.task, nonfit), responded, audit_hits, load, named: namedOf(log), routed_events: log === null ? null : log.split("\n").filter((l) => /\bevent=routed\b/.test(l)).length, route_mark: isGstackArm(row.arm) ? (last ? (last.route_mark_before_output ?? false) : null) : null, tar_sha256: armEvent(dir), first_call: load.loaded && load.at_call === 1 };
 }
 export function buildB1eTable(cfg: B1TableConfig): B1eRow[] {
   const sessions = sessionsByTrial(readSessionRows(cfg.sessions)), nonfit = new Set(taskList("nonfit")), out: B1eRow[] = [];
