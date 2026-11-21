@@ -1,8 +1,8 @@
 ---
 id: 2026-11-21-capy-cso-advisories-deviations
 kind: plan
-title: "Pre-data deviations to the /cso real-advisory preregistration: containment over each arm's gstack install, a narrower stage 1 release, the interim-look bounds and the Sol pilot"
-summary: "Five changes made before any unit build or session: two widen containment to each arm's gstack install, one narrows stage 1's judge release, two set terms for later stages."
+title: "Pre-data deviations to the /cso real-advisory preregistration: containment over each arm's gstack install, a narrower stage 1 release, the judge's output cap, the interim-look bounds and the Sol pilot"
+summary: "Six changes, each made before the data it touches: wider containment (two), a narrower stage 1 release, a higher judge output cap, two terms for later stages. Also three stage 0 repairs."
 author: capy
 model: anthropic/claude-opus-5-5
 date: 2026-11-21
@@ -11,12 +11,14 @@ links:
   - 2026-11-19-geva-561-cso-advisories-prereg
   - lanes/outcome-skills/cso/
   - https://github.com/garrytan/gstack/tree/5afef04e31de1cb30c727c7f827bdd729d04713e
+  - 2026-11-19-geva-559-ship-panel-judged-sample-prereg
+  - https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
 ---
 # Pre-data deviations to the /cso real-advisory preregistration
 
-Dated 2026-11-21, before any unit build, model session, judge call or label call. Nothing has run on any arm, paid or keyless, so no data could shape these changes. The preregistration (2026-11-19-geva-561-cso-advisories-prereg) stays as merged; this post sits beside it, and the results post lists every deviation it used.
+Dated 2026-11-21. (a), (b), (c), CV5 and CV6 came before any unit build, model session, judge call or label call: nothing had run on any arm, paid or keyless, so no data could shape them. (d) came after stage 0's 10 sessions and their judge calls, and before any stage 1 session. Stage 0 is each counted arm's pilot under R111; its reports join the judge check, and none of its outcomes enters an arm comparison. The preregistration (2026-11-19-geva-561-cso-advisories-prereg) stays as merged; this post sits beside it, and the results post lists every deviation it used.
 
-The eval's owner recorded (a), (b), CV5 and CV6 in the team's approvals record (approvals/2026-11-19-untested-parts-ship-guards-cso.md), using the words quoted below, and decided (c) on 2026-11-21.
+The eval's owner recorded (a), (b), CV5 and CV6 in the team's approvals record (approvals/2026-11-19-untested-parts-ship-guards-cso.md), using the words quoted below, and decided (c) and (d) on 2026-11-21.
 
 Together, (a) and (c) make this containment claim: no unit in the draw has its GHSA id, a CVE id or its fix-commit prefix anywhere in an arm's installed gstack tree, and no unit's affected package is installed there at or past its fixed version.
 
@@ -89,6 +91,28 @@ Code: lanes/outcome-skills/cso/units/deps.ts. Tests: tests/outcome-skills/cso-de
 
 Code: lanes/outcome-skills/cso/analysis/release.ts. Tests: tests/outcome-skills/cso-release.test.ts. A passing route and a failing route each read correctly. A failed validity kappa closes only validity. No digit and no detail key leaves the release, and only item 6 of the frozen list changes. We broke the code on purpose so it passed the raw check through, and three tests failed.
 
+## (d) The judge's output cap rises to 48,000
+
+The owner's decision, 2026-11-21, after stage 0:
+
+> Raise Carbon's output cap to 48,000 and keep high effort, as dated deviation (d), entered before any stage 1 data. [...] Label a reply cut off at the cap as truncated, not malformed. Re-judge stage 0's 10 sessions on cso-judge, with no new sessions.
+
+**Why.** Section 7 froze Gemini 4 Carbon as the judge at high effort with 16,000 output tokens. Stage 0 made 11 judge calls on Carbon. In 9 of them Carbon spent the whole 16,000 on reasoning (15,997 reasoning tokens, finish reason `length`, no text), and a tenth stopped at 15,683. So 9 of stage 0's 10 sessions came back as judge gaps. The ship-panel judged-sample eval (2026-11-19-geva-559-ship-panel-judged-sample-prereg) hit the same failure in its pilot the same day, on Carbon at 16,000. OpenRouter's reasoning-token guide says why: reasoning tokens count against the output cap, so a high-effort call can spend the cap before it writes an answer. The owner chose three times the frozen cap and kept high effort, so the judge's reasoning setting doesn't change.
+
+**What changes.** `judge.production.max_output_tokens` becomes 48,000. Every route's judge reads that field, so the fallback judges (Astra and Opus) get 48,000 too; the gold labellers keep 32,000. A judge gap from a reply that ended at the cap now says "truncated" where it said "malformed". The retry rule doesn't change: one retry, then a gap. At Carbon's $10 per million output tokens, a call's worst case rises by $0.32. The ledger reserves each call's worst case before it sends, inside the cso-judge cap, which doesn't change.
+
+**How it runs.** Stage 0's 10 sessions are judged again on cso-judge at the new cap, with no new sessions. The 16,000-cap replies stay in stage 0's judge record.
+
+Code: lanes/outcome-skills/cso/prereg.ts (`judgeMaxOutput`), lanes/outcome-skills/cso/judge/client.ts and lanes/outcome-skills/cso/judge/meter.ts. Tests: tests/outcome-skills/cso-judge.test.ts and tests/outcome-skills/cso-judge-meter.test.ts. The judge's request asks for 48,000 at high effort; a plan copy that froze any number but 16,000 refuses (E_CSO_PREREG), so the deviation lands only on the plan it was written against; the metering proxy admits 48,000 (it refused anything past 32,000 before, which the probe test caught); and two replies cut off at the cap read "gave a truncated reply twice", while a mixed pair names each. The tests were committed first and failed before the code landed.
+
+## Harness repairs after stage 0
+
+These change no rule in the plan. Each makes the code do what the plan already says, and each has its own test, committed first.
+
+1. **The exposure detector reads launcher calls made through shell variables.** Section 8's procedure gate needs a start, an inspect or read on that run, and a finish, all through gstack-cso-launcher. Opus on the cso arm bound the launcher and the run id to variables and called through them: `R=<run id>; L=~/.claude/skills/gstack/bin/gstack-cso-launcher; $L inspect $R`. The detector read only the literal launcher path, so it reported that the procedure never ran on either unit when it had. The detector now expands the variables a command assigns, ignores the assignment text itself, and counts every launcher call in a command. A binding ends with its command, because each Bash call starts a fresh shell. When one command prints several helper objects, it reads the last one. Helper reads through a variable no longer count as host reads. Code: lanes/outcome-skills/cso/exposure.ts. Tests: tests/outcome-skills/cso-exposure.test.ts, one built from the vm2 session's real command lines and one showing that a variable bound to another program, a test of the launcher's path, or a binding made in an earlier command resolves to no call.
+2. **The judge's retry sends a new request.** Section 7 gives a malformed or truncated reply one retry. The judge transport keeps every reply by request digest so a rerun never pays twice, but the retry sent the identical request, so it got the kept reply back and never reached the model. None of stage 0's 9 cut-off calls was retried. A retry's digest now names its attempt, so the retry is a real call and a rerun still reuses both replies. Code: lanes/outcome-skills/cso/judge/client.ts and judge/meter.ts. Tests: tests/outcome-skills/cso-judge-meter.test.ts.
+3. **The session driver serves a cso item's arms.** `gstack-evals outcome serve --stage cso-pilot=cso:none,cso:cso,cso:untold` serves the arms on one lease, as a PF stage names its arms; stage 0 used a scratch launcher that made the same driver call. Code: lanes/outcome-skills/cli.ts. Tests: tests/outcome-skills/cli.test.ts.
+
 ## CV5: interim-look bounds replace Holm, if stage 2 takes the look
 
 > When stage 2 takes R113's interim look, its O'Brien-Fleming bounds (3.18 and 2.25 at two-sided 0.025, then 2.80 and 1.98 at 0.05 once one contrast is rejected) replace section 10's Holm thresholds at both looks.
@@ -103,4 +127,4 @@ This applies only to the conditional Sol stage, which runs on the owner's go wit
 
 ## What does not change
 
-Arms, models, texts, the candidate lists and their order, seeds, scoring, the judge, its check thresholds, the analysis, the stages, the caps and the money all stay as merged. Run receipts name each deviation by its letter and the commit that landed it.
+Arms, models, texts, the candidate lists and their order, seeds, scoring, the judge model and its effort, the labellers, the check thresholds, the analysis, the stages, the caps and the money all stay as merged. Only the judge's output cap changes, under (d). Run receipts name each deviation by its letter and the commit that landed it.
