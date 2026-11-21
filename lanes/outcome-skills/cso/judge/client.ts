@@ -4,12 +4,12 @@
 // pinned to google-vertex with fallbacks off and data collection denied; Astra and Opus are the gold labellers and the
 // fallback judges, and every Astra prompt opens with prereg.json's read-only correctness framing. A malformed or truncated
 // reply gets one retry, sent as its own request, then is a judge gap labelled by what came back (a reply cut off at its
-// output cap is truncated, not malformed); a provider refusal is counted as a refusal. The judge's cap is deviation (d)'s. JUDGE_MODELS is the one place that maps
+// output cap is truncated, not malformed); a provider refusal is counted as a refusal. The judge's cap and effort are deviation (d)'s. JUDGE_MODELS is the one place that maps
 // prereg.json's model ids to provider ids and to src/runner/pricing/prices.ts ids (Astra is openai/gpt-6.2-astra in
 // prereg.json and openai:gpt-6.2-astra in prices.ts).
 import { judgeAnswer, JUDGE_ROUTE } from "../../../../src/adapters/judge.ts";
 import { OPENROUTER_MODELS, openRouterRouting, type Provider } from "../../../../src/runner/pricing/prices.ts";
-import { csoFail, judgeMaxOutput, type CsoPrereg } from "../prereg.ts";
+import { csoFail, judgeEffort, judgeMaxOutput, type CsoPrereg } from "../prereg.ts";
 import type { CsoModel } from "../types.ts";
 
 /** prereg.json model id to provider, provider model id and price id. */
@@ -96,12 +96,12 @@ export function judgeRoutes(p: CsoPrereg): JudgeRoute[] {
 
 /** The clients for one route: the judge at the production effort and cap, and both labellers at high effort. */
 export function routeClients(route: JudgeRoute, p: CsoPrereg, transport: Transport): { judge: JudgeClient; gold: [JudgeClient, JudgeClient] } {
-  const j = p.judge as unknown as { production: { effort: string; max_output_tokens: number }; gold_labellers: { model: string; effort: string; framing?: string }[] };
+  const j = p.judge as unknown as { gold_labellers: { model: string; effort: string; framing?: string }[] };
   const framing = j.gold_labellers.find((g) => g.model === ASTRA)?.framing;
   const frame = (m: string) => (m === ASTRA && framing ? "This is " + framing + "." : undefined);
   const effort = (m: string) => j.gold_labellers.find((g) => g.model === m)?.effort ?? "high";
   return {
-    judge: judgeClient(route.judge, "judge", transport, { maxOutputTokens: judgeMaxOutput(p), effort: j.production.effort, framing: frame(route.judge) }),
+    judge: judgeClient(route.judge, "judge", transport, { maxOutputTokens: judgeMaxOutput(p), effort: judgeEffort(p), framing: frame(route.judge) }),
     gold: route.gold.map((m) => judgeClient(m, "gold", transport, { maxOutputTokens: LABELLER_MAX_OUTPUT, effort: effort(m), framing: frame(m) })) as [JudgeClient, JudgeClient],
   };
 }

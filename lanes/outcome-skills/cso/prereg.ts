@@ -27,7 +27,7 @@ export const DEVIATIONS = {
   a: "The containment gate also scans each arm's installed gstack tree; a unit whose GHSA id, CVE id or fix-commit prefix appears there drops from every cell.",
   b: "Stage 1's judge-check release reports only whether each gold minimum was met and the pass or fail of each gate, not gold counts by class.",
   c: "A unit whose affected package an arm's installed gstack tree holds at or past its fixed version, in a lockfile or an installed package manifest, drops from every cell; the 16 such units at the pin drop by name before the draw, and the unit gate checks every arm's install for this route.",
-  d: "The judge's output cap (judge.production.max_output_tokens, which every route's judge reads) is 128,000 at high effort in place of 16,000, from stage 0's second re-judge on (48,000 from the first, amended the same day); a judge reply cut off at its cap is labelled truncated, not malformed.",
+  d: "The judge (judge.production, which every route's judge reads) runs at medium effort with an output cap of 65,536 in place of high and 16,000, from stage 0's third re-judge on (48,000 and then 128,000 at high effort before it, amended the same day); a judge reply cut off at its cap is labelled truncated, not malformed, and is a judge gap after the one retry at the same setting.",
   CV5: "When stage 2 takes R113's interim look, its O'Brien-Fleming bounds (3.18 and 2.25 at two-sided 0.025, then 2.80 and 1.98 at 0.05 once one contrast is rejected) replace section 10's Holm thresholds at both looks.",
   CV6: "The Sol stage's R111 pilot is its paid Codex smoke, sized with its own caps in the Sol proposal; a keyless session start doesn't count, and R78's 40 Sol reports still stand.",
 } as const;
@@ -51,9 +51,16 @@ export interface CsoPrereg {
   [k: string]: unknown;
 }
 
-/** Deviation (d): the judge's output cap, 128,000 in place of prereg.json's frozen 16,000 (E_CSO_PREREG when prereg.json
- *  holds another number, so the deviation never lands on a plan it was not written against). */
-export const JUDGE_MAX_OUTPUT_D = 128_000;
+/** Deviation (d): the judge's output cap and effort, 65,536 at medium in place of prereg.json's frozen 16,000 at high
+ *  (E_CSO_PREREG when prereg.json holds other values, so the deviation never lands on a plan it was not written against).
+ *  65,536 is the most one Carbon call returns through OpenRouter (one Vertex output segment). */
+export const JUDGE_MAX_OUTPUT_D = 65_536;
+export const JUDGE_EFFORT_D = "medium";
+export function judgeEffort(p: CsoPrereg): string {
+  const frozen = (p.judge as { production?: { effort?: unknown } }).production?.effort;
+  if (frozen !== "high") csoFail("E_CSO_PREREG", "judge.production.effort is " + String(frozen) + ", not the high that deviation (d) lowers to " + JUDGE_EFFORT_D);
+  return JUDGE_EFFORT_D;
+}
 export function judgeMaxOutput(p: CsoPrereg): number {
   const frozen = (p.judge as { production?: { max_output_tokens?: unknown } }).production?.max_output_tokens;
   if (frozen !== 16_000) csoFail("E_CSO_PREREG", "judge.production.max_output_tokens is " + String(frozen) + ", not the 16,000 that deviation (d) raises to " + JUDGE_MAX_OUTPUT_D);
