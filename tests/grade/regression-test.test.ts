@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { describe, expect, test } from "bun:test";
-import { regressionTest } from "../../src/grade/regression-test.ts";
+import { regressionTest, testFileChanged } from "../../src/grade/regression-test.ts";
 
 const none = () => null;
 const add = (path: string, lines: string[]) =>
@@ -30,6 +30,19 @@ describe("regressionTest", () => {
 
   test("blank or whitespace-only added lines do not count", () => {
     expect(regressionTest(edit("tests/test_a.py", 1, ["def test_a():"], ["", "   "]), "python", [], none).added).toBe(false);
+  });
+
+  test("comment-only added lines do not count, in either comment family", () => {
+    expect(regressionTest(edit("tests/test_a.py", 1, ["def test_a():"], ["    # covers the empty case"]), "python", [], none).added).toBe(false);
+    expect(regressionTest(edit("src/a.test.ts", 1, ["});"], ["// empty input", "/* more */", " * doc"]), "ts", [], none).added).toBe(false);
+    expect(regressionTest(edit("src/a.test.ts", 1, ["});"], ["// empty input", "it(\"empty\", () => {});"]), "ts", [], none)).toEqual({ added: true, files: ["src/a.test.ts"], lines: 1 });
+  });
+
+  test("the recount rule counts any change to a TEST_PATH file, deletions included, and ignores the hidden test set", () => {
+    expect(testFileChanged(del("tests/test_old.py", ["def test_x():"]), "python")).toBe(true);
+    expect(testFileChanged(edit("tests/test_a.py", 1, ["def test_a():"], ["    # note"]), "python")).toBe(true);
+    expect(testFileChanged(add("pkg/checks.py", ["def check_x():"]), "python")).toBe(false);
+    expect(testFileChanged(add("src/lib.rs", ["#[cfg(test)]", "mod tests {}"]), "rust")).toBe(false);
   });
 
   test("a test-like path outside the language's conventions does not count", () => {
