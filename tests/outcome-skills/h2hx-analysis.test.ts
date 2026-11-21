@@ -8,12 +8,13 @@ import { readRecords } from "../../lanes/outcome-skills/h2h/analysis/commands.ts
 import type { PairedTest } from "../../lanes/outcome-skills/h2h/analysis/stats.ts";
 import { analyzeExt, crossRows, noHarm, reportExt, testsRecord, type ExtInput, type ExtScore, type ExtSession, type ExtTests } from "../../lanes/outcome-skills/h2h/ext/analysis.ts";
 import { boundAt, holmCrossings, interimLook, lookLines, obfBounds } from "../../lanes/outcome-skills/h2h/ext/look.ts";
-import { extArmsFor, readExtPrereg, type ExtArm, type Part } from "../../lanes/outcome-skills/h2h/ext/prereg.ts";
+import { EXT_PREREG_PATH, extArmsFor, readExtPrereg, type ExtArm, type Part } from "../../lanes/outcome-skills/h2h/ext/prereg.ts";
 import { readPrereg } from "../../lanes/outcome-skills/h2h/prereg.ts";
 import type { H2hArm, H2hScore, H2hSession, H2hUnit, UnitKind } from "../../lanes/outcome-skills/h2h/types.ts";
 
 const x = readExtPrereg();
 const base = readPrereg();
+const published = (JSON.parse(readFileSync(EXT_PREREG_PATH, "utf8")) as { tests_added: { published_check: { recount: Record<string, number>; frozen_rule: Record<string, number> } } }).tests_added.published_check;
 const DATA = join(import.meta.dir, "..", "..", "wiki", "board", "2026-11-19-geva-540-skill-pack-h2h-session-data");
 
 /** Units of one kind, two to a repository; every fifth O unit is a feature. */
@@ -113,14 +114,14 @@ describe("h2hx sentence family (section 9)", () => {
   test("the frozen rule and the recount reproduce prereg.json's published counts on the head-to-head's diffs", () => {
     const rows = readFileSync(join(DATA, "sessions.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { unit: string; arm: string; class: string; lang: string; diff: string | null });
     const got: Record<string, { frozen: number; recount: number }> = {};
-    for (const r of rows.filter((r) => r.class === "O" && r.arm in x.tests_added.published_check.recount)) {
+    for (const r of rows.filter((r) => r.class === "O" && r.arm in published.recount)) {
       const t = testsRecord({ unit: r.unit, arm: "l-gstack", stage: "stage2", patch: r.diff ? readFileSync(join(DATA, r.diff), "utf8") : "", lang: r.lang as never, testFiles: [], readBase: () => null });
       const c = (got[r.arm] ??= { frozen: 0, recount: 0 });
       c.frozen += t.added ? 1 : 0;
       c.recount += t.recount ? 1 : 0;
     }
-    expect(Object.fromEntries(Object.entries(got).map(([k, v]) => [k, v.frozen]))).toEqual(x.tests_added.published_check.frozen_rule);
-    expect(Object.fromEntries(Object.entries(got).map(([k, v]) => [k, v.recount]))).toEqual(x.tests_added.published_check.recount);
+    expect(Object.fromEntries(Object.entries(got).map(([k, v]) => [k, v.frozen]))).toEqual(published.frozen_rule);
+    expect(Object.fromEntries(Object.entries(got).map(([k, v]) => [k, v.recount]))).toEqual(published.recount);
   });
 
   test("refuses a record for an arm that does not run on the unit, and a scored session with no tests-added record", () => {
