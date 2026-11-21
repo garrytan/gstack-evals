@@ -7,12 +7,17 @@
 // cso skill's base-directory marker. Procedure ran: a start through gstack-cso-launcher returned a run id, an inspect or
 // read used that run, and a finish on it ran. Also read: completeness, findings submitted, tooling errors (a failed
 // launcher call with no helper refusal), host file reads after start, and the helper records (snapshot root and handles).
+// Stage 0 repair (deviations post, d): a command may bind the launcher or the run id to a shell variable and call through it
+// (`R=<run>; L=<launcher>; $L inspect $R`), and may hold several calls. Each command is read with the variables it assigns
+// expanded, its own assignments dropped, and every launcher call in it counted. A binding ends with its command, since each
+// Bash call starts a fresh shell. When one command's output holds several helper objects, the last one that starts a line is read.
 import { createHash } from "node:crypto";
 import { events, type Ev } from "../h2h/sessions/exposure.ts";
 import type { Exposure, HelperRecords } from "./types.ts";
 
 type Rec = Record<string, any>;
 export const LAUNCHER = /gstack-cso-launcher(?:\.exe)?['"]?\s+([a-z][a-z0-9-]*)((?:\s+[^\s;&|]+)*)/;
+const SHELL_VAR = /(?<=^|[\s;&|(])([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|()]*)|\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/g;
 export const RUN_ID = /\b\d{13}-[0-9a-f]{16}\b/;
 export const HANDLE = (pathId: string): string => "@cso-path//" + pathId;
 /** The pinned helper's path id for one tree-relative path (contracts.ts snapshotPathId): the first 32 hex of the sha256 of
@@ -28,30 +33,59 @@ const SHELL_READ = /(^|[;&|(]\s*)(cat|head|tail|sed|less|more|nl|grep|egrep|rg|a
 /** One helper call through the launcher: its operation, arguments, output and whether the tool reported an error. */
 export interface HelperCall { at: number; op: string; args: string[]; out: string; error: boolean }
 
+/** One command with the variables it assigns expanded where it uses them and its assignments' values dropped. */
+export function expandCommand(command: string): string {
+  const vars = new Map<string, string>();
+  return command.replace(SHELL_VAR, (all, name?: string, value?: string, braced?: string, bare?: string) => {
+    if (name === undefined) return vars.get((braced ?? bare)!) ?? all;
+    vars.set(name, /^(["']).*\1$/s.test(value!) ? value!.slice(1, -1) : value!);
+    return name + "=";
+  });
+}
+
 /** Every launcher call in order, paired with its result. */
 export function helperCalls(evs: readonly Ev[]): HelperCall[] {
   const results = new Map(evs.filter((e) => e.kind === "tool_result" && e.id).map((e) => [e.id!, e]));
   const out: HelperCall[] = [];
   for (const e of evs) {
     if (e.kind !== "tool_use" || e.name !== "Bash" || typeof e.input?.command !== "string") continue;
-    const m = LAUNCHER.exec(e.input.command);
-    if (!m) continue;
     const r = e.id ? results.get(e.id) : undefined;
-    out.push({ at: e.at, op: m[1]!, args: m[2]!.trim().split(/\s+/).filter(Boolean).map((a) => a.replace(/^["']|["']$/g, "")), out: r?.text ?? "", error: r ? r.error === true : true });
+    for (const m of expandCommand(e.input.command).matchAll(new RegExp(LAUNCHER.source, "g"))) {
+      out.push({ at: e.at, op: m[1]!, args: m[2]!.trim().split(/\s+/).filter(Boolean).map((a) => a.replace(/^["']|["']$/g, "")), out: r?.text ?? "", error: r ? r.error === true : true });
+    }
   }
   return out;
 }
 
-/** The first JSON object a helper printed, or null. */
+/** The JSON object a helper printed, or, when the output holds several, the last one that starts a line, or null. */
 export function helperJson(out: string): Rec | null {
+  const parse = (t: string): Rec | null => {
+    try {
+      const v = JSON.parse(t);
+      return v && typeof v === "object" ? v : null;
+    } catch {
+      return null;
+    }
+  };
   const i = out.indexOf("{"), j = out.lastIndexOf("}");
   if (i < 0 || j <= i) return null;
-  try {
-    const v = JSON.parse(out.slice(i, j + 1));
-    return v && typeof v === "object" ? v : null;
-  } catch {
-    return null;
+  const whole = parse(out.slice(i, j + 1));
+  if (whole) return whole;
+  let last: Rec | null = null, done = -1;
+  for (const { index: at } of out.matchAll(/^\{/gm)) {
+    if (at! <= done) continue;
+    let depth = 0, str = false, esc = false, end = -1;
+    for (let k = at; k < out.length && end < 0; k++) {
+      const ch = out[k];
+      if (str) [esc, str] = [!esc && ch === "\\", str && (esc || ch !== '"')];
+      else if (ch === '"') str = true;
+      else if (ch === "{") depth++;
+      else if (ch === "}" && --depth === 0) end = k;
+    }
+    const v = end < 0 ? null : parse(out.slice(at, end + 1));
+    if (v) [last, done] = [v, end];
   }
+  return last;
 }
 
 const COMPLETENESS: Record<string, Exposure["completeness"]> = { complete: "complete", partial: "partial", "not assessed": "not_assessed" };
@@ -92,7 +126,7 @@ export function csoExposure(records: readonly Rec[], tree: readonly string[] = [
     const j = helperJson(c.out);
     if (!helper.snapshot_root && typeof j?.manifest?.root === "string") helper.snapshot_root = j.manifest.root;
   }
-  const hostReads = start ? evs.filter((e) => e.at > start.at && e.kind === "tool_use" && (HOST_READ_TOOLS.has(e.name!) || (e.name === "Bash" && typeof e.input?.command === "string" && !LAUNCHER.test(e.input.command) && SHELL_READ.test(e.input.command)))).length : 0;
+  const hostReads = start ? evs.filter((e) => e.at > start.at && e.kind === "tool_use" && (HOST_READ_TOOLS.has(e.name!) || (e.name === "Bash" && typeof e.input?.command === "string" && !LAUNCHER.test(expandCommand(e.input.command)) && SHELL_READ.test(e.input.command)))).length : 0;
   const exposure: Exposure = {
     loaded: loaded(evs),
     procedure_ran: start !== undefined && used && finish !== undefined,
