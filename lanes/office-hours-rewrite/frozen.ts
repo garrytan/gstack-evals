@@ -20,7 +20,70 @@ export const SEED = 20261117;
 /** Section 4 step 1 and pre-run change 1, item 4c: each arm's first message, byte for byte. */
 export const LENS_LINE = "Act as a YC partner holding office hours with me.";
 export const SKILL_PREFIX = "/office-hours ";
-export const firstMessage = (arm: ArmId, opening: string): string => (arm === "none" ? "" : SKILL_PREFIX) + LENS_LINE + "\n\n" + opening.trim();
+/** The eval owner's ruling of 2026-11-19 (the second attempt's pre-run change 2): Sol runs in Codex CLI; Opus and particle-1 stay on Claude Code. */
+export const HOSTS: Readonly<Record<ModelId, "claude" | "codex">> = { opus: "claude", sol: "codex", particle: "claude" };
+/** A Codex skill arm names the skill with Codex's own mention syntax; the rest of the message is the same. */
+export const CODEX_SKILL_PREFIX = "$office-hours ";
+export const firstMessage = (arm: ArmId, opening: string, model: ModelId = "opus"): string => (arm === "none" ? "" : HOSTS[model] === "codex" ? CODEX_SKILL_PREFIX : SKILL_PREFIX) + LENS_LINE + "\n\n" + opening.trim();
+
+/**
+ * Pre-run change 2: the Codex CLI every Sol session runs, npm's latest stable on 2026-11-19, by version and checksum. The
+ * trial image installs the package's vendor/<triple> directory under root (docker/trial.Dockerfile checks the tarball
+ * and the binary), and docker/host-cli.json names the version as codex_office_hours_rewrite. Sol reaches OpenAI's
+ * Responses route at the metering proxy as model, the openai provider's id for MODEL_KEYS.sol.
+ */
+export const CODEX = {
+  version: "0.170.0",
+  tarball: "https://registry.npmjs.org/@openai/codex/-/codex-0.170.0-linux-x64.tgz",
+  tarball_sha256: "67c4bccce8e6c3a2b9ae0e586750e0efac7e0b8cd85e6b4734ad474317d2cc32",
+  binary_sha256: "880819aab735adcf16f36cd628940b9f1e652a36c01d10a5d32f83cc84902971",
+  root: "/opt/codex-0.170.0",
+  bin: "/opt/codex-0.170.0/bin/codex",
+  path_dir: "/opt/codex-0.170.0/codex-path",
+  model: "gpt-6.1-sol",
+  provider: "openai",
+} as const;
+/**
+ * Every Sol session's Codex settings beside the proxy's provider entry, passed as -c pairs under --strict-config. Effort
+ * and window are the catalog's own values for gpt-6.1-sol (default_reasoning_level low, context_window 500000), written
+ * out. model_auto_compact_token_limit is Codex's auto-compaction key; unset, Codex 0.170.0 compacts at 9/10 of the
+ * context window (ModelInfo::auto_compact_token_limit, protocol/src/openai_models.rs), 450000 here, and turn-end
+ * compaction is off (model_post_turn_compact_threshold_percent defaults to 0). The bundled system skills, web search,
+ * image generation, browser and computer use and apps are off; Claude Code has none of the last four, and its arms deny
+ * WebSearch and WebFetch. The sleep tool (clock.sleep) is off too: Codex delivers the reply to a request_user_input_async
+ * question only as a new user message, which exec gives only at the next turn (exec resume), so a model that sleeps to
+ * wait for it would wait for nothing (run/codex.ts).
+ */
+export const CODEX_SETTINGS = {
+  model_reasoning_effort: "low",
+  model_context_window: 500_000,
+  model_auto_compact_token_limit: 450_000,
+  "skills.bundled.enabled": false,
+  web_search: "disabled",
+  "features.image_generation": false,
+  "features.browser_use": false,
+  "features.computer_use": false,
+  "features.apps": false,
+  "features.sleep_tool": false,
+  check_for_update_on_startup: false,
+  "analytics.enabled": false,
+} as const;
+/**
+ * The one layout fix. gstack's `./setup --host codex` lists three skills twice under CODEX_HOME/skills: office-hours,
+ * plan-design-review and gstack-upgrade each as gstack-<name> (a link into the tree's .agents/skills) and as a copy in the
+ * runtime root, gstack/<name>/SKILL.md, with the same name and bytes. With office-hours listed twice, Codex injects
+ * nothing for "$office-hours". Each Sol skill arm disables the three copies with one [[skills.config]] entry each,
+ * path = "<CODEX_HOME>/<entry>" and enabled = false, and hides nothing else.
+ */
+export const CODEX_LAYOUT_FIX = ["skills/gstack/office-hours/SKILL.md", "skills/gstack/plan-design-review/SKILL.md", "skills/gstack/gstack-upgrade/SKILL.md"] as const;
+/** The rendered office-hours SKILL.md each pin's Codex install serves, under HOME at both entries; the Sol arms' install check. */
+export const CODEX_SKILL_FILES = [".codex/skills/gstack-office-hours/SKILL.md", ".codex/" + CODEX_LAYOUT_FIX[0]] as const;
+export const CODEX_RENDERED: Readonly<Record<SkillArm, { sha256: string; bytes: number }>> = {
+  current: { sha256: "ba7f2e3cd426f871deb5bb5c65c6dbca3a3c676d71eae9ac307133a02b696f9a", bytes: 48_068 },
+  new: { sha256: "c8b25fa81d3143c908b824955898e564702d9585858705cc0a9984137e9dbb26", bytes: 48_058 },
+};
+/** Changed lines in the unified diff from current to new, the same for the pins' office-hours/SKILL.md and for Codex's render of it. */
+export const RENDER_GAP = 62;
 
 /** Section 4 step 4 and pre-run change 1, item 4c: the closing message, sent at most twice. */
 export const CLOSING = "I need to stop here. Please end your reply with exactly these three lines, filled in:\nDECISION: what I should do.\nNEXT ACTION: one thing, who and by when.\nWHY: up to three facts from our talk.";

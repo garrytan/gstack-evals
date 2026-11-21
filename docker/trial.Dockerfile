@@ -26,5 +26,14 @@ RUN tar -xzf /tmp/codex.tgz -C /tmp package/vendor/x86_64-unknown-linux-musl/bin
  && rm -rf /tmp/codex.tgz /tmp/package \
  && codex --version \
  && codex-code-mode-host --help >/dev/null
+# The office-hours rewrite eval runs GPT-6.1 Sol in Codex CLI 0.170.0 (lanes/office-hours-rewrite/frozen.ts CODEX), kept
+# beside the adapter's pin in its own directory. The package's whole vendor/<triple> directory is laid out there as npm
+# lays it out (bin/, codex-path/, codex-resources/), and the codex binary is checked against its own sha256.
+ADD --checksum=sha256:67c4bccce8e6c3a2b9ae0e586750e0efac7e0b8cd85e6b4734ad474317d2cc32 https://registry.npmjs.org/@openai/codex/-/codex-0.170.0-linux-x64.tgz /tmp/codex-ohr.tgz
+RUN mkdir -p /opt/codex-0.170.0 \
+ && tar -xzf /tmp/codex-ohr.tgz -C /opt/codex-0.170.0 --strip-components=3 package/vendor/x86_64-unknown-linux-musl \
+ && rm -f /tmp/codex-ohr.tgz \
+ && echo "880819aab735adcf16f36cd628940b9f1e652a36c01d10a5d32f83cc84902971  /opt/codex-0.170.0/bin/codex" | sha256sum -c - \
+ && test "$(/opt/codex-0.170.0/bin/codex --version)" = "codex-cli 0.170.0"
 ENV HOME=/home/agent LANG=C.UTF-8
 WORKDIR /work
