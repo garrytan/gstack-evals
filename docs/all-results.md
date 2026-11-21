@@ -165,7 +165,7 @@ These results have no numbers here, because they haven't yet had both checks the
 
 **/ship's extra review voices**
 
-- **No counted result, the judge failed its check**, Gemini 4 Carbon as judge: in a pilot on fixed review findings sampled from /ship's own history, the judge agreed with labels settled by Opus 5.5 and GPT-6.2 Astra at kappa 0.36 on 26 of 40 checked items, under the 0.6 it needed, so the judged sample gives no number. 19 of 71 judge calls came back empty at a 16,000-token output cap, and 41 of 145 sampled findings had no readable text in the packets built for the judge. [Pilot results](../wiki/board/2026-11-21-capy-ship-panel-sample-results/README.md)
+- **No counted result, the judge failed its check**, Gemini 4 Carbon as judge: in a pilot on fixed review findings sampled from /ship's own history, the judge agreed with the settled labels at kappa 0.36 on the 26 of 40 gold items it answered, under the 0.6 it needed, so the judged sample gives no number. 19 of 71 judge calls came back empty at a 16,000-token output cap, and 41 of 145 sampled findings had no readable text in the packets built for the judge. [Pilot results](../wiki/board/2026-11-21-capy-ship-panel-sample-results/README.md)
 
 ## Corrections
 
