@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+# Gold labels, the judge check and the pilot gates for the /ship review panel judged sample (GEVA-559; prereg sections 5 and 10).
+#   labels.py settle <calls> <private-calls> <decisions.json> <out labels.json>
+#       Each gold item's binary label from the two labellers at the real-defect line (dated change post 2026-11-21): part A,
+#       A1 class blocker or should; part B, corrects yes and class blocker or should. The blocker line is printed beside it.
+#       They agree: that is the label. They disagree, or one has no usable answer: the run thread's decision in decisions.json
+#       (item -> {"label": bool, "why": "<one line>"}), written blind to the judge. Prints the labeller kappa.
+#   labels.py check <calls> <private-calls> <labels.json>
+#       The judge against the settled labels on the gold items: kappa, sensitivity, specificity, the five-class table, A2 agreement
+#       counts on the part A gold items, and the pilot's usable-answer gates.
+import collections, json, sys
+from pathlib import Path
+
+LABELLERS = ("opus", "astra")
+REAL = ("blocker", "should")
+
+
+def answers(dirs, role, call):
+    out = {}
+    for d in dirs:
+        for f in sorted((Path(d) / role / call).glob("*.json")):
+            r = json.loads(f.read_text())
+            out[r["item"]] = r
+    return out
+
+
+def binary(call, a, line=REAL):
+    if a is None:
+        return None
+    return a["class"] in line if call == "a1" else (a["corrects"] == "yes" and a["class"] in line)
+
+
+def kappa(pairs):
+    n = len(pairs)
+    if not n:
+        return None
+    po = sum(1 for a, b in pairs if a == b) / n
+    pa, pb = sum(1 for a, _ in pairs if a) / n, sum(1 for _, b in pairs if b) / n
+    pe = pa * pb + (1 - pa) * (1 - pb)
+    return 1.0 if pe == 1 else (po - pe) / (1 - pe)
+
+
+def gold_items(dirs):
+    items = {}
+    for role in LABELLERS:
+        for call in ("a1", "b"):
+            for i, r in answers(dirs, role, call).items():
+                if r["item_role"] == "gold":
+                    items[i] = ("a1" if r["part"] == "A" else "b", r.get("stratum"))
+    return items
+
+
+def settle(calls, private_calls, decisions_path, out):
+    dirs = [calls, private_calls]
+    dec = json.loads(Path(decisions_path).read_text()) if Path(decisions_path).exists() else {}
+    items = gold_items(dirs)
+    labels, pairs, need = {}, [], []
+    for i, (call, stratum) in sorted(items.items()):
+        v = [binary(call, (answers(dirs, role, call).get(i) or {}).get("answer")) for role in LABELLERS]
+        if None not in v:
+            pairs.append(tuple(v))
+        if v[0] is not None and v[0] == v[1]:
+            labels[i] = {"part": "A" if call == "a1" else "B", "stratum": stratum, "label": v[0], "source": "agree"}
+        elif i in dec:
+            labels[i] = {"part": "A" if call == "a1" else "B", "stratum": stratum, "label": bool(dec[i]["label"]), "source": "run thread", "why": dec[i]["why"], "labellers": v}
+        else:
+            need.append((i, call, v))
+    k = kappa(pairs)
+    kb = kappa([tuple(binary(call, (answers(dirs, role, call).get(i) or {}).get("answer"), ("blocker",)) for role in LABELLERS) for i, (call, _) in sorted(items.items())])
+    print(f"gold items {len(items)}; labeller pairs with both answers {len(pairs)}; labeller kappa at the real-defect line {k if k is None else round(k, 3)}; at the blocker line {kb if kb is None else round(kb, 3)}; agree {sum(1 for x in labels.values() if x['source']=='agree')}")
+    for i, call, v in need:
+        print(f"NEEDS DECISION {i} {call} opus={v[0]} astra={v[1]}")
+    if need:
+        sys.exit(2)
+    Path(out).write_text(json.dumps({"line": "real defect (blocker or should)", "labeller_kappa": k, "labeller_kappa_blocker_line": kb, "labels": labels}, indent=1, sort_keys=True))
+    print("labels written", out)
+
+
+def check(calls, private_calls, labels_path):
+    dirs = [calls, private_calls]
+    L = json.loads(Path(labels_path).read_text())["labels"]
+    rows, five = [], collections.Counter()
+    for i, lab in sorted(L.items()):
+        call = "a1" if lab["part"] == "A" else "b"
+        r = answers(dirs, "judge", call).get(i)
+        a = (r or {}).get("answer")
+        j = binary(call, a)
+        if j is None:
+            rows.append((i, lab, None)); continue
+        rows.append((i, lab, j))
+        cls = a["class"] if call == "a1" else ("not_defect" if a["corrects"] == "no" else "cant_tell" if a["corrects"] == "cant_tell" else a["class"])
+        five[(cls, lab["label"])] += 1
+    pairs = [(j, lab["label"]) for _, lab, j in rows if j is not None]
+    k = kappa(pairs)
+    tp = sum(1 for j, l in pairs if j and l); fn = sum(1 for j, l in pairs if not j and l)
+    tn = sum(1 for j, l in pairs if not j and not l); fp = sum(1 for j, l in pairs if j and not l)
+    print(f"judge on gold at the real-defect line: {len(pairs)} of {len(rows)} usable; kappa {k if k is None else round(k, 3)} (gate: at least 0.6); sensitivity {tp}/{tp+fn}; specificity {tn}/{tn+fp}")
+    print("five-class table (judge class x settled label): " + ", ".join(f"{c}/{'blocker' if l else 'not'} {n}" for (c, l), n in sorted(five.items())))
+    # A2 agreement on the part A gold items
+    a2 = {role: answers(dirs, role, "a2") for role in ("judge",) + LABELLERS}
+    def same(x, y, i):
+        ax, ay = (a2[x].get(i) or {}).get("answer"), (a2[y].get(i) or {}).get("answer")
+        if not ax or not ay:
+            return None
+        return set(ax["same_first"]) == set(ay["same_first"]) and set(ax["same_later"]) == set(ay["same_later"])
+    gold_a = [i for i, lab in L.items() if lab["part"] == "A"]
+    for x, y in (("judge", "opus"), ("judge", "astra"), ("opus", "astra")):
+        v = [same(x, y, i) for i in gold_a]
+        print(f"A2 agreement {x} vs {y}: {sum(1 for s in v if s)} of {sum(1 for s in v if s is not None)} identical (both lists)")
+    # pilot gates on the judge's calls (gold and batch)
+    usable, fails, by = 0, 0, collections.Counter()
+    for call in ("a1", "a2", "b"):
+        for i, r in answers(dirs, "judge", call).items():
+            if r["answer"]:
+                usable += 1
+                if call != "a2":
+                    by["B" if call == "b" else r["stratum"]] += 1
+            else:
+                fails += 1
+    print(f"judge calls: {usable} usable, {fails} unscorable after one retry (gate: at most 2 of 72); usable A1 or B by stratum: {dict(sorted(by.items()))} (gate: at least 5 each)")
+
+
+if __name__ == "__main__":
+    {"settle": settle, "check": check}[sys.argv[1]](*sys.argv[2:])
