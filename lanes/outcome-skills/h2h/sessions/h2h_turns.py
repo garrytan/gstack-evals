@@ -307,7 +307,8 @@ class Turns(PfSession):
     def generations(self, slot: dict) -> None:
         """Part P (the config's generations key): before the slot closes, reads each answer's OpenRouter generation record by
         its id (an assistant message id in the home's Claude Code session logs, sub-agents' included) through the slot's free
-        generation route, and writes one line per id to generations.jsonl for ext/session.ts's served-by check. A record not
+        generation route, and writes one line per id to generations.jsonl for ext/session.ts's served-by check, with the
+        generation id the proxy named in its x-h2h-generation-id header (the answer's X-Generation-Id), or null. A record not
         found yet is asked again up to GEN_TRIES times; whatever was read last is written, and nothing here stops the close
         (run() records any error in the summary as generations_error). A message Claude Code wrote itself (model
         "<synthetic>") has no generation record and is skipped."""
@@ -327,20 +328,20 @@ class Turns(PfSession):
                 ids.append(i)
         with (self.out / "generations.jsonl").open("w") as f:
             for i in ids:
-                status, body = 0, ""
+                status, body, gen = 0, "", None
                 for attempt in range(GEN_TRIES if re.fullmatch(r"[A-Za-z0-9_-]+", i) else 0):
                     req = urllib.request.Request(slot["base_url"].rstrip("/") + "/v1/generation?id=" + i, headers={"authorization": "Bearer " + slot["token"]})
                     try:
                         with urllib.request.urlopen(req, timeout=30) as r:
-                            status, body = r.status, r.read().decode(errors="replace")
+                            status, body, gen = r.status, r.read().decode(errors="replace"), r.headers.get("x-h2h-generation-id")
                     except urllib.error.HTTPError as e:
-                        status, body = e.code, e.read().decode(errors="replace")
+                        status, body, gen = e.code, e.read().decode(errors="replace"), e.headers.get("x-h2h-generation-id")
                     except Exception as e:
-                        status, body = 0, f"{type(e).__name__}: {e}"[:300]
+                        status, body, gen = 0, f"{type(e).__name__}: {e}"[:300], None
                     if status == 200 or attempt == GEN_TRIES - 1:
                         break
                     time.sleep(GEN_WAIT_S)
-                f.write(json.dumps({"id": i, "status": status, "text": body}) + "\n")
+                f.write(json.dumps({"id": i, "status": status, "text": body, "generation_id": gen}) + "\n")
 
     def copy_out(self, src: str, dest: Path) -> None:
         """Copies a file the session's container wrote to the host: docker cp under Harbor, a plain copy on the host."""

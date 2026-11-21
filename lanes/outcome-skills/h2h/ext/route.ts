@@ -3,9 +3,11 @@
 // the run's metering proxy to OpenRouter, pinned to the Particle AI provider only, with data collection denied and no
 // fallbacks. The proxy already writes that routing into every OpenRouter call from the price row (prices.ts
 // openRouterRouting); particleRoute checks the row against prereg.json before anything runs. A call served by another
-// provider is caught after the session from OpenRouter's generation record of each answer (the Messages stream's
-// message_start id is the generation id), read through the proxy's free generation route; one such call stops part P's
-// items for the Captain. This file also holds the extension's Claude Code stages (parts P and L): the items, the arms each
+// provider is caught after the session from OpenRouter's generation record of each answer, read through the proxy's free
+// generation route. Claude Code logs each answer's Messages id (msg_...), which that route does not take; the proxy
+// recorded each answer's X-Generation-Id header and reads the record of that generation id, naming it in an
+// x-h2h-generation-id header, and the check holds the record to that id. One such call stops part P's items for the
+// Captain. This file also holds the extension's Claude Code stages (parts P and L): the items, the arms each
 // pays for, the model and the session allowance.
 import { chatPrice, openRouterRouting } from "../../../../src/runner/pricing/prices.ts";
 import { HARBOR_MODEL } from "../../statemachines/run.ts";
@@ -95,15 +97,17 @@ export function answerIds(transcript: string): string[] {
   return ids;
 }
 
-export type GenerationLookup = (id: string) => Promise<{ status: number; text: string }>;
+/** An answer's generation record lookup: the status and body, and the generation id the proxy recorded for the answer (its x-h2h-generation-id header), or null when it recorded none. */
+export type GenerationLookup = (id: string) => Promise<{ status: number; text: string; generation_id: string | null }>;
 /** A lookup through a proxy slot's free OpenRouter generation route. */
 export const proxyLookup = (proxyBase: string, slot: string, token: string): GenerationLookup => async (id) => {
   const res = await fetch(proxyBase.replace(/\/$/, "") + "/" + slot + "/openrouter/v1/generation?id=" + id, { headers: { authorization: "Bearer " + token } });
-  return { status: res.status, text: await res.text() };
+  return { status: res.status, text: await res.text(), generation_id: res.headers.get("x-h2h-generation-id") };
 };
 
 /** Refuses unless every answer was served by one of the route's providers: E_H2HX_ROUTE_PROVIDER for a call served by
- *  another provider, E_H2HX_ROUTE_RECORD when an answer has no readable generation record. Either stops part P's items. */
+ *  another provider, E_H2HX_ROUTE_RECORD when an answer has no recorded generation id or no readable record of it. Either
+ *  stops part P's items. */
 export async function checkServedBy(ids: readonly string[], lookup: GenerationLookup, route: ClaudeRoute): Promise<{ checked: number; served_by: string[] }> {
   if (!route.served_by) return { checked: 0, served_by: [] };
   const allowed = new Set(route.served_by.map((n) => n.toLowerCase()));
@@ -115,7 +119,8 @@ export async function checkServedBy(ids: readonly string[], lookup: GenerationLo
     try {
       data = (JSON.parse(r.text) as { data?: { id?: unknown; provider_name?: unknown } }).data;
     } catch {}
-    const name = r.status === 200 && data?.id === id && typeof data.provider_name === "string" ? data.provider_name : h2hFail("E_H2HX_ROUTE_RECORD", "no generation record for answer " + id + " (status " + r.status + "); part P's items stop for the Captain");
+    if (typeof r.generation_id !== "string" || !/^[A-Za-z0-9_-]+$/.test(r.generation_id)) h2hFail("E_H2HX_ROUTE_RECORD", "no generation id was recorded for answer " + id + " (its reply had no X-Generation-Id header, or the proxy never served it; lookup status " + r.status + "); part P's items stop for the Captain");
+    const name = r.status === 200 && data?.id === r.generation_id && typeof data.provider_name === "string" ? data.provider_name : h2hFail("E_H2HX_ROUTE_RECORD", "no generation record for answer " + id + " (generation " + r.generation_id + ", status " + r.status + "); part P's items stop for the Captain");
     if (!allowed.has(name.toLowerCase())) h2hFail("E_H2HX_ROUTE_PROVIDER", "answer " + id + " for " + route.model + " was served by " + JSON.stringify(name) + ", not " + route.served_by.join(" or ") + "; part P's items stop for the Captain");
     seen.add(name);
   }
