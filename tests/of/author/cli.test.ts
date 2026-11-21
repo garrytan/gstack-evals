@@ -1,7 +1,8 @@
 // Value: protects=the authoring commands' wiring: sealed paths, the gstack pin check, the frame file, one metered client with the production labeller on one item, the strict Argon check and the printed counts.
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkGstack, authorCommand, mddAt, readFrame, realCommand, type Wire } from "../../../lanes/office-hours-founder/author/cli.ts";
 import { FIXTURE, FIXTURE_ASKS, REAL_FILES, REAL_NOTES, REAL_PAGE, authorReply, blockReply } from "../../../lanes/office-hours-founder/author/fixtures.ts";
@@ -48,8 +49,10 @@ function upstream(argon = "Google", seen: string[] = []): typeof fetch {
   }) as typeof fetch;
 }
 
+// The ledger fsyncs every write (a pilot run makes about 980), so on a busy CI disk the pilot test ran past 5 s. The
+// ledger lives in RAM-backed /dev/shm where there is one, so fsync costs nothing; durability is not under test here.
 const setup = (item: string) => {
-  const dir = tmp();
+  const dir = mkdtempSync(join(existsSync("/dev/shm") ? "/dev/shm" : tmpdir(), "of-author-cli-"));
   const { record, ledger } = ledgerWith(dir, [item]);
   return { dir, record, ledger, units: join(dir, "units") };
 };
