@@ -7,11 +7,25 @@
 // bzip2, found by their bytes; the head-to-head's findArchives and extract) two levels deep, listing a third. A scan
 // that did not finish fails closed (E_CSO_SCAN). Ids are public, so a hit keeps its needle beside its path.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { ARCHIVE_LEVELS, extract, findArchives } from "../../h2h/arms/contain.ts";
 import { csoFail } from "../prereg.ts";
+
+// An unpacked archive can hold a file name that is not UTF-8, which findArchives cannot stat by string. Such a name
+// becomes "_x" and its bytes in hex, in the scratch copy only; the bytes scan-ids.sh reads do not change.
+function utf8Names(dir: Buffer): void {
+  for (const n of readdirSync(dir, { encoding: "buffer" })) {
+    let p = Buffer.concat([dir, Buffer.from("/"), n]);
+    if (!Buffer.from(n.toString("utf8")).equals(n)) {
+      const q = Buffer.concat([dir, Buffer.from("/_x" + n.toString("hex"))]);
+      renameSync(p, q);
+      p = q;
+    }
+    if (lstatSync(p).isDirectory()) utf8Names(p);
+  }
+}
 
 export const SCAN_IDS = readFileSync(join(import.meta.dir, "sh", "scan-ids.sh"), "utf8");
 export const FIX_PREFIX_CHARS = 12;
@@ -90,6 +104,8 @@ export function scanIds(rootIn: string, units: readonly UnitIds[]): IdScan {
           const why = extract(a.path, a.format, to);
           archives.push({ path, level: depth, opened: why === null, ...(why ? { note: why } : {}) });
           if (why) continue;
+          spawnSync("chmod", ["-R", "u+rwX", to]);
+          utf8Names(Buffer.from(to));
           found.push(...scanTree(to, ns).raw.map((h) => ({ where: "archive" as const, path: path + "!" + h.path, match: h.match })));
           next.push({ dir: to, label: path + "!" });
         }
@@ -97,6 +113,7 @@ export function scanIds(rootIn: string, units: readonly UnitIds[]): IdScan {
       level = next;
     }
   } finally {
+    spawnSync("chmod", ["-R", "u+rwX", scratch]);
     rmSync(scratch, { recursive: true, force: true });
   }
   const seen = new Set<string>();

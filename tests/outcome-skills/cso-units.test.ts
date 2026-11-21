@@ -224,6 +224,16 @@ describe("cso units: the six gates on planted units", () => {
     expect((gate(res, bad) as { reason: string }).reason).toContain("at git vendor/m.git");
     expect(gate(res, ok)).toMatchObject({ usable: true, position: 1 });
   });
+  test("gate 6: a session tree whose vendored git store git cannot read drops with its own code, and the build goes on", () => {
+    const store = { "vendor/broken/HEAD": "ref: refs/heads/main\n", "vendor/broken/refs/heads/main": "a".repeat(40) + "\n", ["vendor/broken/objects/ab/" + "c".repeat(38)]: "not a zlib stream\n" };
+    const bad = unit("contain/unreadable", plant({ ...BASE, ...store }, { "src/a.ts": SRC.replace("trim", "trimEnd") }));
+    const ok = unit("contain/readable", plant(BASE, { "src/a.ts": SRC.replace("trim", "trimStart") }));
+    const { work, res } = run([bad, ok]);
+    expect(gate(res, bad)).toMatchObject({ usable: false, gate: "containment", code: "E_CSO_DROP_SCAN" });
+    expect((gate(res, bad) as { reason: string }).reason).toContain("git cat-file vendor/broken");
+    expect(existsSync(join(work, "trees", bad.c.unit))).toBe(false);
+    expect(gate(res, ok)).toMatchObject({ usable: true, position: 1 });
+  });
   test("gate 6: a CVE id of the advisory in a file drops, and a longer CVE id that runs on does not", () => {
     const bad = unit("contain/cve", plant({ ...BASE, "SECURITY.md": "CVE-2026-4321 fixed\n" }, { "src/a.ts": SRC.replace("trim", "trimEnd") }), { cves: ["CVE-2026-4321"] });
     const ok = unit("contain/cve-long", plant({ ...BASE, "SECURITY.md": "CVE-2026-43210 fixed\n" }, { "src/a.ts": SRC.replace("trim", "trimStart") }), { cves: ["CVE-2026-4321"] });
