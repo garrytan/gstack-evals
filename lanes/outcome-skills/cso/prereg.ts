@@ -21,12 +21,13 @@ export const PREREG_PATH = join(import.meta.dir, "..", "..", "..", "wiki", "plan
 export const DEVIATIONS_POST_ID = "2026-11-21-capy-cso-advisories-deviations";
 
 /** The dated pre-data deviations, as the deviations post lists them: a, b, CV5 and CV6 in the Captain's approvals record
- *  (approvals/2026-11-19-untested-parts-ship-guards-cso.md), c from the Captain's decision of 2026-11-21. Run receipts
- *  name these ids and the commit that landed each. */
+ *  (approvals/2026-11-19-untested-parts-ship-guards-cso.md), c and d from the Captain's decisions of 2026-11-21. Run
+ *  receipts name these ids and the commit that landed each. */
 export const DEVIATIONS = {
   a: "The containment gate also scans each arm's installed gstack tree; a unit whose GHSA id, CVE id or fix-commit prefix appears there drops from every cell.",
   b: "Stage 1's judge-check release reports only whether each gold minimum was met and the pass or fail of each gate, not gold counts by class.",
   c: "A unit whose affected package an arm's installed gstack tree holds at or past its fixed version, in a lockfile or an installed package manifest, drops from every cell; the 16 such units at the pin drop by name before the draw, and the unit gate checks every arm's install for this route.",
+  d: "The judge's output cap (judge.production.max_output_tokens, which every route's judge reads) is 48,000 at high effort in place of 16,000, from stage 0's re-judge on; a judge reply cut off at its cap is labelled truncated, not malformed.",
   CV5: "When stage 2 takes R113's interim look, its O'Brien-Fleming bounds (3.18 and 2.25 at two-sided 0.025, then 2.80 and 1.98 at 0.05 once one contrast is rejected) replace section 10's Holm thresholds at both looks.",
   CV6: "The Sol stage's R111 pilot is its paid Codex smoke, sized with its own caps in the Sol proposal; a keyless session start doesn't count, and R78's 40 Sol reports still stand.",
 } as const;
@@ -48,6 +49,15 @@ export interface CsoPrereg {
   stage1_release: string[];
   items: Record<string, { central?: number; cap: number }>;
   [k: string]: unknown;
+}
+
+/** Deviation (d): the judge's output cap, 48,000 in place of prereg.json's frozen 16,000 (E_CSO_PREREG when prereg.json
+ *  holds another number, so the deviation never lands on a plan it was not written against). */
+export const JUDGE_MAX_OUTPUT_D = 48_000;
+export function judgeMaxOutput(p: CsoPrereg): number {
+  const frozen = (p.judge as { production?: { max_output_tokens?: unknown } }).production?.max_output_tokens;
+  if (frozen !== 16_000) csoFail("E_CSO_PREREG", "judge.production.max_output_tokens is " + String(frozen) + ", not the 16,000 that deviation (d) raises to 48,000");
+  return JUDGE_MAX_OUTPUT_D;
 }
 
 const u32 = (n: unknown) => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 0xffffffff;

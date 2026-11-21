@@ -6,7 +6,7 @@
 // is sent. Carbon and Argon go through OpenRouter, where the proxy pins google-vertex with fallbacks off and data
 // collection denied, and a reply served by any other provider stops the send; Astra goes through OpenAI and Opus
 // through Anthropic. Every request (the judge packet) and answered reply is kept by request digest in the out dir, so a rerun
-// never pays for the same request twice and the export carries both; with the readout key they are sealed to it, since
+// never pays for the same request twice (a retry's digest names its attempt, so the retry rule sends a fresh call) and the export carries both; with the readout key they are sealed to it, since
 // stage 1's packets and replies carry its reports and labels (section 12).
 // probe sends one short call down each judge and labeller route at its frozen model, effort and cap.
 import { createHash, randomBytes } from "node:crypto";
@@ -22,7 +22,7 @@ import { priceRequest, reservationMicros } from "../../../../src/runner/pricing/
 import { MeteringProxy, reconcileJournal, type RetryBudget } from "../../../../src/runner/proxy/metering-proxy.ts";
 import { rigAdmission } from "../../../../src/rig/admission.ts";
 import { isSealedRow, openRow, sealRow } from "../analysis/readout.ts";
-import { csoFail, type CsoPrereg } from "../prereg.ts";
+import { csoFail, JUDGE_MAX_OUTPUT_D, type CsoPrereg } from "../prereg.ts";
 import { judgeRoutes, LABELLER_MAX_OUTPUT, routeClients, type JudgeClient, type Transport } from "./client.ts";
 
 export const JUDGE_ITEM = "cso-judge";
@@ -59,7 +59,7 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
     const open = readItem(record, JUDGE_ITEM).open;
     if (open && open.run_id === o.run_id && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
     lease = openLease(record, local, { item: JUDGE_ITEM, run_id: o.run_id, warn, requireAdmission: rigAdmission({ proof: "direct" }) });
-    proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "cso-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: LABELLER_MAX_OUTPUT, refuseServerTools: true });
+    proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "cso-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: Math.max(LABELLER_MAX_OUTPUT, JUDGE_MAX_OUTPUT_D), refuseServerTools: true });
     proxy.start();
   } catch (e) {
     if (lease.lease_id && !proxy) settleLease(record, local, lease.lease_id, warn);
@@ -69,10 +69,10 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
   const px = proxy;
   const log = join(out, "calls.jsonl");
   let sent = 0, closed = false;
-  const transport: Transport = async ({ provider, route, body: asked }) => {
+  const transport: Transport = async ({ provider, route, body: asked, attempt = 1 }) => {
     const body: Record<string, unknown> = { ...asked, ...PROXY_FIELDS[provider as keyof typeof PROXY_FIELDS] };
     if (closed) csoFail("E_USAGE", "the judge meter is closed");
-    const digest = createHash("sha256").update(provider + route + JSON.stringify(body)).digest("hex");
+    const digest = createHash("sha256").update(provider + route + JSON.stringify(body) + (attempt > 1 ? "#attempt" + attempt : "")).digest("hex");
     const kept = join(out, "replies", digest + ".json");
     if (existsSync(kept)) {
       const v: unknown = JSON.parse(readFileSync(kept, "utf8"));

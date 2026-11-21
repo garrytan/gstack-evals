@@ -2,13 +2,14 @@
 // Plan section 7's judge and labeller clients. Every client sends through a transport the caller supplies (the metering
 // proxy in a run, a fake in tests), so this file holds no key and makes no call of its own. Carbon goes through OpenRouter
 // pinned to google-vertex with fallbacks off and data collection denied; Astra and Opus are the gold labellers and the
-// fallback judges, and every Astra prompt opens with prereg.json's read-only correctness framing. A malformed reply gets
-// one retry, then is a judge gap; a provider refusal is counted as a refusal. JUDGE_MODELS is the one place that maps
+// fallback judges, and every Astra prompt opens with prereg.json's read-only correctness framing. A malformed or truncated
+// reply gets one retry, sent as its own request, then is a judge gap labelled by what came back (a reply cut off at its
+// output cap is truncated, not malformed); a provider refusal is counted as a refusal. The judge's cap is deviation (d)'s. JUDGE_MODELS is the one place that maps
 // prereg.json's model ids to provider ids and to src/runner/pricing/prices.ts ids (Astra is openai/gpt-6.2-astra in
 // prereg.json and openai:gpt-6.2-astra in prices.ts).
 import { judgeAnswer, JUDGE_ROUTE } from "../../../../src/adapters/judge.ts";
 import { OPENROUTER_MODELS, openRouterRouting, type Provider } from "../../../../src/runner/pricing/prices.ts";
-import { csoFail, type CsoPrereg } from "../prereg.ts";
+import { csoFail, judgeMaxOutput, type CsoPrereg } from "../prereg.ts";
 import type { CsoModel } from "../types.ts";
 
 /** prereg.json model id to provider, provider model id and price id. */
@@ -23,9 +24,9 @@ export const JUDGE_MODELS: Record<string, { provider: Provider; api: string; pri
 export const LABELLER_MAX_OUTPUT = 32_000;
 export const ASTRA = "openai/gpt-6.2-astra";
 
-export interface TransportRequest { provider: Provider; route: string; body: Record<string, unknown> }
+export interface TransportRequest { provider: Provider; route: string; body: Record<string, unknown>; attempt?: number }
 export type Transport = (req: TransportRequest) => Promise<{ status: number; body: unknown }>;
-export interface JudgeClient { model: string; role: "judge" | "gold"; ask(prompt: string): Promise<{ text: string; refused: boolean; truncated: boolean }> }
+export interface JudgeClient { model: string; role: "judge" | "gold"; ask(prompt: string, attempt?: number): Promise<{ text: string; refused: boolean; truncated: boolean }> }
 
 /** The request body for one prompt on a model's provider route. */
 export function judgeBody(model: string, prompt: string, maxOutputTokens: number, effort: string): Record<string, unknown> {
@@ -53,9 +54,9 @@ export function judgeClient(model: string, role: "judge" | "gold", transport: Tr
   const m = JUDGE_MODELS[model] ?? csoFail("E_CSO_JUDGE_ROUTE", model + " is not a judge or labeller model the plan names");
   return {
     model, role,
-    async ask(prompt) {
+    async ask(prompt, attempt = 1) {
       const body = judgeBody(model, o.framing ? o.framing + "\n\n" + prompt : prompt, o.maxOutputTokens, o.effort);
-      const r = await transport({ provider: m.provider, route: JUDGE_ROUTE[m.provider], body });
+      const r = await transport({ provider: m.provider, route: JUDGE_ROUTE[m.provider], body, attempt });
       if (r.status !== 200) csoFail("E_CSO_JUDGE_TRANSPORT", model + " answered HTTP " + r.status);
       return { text: judgeAnswer(m.provider, r.body), ...refusedOrTruncated(m.provider, r.body) };
     },
@@ -64,16 +65,18 @@ export function judgeClient(model: string, role: "judge" | "gold", transport: Tr
 
 export type Asked<T> = { value: T; refused: false; attempts: number } | { gap: string; refused: boolean; attempts: number };
 
-/** Section 7's retry rule: a malformed or truncated reply gets one retry, and a second is a judge gap. A refusal ends the
- *  call as a refusal (and a gap). */
+/** Section 7's retry rule: a malformed or truncated reply gets one retry as attempt 2, and a second is a judge gap named
+ *  by what each reply was. A refusal ends the call as a refusal (and a gap). */
 export async function askParsed<T>(c: JudgeClient, prompt: string, parse: (text: string) => T | null): Promise<Asked<T>> {
+  const why: string[] = [];
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const r = await c.ask(prompt);
+    const r = await c.ask(prompt, attempt);
     if (r.refused) return { gap: c.model + " refused", refused: true, attempts: attempt };
     const v = r.truncated ? null : parse(r.text);
     if (v !== null) return { value: v, refused: false, attempts: attempt };
+    why.push(r.truncated ? "truncated" : "malformed");
   }
-  return { gap: c.model + " gave a malformed reply twice", refused: false, attempts: 2 };
+  return { gap: c.model + (why[0] === why[1] ? " gave a " + why[0] + " reply twice" : " gave a " + why[0] + " reply, then a " + why[1] + " one"), refused: false, attempts: 2 };
 }
 
 export interface JudgeRoute { route: string; judge: string; gold: [string, string]; cells: CsoModel[] }
@@ -98,7 +101,7 @@ export function routeClients(route: JudgeRoute, p: CsoPrereg, transport: Transpo
   const frame = (m: string) => (m === ASTRA && framing ? "This is " + framing + "." : undefined);
   const effort = (m: string) => j.gold_labellers.find((g) => g.model === m)?.effort ?? "high";
   return {
-    judge: judgeClient(route.judge, "judge", transport, { maxOutputTokens: j.production.max_output_tokens, effort: j.production.effort, framing: frame(route.judge) }),
+    judge: judgeClient(route.judge, "judge", transport, { maxOutputTokens: judgeMaxOutput(p), effort: j.production.effort, framing: frame(route.judge) }),
     gold: route.gold.map((m) => judgeClient(m, "gold", transport, { maxOutputTokens: LABELLER_MAX_OUTPUT, effort: effort(m), framing: frame(m) })) as [JudgeClient, JudgeClient],
   };
 }
