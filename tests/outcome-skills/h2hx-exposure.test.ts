@@ -94,6 +94,7 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1" || !SOURCES)("stage 0 in
     const r = await codexStage0({ arm: "s-gstack", home, out: join(mkdtempSync(join(tmpdir(), "h2hx-s0-")), "out") });
     expect(r.runs.map((x) => [x.name, x.exit, x.session_kind, x.ci, x.github_actions, x.summary_end])).toEqual([["link", 0, "interactive", "unset", "unset", "completed"], ["plain", 0, "headless", "unset", "unset", "completed"]]);
     expect(r.runs.map((x) => x.session_meta)).toEqual([{ originator: "codex_exec", cli_version: "0.170.0" }, { originator: "codex_exec", cli_version: "0.170.0" }]);
+    expect(r.runs.map((x) => [x.path_kept, x.bun?.startsWith("/opt/h2h-runtimes/")])).toEqual([[true, true], [true, true]]);
     expect({ same_request: r.same_request, request_diff: r.request_diff, same_session_meta: r.same_session_meta }).toEqual({ same_request: true, request_diff: [], same_session_meta: true });
     expect(r.question_tools).toEqual(["functions.request_user_input", "functions.request_user_input_async"]);
   }, 600_000);
