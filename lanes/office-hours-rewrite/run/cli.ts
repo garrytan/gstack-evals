@@ -20,7 +20,8 @@ import { dockerRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { receiptsSink } from "../../../src/trial/durable.ts";
 import { insideRepo } from "../../review-noloss/suite.ts";
 import { openMeter } from "../../product-value/meter.ts";
-import { ARMS, EMPTY_BOUND, MODEL_KEYS, PINS } from "../frozen.ts";
+import { ARMS, EMPTY_BOUND, HOSTS, MODEL_KEYS, PINS } from "../frozen.ts";
+import { withCodex } from "./codex-rig.ts";
 import { parseBlock } from "../score/block.ts";
 import { simTurn } from "../sim/founder.ts";
 import type { ArmId, ModelId } from "../types.ts";
@@ -158,7 +159,11 @@ export async function runCommand(argv: string[], io: Io, env: Env): Promise<numb
   let failed = false;
   try {
     const run = await runLaunch({ ...plan.input, runId, pins: PINS, buildCommit: commit, allowances: ALLOWANCES, policy: policy as LoadedPolicy, docker: env.GSTACK_EVALS_DOCKER_BIN || "docker", day: today(), ledger: ledger.path, log: (l) => io.err(l) }, {
-      openRig: () => dockerRig({ host: "claude", arms: { arms: specs, base: null, skill: null, notes: [] }, tasks: join(out, "fixtures", "tasks.json"), out: { path: out, rule: "--out" }, ledger, record, item: plan.item, runId, models: plan.input.models.map((m) => MODEL_KEYS[m]), policy: policy as LoadedPolicy }, { env, skill: null, skills: { current: "office-hours", new: "office-hours" }, nonce: randomBytes(6).toString("hex"), cap: plan.input.cap, voice: false }),
+      openRig: () => {
+        const nonce = randomBytes(6).toString("hex");
+        const rig = dockerRig({ host: "claude", arms: { arms: specs, base: null, skill: null, notes: [] }, tasks: join(out, "fixtures", "tasks.json"), out: { path: out, rule: "--out" }, ledger, record, item: plan.item, runId, models: plan.input.models.map((m) => MODEL_KEYS[m]), policy: policy as LoadedPolicy }, { env, skill: null, skills: { current: "office-hours", new: "office-hours" }, nonce, cap: plan.input.cap, voice: false });
+        return plan.input.models.some((m) => HOSTS[m] === "codex") ? withCodex(rig, { arms: specs, env, out, tasks: join(out, "fixtures", "tasks.json"), runId, nonce }) : rig;
+      },
       simSlot: meterSim(meter),
       simTurn,
       parse: parseBlock,

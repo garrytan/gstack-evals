@@ -7,6 +7,9 @@
 // prompt, detector markers) lives in its area and is listed in the lane README as a build-time choice.
 import type { ArmId, BuilderGoal, FounderType, JudgeKey, ModelId, SkillArm } from "./types.ts";
 
+/** HOME inside every arm container: the trial image's agent user. */
+export const CONTAINER_HOME = "/home/agent";
+
 /** The first attempt's preregistration: everything its second attempt does not change still holds from it. */
 export const PREREG_1 = "wiki/plans/2026-11-17-geva-552-office-hours-rewrite-prereg/README.md";
 /** The second attempt's preregistration, which this build serves. */

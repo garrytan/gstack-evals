@@ -451,6 +451,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_DRYRUN_FAIL](#e_ohr_dryrun_fail) | 2 | U20 |
 | [E_OHR_PREFLIGHT_FAIL](#e_ohr_preflight_fail) | 2 | U20 |
 | [E_OHR_MODEL_DRIFT](#e_ohr_model_drift) | 2 | U20 |
+| [E_OHR_TAP](#e_ohr_tap) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -3495,6 +3496,14 @@ Office-hours rewrite eval (pre-run change 4): a reply named a model other than t
 Fix: Keep the journal and the transcript that show the reported model, and send the question to the Captain. Never retry the item on another model or route.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_TAP
+
+Office-hours rewrite eval (pre-run change 2): the model tap between the Sol arms' Codex CLI and the metering proxy did not start, or did not print TAP_READY within 30 seconds. No Sol session starts without it, because Codex records no reported model of its own.
+
+Fix: Read the tap container's docker logs and &lt;out>/tap/tap.json, fix the image or the rig network, and open the rig again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

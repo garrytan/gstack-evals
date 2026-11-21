@@ -3832,6 +3832,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_OHR_TAP: {
+    exit: 2,
+    meaning: "Office-hours rewrite eval (pre-run change 2): the model tap between the Sol arms' Codex CLI and the metering proxy did not start, or did not print TAP_READY within 30 seconds. No Sol session starts without it, because Codex records no reported model of its own.",
+    fix: "Read the tap container's docker logs and <out>/tap/tap.json, fix the image or the rig network, and open the rig again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
