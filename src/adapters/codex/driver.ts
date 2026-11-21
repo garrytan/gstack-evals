@@ -276,13 +276,8 @@ export async function copyRollouts(session: AgentSession, out: string): Promise<
       failed.push(path + ": unreadable");
       continue;
     }
-    try {
-      mkdirSync(join(out, dirname(path)), { recursive: true });
-      writeFileSync(join(out, path), r.out);
-    } catch (e) {
-      failed.push(path + ": could not be written (" + (e as Error).message + ")");
-      continue;
-    }
+    mkdirSync(join(out, dirname(path)), { recursive: true });
+    writeFileSync(join(out, path), r.out);
     copied.push(path);
   }
   return { copied, failed };
