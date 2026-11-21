@@ -172,6 +172,24 @@ describe("practice 5: the judge check", () => {
     const problems = check(prereg(swap("Labelled outputs: 40\nKappa at least: 0.6\nErrors read: per arm", "Labelled outputs: 39\nKappa at least: 0.5\nErrors read: pooled")));
     expect(problems.filter((p) => p.includes("practice 5"))).toHaveLength(3);
   });
+
+  test("a plan dated 2026-11-22 or later needs 100 labels: 40 fails and 100 passes", () => {
+    const id = "2026-11-22-geva-9-hook-prereg";
+    expect(check(prereg(PASSING_PREREG, id))).toEqual([
+      "wiki/plans/" + id + '.md: practice 5: "Labelled outputs:" must give at least 100 labelled outputs for the judge check, because the plan is dated 2026-11-22 or later (plans dated earlier need 40) (wiki/README.md, Eval plans and results, gives the format)',
+    ]);
+    expect(has(check(prereg(swap("Labelled outputs: 40", "Labelled outputs: 99"), id)), "at least 100 labelled outputs")).toBe(true);
+    expect(check(prereg(swap("Labelled outputs: 40", "Labelled outputs: 100"), id))).toEqual([]);
+    expect(check(prereg(swap("Labelled outputs: 40", "Labelled outputs: 100"), "2026-12-01-geva-9-hook-prereg"))).toEqual([]);
+  });
+
+  test("a plan dated 2026-11-21 keeps the 40-label floor", () => {
+    const id = "2026-11-21-geva-9-hook-prereg";
+    expect(check(prereg(PASSING_PREREG, id))).toEqual([]);
+    expect(check(prereg(swap("Labelled outputs: 40", "Labelled outputs: 39"), id))).toEqual([
+      "wiki/plans/" + id + '.md: practice 5: "Labelled outputs:" must give at least 40 labelled outputs for the judge check, because the plan is dated before 2026-11-22 (plans dated 2026-11-22 or later need 100) (wiki/README.md, Eval plans and results, gives the format)',
+    ]);
+  });
 });
 
 describe("practice 6: one planned look above $500 paid", () => {

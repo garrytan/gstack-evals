@@ -435,7 +435,9 @@ const labOf = (model: string) => {
 const blank = (s: string | undefined) => !s || /^(?:-|none|n\/a)$/i.test(s.trim());
 const HOW = " (wiki/README.md, Eval plans and results, gives the format)";
 
-function checkPrereg(lines: string[], p: (message: string) => void) {
+const MORE_LABELS_FROM = "2026-11-22";
+
+function checkPrereg(lines: string[], date: string, p: (message: string) => void) {
   const decision = sectionLines(lines, "Decisions?");
   if (!decision) p('practice 1: no "## Decision" section naming what we do for each way the result could come out' + HOW);
   else {
@@ -463,7 +465,10 @@ function checkPrereg(lines: string[], p: (message: string) => void) {
       }
     }
     const labels = Number(labelled(judge, "Labelled outputs")[0]?.replaceAll(",", "").match(/^\d+/)?.[0] ?? NaN);
-    if (!(labels >= 40)) p('practice 5: "Labelled outputs:" must give at least 40 labelled outputs for the judge check' + HOW);
+    const later = date >= MORE_LABELS_FROM;
+    const floor = later ? 100 : 40;
+    const why = later ? "the plan is dated " + MORE_LABELS_FROM + " or later (plans dated earlier need 40)" : "the plan is dated before " + MORE_LABELS_FROM + " (plans dated " + MORE_LABELS_FROM + " or later need 100)";
+    if (!(labels >= floor)) p('practice 5: "Labelled outputs:" must give at least ' + floor + " labelled outputs for the judge check, because " + why + HOW);
     const kappa = Number(labelled(judge, "Kappa at least")[0]?.match(/^\d*\.?\d+/)?.[0] ?? NaN);
     if (!(kappa >= 0.6)) p('practice 5: "Kappa at least:" must be 0.6 or more' + HOW);
     if (!/^per arm\b/i.test(labelled(judge, "Errors read")[0] ?? "")) p('practice 5: "Errors read: per arm" is missing; the judge\'s errors are read per arm, not pooled' + HOW);
@@ -525,7 +530,7 @@ export function checkPractices(root: string, entries: Entry[], baseFiles: Map<st
     if (!kind || baseFiles.has(e.path)) continue;
     const lines = bodyLines(readFileSync(join(root, e.path), "utf8"));
     const p = (message: string) => problems.push({ file: e.path, message });
-    if (kind === "prereg") checkPrereg(lines, p);
+    if (kind === "prereg") checkPrereg(lines, str(e, "date"), p);
     else if (kind === "quick-look") checkQuickLook(lines, p);
     else if (!lines.some((l) => CALL_SETTLED.test(l))) p('practice 12: no "Call settled: <the ship-or-kill call, or none>" line' + HOW);
   }
