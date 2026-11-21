@@ -1078,10 +1078,6 @@ export class MeteringProxy {
     }
   }
 
-  /**
-   * Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter.
-   * A journal write that fails is reported on stderr and counted as unsettled; the call is still metered and settled.
-   */
   /** Records an OpenRouter answer's id with its X-Generation-Id header (null when absent or malformed), for the free generation route and the outcome line. */
   private answer(slot: Slot, id: string | null, header: string | null): { answer_id: string | null; generation_id: string | null } {
     const generation = header !== null && GENERATION_ID.test(header) ? header : null;
@@ -1089,6 +1085,10 @@ export class MeteringProxy {
     return { answer_id: id, generation_id: generation };
   }
 
+  /**
+   * Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter.
+   * A journal write that fails is reported on stderr and counted as unsettled; the call is still metered and settled.
+   */
   private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string, upstream?: string, mark?: { no_usage_5xx: true; shadow_micros: number }, billed: number | null = null, answer?: { answer_id: string | null; generation_id: string | null }): Promise<void> {
     const meter = this.meter(ctx.slot);
     const micros = outcome.kind === "spent" ? outcome.spent_micros : maxMicros;

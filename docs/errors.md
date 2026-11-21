@@ -2598,7 +2598,7 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 
 ### E_H2HX_ROUTE_RECORD
 
-A particle-1 answer has no readable OpenRouter generation record, so the provider that served it is unknown: the answer id is malformed, the lookup did not answer 200, or the record names another id or no provider.
+A particle-1 answer has no readable OpenRouter generation record, so the provider that served it is unknown: the answer id is malformed, the proxy recorded no X-Generation-Id for it (its reply had none, or the proxy never served it), the lookup did not answer 200, or the record names another id or no provider.
 
 Fix: Part P's items stop. Read the generation record by hand through the proxy's free route and bring it to the Captain before any more particle-1 sessions open.
 

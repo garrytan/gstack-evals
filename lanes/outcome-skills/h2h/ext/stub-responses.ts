@@ -9,7 +9,8 @@
 //   nodone      a final message without DONE, every time
 //   ask         request_user_input_async with one question, then DONE after the reply
 //   asksync     request_user_input with one question, then DONE after Codex's own answer
-//   fail        response.failed with error code cyber_policy
+//   fail        response.failed with error code cyber_policy and the message OpenAI sent with it on a real part S
+//               session (tests/fixtures/codex-cyber-policy.json), which names no code
 //   bound       the metering proxy's 429 E_H2H_RESERVATION_BOUND refusal, then DONE after the next user message
 //   boundlate   one exec cell that runs true, then the proxy's 429 on the next request, after every user message
 //   hang        no answer until the client goes away
@@ -31,6 +32,7 @@ if (dir) mkdirSync(dir, { recursive: true });
 let n = 0;
 
 type Item = Record<string, unknown>;
+export const CYBER_POLICY_MESSAGE = "This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request. If you’re doing authorized security work that requires more cyber permissive safeguards, apply for Daybreak access via https://platform.openai.com/settings/organization/status-and-access before retrying.";
 const sse = (events: Item[]) => new Response(events.map((e) => "event: " + e.type + "\ndata: " + JSON.stringify(e) + "\n\n").join(""), { headers: { "content-type": "text/event-stream" } });
 const usage = { input_tokens: 1000, input_tokens_details: { cached_tokens: 200 }, output_tokens: 50, output_tokens_details: { reasoning_tokens: 10 }, total_tokens: 1050 };
 const message = (text: string): Item => ({ type: "message", id: "msg_" + n, role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] });
@@ -97,7 +99,7 @@ if (import.meta.main) {
         await new Promise((r) => req.signal.addEventListener("abort", r));
         return new Response(null, { status: 499 });
       }
-      if (item === "fail") return sse([{ type: "response.created", response: { id } }, { type: "response.failed", response: { id, status: "failed", error: { code: "cyber_policy", message: "This request was flagged under cyber_policy." }, usage } }]);
+      if (item === "fail") return sse([{ type: "response.created", response: { id } }, { type: "response.failed", response: { id, status: "failed", error: { code: "cyber_policy", message: CYBER_POLICY_MESSAGE }, usage } }]);
       if (item === "bound") return problem("E_H2H_RESERVATION_BOUND", 429, "only calls still in flight fill the slot's allowance; retry once one settles", "rate_limit_error", { "retry-after": String(RESERVATION_RETRY_AFTER_S), "x-should-retry": "true" });
       const items = Array.isArray(item) ? item : [item];
       return sse([{ type: "response.created", response: { id } }, ...items.map((it, i) => ({ type: "response.output_item.done", output_index: i, item: it })), { type: "response.completed", response: { id, status: "completed", usage } }]);
