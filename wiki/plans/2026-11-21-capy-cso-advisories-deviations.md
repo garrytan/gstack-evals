@@ -13,6 +13,7 @@ links:
   - https://github.com/garrytan/gstack/tree/5afef04e31de1cb30c727c7f827bdd729d04713e
   - 2026-11-19-geva-559-ship-panel-judged-sample-prereg
   - https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
+  - https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/guides/gemini-4-carbon
 ---
 # Pre-data deviations to the /cso real-advisory preregistration
 
@@ -91,27 +92,42 @@ Code: lanes/outcome-skills/cso/units/deps.ts. Tests: tests/outcome-skills/cso-de
 
 Code: lanes/outcome-skills/cso/analysis/release.ts. Tests: tests/outcome-skills/cso-release.test.ts. A passing route and a failing route each read correctly. A failed validity kappa closes only validity. No digit and no detail key leaves the release, and only item 6 of the frozen list changes. We broke the code on purpose so it passed the raw check through, and three tests failed.
 
-## (d) The judge's output cap rises to 128,000
+## (d) The judge runs at medium effort with a 65,536-token cap
 
-The owner's decision, 2026-11-21, after stage 0:
+The owner decided this in three steps on 2026-11-21, each after a stage 0 re-judge showed the step before it wasn't enough. First, after stage 0:
 
 > Raise Carbon's output cap to 48,000 and keep high effort, as dated deviation (d), entered before any stage 1 data. [...] Label a reply cut off at the cap as truncated, not malformed. Re-judge stage 0's 10 sessions on cso-judge, with no new sessions.
 
-The owner amended it the same day, after the 48,000 re-judge (below):
+Then, after the 48,000 re-judge:
 
 > Raise Carbon to 128,000 at high effort as a dated (d) amendment, test-first and before any stage 1 data, then re-judge all 10 stage 0 sessions at 128,000 in a fresh out dir. Keep the stage 1 judging inside cso-judge's $174 cap; a projection past it comes back to me.
 
-**Why.** Section 7 froze Gemini 4 Carbon as the judge at high effort with 16,000 output tokens. Stage 0 made 11 judge calls on Carbon. In 9 of them Carbon spent the whole 16,000 on reasoning (15,997 reasoning tokens, finish reason `length`, no text), and a tenth stopped at 15,683. So 9 of stage 0's 10 sessions came back as judge gaps. The ship-panel judged-sample eval (2026-11-19-geva-559-ship-panel-judged-sample-prereg) hit the same failure in its pilot the same day, on Carbon at 16,000. OpenRouter's reasoning-token guide says why: reasoning tokens count against the output cap, so a high-effort call can spend the cap before it writes an answer.
+Then, after the 128,000 re-judge's first calls:
 
-**Why 128,000.** At 48,000, the re-judge's calls that ended normally used 22,573 to 46,965 tokens, and one stage 0 packet used the whole 48,000 on reasoning on both the first try and the retry (47,997 reasoning tokens each, no text). The same packet was cut off at 16,000 too. Google's guidance for this failure is a higher cap or a lower thinking level, and an open issue reports that thinking budgets don't bound the reasoning reliably (googleapis/python-genai#782). The owner kept high effort, so the judge's reasoning setting doesn't change, and raised the cap to 128,000. OpenRouter lists Carbon on google-vertex with up to 943,718 output tokens, so 128,000 is inside the provider's limit. The 48,000 re-judge ran to the end in its own out dir, as the record of how many packets hit that cap.
+> Judge every Carbon call at medium effort with a cap of 65,536, as a dated amendment to (d) made before any stage 1 judge call. Land it test-first and re-judge all of stage 0 at medium in a fresh out dir. [...] If a packet still overflows at medium, it's a judge gap and comes to me with the count, not as a retry at another setting.
 
-**When.** The 48,000 cap came after stage 0 and before any stage 1 session. The 128,000 amendment came after stage 1's sessions had started and before any stage 1 judge call. Stage 1's session records are sealed to the readout key as they are written, and nobody has read them, so no stage 1 data shaped either change.
+**Why.** Section 7 froze Gemini 4 Carbon as the judge at high effort with 16,000 output tokens. Reasoning tokens count against the output cap, as OpenRouter's reasoning-token guide says, so a high-effort call can spend the whole cap before it writes an answer.
 
-**What changes.** `judge.production.max_output_tokens` becomes 128,000. Every route's judge reads that field, so the fallback judges (Astra and Opus) get 128,000 too; the gold labellers keep 32,000. A judge gap from a reply that ended at the cap now says "truncated" where it said "malformed". The retry rule doesn't change: one retry, then a gap. At Carbon's $10 per million output tokens, a call's worst case is $1.28 of output. The ledger reserves each call's worst case before it sends, inside the cso-judge cap, which doesn't change.
+- **At 16,000.** Stage 0 made 11 judge calls on Carbon. In 9 of them Carbon spent the whole 16,000 on reasoning (15,997 reasoning tokens, finish reason `length`, no text), and a tenth stopped at 15,683. So 9 of stage 0's 10 sessions came back as judge gaps. The ship-panel judged-sample eval (2026-11-19-geva-559-ship-panel-judged-sample-prereg) hit the same failure in its pilot the same day, on Carbon at 16,000.
+- **At 48,000.** 8 of 20 Carbon calls were cut off, and 4 of stage 0's 10 sessions were judge gaps. The longest call that finished used 46,965 tokens.
+- **At 128,000.** A call can't return more than 65,536 tokens. One packet ran to `length` at exactly 65,536 completion tokens (65,533 of them reasoning), with Google's native finish reason `CONTINUATION`. That packet was also cut off at 16,000 and at 48,000. Google's Vertex guide for Gemini 4 Carbon (https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/guides/gemini-4-carbon) says one API segment produces at most 65,536 output tokens when streaming, or 32,768 when not. Longer output needs Vertex's long-decode `continuation_token` on the v1beta1 API, which OpenRouter's chat route doesn't expose. So no cap above 65,536 helps through OpenRouter.
 
-**How it runs.** Stage 0's 10 sessions are judged again on cso-judge at 128,000 in a fresh out dir, with no new sessions. The 16,000 and 48,000 replies stay in their own out dirs. One probe call down each judge and labeller route at its cap runs before stage 1's judging, as section 7's probe does.
+The same guide lists Carbon's thinking levels as low, medium (Carbon's default) and high. The owner chose medium for every judge call, so every session gets the same judge setting. Raising effort only on the retry after a cut-off was ruled out, because the cut-offs fell on the none and untold arms' long reports: judge effort would then differ by arm on exactly the sessions the eval compares.
 
-Code: lanes/outcome-skills/cso/prereg.ts (`judgeMaxOutput`), lanes/outcome-skills/cso/judge/client.ts and lanes/outcome-skills/cso/judge/meter.ts. Tests: tests/outcome-skills/cso-judge.test.ts and tests/outcome-skills/cso-judge-meter.test.ts. The judge's request asks for 128,000 at high effort; a plan copy that froze any number but 16,000 refuses (E_CSO_PREREG), so the deviation lands only on the plan it was written against; the metering proxy admits the judge's cap (it refused anything past 32,000 before, which the probe test caught); and two replies cut off at the cap read "gave a truncated reply twice", while a mixed pair names each. The tests were committed first and failed before the code landed, for 48,000 and again for 128,000.
+**When.** All three steps came after stage 0 and before any stage 1 judge call. The first came before any stage 1 session. The second and third came after stage 1's sessions had started. Those session records are sealed to the readout key as they are written, and nobody has read them, so no stage 1 data shaped any step.
+
+**What changes.** The judge's settings in `judge.production` become medium effort and a 65,536 output cap. Every route's judge reads those settings, so the fallback judges (Astra and Opus) get them too; the gold labellers keep high effort and 32,000. A judge gap from a reply that ended at the cap now says "truncated" where it said "malformed". The retry rule doesn't change: one retry at the same setting, then a gap. A packet that still overflows at medium is a judge gap, and its count goes to the owner. A call's worst case is $0.66 of output at Carbon's $10 per million output tokens. The ledger reserves each call's worst case before it sends, inside the cso-judge cap, which doesn't change.
+
+**How it runs.** Stage 0's 10 sessions are judged again on cso-judge at medium in a fresh out dir, with no new sessions. The 16,000, 48,000 and 128,000 replies stay in their own out dirs as the record. The 128,000 re-judge was stopped after its stage 0 calls, and it judged no stage 1 session. One probe call down each judge and labeller route at its setting runs before stage 1's judging, as section 7's probe does.
+
+Code: lanes/outcome-skills/cso/prereg.ts (`judgeMaxOutput` and `judgeEffort`), lanes/outcome-skills/cso/judge/client.ts and lanes/outcome-skills/cso/judge/meter.ts. Tests: tests/outcome-skills/cso-judge.test.ts and tests/outcome-skills/cso-judge-meter.test.ts. The tests check that:
+
+- the judge's request asks for 65,536 at medium effort, and the gold labellers keep high effort;
+- a plan copy that froze any effort but high, or any cap but 16,000, refuses (E_CSO_PREREG), so the deviation lands only on the plan it was written against;
+- the metering proxy admits the judge's cap (it refused anything past 32,000 before, which the probe test caught);
+- two replies cut off at the cap read "gave a truncated reply twice", while a mixed pair names each.
+
+The tests were committed first and failed before the code landed, at each step.
 
 ## Harness repairs after stage 0
 
@@ -135,4 +151,4 @@ This applies only to the conditional Sol stage, which runs on the owner's go wit
 
 ## What does not change
 
-Arms, models, texts, the candidate lists and their order, seeds, scoring, the judge model and its effort, the labellers, the check thresholds, the analysis, the stages, the caps and the money all stay as merged. Only the judge's output cap changes, under (d). Run receipts name each deviation by its letter and the commit that landed it.
+Arms, models, texts, the candidate lists and their order, seeds, scoring, the judge model, the labellers, the check thresholds, the analysis, the stages, the caps and the money all stay as merged. Only the judge's output cap and effort change, under (d). Run receipts name each deviation by its letter and the commit that landed it.
