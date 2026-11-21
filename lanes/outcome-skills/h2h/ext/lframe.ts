@@ -65,13 +65,31 @@ export interface BaseWalkRecords {
   /** Rows a surviving verdict record drops. */
   drops: ReadonlySet<string>;
   usable: number; reservePositions: readonly number[]; passedPositions: readonly number[]; cap: number; capped: number;
+  /** The walk log's draw lines (drawLines), when it survives: each line's counts cover the order rows before the unit it
+   *  waits on, so the rows between two lines resolved to its count deltas. */
+  draws?: readonly DrawLine[];
+}
+
+export interface DrawLine { at: string; usable: number; dropped: number; capped: number; waits: string | null }
+export interface LoggedUnit { id: string; positions: number[]; evidence: string }
+
+/** The O draw lines of a base walk log (o-walk.out): its timestamp, usable, dropped and capped counts and the unit it waits on. */
+export function drawLines(text: string): DrawLine[] {
+  const out: DrawLine[] = [];
+  for (const l of text.split("\n")) {
+    const m = /^(\S+) (?:WALK_DONE )?draw exit \d+: O: usable (\d+), stage 1 \d+, stage 2 \d+, reserves \d+, stage 0 \d+, dropped (\d+), capped (\d+)(?: \| E_H2H_DRAW_PENDING O waits on (\S+) at gate)?/.exec(l);
+    if (m) out.push({ at: m[1]!, usable: Number(m[2]), dropped: Number(m[3]), capped: Number(m[4]), waits: m[5] ?? null });
+  }
+  return out;
 }
 
 /** Pools 1 and 2 from the base walk's surviving records. Pool 2 refuses (E_H2HX_UNITS_INPUT) unless the cap replay gives
  *  the recorded count. Pool 1's missing units are listed by window: the order rows between two placed units that hold
  *  the missing positions, each with its candidates (rows not placed, not capped, not dropped by a record, and for the
- *  passed-unassigned positions bug rows only). */
-export function basePools(r: BaseWalkRecords): { pool1: string[]; pool1Missing: Window[]; pool2: string[] } {
+ *  passed-unassigned positions bug rows only). With the walk log's draw lines, each window is split at the lines: the rows
+ *  between two lines hold the usable delta's units, less the placed and named ones among them. Where that need equals the
+ *  candidates, they are the units (pool1Logged, with their positions and the line); where it is 0, none of them is. */
+export function basePools(r: BaseWalkRecords): { pool1: string[]; pool1Logged: LoggedUnit[]; pool1Missing: Window[]; pool2: string[] } {
   const at = new Map(r.order.map((id, i) => [id, i]));
   for (const id of [...r.placed.keys(), ...r.reserves]) if (!at.has(id) || !r.frame.has(id)) fail("E_H2HX_UNITS_INPUT", id + " is not in the frozen order and frame");
   const known = [...r.placed.entries()].sort((a, b) => a[1] - b[1]);
@@ -83,27 +101,57 @@ export function basePools(r: BaseWalkRecords): { pool1: string[]; pool1Missing: 
   const pool2 = cappedRows(r.order, repoOf, drawn, r.cap, last[0]);
   if (pool2.length !== r.capped) fail("E_H2HX_UNITS_INPUT", "the cap replay gives " + pool2.length + " capped rows, not the walk's recorded " + r.capped);
   const capped = new Set(pool2);
-  const windows: Window[] = [];
+  const gaps: { from: number; to: number; positions: number[] }[] = [];
   let prev: [string, number] = ["", 0];
-  let namedIn = 0;
   for (const k of known) {
-    const gap = Array.from({ length: k[1] - prev[1] - 1 }, (_, i) => prev[1] + 1 + i);
-    if (gap.length) {
-      const from = prev[0] ? at.get(prev[0])! + 1 : 0, to = at.get(k[0])! - 1;
-      const res = gap.filter((p) => r.reservePositions.includes(p)), pas = gap.filter((p) => r.passedPositions.includes(p));
-      if (res.length + pas.length !== gap.length) fail("E_H2HX_UNITS_INPUT", "positions " + gap.join(",") + " are neither placed nor reserve or passed positions");
-      const rows = r.order.slice(from, to + 1);
-      const named = rows.filter((id) => r.reserves.includes(id));
-      if (named.length > res.length) fail("E_H2HX_UNITS_INPUT", "the window before " + k[0] + " holds " + named.length + " named reserves for " + res.length + " reserve positions");
-      namedIn += named.length;
-      const open = rows.filter((id) => !drawn.has(id) && !capped.has(id) && !r.drops.has(id));
-      if (res.length > named.length) windows.push({ from_index: from, to_index: to, positions: res, role: "reserve", need: res.length - named.length, candidates: open });
-      if (pas.length) windows.push({ from_index: from, to_index: to, positions: pas, role: "passed_unassigned", need: pas.length, candidates: open.filter((id) => r.frame.get(id)!.entry === "bug") });
-    }
+    if (k[1] - prev[1] > 1) gaps.push({ from: prev[0] ? at.get(prev[0])! + 1 : 0, to: at.get(k[0])! - 1, positions: Array.from({ length: k[1] - prev[1] - 1 }, (_, i) => prev[1] + 1 + i) });
     prev = k;
   }
+  type Span = { from: number; to: number; slots: number; evidence: string };
+  const spans: Span[] = [];
+  if (r.draws) {
+    let prior = { usable: 0, dropped: 0, capped: 0, end: 0 };
+    for (const d of r.draws) {
+      const end = d.waits === null ? at.get(last[0])! + 1 : at.get(d.waits) ?? fail("E_H2HX_UNITS_INPUT", "the walk log waits on " + d.waits + ", which is not in the order");
+      const du = d.usable - prior.usable, dd = d.dropped - prior.dropped, dc = d.capped - prior.capped;
+      if (end < prior.end || du < 0 || dd < 0 || dc < 0 || du + dd + dc !== end - prior.end) fail("E_H2HX_UNITS_INPUT", "the walk log line at " + d.at + " resolves " + (du + dd + dc) + " units over order rows " + prior.end + " to " + (end - 1));
+      const rows = r.order.slice(prior.end, end);
+      const cappedIn = rows.filter((id) => capped.has(id)).length;
+      if (cappedIn !== dc) fail("E_H2HX_UNITS_INPUT", "the cap replay puts " + cappedIn + " capped rows in order rows " + prior.end + " to " + (end - 1) + ", the walk log line at " + d.at + " " + dc);
+      spans.push({ from: prior.end, to: end - 1, slots: du - rows.filter((id) => r.placed.has(id)).length, evidence: "o-walk.out line at " + d.at + ": usable " + prior.usable + " to " + d.usable + " over o-order.json rows " + prior.end + " to " + (end - 1) });
+      prior = { usable: d.usable, dropped: d.dropped, capped: d.capped, end };
+    }
+    if (prior.end !== at.get(last[0])! + 1 || prior.usable !== r.usable || prior.capped !== r.capped) fail("E_H2HX_UNITS_INPUT", "the walk log ends at row " + prior.end + " with " + prior.usable + " usable and " + prior.capped + " capped, not the walk's " + r.usable + " and " + r.capped);
+  }
+  const windows: Window[] = [];
+  const logged: LoggedUnit[] = [];
+  let namedIn = 0;
+  for (const g of gaps) {
+    const parts = r.draws ? spans.filter((s) => s.to >= g.from && s.from <= g.to && s.slots > 0) : [{ from: g.from, to: g.to, slots: g.positions.length, evidence: "" }];
+    let cursor = 0;
+    for (const s of parts) {
+      if (r.draws && gaps.some((o) => o !== g && s.to >= o.from && s.from <= o.to)) fail("E_H2HX_UNITS_INPUT", "the walk log rows " + s.from + " to " + s.to + " cross two missing windows");
+      const from = Math.max(s.from, g.from), to = Math.min(s.to, g.to);
+      const taken = g.positions.slice(cursor, cursor + s.slots);
+      cursor += s.slots;
+      const res = taken.filter((p) => r.reservePositions.includes(p)), pas = taken.filter((p) => r.passedPositions.includes(p));
+      if (taken.length !== s.slots || res.length + pas.length !== taken.length) fail("E_H2HX_UNITS_INPUT", "positions " + taken.join(",") + " are neither placed nor reserve or passed positions, or too few for rows " + from + " to " + to);
+      const rows = r.order.slice(from, to + 1);
+      const named = rows.filter((id) => r.reserves.includes(id));
+      if (named.length > res.length) fail("E_H2HX_UNITS_INPUT", "the window before " + r.order[g.to + 1] + " holds " + named.length + " named reserves for " + res.length + " reserve positions");
+      namedIn += named.length;
+      const open = rows.filter((id) => !drawn.has(id) && !capped.has(id) && !r.drops.has(id));
+      const bugs = open.filter((id) => r.frame.get(id)!.entry === "bug");
+      const resNeed = res.length - named.length;
+      if (r.draws && !pas.length && resNeed === open.length) { for (const id of open) logged.push({ id, positions: res, evidence: s.evidence }); continue; }
+      if (r.draws && !resNeed && pas.length === bugs.length) { for (const id of bugs) logged.push({ id, positions: pas, evidence: s.evidence }); continue; }
+      if (resNeed) windows.push({ from_index: from, to_index: to, positions: res, role: "reserve", need: resNeed, candidates: open });
+      if (pas.length) windows.push({ from_index: from, to_index: to, positions: pas, role: "passed_unassigned", need: pas.length, candidates: bugs });
+    }
+    if (cursor !== g.positions.length) fail("E_H2HX_UNITS_INPUT", "the walk log fills " + cursor + " of positions " + g.positions.join(",") + " in order rows " + g.from + " to " + g.to);
+  }
   if (namedIn !== r.reserves.length) fail("E_H2HX_UNITS_INPUT", (r.reserves.length - namedIn) + " named reserves sit where the placed units leave no reserve position");
-  return { pool1: [...r.reserves], pool1Missing: windows, pool2 };
+  return { pool1: [...r.reserves, ...logged.map((u) => u.id)], pool1Logged: logged, pool1Missing: windows, pool2 };
 }
 
 /** The frame from the three pools, in id order, with each pool's status. */
