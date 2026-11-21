@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Plan section 7's gold fill under the 30% anchor cap in check_seed order, and section 5's atomization rules carried by the
 // pass A prompt (a table row and its evidence block are one finding; checked-and-safe items and plans to check are not).
+// The extra findings pool is pass A findings past the first 10 of check-set reports.
 import { describe, expect, test } from "bun:test";
 import { loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
 import { GATES, GOLD_MINIMUMS, type JudgeCheck } from "../../lanes/outcome-skills/cso/analysis/release.ts";
-import { goldFill, type AnchorCandidate } from "../../lanes/outcome-skills/cso/judge/check.ts";
+import { extraFindingPool, goldFill, type AnchorCandidate } from "../../lanes/outcome-skills/cso/judge/check.ts";
 import { passAPacket } from "../../lanes/outcome-skills/cso/judge/packets.ts";
 
 const p = loadCsoPrereg();
@@ -54,5 +55,19 @@ describe("section 5: the pass A prompt carries the atomization rules", () => {
     expect(prompt).toContain("Order: findings in order of first appearance in the final message, then findings that appear only in earlier messages");
     expect(prompt).toContain("You see no answer key.");
     expect(prompt.endsWith("=== Report ===\n\nREPORT TEXT")).toBe(true);
+  });
+});
+
+describe("section 7: the extra findings pool", () => {
+  const reps = [{ id: "r1", findings_total: 13 }, { id: "r2", findings_total: 10 }, { id: "r3", findings_total: 12 }, { id: "r4" }] as unknown as Parameters<typeof extraFindingPool>[0];
+  test("pass A findings past the first 10 of check-set reports, one id each", () => {
+    expect(extraFindingPool(reps, p)).toEqual(["r1#11", "r1#12", "r1#13", "r3#11", "r3#12"]);
+  });
+  test("a validity shortfall draws from it in check_seed order, whatever order the reports came in", () => {
+    const short = check({ gold_findings: 37 });
+    const a = goldFill(short, { anchors: pool, findings: extraFindingPool(reps, p) }, p);
+    expect(a.findings.length).toBe(3);
+    expect(goldFill(short, { anchors: pool, findings: extraFindingPool([...reps].reverse(), p) }, p).findings).toEqual(a.findings);
+    expect(goldFill(check({ gold_findings: 30 }), { anchors: pool, findings: extraFindingPool(reps, p) }, p)).toMatchObject({ findings: expect.any(Array), still_short: ["validity"] });
   });
 });
