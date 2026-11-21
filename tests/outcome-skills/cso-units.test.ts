@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { B2Row } from "../../lanes/outcome-skills/h2h/breadth/b2.ts";
 import { loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
-import { csoCandidates, cweFamilies, readAdvisory, unitAffected, type AdvisoryJson, type Candidate } from "../../lanes/outcome-skills/cso/units/advisory.ts";
+import { csoCandidates, cweFamilies, readAdvisory, repoAdvisoriesFromDb, unitAffected, type AdvisoryJson, type Candidate } from "../../lanes/outcome-skills/cso/units/advisory.ts";
 import { assertSupply, buildUnits, isCommentLine, sessionTree, type UnitInput } from "../../lanes/outcome-skills/cso/units/build.ts";
 import { draw, drawPlan } from "../../lanes/outcome-skills/cso/units/draw.ts";
 
@@ -107,6 +107,24 @@ describe("cso units: candidates and advisories", () => {
     expect(cweFamilies(p, ["CWE-776"])).toEqual(["xml-entities", "denial-of-service"]);
     expect(cweFamilies(p, ["CWE-20"])).toEqual([]);
     expect(unitAffected("u", { id: "x", affected: [{ package: { ecosystem: "npm", name: "a" }, ranges: [{ type: "SEMVER", events: [{ introduced: "0" }, { fixed: "1.2.0" }] }] }] }).affected[0]!.ranges).toEqual([[{ introduced: "0" }, { fixed: "1.2.0" }]]);
+  });
+});
+
+describe("cso units: the repository's other advisories", () => {
+  test("a checkout's reviewed advisories by repository: a commit reference names the fix, a pull reference alone names none, withdrawn ones are skipped", () => {
+    const db = tmp("db");
+    const adv = (id: string, refs: string[], extra: Record<string, unknown> = {}) => {
+      const d = join(db, "advisories/github-reviewed/2026/08", id);
+      mkdirSync(d, { recursive: true });
+      writeFileSync(join(d, id + ".json"), JSON.stringify({ id, summary: "s " + id, references: refs.map((url) => ({ type: "WEB", url })), ...extra }));
+    };
+    adv("GHSA-aaaa-aaaa-aaaa", ["https://github.com/Org/Repo/pull/12", "https://github.com/Org/Repo/commit/" + "c".repeat(40)]);
+    adv("GHSA-bbbb-bbbb-bbbb", ["https://github.com/org/repo/pull/13"]);
+    adv("GHSA-cccc-cccc-cccc", ["https://github.com/org/repo/commit/" + "d".repeat(40)], { withdrawn: "2026-09-01T00:00:00Z" });
+    adv("GHSA-dddd-dddd-dddd", ["https://github.com/other/repo/commit/" + "e".repeat(40)]);
+    const look = repoAdvisoriesFromDb(db, ["org/repo"]);
+    expect(look("ORG/repo").sort((a, b) => (a.ghsa < b.ghsa ? -1 : 1))).toEqual([{ ghsa: "GHSA-aaaa-aaaa-aaaa", summary: "s GHSA-aaaa-aaaa-aaaa", fix_commit: "c".repeat(40) }, { ghsa: "GHSA-bbbb-bbbb-bbbb", summary: "s GHSA-bbbb-bbbb-bbbb", fix_commit: null }]);
+    expect(look("other/repo")).toEqual([]);
   });
 });
 
