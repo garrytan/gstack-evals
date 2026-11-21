@@ -11,6 +11,8 @@ records differ.
   session-kind check finds no ancestor process named codex. The first exec is "sol-agent exec --json", every later one
   "sol-agent exec --json ... resume <thread>", with the message on stdin. CI and GITHUB_ACTIONS are unset in the exec's
   environment (env -u), since gstack reads either as headless.
+- In a container, /usr/local/bin/node is linked to the PATH node when the image has none, before the first exec and for
+  every arm, since GSD's Codex hooks call that path with no fallback; the summary records the link (codex.node_link).
 - CODEX_HOME is the session home's .codex. Its config.toml is the pack's own (when its install wrote one) with the
   harness's settings around it: the model, reasoning effort low, the metering proxy as a Responses provider, approvals
   never, sandbox danger-full-access (the container is the sandbox), and the update check, analytics, web search and
@@ -59,6 +61,7 @@ POLICY_CODES = ("cyber_policy", "bio_policy", "misalignment_policy_violation")
 MAX_REPLIES = 20
 PROVIDER_ID = "h2h_proxy"
 DOCKER_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY", "XDG_RUNTIME_DIR")
+NODE_LINK = '[ -e /usr/local/bin/node ] && exit 0; n=$(command -v node) || exit 0; ln -s "$n" /usr/local/bin/node && echo "linked $n"'
 KILL_CODEX = 'for p in /proc/[0-9]*; do case "$(cat "$p/comm" 2>/dev/null)" in "$1"|codex|codex-code-mode*) kill -9 "${p##*/}" 2>/dev/null;; esac; done; true'
 ROLLOUT = 'n=0; for f in "$1"/sessions/*/*/*/rollout-*-"$2".jsonl; do if [ -f "$f" ] && [ ! -h "$f" ]; then cat -- "$f" || exit 1; n=1; fi; done; [ "$n" = 1 ]'
 SESSIONS_TAR = 'cd "$1" 2>/dev/null && [ -d sessions ] || exit 0; tar -cf - sessions'
@@ -226,6 +229,9 @@ class CodexTurns(Turns):
         self.config_text = text
         (self.out / "codex-config.toml").write_text(text)
         self.summary["codex"]["config_sha256"] = hashlib.sha256(text.encode()).hexdigest()
+        if self.cfg.get("container"):
+            link = self.sh(NODE_LINK, timeout=60)
+            self.summary["codex"]["node_link"] = link.stdout.decode(errors="replace").strip() or None
 
     def argv(self) -> list[str]:
         flags = ["exec", "--json", "--strict-config", "--skip-git-repo-check", "--dangerously-bypass-hook-trust", "--color", "never"]
