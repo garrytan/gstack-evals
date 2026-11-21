@@ -81,6 +81,39 @@ describe("cso exposure", () => {
     expect(start("", "")).toBeNull();
     expect(csoExposure(LOADED).exposure.scope).toBeNull();
   });
+  test("stage 0 repair: a launcher and run id bound to shell variables in the same command resolve, as in Opus's vm2 session", () => {
+    const R0 = "1795275999946-4e87a9eb23d87768";
+    const P = "R=" + R0 + "; L=" + L + "; ";
+    const recs = [
+      ...LOADED,
+      ...call(L + ' start --repo /work/repo 2>&1 | head -100; echo "exit: ${PIPESTATUS[0]}"', JSON.stringify({ schemaVersion: 3, runId: R0, status: "running", source: { root: "<REDACTED-internal.user_path>" } }, null, 2) + "\nexit: 0"),
+      ...call(P + '$L inspect $R > /tmp/cso_inspect.json 2>&1; echo "exit $?"', "exit 0"),
+      ...call(P + '$L read $R lib/resolver-compat.js > /tmp/cso_rc.txt 2>&1; grep -n "isPathAllowed" /tmp/cso_rc.txt | head -40', "105:  isPathAllowed(path) {"),
+      ...call(
+        "umask 077; D=$(mktemp -d /tmp/csoctl.XXXX); R=" + R0 + "; L=" + L + "\ncat > $D/s.json <<'EOF'\n{\"findings\":[]}\nEOF\n" + '$L submit $R $D/s.json 2>&1 | tail -20; echo "submit exit ${PIPESTATUS[0]}"; rm -rf $D\n$L finish $R 2>&1 | tail -40; echo "finish exit ${PIPESTATUS[0]}"',
+        '{"ok":false,"error":{"code":"INVALID_SCHEMA","message":"exclusions must be an array"}}\nsubmit exit 1\n' + JSON.stringify({ runId: R0, status: "finished", completeness: "partial", report: "report.md" }, null, 2) + "\nfinish exit 0",
+      ),
+    ];
+    expect(csoExposure(recs).exposure).toEqual({ loaded: true, procedure_ran: true, run_id: R0, completeness: "partial", findings_submitted: 0, tooling_errors: 0, host_reads_after_start: 0, scope: "daily/default" });
+    const braced = [...LOADED, ...call(L + " start --repo .", startOut), ...call('G="' + L + '"; R=' + RUN + '; "$G" read "${R}" src/a.ts | head', "x"), ...call(L + " finish " + RUN, "{}")];
+    expect(csoExposure(braced).exposure.procedure_ran).toBe(true);
+  });
+  test("a variable bound to anything but the launcher does not resolve to it, an assignment is not a call, and a binding ends with its command", () => {
+    const recs = [
+      ...LOADED,
+      ...call(L + " start --repo /work/repo", startOut),
+      ...call("X=/usr/bin/foo; R=" + RUN + "; $X inspect $R; $X read $R src/a.ts", "ok"),
+      ...call("L=" + L + '; [ -x "$L" ] && echo "launcher: present"', "launcher: present"),
+      ...call("L=" + L + "\ncat src/a.ts", "x"),
+      ...call("L=" + L + "; R=" + RUN, ""),
+      ...call("$L inspect $R", inspectOut),
+      ...call(L + " finish " + RUN, JSON.stringify({ runId: RUN, status: "finished", completeness: "partial" })),
+    ];
+    const e = csoExposure(recs).exposure;
+    expect(e.procedure_ran).toBe(false);
+    expect(e.tooling_errors).toBe(0);
+    expect(e.host_reads_after_start).toBe(0);
+  });
   test("helper JSON is read from pretty-printed output with text around it", () => {
     expect(helperJson("note\n" + startOut + "\n")?.runId).toBe(RUN);
     expect(helperJson("no json")).toBeNull();
