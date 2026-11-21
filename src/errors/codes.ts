@@ -2577,6 +2577,24 @@ export const CODES = {
     owner: "U20",
   },
   // h2h, shared: the skill-pack head-to-head (lanes/outcome-skills/h2h). Each build part adds its codes under its own line.
+  E_H2HX_PREREG: {
+    exit: 2,
+    meaning: "The skill-pack head-to-head extension (Sol in Codex, particle-1, the smallest-change sentence) found no usable preregistration: its prereg.json is missing, is not h2h-ext-prereg.v1, lacks a seed, lists other arms for a part than the lane's, or lacks an entry, model, limits, gstack pin, pilot cap or item.",
+    fix: "Change the extension's prereg.json only through its preregistration's own pull request. Nothing runs on values chosen anywhere else.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
+  E_H2HX_INPUT: {
+    exit: 2,
+    meaning: "An extension command got input it can't use: an unknown part, stage or arm, a unit listed twice, a B1 unit, a non-O unit in part L, or an empty problem statement.",
+    fix: "Pass the part's own units and arms, each once, as the extension's preregistration lists them.",
+    side_effects: NO_SPEND,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_H2H_PREREG: {
     exit: 2,
     meaning: "The skill-pack head-to-head found no usable preregistration: its prereg.json is missing, is not h2h-prereg.v1, lacks an unsigned 32-bit integer draw_seed, order_seed or bootstrap_seed, lists other arms than the lane's, or lacks a text, entry, list or continuation cap.",

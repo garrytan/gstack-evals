@@ -310,6 +310,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_PROVIDER_DRIFT](#e_of_provider_drift) | 2 | U20 |
 | [E_OF_SUPPLY_SHORT](#e_of_supply_short) | 2 | U20 |
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
+| [E_H2HX_PREREG](#e_h2hx_prereg) | 2 | U20 |
+| [E_H2HX_INPUT](#e_h2hx_input) | 2 | U20 |
 | [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
 | [E_H2H_INSTALL](#e_h2h_install) | 2 | U20 |
 | [E_H2H_PIN](#e_h2h_pin) | 2 | U20 |
@@ -2431,6 +2433,22 @@ An office-hours founder eval dry-run case printed FAIL: a frozen rule did not ho
 Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2HX_PREREG
+
+The skill-pack head-to-head extension (Sol in Codex, particle-1, the smallest-change sentence) found no usable preregistration: its prereg.json is missing, is not h2h-ext-prereg.v1, lacks a seed, lists other arms for a part than the lane's, or lacks an entry, model, limits, gstack pin, pilot cap or item.
+
+Fix: Change the extension's prereg.json only through its preregistration's own pull request. Nothing runs on values chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_INPUT
+
+An extension command got input it can't use: an unknown part, stage or arm, a unit listed twice, a B1 unit, a non-O unit in part L, or an empty problem statement.
+
+Fix: Pass the part's own units and arms, each once, as the extension's preregistration lists them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_H2H_PREREG
 
