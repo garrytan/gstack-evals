@@ -222,7 +222,7 @@ export function readStates(text: string, suite: Suite, o: { passes: number; unit
       return { id: stateId(id, s), record: r };
     };
     const final = ref("final");
-    sessions.push({ id, unit: suite.units.find((u) => u.id === first.unit)!, arm: first.arm, pass: first.pass, outcome: first.outcome, outcome_code: first.outcome_code, attempts: first.attempts, limit_stop: first.limit_stop, safety_stop: first.safety_stop, no_text: final.record.no_text, blocked: first.blocked, cost: first.cost, exposure: first.exposure ?? null, states: first.outcome !== "scored" ? null : { first_stop: first.blocked ? ref("first_stop") : final, final } });
+    sessions.push({ id, unit: suite.units.find((u) => u.id === first.unit)!, arm: first.arm, pass: first.pass, outcome: first.outcome, outcome_code: first.outcome_code, attempts: first.attempts, limit_stop: first.limit_stop, safety_stop: first.safety_stop, no_text: first.no_text, blocked: first.blocked, cost: first.cost, exposure: first.exposure ?? null, states: first.outcome !== "scored" ? null : { first_stop: first.blocked ? ref("first_stop") : final, final } });
   }
   if (problems.length) throw new StatesError("E_CH_C_STATES", problems);
   const missing: StatesFile["missing"] = [];

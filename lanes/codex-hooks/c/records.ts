@@ -64,7 +64,7 @@ export function sessionRecords(s: SessionReadout, unit: Unit): StateRecord[] {
       : r.outcome === "findings"
         ? { findings: r.findings.map((f) => ({ ...f, file: repoPath(f.file, "/work/" + unitTaskId(unit)) })), no_block: false, message: null }
         : { findings: null, no_block: true, message: r.text };
-    return { ...head, state: r.state, ...rest, no_text: r.text === null, ...body, ...tail };
+    return { ...head, state: r.state, ...rest, no_text: outcome === "scored" && r.text === null, ...body, ...tail };
   };
   const first = s.states.find((r) => r.state === "first_stop");
   return blocked && first ? [line(first), line(final)] : [line(final)];

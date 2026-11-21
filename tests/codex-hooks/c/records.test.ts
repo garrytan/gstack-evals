@@ -90,6 +90,20 @@ describe("the states file the analysis reads, from the rig's readouts (lanes/cod
     expect([got.no_text, got.blocked, got.states!.first_stop.record.findings!.length, got.states!.final.record.findings]).toEqual([true, true, 1, []]);
   });
 
+  // Value: protects=a blocked session whose first-stop text is null but whose final state has findings is not a no-text session, and a session that was not scored never carries no_text; fails_when=the session takes no_text from its first-stop line, or a limit stop with no text reads as a no-text session
+  test("no_text: a null first-stop text with final findings, and a session that was not scored", () => {
+    const s = readout("block", "c-on", A);
+    s.states.find((x) => x.state === "first_stop")!.text = null;
+    const lines = sessionRecords(s, A);
+    expect(lines.map((l) => [l.state, l.no_text])).toEqual([["first_stop", true], ["final", false]]);
+    const got = readStates(jsonl(lines), suite, { passes: 1, units: [A.id] }).sessions.find((x) => x.id === sessionId("c-on", A, 1))!;
+    expect([got.no_text, got.states!.first_stop.record.findings, got.states!.final.record.findings!.length]).toEqual([false, [], 2]);
+    const stop = readout("off", "c-off", B, { class: "limit_stop", scored: false, code: null });
+    for (const x of stop.states) x.text = null;
+    const [line] = sessionRecords(stop, B);
+    expect([line!.outcome, line!.limit_stop, line!.no_text]).toEqual(["gap", true, false]);
+  });
+
   // Value: protects=an item the controller stopped at its cap before a session started (the CAP_STOP marker, no session row) still reaches the analysis as cap_stop lines for every planned cell it never ran, so section 5.8's "any cap stop ends the part INCOMPLETE" holds; fails_when=a cap stop with no session row reads as a few missing sessions, which the analysis tolerates; why_new=GEVA-562 part C, PR 400 review; seam=phaseRecords, capStopRecord; no_claim=cap stops review-units reports inside a session
   test("a cap stop before any session started", () => {
     const root = mkdtempSync(join(tmpdir(), "chc-records-"));
