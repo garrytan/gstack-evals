@@ -41,10 +41,16 @@ describe("trial image pin", () => {
   test("doctor's build pins the digest; a missing pin, a rebuilt tag, a foreign label and a recorded digest mismatch refuse", () => {
     const state = scratch("state");
     const images: Record<string, string> = {};
-    const run = fakeDocker(images);
+    const builds: string[][] = [];
+    const fake = fakeDocker(images);
+    const run: Runner = (command, args, opts) => {
+      if (args[0] === "build") builds.push(args);
+      return fake(command, args, opts);
+    };
     expect(checkImagePin({ state, run })).toMatchObject({ ok: false, code: "E_IMAGE_STALE", message: expect.stringContaining("no trial image is pinned for recipe") });
     const built = buildTrialImage({ state, run });
     if (!built.ok) throw new Error(built.message);
+    expect(builds[0]).toContain("--provenance=false");
     expect(built.tag).toBe(trialTag(recipeHash()));
     expect(readFileSync(built.log, "utf8")).toContain("docker build docker/trial.Dockerfile");
     expect(checkImagePin({ state, run })).toMatchObject({ ok: true, pin: { digest: built.digest, recipe_sha256: recipeHash() } });
