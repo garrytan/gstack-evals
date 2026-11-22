@@ -576,6 +576,25 @@ describe("pre-run change 5: a host loss settles only through the recovery of tha
     chmodSync(join(dir, "p3", "host"), 0o000);
     try { expect(partProblems(dir).unsettled).toEqual(["p3/host"]); } finally { chmodSync(join(dir, "p3", "host"), 0o755); }
   });
+  test("a later host that attach called lost and that no lost row records is unsettled, even behind an earlier complete recovery; one miss is not a loss", () => {
+    const dir = scratch("weekly-c5-unrecorded-");
+    const settled = up(1, "host-a") + lost(1, "host-a", 100) + up(2, "host-b");
+    part3(dir, settled, { complete: true, host: "host-a", down_confirmed_at: 100 });
+    writeFileSync(join(dir, "p3", "host", "unreachable.jsonl"), JSON.stringify({ host: "host-a", at: 90 }) + "\n");
+    expect(partProblems(dir).unsettled).toEqual([]);
+    writeFileSync(join(dir, "p3", "host", "unreachable.jsonl"), JSON.stringify({ host: "host-b", at: 300 }) + "\n");
+    expect(partProblems(dir).unsettled).toEqual([]);
+    writeFileSync(join(dir, "p3", "host", "unreachable.jsonl"), [300, 700, 1000].map((at) => JSON.stringify({ host: "host-b", at })).join("\n") + "\n");
+    expect(partProblems(dir).unsettled).toEqual(["p3/host"]);
+  });
+  test("a host-gone.json for a host that no lost row records leaves the host unsettled", () => {
+    const dir = scratch("weekly-c5-gone-");
+    part3(dir, up(1, "host-a") + lost(1, "host-a", 100) + up(2, "host-b"), { complete: true, host: "host-a", down_confirmed_at: 100 });
+    writeFileSync(join(dir, "p3", "host", "host-gone.json"), JSON.stringify({ host: "host-a", confirmed_at: 100 }));
+    expect(partProblems(dir).unsettled).toEqual([]);
+    writeFileSync(join(dir, "p3", "host", "host-gone.json"), JSON.stringify({ host: "host-b", confirmed_at: 300 }));
+    expect(partProblems(dir).unsettled).toEqual(["p3/host"]);
+  });
   test("an unreadable hosts.jsonl leaves the host unsettled, and the full report still writes an INCOMPLETE record", async () => {
     const dir = scratch("weekly-c5-unreadable-");
     part3(dir, null, null);

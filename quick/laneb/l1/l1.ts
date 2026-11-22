@@ -681,6 +681,14 @@ export function unsettledHostLoss(work: string): string | null {
     try { h = readJson(join(work, f))?.lost_host; } catch { continue; }
     if (typeof h === "string" && !rows.some((r) => r.event === "lost" && r.name === h)) return f + " was written by a recover of host " + h + " that has not finished (no lost row yet); run recover again";
   }
+  const ended = (h: unknown) => rows.some((r) => (r.event === "lost" || r.event === "down") && r.name === h);
+  let misses = "", gone: any = null;
+  try { misses = readFileSync(join(work, "host/unreachable.jsonl"), "utf8"); } catch (e) { if (!absent(e)) return "host/unreachable.jsonl can't be read, so a host loss can't be ruled out"; }
+  const miss = misses.split("\n").filter((x) => x.trim()).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((m) => m && !ended(m.host));
+  const silent = [...new Set(miss.map((m) => m.host))].find((h) => { const m = miss.filter((x) => x.host === h); return m.length >= L1.unreachable.tries && (m.at(-1).at - m[0].at) / 60 >= Number(process.env.L1_UNREACHABLE_MINUTES ?? L1.unreachable.minutes); });
+  if (silent !== undefined) return "host " + silent + " was called lost (HOST_LOST) and no lost row records its recovery; run recover";
+  try { gone = readJson(join(work, "host/host-gone.json")); } catch (e) { if (!absent(e)) return "host/host-gone.json can't be read, so a host loss can't be ruled out"; }
+  if (gone && !ended(gone.host)) return "host " + gone.host + " is gone and no lost row records its recovery; run recover again";
   const lost = rows.filter((r) => r.event === "lost").at(-1);
   let rec: any;
   try { rec = readJson(join(work, "host/recover.json")); } catch (e) {
