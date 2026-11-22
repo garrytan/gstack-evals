@@ -24,9 +24,9 @@ import { pfFail } from "./prereg.ts";
 import { PSTACK_DIR, pstackVolume } from "./pstack.ts";
 import { effortFields, effortHolds, effortProblem, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfPlanned, type PfPostTurn, type PfSessionRecord } from "./session.ts";
 import { TOOLS_DIR, toolsEnv, toolsVolume } from "./tools.ts";
+import { keylessEnv } from "../../../src/trial/env.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 /** Claude Code's env block in every arm's session (section 4). The tools env is added per image. */
 export const CLAUDE_ENV = { CLAUDE_CONFIG_DIR: "/root/.claude", HOME: "/root", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", ...ARM_ENV, CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000", DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1", IS_SANDBOX: "1" } as const;
 /** meta.rerun on attempt 2's task slot: the whole-session retry after a task turn's upstream or infra end. */
@@ -141,7 +141,7 @@ export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir:
   const manifestSha = sessionManifest(manifest, label, image);
   const armTar = join(dir, "arm.tar");
   writeFileSync(armTar, Buffer.alloc(10240));
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
+  const env = keylessEnv();
   env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
   env.HARBOR_TELEMETRY = "0";
   env.PYTHONPATH = [import.meta.dir, join(ROOT, "lanes/real-outcome/agent"), join(ROOT, "quick/laneb/runner/agent")].join(":");

@@ -34,6 +34,7 @@ import { buildKey, ebSession, runPlantedBuild, type MountTable } from "./build.t
 import { ITEMS, itemOf, ItemGate } from "./ledger.ts";
 import { EP_PROGRAM, EP_RUN, EP_SKILL } from "./local.ts";
 import { reviewKey, runPlantedReviews } from "./pipeline.ts";
+import { dropKeyEnv } from "../../../src/trial/env.ts";
 
 export interface Check {
   check: string;
@@ -41,7 +42,6 @@ export interface Check {
   detail: string;
 }
 
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 const D = 1_000_000;
 const REVIEWED = "# Plan\n\nAdd Mul(a, b int) int to the calculator, with tests. Mul returns the product of a and b.\n\n## Review\n\nTest Mul with a zero on either side.\n";
 const AUTHORED = "# Plan\n\nAdd Mul(a, b int) int to the calculator, with tests.\n";
@@ -51,7 +51,7 @@ const b64 = (s: string) => Buffer.from(s).toString("base64");
 
 /** Runs the driven launch and returns its checks; the dry run reads ok and one line from it. */
 export async function drivenLaunch(o: { harbor?: string; gstack?: string; keep?: boolean; log?: (l: string) => void } = {}): Promise<{ ok: boolean; detail: string; checks: Check[] }> {
-  for (const k of Object.keys(process.env)) if (KEYS.test(k)) delete process.env[k];
+  dropKeyEnv();
   const log = o.log ?? ((l: string) => console.error(l));
   const checks: Check[] = [];
   const check = (name: string, ok: boolean, detail: string) => {

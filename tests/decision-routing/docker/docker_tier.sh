@@ -29,7 +29,7 @@ for id in "$@"; do
   "tasks": [{ "path": "$tasks/$id" }]
 }
 JSON
-  DR_PROXY_BASE=http://127.0.0.1:9 HARBOR_TELEMETRY=0 PYTHONPATH="$here:$agent" harbor run -c "$out/$id.job.json" > "$out/$id.harbor.log" 2>&1 || true
+  env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u TYPESAFE_API_KEY -u GEMINI_API_KEY -u GOOGLE_API_KEY -u XAI_API_KEY -u DEEPSEEK_API_KEY -u UBICLOUD_API_KEY -u EXA_API_KEY -u AGENTRUN_API_KEY -u AGENTRUN_BASE_URL DR_PROXY_BASE=http://127.0.0.1:9 HARBOR_TELEMETRY=0 PYTHONPATH="$here:$agent" harbor run -c "$out/$id.job.json" > "$out/$id.harbor.log" 2>&1 || true
   reward=$(find "$out/harbor/oracle-$id" -name reward.txt -path '*verifier*' | head -1 | xargs -r cat)
   probe=$(find "$out/harbor/oracle-$id" -name oracle-probe.json | head -1)
   echo "== $id reward ${reward:-none}"

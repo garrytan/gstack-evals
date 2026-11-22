@@ -36,9 +36,9 @@ import type { ExtPlanned } from "./plan.ts";
 import { extScriptedTurns, partOf, readExtPrereg, type ExtArm, type ExtPrereg, type Part } from "./prereg.ts";
 import { answerIds, checkServedBy, claudeRoute, EXT_PREFIX, type GenerationLookup } from "./route.ts";
 import { extHomeRule, extRunCopy } from "./run.ts";
+import { keylessEnv } from "../../../../src/trial/env.ts";
 
 const ROOT = join(import.meta.dir, "../../../..");
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 /** The files each host's attempt leaves beside the record (the last attempt's win); part S also keeps codex-sessions/. */
 const KEEP: Record<"codex" | "claude-code", string[]> = {
   codex: ["codex-events.jsonl", "codex-config.toml", "codex-stderr.log", "usersim-events.jsonl", "tree.tar", SUMMARY],
@@ -139,7 +139,7 @@ export function extClaudeRunCopy(i: ExtSessionInput, attempt: 1 | 2, dir: string
   const manifestSha = sessionManifest(manifest, label, u.image);
   const armTar = join(dir, "arm.tar");
   writeFileSync(armTar, Buffer.alloc(10240));
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
+  const env = keylessEnv();
   env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
   env.HARBOR_TELEMETRY = "0";
   env.PYTHONPATH = [join(import.meta.dir, "../sessions"), join(ROOT, "lanes/outcome-skills/pfchecks"), join(ROOT, "lanes/real-outcome/agent"), join(ROOT, "quick/laneb/runner/agent")].join(":");

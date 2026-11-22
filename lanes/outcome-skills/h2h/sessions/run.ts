@@ -27,11 +27,11 @@ import type { H2hPlanned } from "./plan.ts";
 import { attemptUsage, endOf, retries, retryCovered, SESSION_RERUN, sessionRecord, withRefusalFallback, writeSessionRecord, type AttemptUsage, type H2hSessionRecord } from "./session.ts";
 import { turnPlan } from "./turns.ts";
 import { buildRuntimeVolume, runtimePath, RUNTIMES_DIR } from "./runtimes.ts";
+import { keylessEnv } from "../../../../src/trial/env.ts";
 
 const ROOT = join(import.meta.dir, "../../../..");
 /** The Claude Code binary every session mounts: the pinned 2.1.325 native build (part A installs the same version). */
 export const H2H_CLAUDE = process.env.H2H_CLAUDE_BIN ?? join(homedir(), ".capy/work/h2h-s/claude/claude-2.1.325/package/claude");
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 /** Claude Code's environment in every arm: pfchecks' fixed block, the todo tools Claude Code withholds from Opus 5.5 by
  *  default (DEVIATIONS.md, 2026-11-16) and prereg.json's env. */
 export const claudeEnv = (p: H2hPrereg = readPrereg()): Record<string, string> => ({ CLAUDE_CONFIG_DIR: "/root/.claude", HOME: "/root", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000", DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1", IS_SANDBOX: "1", CLAUDE_CODE_ENABLE_TODO_TOOLS: "1", ...p.env });
@@ -112,7 +112,7 @@ export function runCopy(i: H2hRunInput, attempt: 1 | 2, dir: string, p: H2hPrere
   const manifestSha = sessionManifest(manifest, label, u.image);
   const armTar = join(dir, "arm.tar");
   writeFileSync(armTar, Buffer.alloc(10240));
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
+  const env = keylessEnv();
   env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
   env.HARBOR_TELEMETRY = "0";
   env.PYTHONPATH = [import.meta.dir, join(ROOT, "lanes/outcome-skills/pfchecks"), join(ROOT, "lanes/real-outcome/agent"), join(ROOT, "quick/laneb/runner/agent")].join(":");

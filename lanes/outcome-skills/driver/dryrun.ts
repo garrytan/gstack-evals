@@ -21,11 +21,11 @@ import { meteredPricer } from "../../../src/runner/stats/g-resize.ts";
 import { detectExposure } from "../arms/exposure.ts";
 import { loadRegistry, REGISTRY_PATH, turnScript } from "../arms/registry.ts";
 import type { StageSpec } from "./stage.ts";
+import { dropKeyEnv } from "../../../src/trial/env.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
 const BIN = join(ROOT, "bin/gstack-evals");
 const PYTHON = process.env.REAL_OUTCOME_PYTHON ?? join(homedir(), ".capy/work/real/venv/bin/python");
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK)_[A-Z_]*KEY$|_TOKEN$/;
 export const SEEDS = ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "l7-extra", "l7-missing", "l7-swap", "l7-cache-rate", "z1-container", "z1-volume", "z1-lease", "z1-after-fail", "u8-turns", "u8-parent"] as const;
 const PROGRAM = "g-dryrun";
 const RUN = "dryrun-g";
@@ -128,7 +128,7 @@ async function main(argv: string[]): Promise<number> {
     console.error("E_USAGE dryrun: --seed takes one of " + SEEDS.join(", "));
     return 2;
   }
-  for (const k of Object.keys(process.env)) if (KEYS.test(k)) delete process.env[k];
+  dropKeyEnv();
   const W = mkdtempSync(join(tmpdir(), "u4-dryrun-"));
   const LD = join(W, "ledger");
   mkdirSync(join(W, "markers"), { recursive: true });
