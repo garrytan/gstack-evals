@@ -22,7 +22,7 @@ import { armRuns, csoLimits } from "./sessions.ts";
 import type { CsoArm, CsoModel, UnitRecord } from "./types.ts";
 import { csoCandidates, cveIds, readAdvisory, repoAdvisoriesFromDb, unitAffected, type FetchText } from "./units/advisory.ts";
 import { assertSupply, buildUnits, type UnitInput } from "./units/build.ts";
-import { draw, drawPlan, type Raise } from "./units/draw.ts";
+import { draw, drawPlan, stage2Order, type Raise } from "./units/draw.ts";
 
 export type Command = (argv: string[]) => Promise<number>;
 export const ARMS: readonly CsoArm[] = ["none", "cso", "untold"];
@@ -87,7 +87,7 @@ export function ledgerDryRun(p: CsoPrereg, dir = mkdtempSync(join(tmpdir(), "cso
   return { dir, checks };
 }
 
-const RERUN_HELP = "Usage: gstack-evals cso rerun --arm <none|cso|untold> --model <opus|particle|sol> --units <file> --spend-cap <usd> [--dry-run]\nRuns one arm on every unit in the file under the spend cap. --dry-run checks the arm, model and units, prints the most the\nrun could spend at the session allowance, opens and settles one ledger lease per frozen item on a temporary ledger, and\nruns nothing. Exits: 0 done, 2 usage, 3 refused precondition, 10 cap stop.";
+const RERUN_HELP = "Usage: gstack-evals cso rerun --arm <none|cso|untold> --model <opus|particle|sol> --units <file> --spend-cap <usd> [--allowance <usd>] [--dry-run]\nRuns one arm on every unit in the file under the spend cap. --allowance is the session allowance: prereg.json's for the\nmodel by default, or exactly twice it after stage 1's doubling rule (section 4). --dry-run checks the arm, model and units,\nprints the most the run could spend at the session allowance, opens and settles one ledger lease per frozen item on a\ntemporary ledger, and runs nothing. Exits: 0 done, 2 usage, 3 refused precondition, 10 cap stop.";
 
 /** The session runner rerun drives (rerunner.ts csoRunner); preflight refuses before the first session. */
 export interface CsoRunner {
@@ -96,7 +96,7 @@ export interface CsoRunner {
 }
 
 export async function rerun(argv: string[], runner: CsoRunner | null = null): Promise<number> {
-  const f = flags(argv, ["--arm", "--model", "--units", "--spend-cap"], ["--dry-run"], RERUN_HELP);
+  const f = flags(argv, ["--arm", "--model", "--units", "--spend-cap", "--allowance"], ["--dry-run"], RERUN_HELP);
   if (!f) return 0;
   const arm = f.need("--arm") as CsoArm, model = f.need("--model") as CsoModel;
   if (!ARMS.includes(arm)) csoFail("E_USAGE", "--arm " + JSON.stringify(arm) + " is not one of " + ARMS.join(", "));
@@ -106,7 +106,9 @@ export async function rerun(argv: string[], runner: CsoRunner | null = null): Pr
   const p = loadCsoPrereg();
   if (!(["stage0", "stage1", "stage2"] as const).some((s) => armRuns(arm, model, s, p))) csoFail("E_CSO_RERUN_PRECONDITION", "arm " + arm + " does not run on " + model + " in any stage");
   const ids = readUnitIds(f.need("--units"));
-  const allowance = csoLimits(model, p).allowance_usd;
+  const given = f.has("--allowance") ? Number(f.one("--allowance")) : undefined;
+  if (given !== undefined && !(Number.isFinite(given) && given > 0)) csoFail("E_USAGE", "--allowance must be a positive number of dollars");
+  const allowance = csoLimits(model, p, given).allowance_usd;
   if (f.has("--dry-run")) {
     console.log("rerun dry run: arm " + arm + " on " + model + ", " + ids.length + " units; at most $" + (ids.length * allowance).toFixed(2) + " if every session spent its $" + allowance + " allowance, against a spend cap of $" + cap.toFixed(2));
     if (ids.length * allowance > cap) console.log("a real run stops before the session whose allowance would pass the cap (exit 10)");
@@ -181,7 +183,7 @@ async function units(argv: string[]): Promise<number> {
   return 0;
 }
 
-const DRAW_HELP = "Usage: gstack-evals cso draw --work <dir> --n2 <n> [--raise floor|ceiling]\nReads work/units/*.json and writes work/draw-<n2>.json by section 3's positions.";
+const DRAW_HELP = "Usage: gstack-evals cso draw --work <dir> --n2 <n> [--raise floor|ceiling]\nReads work/units/*.json and writes work/draw-<n2>.json by section 3's positions, with stage 2's session order seeded\nby order_seed (section 12).";
 async function drawCmd(argv: string[]): Promise<number> {
   const f = flags(argv, ["--work", "--n2", "--raise"], [], DRAW_HELP);
   if (!f) return 0;
@@ -189,9 +191,10 @@ async function drawCmd(argv: string[]): Promise<number> {
   const dir = join(work, "units");
   if (!existsSync(dir)) csoFail("E_CSO_DRAW", dir + " does not exist; run cso units first");
   const recs = readdirSync(dir).filter((x) => x.endsWith(".json")).map((x) => JSON.parse(readFileSync(join(dir, x), "utf8")) as UnitRecord);
-  const d = draw(drawPlan(loadCsoPrereg()), recs, Number(f.need("--n2")), (f.one("--raise") as Raise | undefined) ?? null);
+  const p = loadCsoPrereg();
+  const d = draw(drawPlan(p), recs, Number(f.need("--n2")), (f.one("--raise") as Raise | undefined) ?? null);
   const out = join(work, "draw-" + d.n2 + (d.raise ? "-" + d.raise : "") + ".json");
-  writeFileSync(out, JSON.stringify(d, null, 1) + "\n", { flag: "wx" });
+  writeFileSync(out, JSON.stringify({ ...d, order: stage2Order(d, p.order_seed) }, null, 1) + "\n", { flag: "wx" });
   console.log("draw: " + d.units.length + " positions written to " + out);
   return 0;
 }

@@ -6,7 +6,7 @@
 // next 8 unused positions are reserves. The supply check fills stage 0, stage 1, one re-pilot block, stage 2 at its cap
 // and the reserves.
 import { csoFail, type CsoPrereg } from "../prereg.ts";
-import type { CsoStage, UnitRecord } from "../types.ts";
+import type { CsoArm, CsoModel, CsoStage, UnitRecord } from "../types.ts";
 
 export interface DrawPlan { stage0: number[]; stage1: number[]; repilot: number; n2_min: number; n2_max: number; n2_step: number; reserve: number; size_split: number; supply: number }
 
@@ -71,4 +71,27 @@ export function draw(plan: DrawPlan, units: readonly Pick<UnitRecord, "unit" | "
   next(n2, "stage2", true);
   next(plan.reserve, "reserve", true);
   return { schema: "cso-draw.v1", n2, raise, units: out };
+}
+
+export interface Ordered { unit: string; model: CsoModel; arm: CsoArm }
+
+/** Section 12's stage 2 order: the stage 2 units in draw order, each unit's four cells (Opus none and cso, particle-1
+ *  none and cso) shuffled by one mulberry32 stream seeded with prereg.json's order_seed, so arms interleave within each
+ *  unit. */
+export function stage2Order(d: Draw, seed: number): Ordered[] {
+  let s = seed >>> 0;
+  const rand = () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), s | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  return d.units.filter((u) => u.role === "stage2").flatMap((u) => {
+    const cells: Ordered[] = [["opus", "none"], ["opus", "cso"], ["particle", "none"], ["particle", "cso"]].map(([model, arm]) => ({ unit: u.unit, model: model as CsoModel, arm: arm as CsoArm }));
+    for (let i = cells.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [cells[i], cells[j]] = [cells[j]!, cells[i]!];
+    }
+    return cells;
+  });
 }

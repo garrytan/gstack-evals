@@ -7,13 +7,15 @@ import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
 import { LedgerError } from "../../src/runner/ledger/record.ts";
 import { serveStages, type StageSpec } from "./driver/stage.ts";
 import { loadRegistry } from "./arms/registry.ts";
+import { CSO_DRIVER_MODELS } from "./cso/driver.ts";
 import { TaskError } from "../real-outcome/task/format.ts";
 import { bind, check, pin, publicForm, readManifest } from "./images/manifest.ts";
 import { readFileSync } from "node:fs";
 
 export const HELP = `Usage: gstack-evals outcome serve --run <id> --envelope-host <machine id> --stage <item>=<arm> [--stage ...]
            --host <ip> --dir <run dir> [--planned 24] [--reruns 2] [--control-port <n>] [--ttl-hours 72]
-           [--ledger <path>] [--ledger-record <dir>] [--pf-allowance <json file>] [--registry <arms file>] [--lift-halt <session id>[,<session id>]]
+           [--ledger <path>] [--ledger-record <dir>] [--pf-allowance <json file>] [--cso-allowance <model>=<usd>[,<model>=<usd>]]
+           [--registry <arms file>] [--lift-halt <session id>[,<session id>]]
 A family SM stage is --stage <item>=<model>@<arm>,<arm>: one lease on the item for that model, serving each named SM arm
 at its per-model allowance, with a proxy that refuses provider-side tools.
 A PF stage is --stage <pf item>=pf:<arm>,pf:<arm> (pf:P, pf:C, pf:N, or pf:blind on pf-blind): one lease on the item for
@@ -21,6 +23,8 @@ the models it pays for, two slots per session (task and wrap-up), with a proxy t
 A cso stage is --stage <cso item>=cso:<arm>,cso:<arm> (cso-smoke and cso-pilot serve cso:none, cso:cso and cso:untold;
 cso-main serves cso:none and cso:cso): one lease on the item, serving each arm at prereg.json's models and allowances.
 --pf-allowance <json file> replaces the task-turn allowance table (the doubled one admission's cost reading writes).
+--cso-allowance gives a cso model's session allowance after stage 1's doubling rule, such as claude-opus-5-5=16; the driver
+serves only prereg.json's allowance or exactly twice it.
 
 Opens one U4 lease per stage at its line item's cap through O6's envelope, one metering proxy per lease on --host, and a
 control plane on 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. It prints control=<url> and one
@@ -64,7 +68,7 @@ export async function main(argv: string[]): Promise<number> {
   }
   const flags = new Map<string, string>();
   const stages: StageSpec[] = [];
-  const allowed = new Set(["--run", "--envelope-host", "--stage", "--host", "--dir", "--planned", "--reruns", "--control-port", "--ttl-hours", "--ledger", "--ledger-record", "--pf-allowance", "--registry", "--lift-halt"]);
+  const allowed = new Set(["--run", "--envelope-host", "--stage", "--host", "--dir", "--planned", "--reruns", "--control-port", "--ttl-hours", "--ledger", "--ledger-record", "--pf-allowance", "--cso-allowance", "--registry", "--lift-halt"]);
   for (let i = 0; i < rest.length; i += 2) {
     const [k, v] = [rest[i]!, rest[i + 1]];
     if (!allowed.has(k) || v === undefined) {
@@ -106,6 +110,20 @@ export async function main(argv: string[]): Promise<number> {
       return 2;
     }
   }
+  let csoAllowance: Record<string, number> | undefined;
+  if (flags.has("--cso-allowance")) {
+    const pairs = flags.get("--cso-allowance")!.split(",").map((s) => s.match(/^([^=]+)=(\d+(?:\.\d+)?)$/));
+    if (pairs.some((m) => !m)) {
+      console.error(lines("E_USAGE", "--cso-allowance takes <model>=<usd>[,<model>=<usd>], such as claude-opus-5-5=16, not " + flags.get("--cso-allowance")));
+      return 2;
+    }
+    csoAllowance = Object.fromEntries(pairs.map((m) => [m![1]!, Number(m![2])]));
+    const stray = Object.keys(csoAllowance).filter((m) => !Object.hasOwn(CSO_DRIVER_MODELS, m));
+    if (stray.length) {
+      console.error(lines("E_USAGE", "--cso-allowance names " + stray.join(", ") + "; the cso stages serve " + Object.keys(CSO_DRIVER_MODELS).join(", ")));
+      return 2;
+    }
+  }
   let local: ReturnType<typeof openLocalLedger> | null = null;
   try {
     const registry = flags.has("--registry") ? loadRegistry(flags.get("--registry")!) : undefined;
@@ -123,6 +141,7 @@ export async function main(argv: string[]): Promise<number> {
       control_port: num("--control-port"),
       ttl_ms: ttlHours === undefined ? undefined : Math.round(ttlHours * 3_600_000),
       ...(pfAllowance ? { pf_allowance: pfAllowance } : {}),
+      ...(csoAllowance ? { cso_allowance_usd: csoAllowance } : {}),
       registry,
       ...(flags.has("--lift-halt") ? { lift_halts: flags.get("--lift-halt")!.split(",") } : {}),
     });

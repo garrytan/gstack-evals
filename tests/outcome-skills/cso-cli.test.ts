@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { COMMANDS as TABLE } from "../../src/cli.ts";
 import { homeAudit, ledgerDryRun, main, readUnitIds, rerun } from "../../lanes/outcome-skills/cso/cli.ts";
 import { loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
+import { stage2Order } from "../../lanes/outcome-skills/cso/units/draw.ts";
 
 const p = loadCsoPrereg();
 const tmp = () => mkdtempSync(join(tmpdir(), "cso-cli-"));
@@ -67,6 +68,23 @@ describe("cso cli", () => {
     await expect(rerun(["--arm", "none", "--model", "particle", "--units", unitsFile(["a", "b", "c"]), "--spend-cap", "4.5"], runner)).rejects.toThrow(/^E_CSO_CAP_STOP /);
     expect(ran).toEqual(["a", "b"]);
   });
+  test("rerun --allowance takes prereg.json's allowance or exactly twice it, and the cap check and the runner use it", async () => {
+    const two = unitsFile(["a", "b"]);
+    const dry = await capture(() => main(["rerun", "--arm", "none", "--model", "opus", "--units", two, "--spend-cap", "40", "--allowance", "16", "--dry-run"]));
+    expect(dry.code).toBe(0);
+    expect(dry.out).toContain("2 units; at most $32.00 if every session spent its $16 allowance");
+    const odd = await capture(() => main(["rerun", "--arm", "none", "--model", "opus", "--units", two, "--spend-cap", "40", "--allowance", "5", "--dry-run"]));
+    expect(odd.code).toBe(2);
+    expect(odd.err).toMatch(/^E_CSO_SESSION .*after stage 1's doubling, \$16; not \$5/);
+    expect((await capture(() => main(["rerun", "--arm", "none", "--model", "opus", "--units", two, "--spend-cap", "40", "--allowance", "x", "--dry-run"]))).err).toMatch(/^E_USAGE --allowance must be/);
+    const seen: Array<[string, number]> = [];
+    const runner = { run: async (o: { unit: string; allowance_usd: number }) => (seen.push([o.unit, o.allowance_usd]), { cost_usd: 1 }) };
+    await expect(rerun(["--arm", "none", "--model", "opus", "--units", two, "--spend-cap", "16.5", "--allowance", "16"], runner)).rejects.toThrow(/^E_CSO_CAP_STOP .*its \$16 allowance/);
+    expect(seen).toEqual([["a", 16]]);
+    seen.length = 0;
+    expect(await rerun(["--arm", "none", "--model", "opus", "--units", two, "--spend-cap", "16.5"], runner)).toBe(0);
+    expect(seen).toEqual([["a", 8], ["b", 8]]);
+  });
   test("units files: ids, records and draw files", () => {
     expect(readUnitIds(unitsFile({ schema: "cso-draw.v1", units: [{ unit: "x", position: 1 }] }))).toEqual(["x"]);
     expect(() => readUnitIds(unitsFile([1]))).toThrow(/^E_CSO_RERUN_PRECONDITION /);
@@ -78,7 +96,16 @@ describe("cso cli", () => {
     const r = await capture(() => main(["draw", "--work", work, "--n2", "60"]));
     expect(r.code).toBe(0);
     const d = JSON.parse(readFileSync(join(work, "draw-60.json"), "utf8"));
-    expect(d.units.filter((u: { role: string }) => u.role === "stage2").length).toBe(60);
+    const stage2 = d.units.filter((u: { role: string }) => u.role === "stage2").map((u: { unit: string }) => u.unit);
+    expect(stage2.length).toBe(60);
+    expect(d.order.length).toBe(240);
+    const cells = ["opus none", "opus cso", "particle none", "particle cso"];
+    const blocks = stage2.map((_: string, i: number) => d.order.slice(4 * i, 4 * i + 4));
+    expect(blocks.map((b: Array<{ unit: string }>) => [...new Set(b.map((o) => o.unit))])).toEqual(stage2.map((u: string) => [u]));
+    for (const b of blocks) expect(b.map((o: { model: string; arm: string }) => o.model + " " + o.arm).sort()).toEqual([...cells].sort());
+    expect(new Set(blocks.map((b: Array<{ model: string; arm: string }>) => b.map((o) => o.model + " " + o.arm).join())).size).toBeGreaterThan(1);
+    expect(d.order).toEqual(stage2Order(d, p.order_seed));
+    expect(stage2Order(d, p.order_seed + 1)).not.toEqual(d.order);
     expect((await capture(() => main(["draw", "--work", work, "--n2", "60"]))).code).toBe(2);
   });
   test("the read audit: the clean room holds no gstack path and no drive; a gstack home holds no drive", () => {
