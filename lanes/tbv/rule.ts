@@ -123,7 +123,7 @@ const judged = (r: Reading) => r.status === "scored" || r.status === "no-report"
 /** A reading whose report turn returned text or a refusal: exposure reads its report text, whether or not a judge labelled it. */
 const reported = (r: Reading) => judged(r) || r.status === "unjudged";
 const famOf = (t: Task): Family => t.family ?? (t.source === "A" ? "investigate" : "ship");
-const SKILL: Family[] = ["investigate", "ship", "review"];
+export const SKILL: Family[] = ["investigate", "ship", "review"];
 const gstackArm = (arm: Arm) => arm === "current" || arm === "principle";
 /** The seeded double-read draw (section 7): FNV-1a on the seed and the reading's random label. The judge run picks with it and the rule checks with it. */
 export function doubleRead(label: string): boolean {
@@ -150,6 +150,9 @@ function checkPlan(rd: Readings, split: { text: string; manifest: SplitManifest 
 /** The input guards every reading command runs: a known task, no duplicate, a pass inside the plan, labels that match the key on a scored reading, a finite unsupported count of at least 0, the frozen no-report shape (no fact labels, unsupported 0), a family that matches its task, the frozen judge for its model, a second read only where the seeded draw picked it and only by the other judge with a full label count, response ids no other reading holds, and controls on known tasks with full label counts. */
 function validate(rd: Readings, passesOf: (r: Reading) => number | undefined) {
   const tasks = new Map(rd.tasks.map((t) => [t.id, t]));
+  const standIn = rd.plan.standIn;
+  if (standIn !== undefined && !(rd.stage === "held" && standIn.for === "sol" && standIn.by === "astra")) fail("E_USAGE the plan's standIn " + JSON.stringify(standIn) + " is not the R78 addendum's Astra reading (Astra for Sol, on held readings)");
+  const judgeOf = (m: Model): Judge => (standIn && JUDGE_OF[m] === standIn.for ? standIn.by : JUDGE_OF[m]);
   const keys = new Set<string>();
   const responses = new Set<string>();
   for (const r of rd.readings) {
@@ -158,7 +161,7 @@ function validate(rd: Readings, passesOf: (r: Reading) => number | undefined) {
       if (t.source !== "B") fail("E_USAGE reading " + r.id + " is a capy reading on source " + t.source + " task " + r.task + "; capy reads source B tasks only");
       if (r.model !== "opus" || !gstackArm(r.arm)) fail("E_USAGE reading " + r.id + " is capy " + r.arm + " on " + r.model + "; capy readings are Opus current or principle, and capy none is the ship reading");
     } else if (r.family !== famOf(t)) fail("E_USAGE reading " + r.id + " has family " + r.family + ", but its task " + r.task + " is family " + famOf(t));
-    if (r.judge !== JUDGE_OF[r.model]) fail("E_USAGE reading " + r.id + " is judged by " + r.judge + ", but " + r.model + " arms are judged by " + JUDGE_OF[r.model]);
+    if (r.judge !== judgeOf(r.model)) fail("E_USAGE reading " + r.id + " is judged by " + r.judge + ", but " + r.model + " arms are judged by " + judgeOf(r.model));
     if (reported(r)) {
       if (!Array.isArray(r.responseIds) || !r.responseIds.length) fail("E_USAGE reading " + r.id + " carries no response ids, so a copy could not be told from a reading");
       for (const id of r.responseIds) { if (responses.has(id)) fail("E_USAGE reading " + r.id + " shares response id " + id + " with another reading: a copied reading"); responses.add(id); }
@@ -188,7 +191,7 @@ function validate(rd: Readings, passesOf: (r: Reading) => number | undefined) {
   }
   return tasks;
 }
-const recall = (r: Reading) => (r.status === "no-report" || !r.facts.length ? 0 : r.facts.filter((f) => f.in).length / r.facts.length);
+export const recall = (r: Reading) => (r.status === "no-report" || !r.facts.length ? 0 : r.facts.filter((f) => f.in).length / r.facts.length);
 const recallAny = (r: Reading) => (r.status === "no-report" || !r.facts.length ? 0 : r.facts.filter((f) => f.any).length / r.facts.length);
 
 /** Positive agreement over the seeded double-read sample: every scored reading the draw picks on a task with facts (a clean task has no fact to agree on). */
@@ -318,7 +321,7 @@ function caps(c: { items: { item: string; projected: number; models?: Model[]; c
 }
 
 /** Amendment item 11: the all-in check before the first lease of every paid item, with the crew's actual spend from the thread counters. */
-export const PAID_ITEMS = ["tbv-author", "tbv-hr", "tbv-dev-base", "tbv-climb-1", "tbv-climb-2", "tbv-climb-3", "tbv-held", "tbv-held-p3"];
+export const PAID_ITEMS = ["tbv-author", "tbv-hr", "tbv-dev-base", "tbv-climb-1", "tbv-climb-2", "tbv-climb-3", "tbv-held", "tbv-held-p3", "tbv-r78-astra"];
 function allin(a: { item: string; crewCredits: number; crewRest: number; settled: number; reserved: number; unknown: number; itemCap: number; thirdPassCap?: number; capyCap?: number }) {
   if (!PAID_ITEMS.includes(a.item)) fail("E_USAGE the all-in check runs before a paid item (" + PAID_ITEMS.join(", ") + "), not " + JSON.stringify(a.item));
   for (const k of ["crewCredits", "crewRest", "settled", "reserved", "unknown", "itemCap"] as const) if (!(Number.isFinite(a[k]) && a[k] >= 0)) fail("E_USAGE the all-in check needs " + k + " as a number of at least 0");
@@ -340,8 +343,8 @@ function mddFor(n: number, passes: number) {
   return [...rows].reverse().find(([k]) => k <= n)?.[1] ?? null;
 }
 
-/** One paired contrast b minus a over matched task-pass rows, on the non-clean tasks or, with clean, on the clean tasks only. */
-function contrast(rd: Readings, tasks: Map<string, Task>, model: Model, fams: Family[], b: Arm, a: Arm, f: (r: Reading) => number, clean = false) {
+/** The task-pass rows a contrast pairs: a's and b's readings of the same task and pass, both judged, on the non-clean tasks or, with clean, on the clean tasks only. ra[i] and rb[i] are one pair. */
+export function pairedRows(rd: Readings, model: Model, fams: Family[], b: Arm, a: Arm, clean = false) {
   const ids = new Set(rd.tasks.filter((t) => (t.stratum === "clean") === clean && (fams.includes("capy") ? t.source === "B" : fams.includes(famOf(t)))).map((t) => t.id));
   const pick = (arm: Arm, fam: Family[]) => new Map(rd.readings.filter((r) => r.model === model && r.arm === arm && ids.has(r.task) && fam.includes(r.family)).map((r) => [r.task + "#" + r.pass, r]));
   const famsB = fams.includes("capy") ? (["capy"] as Family[]) : fams;
@@ -350,8 +353,12 @@ function contrast(rd: Readings, tasks: Map<string, Task>, model: Model, fams: Fa
   const passes = fams.includes("capy") ? (rd.plan.capyPasses ?? 2) : (rd.plan.passes[model] ?? 2);
   const planned = ids.size * passes;
   const matched = [...B.keys()].filter((k) => A.has(k) && judged(B.get(k)!) && judged(A.get(k)!));
-  const coverage = planned ? matched.length / planned : 0;
-  const ra = matched.map((k) => A.get(k)!), rb = matched.map((k) => B.get(k)!);
+  return { ids, famsA, famsB, passes, planned, ra: matched.map((k) => A.get(k)!), rb: matched.map((k) => B.get(k)!) };
+}
+/** One paired contrast b minus a over matched task-pass rows, on the non-clean tasks or, with clean, on the clean tasks only. */
+function contrast(rd: Readings, tasks: Map<string, Task>, model: Model, fams: Family[], b: Arm, a: Arm, f: (r: Reading) => number, clean = false) {
+  const { ids, famsA, famsB, passes, planned, ra, rb } = pairedRows(rd, model, fams, b, a, clean);
+  const coverage = planned ? ra.length / planned : 0;
   const ca = clusterMean(ra, tasks, f), cb = clusterMean(rb, tasks, f);
   const pairs = [...ca.keys()].map((c) => ({ id: c, cluster: c, a: ca.get(c)!, b: cb.get(c)! }));
   const s = pairs.length ? clusteredPairedDelta(pairs, { seed: SEED, draws: DRAWS }) : null;
@@ -394,6 +401,7 @@ function joinBase(own: Readings, split: { text: string; manifest: SplitManifest 
 function compare(own: Readings, split: { text: string; manifest: SplitManifest }, base?: { rd: Readings; file: string; sha: string }) {
   if (own.stage === "hr") fail("E_USAGE compare reads dev or held readings");
   checkPlan(own, split);
+  if (own.plan.standIn) say("judge stand-in (R78 addendum): " + own.plan.standIn.by + "'s labels in place of " + own.plan.standIn.for + "'s on every reading " + own.plan.standIn.for + " read; second reads and controls as judged");
   const rd = joinBase(own, split, base);
   const tasks = validate(rd, (r) => (r.family === "capy" ? rd.plan.capyPasses ?? 2 : rd.plan.passes[r.model] ?? 2));
   if (rd.stage === "held" && rd.plan.controlTaskIds.length !== HELD_CONTROLS) fail("E_USAGE stage 3's plan names " + rd.plan.controlTaskIds.length + " control tasks; it runs controls on " + HELD_CONTROLS);
