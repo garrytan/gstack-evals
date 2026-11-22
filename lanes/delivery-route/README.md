@@ -184,14 +184,14 @@ The launcher commands are L1's under B1e's profile: host root ~/b1e, ledger port
 
 ## B1f: a rewritten description against the hook
 
-B1f asks whether rewriting prove-it's description, with gstack's routing hook off, gets Opus 5.5 to follow prove-it's steps as often as the hook does, without loading prove-it on feature requests it doesn't fit. It installs gstack v1.102.1.0 the way a user does, with B1's prove-it beside it, in four arms that differ only in how prove-it can be found: hook (gstack's default), own (routing off, prove-it's own description), long and required (routing off, a rewritten description), plus B1's none arm. The plan, the decision rules, the task sets and the frozen numbers are in [its preregistration](../../wiki/plans/2026-11-21-capy-b1f-description-rewrite-prereg/README.md). B1's to B1d's files stay as merged.
+B1f asks whether rewriting prove-it's description, with gstack's routing hook off, gets Opus 5.5 to follow prove-it's steps as often as the hook does, without loading prove-it on feature requests it doesn't fit. It installs gstack v1.102.1.0 the way a user does, with B1's prove-it beside it, in four arms that differ only in how prove-it can be found: hook (gstack's default), own (routing off, prove-it's own description), long and required (routing off, a rewritten description), plus B1's none arm. The plan, the decision rules, the task sets and the frozen numbers are in [its preregistration](../../wiki/plans/2026-11-21-capy-b1f-description-rewrite-prereg/README.md), and the outcome is in [its results](../../wiki/board/2026-11-22-capy-b1f-description-rewrite-results/README.md). B1's to B1d's files stay as merged.
 
 | File | What it does |
 |---|---|
 | b1f-pins.ts | Frozen values: gstack's tag, sha and the blobs of its route files, the hook registrations, the five arms and their rates, the description lengths and digests, the task sets, reserve and supply sample, the items, caps, all-in stop, margin and over-loading bound |
 | b1f-build.sh | Builds the four gstack tars from one gstack setup: the hook tree, own with routing off, and long and required with prove-it's file swapped |
 | arms/b1f/prove-it-long.md, arms/b1f/prove-it-required.md | B1's gstack-shaped prove-it with only its description line rewritten |
-| b1f.ts | The arm checks, the keyless route table, the plan, caps and launch guard, the session rows (steps followed, loads, what the hook named, routing off, the arm's tar), the pilot check with its supply sample, the main report with each rewrite's decision, the power table and six keyless scripted sessions |
+| b1f.ts | The arm checks, the keyless route table, the plan, caps and launch guard, the session rows (steps followed, loads, what the hook named, routing off, the arm's tar), the pilot check with its supply sample (its report prints each arm's settled spend against its pilot cap, and FAIL for an arm above it), the main report with each rewrite's decision, the power table and six keyless scripted sessions |
 
 ```
 lanes/delivery-route/b1f-build.sh
