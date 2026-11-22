@@ -1331,3 +1331,54 @@ describe("a part VM that never reaches running (the Captain's ruling A, 2026-11-
     expect(openIds(r, "pilot-opus")).toEqual([]);
   }, 300_000);
 });
+
+describe("l1.ts host losses (weekly pre-run change 5)", () => {
+  const row = (o: object) => JSON.stringify(o) + "\n";
+  const hostRows = (r: Rig) => readFileSync(join(r.work, "host/hosts.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  test("the item has ended when an earlier host's complete recovery would hide a later loss, or when the host log has a torn line, and no host starts", () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    mkdirSync(join(r.work, "host"), { recursive: true });
+    const first = row({ event: "up", n: 1, name: "host-1" }) + row({ event: "lost", n: 1, name: "host-1", down_confirmed_at: 100 });
+    writeFileSync(join(r.work, "host/recover.json"), JSON.stringify({ host: "host-1", down_confirmed_at: 100, complete: true }));
+    writeFileSync(join(r.work, "host/hosts.jsonl"), first + row({ event: "up", n: 2, name: "host-3" }) + row({ event: "lost", n: 2, name: "host-3", down_confirmed_at: 200 }));
+    const stale = l1(r, ["host-up", r.work]);
+    expect([stale.code, stale.err]).toEqual([3, expect.stringContaining("pilot-opus has ended incomplete: host/recover.json records host-1's recovery, not the newest host loss (host-3)")]);
+    writeFileSync(join(r.work, "host/hosts.jsonl"), first + '{"event":"up","n":2,"na\n');
+    const torn = l1(r, ["host-up", r.work]);
+    expect([torn.code, torn.err]).toEqual([3, expect.stringContaining("pilot-opus has ended incomplete: host/hosts.jsonl has a torn line")]);
+    expect(hostUps(r)).toBe(0);
+  });
+
+  test("recover writes the part results and host/recover.json before it drops the host pointer and records the loss, so a recover cut short there runs again cleanly", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    const mirror = join(r.work, "host/ledger.jsonl");
+    const lines = readFileSync(mirror, "utf8").trim().split("\n");
+    const settles = lines.map((l, i) => [JSON.parse(l), i] as const).filter(([x]) => x.kind === "settle" && x.id.startsWith("pilot-opus/pilot/s"));
+    writeFileSync(mirror, lines.slice(0, settles[1]![1] + 1).join("\n") + "\n");
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    // A folder at the pointer's path makes recover fail where it drops the pointer.
+    const pointer = r.ledger + ".host.json";
+    rmSync(pointer);
+    mkdirSync(join(pointer, "keep"), { recursive: true });
+    const cut = l1(r, ["recover", r.work]);
+    expect(cut.code).not.toBe(0);
+    expect(recoverJson(r)).toMatchObject({ host: "host-1", running: "pilot", part_results_pulled: true, complete: true });
+    expect(JSON.parse(readFileSync(join(r.work, "pilot.result.json"), "utf8")).loss).toContain("the awake host was lost");
+    expect(hostRows(r).filter((x) => x.event === "lost")).toEqual([]);
+    const firstGone = recoverJson(r).down_confirmed_at;
+    await Bun.sleep(1100);
+    rmSync(pointer, { recursive: true });
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part pilot")]);
+    const done = recoverJson(r);
+    expect(done).toMatchObject({ host: "host-1", down_confirmed_at: firstGone, running: "pilot", part_vm: "vm-2", part_results_pulled: true, missing_sessions: [], complete: true });
+    expect(hostRows(r).filter((x) => x.event === "lost")).toEqual([expect.objectContaining({ n: 1, name: "host-1", down_confirmed_at: done.down_confirmed_at })]);
+    expect(existsSync(pointer)).toBe(false);
+    const sess = readRows(r.ledger).filter((x) => x.id.startsWith("pilot-opus/pilot/s"));
+    const ids = [...new Set(sess.map((x) => x.id))];
+    expect(ids.map((id) => [sess.filter((x) => x.id === id && x.kind === "reserve").length, sess.filter((x) => x.id === id && x.kind === "settle").length])).toEqual(ids.map(() => [1, 1]));
+    expect(openIds(r, "pilot-opus")).toEqual([]);
+  }, 240_000);
+});

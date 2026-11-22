@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { L1, l1Main, type PartPlan } from "../../quick/laneb/l1/l1.ts";
+import { L1, l1Main, unsettledHostLoss, type PartPlan } from "../../quick/laneb/l1/l1.ts";
 import { readRows, type Row } from "../../quick/laneb/runner/ledger.ts";
 import { ARMS_DIR, armsCheck, contaminationSearch, manifestDir, writeManifests } from "./arms.ts";
 import { approve, baseOf, guard, isoWeek, markDone, partItems, profileFor, projection, taskLists, weekBase, weekPlan, weekSeed, type WeekState } from "./plan.ts";
@@ -101,8 +101,9 @@ export function partCapStops(work: string): string[] {
   }));
 }
 /** Each part's cap stops, each part with no result file (every part in p1..p3's plan, and every attempt 2 or relaunch
- *  prepared for one), and what can't be settled (pre-run change 4 section 6): a part folder with no plan.json, a lost host
- *  that recover could not fully rebuild (host/recover.json not complete, unreadable, or missing after a recorded loss), and
+ *  prepared for one), and what can't be settled (pre-run change 4 section 6): a part folder with no plan.json, a host loss
+ *  L1's unsettledHostLoss does not settle (pre-run change 5: a torn or unreadable host/hosts.jsonl, or a host/recover.json
+ *  that is missing after a loss, unreadable, not complete or not the newest lost host's), and
  *  a part result with no cap stop that
  *  launch.sh kept at exit 7 with no salvage, whose records (or its salvage's) were never pulled (unless L1 shows no trial started) or whose
  *  ending L1 could not class. */
@@ -110,10 +111,7 @@ export function partProblems(work: string): { caps: string[]; missing: string[];
   const missing: string[] = [], unsettled: string[] = [];
   for (const p of ["p1", "p2", "p3"].filter((x) => existsSync(join(work, x)))) {
     if (!existsSync(join(work, p, "plan.json"))) { unsettled.push(p); continue; }
-    const rec = join(work, p, "host", "recover.json"), hosts = join(work, p, "host", "hosts.jsonl");
-    const recovered = existsSync(rec) ? (() => { try { return readJson(rec).complete === true; } catch { return false; } })() : null;
-    const lost = existsSync(hosts) && readFileSync(hosts, "utf8").split("\n").some((l) => { try { return JSON.parse(l).event === "lost"; } catch { return l.trim() !== ""; } });
-    if (recovered === false || (recovered === null && lost)) unsettled.push(p + "/host");
+    if (unsettledHostLoss(join(work, p))) unsettled.push(p + "/host");
     const s = partState(join(work, p));
     for (const x of s.parts.map((y) => y.name)) {
       if (!s.finished.includes(x)) { missing.push(p + "/" + x); continue; }
@@ -337,7 +335,7 @@ async function run(argv: string[]): Promise<number> {
     if (gate.length) return usage("refused: " + gate.join("; "));
     const l = look(rows, taskLists().run, w.dropped), tasks = new Set(l.tasks), body = jsonl(rows.filter((r) => tasks.has(r.task)));
     if (recordLook(w, l, new Date().toISOString(), { rows: LOOK_ROWS, rows_sha256: createHash("sha256").update(body).digest("hex") })) { writeFileSync(join(work, LOOK_ROWS), body); writeJson(weekFile(work), w); }
-    console.log(!l.ready ? "WEEKLY LOOK NOT READY: " + l.open.length + " arms of the first " + l.tasks.length + " tasks have not settled (" + l.open.slice(0, 3).join("; ") + ")" : l.stop ? "WEEKLY LOOK STOP " + l.stop + ": no new launch, relaunch or rerun starts, and parts already running continue to their caps; report with --stopped " + l.stop + ", which reads the frozen rows and decides the verdict" : "WEEKLY LOOK CONTINUE");
+    console.log(!l.ready ? "WEEKLY LOOK NOT READY: " + l.open.length + " arms of the first " + l.tasks.length + " tasks have not settled (" + l.open.slice(0, 3).join("; ") + ")" : l.stop ? "WEEKLY LOOK STOP " + l.stop + ": prepare, host-up, launch, relaunch and rerun are refused, and parts already running finish their planned cells; report with --stopped " + l.stop + ", which reads the frozen rows and decides the verdict" : "WEEKLY LOOK CONTINUE");
     return 0;
   }
   if (cmd === "pilot-report") {

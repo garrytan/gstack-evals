@@ -662,6 +662,44 @@ function usableHost(work: string, missing: string) {
   return host;
 }
 const recordHost = (work: string, row: Record<string, unknown>) => { mkdirSync(join(work, "host"), { recursive: true }); appendFileSync(hostsFile(work), JSON.stringify({ ...row, ts: new Date().toISOString() }) + "\n"); };
+// Why a host loss in a work dir is not settled, or null (weekly pre-run change 5): host/hosts.jsonl can't be read or has a
+// torn line, a part result names a lost_host that no lost row records yet (a recover cut short), a host was lost with no host/recover.json, or host/recover.json is unreadable, not complete, or does not name
+// the newest lost host and the time ubi-runner confirmed it gone. A recovery of an earlier host never settles a later loss.
+export function unsettledHostLoss(work: string): string | null {
+  const rows: any[] = [];
+  const absent = (e: unknown) => (e as { code?: string }).code === "ENOENT";
+  let text = "";
+  try { text = readFileSync(hostsFile(work), "utf8"); } catch (e) { if (!absent(e)) return "host/hosts.jsonl can't be read (" + (e as Error).message + "), so a host loss can't be ruled out"; }
+  for (const l of text.split("\n").filter((x) => x.trim())) {
+    let r: any;
+    try { r = JSON.parse(l); } catch { r = null; }
+    if (!r || typeof r !== "object") return "host/hosts.jsonl has a torn line, so a host loss can't be ruled out";
+    rows.push(r);
+  }
+  for (const f of readdirSync(work).filter((x) => x.endsWith(".result.json"))) {
+    let h: unknown;
+    try { h = readJson(join(work, f))?.lost_host; } catch { continue; }
+    if (typeof h === "string" && !rows.some((r) => r.event === "lost" && r.name === h)) return f + " was written by a recover of host " + h + " that has not finished (no lost row yet); run recover again";
+  }
+  const ended = (h: unknown) => rows.some((r) => (r.event === "lost" || r.event === "down") && r.name === h);
+  let misses = "", gone: any = null;
+  try { misses = readFileSync(join(work, "host/unreachable.jsonl"), "utf8"); } catch (e) { if (!absent(e)) return "host/unreachable.jsonl can't be read, so a host loss can't be ruled out"; }
+  const miss = misses.split("\n").filter((x) => x.trim()).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((m) => m && !ended(m.host));
+  const silent = [...new Set(miss.map((m) => m.host))].find((h) => { const m = miss.filter((x) => x.host === h); return m.length >= L1.unreachable.tries && (m.at(-1).at - m[0].at) / 60 >= Number(process.env.L1_UNREACHABLE_MINUTES ?? L1.unreachable.minutes); });
+  if (silent !== undefined) return "host " + silent + " was called lost (HOST_LOST) and no lost row records its recovery; run recover";
+  try { gone = readJson(join(work, "host/host-gone.json")); } catch (e) { if (!absent(e)) return "host/host-gone.json can't be read, so a host loss can't be ruled out"; }
+  if (gone && !ended(gone.host)) return "host " + gone.host + " is gone and no lost row records its recovery; run recover again";
+  const lost = rows.filter((r) => r.event === "lost").at(-1);
+  let rec: any;
+  try { rec = readJson(join(work, "host/recover.json")); } catch (e) {
+    if (!absent(e)) return "host/recover.json can't be read, so the host loss it records can't be settled";
+    return lost ? "host " + lost.name + " was lost and no host/recover.json records its recovery" : null;
+  }
+  if (rec?.complete !== true) return "the host was lost and recover could not rebuild the ledger (host/recover.json)";
+  if (!lost || typeof rec.host !== "string" || rec.host !== lost.name || (lost.down_confirmed_at !== undefined && rec.down_confirmed_at !== lost.down_confirmed_at))
+    return "host/recover.json records " + rec.host + "'s recovery, not the newest host loss (" + (lost?.name ?? "none recorded") + ")";
+  return null;
+}
 const readPlan = (work: string): Plan => { if (!existsSync(join(work, "plan.json"))) usage(work + " has no plan.json; run prepare first"); return readJson(join(work, "plan.json")); };
 // The environment host.sh sources before it runs launch.sh, so these values reach launch.sh and its ubi-runner calls.
 export const hostEnvText = (item: string, capUsd: number, owner: string) => ["ITEM=" + item, "LEDGER=$HOME/" + H + "/ledger/" + item + ".jsonl", "LEDGER_PORT=" + (process.env.L1_HOST_LEDGER_PORT ?? P.ledgerPort), "CAP_USD=" + capUsd, "VM_USD_PER_HOUR=" + L1.vm.usdPerHour, "VM_RESERVE_HOURS=" + L1.vm.reserveHours, "UBI_TTL_HOURS=" + L1.vm.ttlHours, "UBI_STORAGE=" + L1.vm.storageGib, "UBI_OWNER=" + owner].join("\n") + "\n";
@@ -844,12 +882,11 @@ function partState(work: string, plan: Plan) {
   return all.map((p) => ({ part: p, launched: existsSync(join(work, p.name + ".launch.json")), result: existsSync(join(work, p.name + ".result.json")) ? readJson(join(work, p.name + ".result.json")) : null, relaunch: existsSync(join(work, p.name + ".relaunch.json")) ? readJson(join(work, p.name + ".relaunch.json")) : null }));
 }
 
-// The item has ended incomplete (prereg section 6): recover could not rebuild the ledger after the host was lost, a part
-// ended at a cap stop, or a part ended in a way the prereg does not class. Nothing more starts for it; host-down is still
-// allowed.
+// The item has ended incomplete (prereg section 6): a host loss is not settled (unsettledHostLoss), a part ended at a cap
+// stop, or a part ended in a way the prereg does not class. Nothing more starts for it; host-down is still allowed.
 function itemEnded(work: string, plan: Plan): string | null {
-  const rec = join(work, "host/recover.json");
-  if (existsSync(rec) && readJson(rec).complete === false) return "the host was lost and recover could not rebuild the ledger (host/recover.json)";
+  const lost = unsettledHostLoss(work);
+  if (lost) return lost;
   const states = partState(work, plan);
   const cap = states.find((s) => s.result?.cap_stop?.length);
   if (cap) return cap.part.name + " ended at a cap stop (" + cap.result.cap_stop[0] + "), and a cap stop is never relaunched";
@@ -1129,10 +1166,12 @@ function recover(work: string) {
     writeJsonAtomic(goneFile, { vms: done, at: nowSec() });
   };
   const states = partState(work, plan);
-  const running = states.find((s) => s.launched && !s.result);
+  // A result a cut-short run of recover wrote for this host (lost_host) is written again, so a rerun holds the same parts.
+  const ours = (s: (typeof states)[number]) => s.result?.lost_host === host.name;
+  const running = states.find((s) => s.launched && (!s.result || (ours(s) && !s.result.salvage)));
   // Every part whose VM may still run under the lost host: the running part, and each part launch.sh kept at exit 7 that no
   // salvage reached. Each one's VM is stopped, pulled and destroyed, and the part is classified again with the ledger check.
-  const held = states.filter((s) => s === running || (s.launched && s.result?.launch_exit === 7 && !s.result.salvage));
+  const held = states.filter((s) => s === running || (s.launched && s.result?.launch_exit === 7 && (!s.result.salvage || ours(s))));
   // A judge part (an agent with judge_backend in its job files, the signal vm-run.sh starts the judge proxy on) also meters
   // its hook calls on the judge proxy, under judge:<part prefix> on the host's ledger. Those rows after the last mirror are
   // in no session record, so rebuilding from the records would drop judge spend: refuse before anything is destroyed.
@@ -1170,7 +1209,10 @@ function recover(work: string) {
   }
   const down = ubi(["down", host.name]);
   if (down.code !== 0) refuse("host " + host.name + " could not be confirmed gone (ubi-runner down exit " + down.code + "); run recover again");
-  const goneAt = nowSec();
+  // The first confirmed-gone time stands, so a recover run again later settles the host's hours to the same moment.
+  const hostGone = join(work, "host/host-gone.json"), firstGone = existsSync(hostGone) ? readJson(hostGone) : null;
+  const goneAt: number = firstGone?.host === host.name ? firstGone.confirmed_at : nowSec();
+  if (firstGone?.host !== host.name) writeJsonAtomic(hostGone, { host: host.name, confirmed_at: goneAt });
   const rows = readRows(mirrorPath(work));
   const add: Row[] = [];
   const at = new Date().toISOString(), hostHours = (goneAt - host.up_at) / 3600;
@@ -1202,13 +1244,11 @@ function recover(work: string) {
   const ledger = resolve(readJson(join(work, "host/pointer")).ledger);
   moveFile(restored, ledger);
   if (existsSync(join(work, "host/bound.json"))) copyFileSync(join(work, "host/bound.json"), ledger + ".bound");
-  rmSync(pointerPath(ledger), { force: true });
-  recordHost(work, { event: "lost", n: host.n, name: host.name, down_confirmed_at: goneAt, rows_added: add.length });
   const checked = [...rows, ...add.filter((x) => x.kind === "reserve"), ...add.filter((x) => x.kind !== "reserve")];
   for (const p of parts) {
     const ledgerCheck = { rows: checked, since: p.l.at, sessionCapUsd: P.items[plan.item]!.allowanceUsd, prefix: p.l.prefix };
     const salvage = p.s === running ? {} : { salvage: { by: "recover", vm: p.vm, vm_gone: p.how === "RECOVER_GONE", pulled: p.pulled, vm_down: !!p.vm, at } };
-    writeJson(join(work, p.name + ".result.json"), { ...classify(join(work, p.name), p.s === running ? null : 7, { hostLost: true, ledger: ledgerCheck }), ...salvage, at });
+    writeJsonAtomic(join(work, p.name + ".result.json"), { ...classify(join(work, p.name), p.s === running ? null : 7, { hostLost: true, ledger: ledgerCheck }), ...salvage, lost_host: host.name, at });
   }
   const run = parts.find((p) => p.s === running);
   // The running part's rows after the last mirror live only in its records. A kept part's rows were all on the mirror before
@@ -1217,6 +1257,9 @@ function recover(work: string) {
   writeJsonAtomic(join(work, "host/recover.json"), { host: host.name, down_confirmed_at: goneAt, mirror_sha256: mirrorSha, running: running?.part.name ?? null,
     ...(run ? { part_vm: run.vm, part_vm_gone: run.how === "RECOVER_GONE", part_results_pulled: run.pulled, missing_sessions: run.missing } : {}),
     kept: parts.filter((p) => p !== run).map((p) => ({ part: p.name, vm: p.vm, vm_gone: p.how === "RECOVER_GONE", results_pulled: p.pulled, missing_sessions: p.missing })), rows_added: add.length, complete });
+  // Only now is the host recorded lost: a recover cut short before this line finds the host current and runs again.
+  rmSync(pointerPath(ledger), { force: true });
+  recordHost(work, { event: "lost", n: host.n, name: host.name, down_confirmed_at: goneAt, rows_added: add.length });
   if (!complete) {
     const why = parts.filter((p) => (p === run ? !p.pulled || p.missing.length : !p.vm)).map((p) => p.missing.length ? p.name + "'s records miss sessions (" + p.missing.slice(0, 5).join("; ") + (p.missing.length > 5 ? "; and " + (p.missing.length - 5) + " more in host/recover.json" : "") + ")"
       : p.how === "RECOVER_GONE" ? p.name + "'s VM " + p.vm + " was already gone (RECOVER_GONE), so its records were lost" : p.name + "'s VM records were lost or its VM is unknown").join("; ");
