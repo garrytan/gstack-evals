@@ -7,7 +7,7 @@ author: GEVA-560
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-21
-status: open
+status: superseded
 links:
   - garrytan/gstack#4513
   - garrytan/gstack#4525
