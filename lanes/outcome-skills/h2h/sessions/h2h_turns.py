@@ -311,9 +311,11 @@ class Turns(PfSession):
         generation id the proxy named in its x-h2h-generation-id header (the answer's X-Generation-Id), or null. OpenRouter
         writes a generation record some time after its answer, so after one pass over every id the ids not yet read (any
         answer but 200) are asked again at every GEN_WAIT_S mark after that pass ended, up to and including the
-        GEN_DEADLINE_S mark, however long the asks themselves take. The file is rewritten in full after the first pass and
-        after every round, so an interrupted wait keeps what was already read; whatever was read last is written, and
-        nothing here stops the close
+        GEN_DEADLINE_S mark. No ask starts once GEN_DEADLINE_S + GEN_WAIT_S has passed since the first pass, so the last
+        mark keeps one wait's room like the others and slow asks cannot stretch the wait past it. The file is rewritten
+        in full after each ask of the first pass and after every round, so an interrupted wait keeps what was already
+        read; whatever was read last is written, an answer whose body cannot be read is kept with the read error as its
+        text, and nothing here stops the close
         (run() records any error in the summary as generations_error). A message Claude Code wrote itself (model
         "<synthetic>") has no generation record and is skipped."""
         ids = []
@@ -336,27 +338,36 @@ class Turns(PfSession):
                 with urllib.request.urlopen(req, timeout=30) as r:
                     return r.status, r.read().decode(errors="replace"), r.headers.get("x-h2h-generation-id")
             except urllib.error.HTTPError as e:
-                return e.code, e.read().decode(errors="replace"), e.headers.get("x-h2h-generation-id")
+                try:
+                    body = e.read().decode(errors="replace")
+                except Exception as x:
+                    body = f"{type(x).__name__}: {x}"[:300]
+                return e.code, body, e.headers.get("x-h2h-generation-id")
             except Exception as e:
                 return 0, f"{type(e).__name__}: {e}"[:300], None
 
         def write() -> None:
             part = self.out / "generations.jsonl.part"
             with part.open("w") as f:
-                for i in ids:
+                for i in [i for i in ids if i in read]:
                     status, body, gen = read[i]
                     f.write(json.dumps({"id": i, "status": status, "text": body, "generation_id": gen}) + "\n")
             part.replace(self.out / "generations.jsonl")
 
-        read = {i: ask(i) if re.fullmatch(r"[A-Za-z0-9_-]+", i) else (0, "", None) for i in ids}
+        read = {}
         write()
+        for i in ids:
+            read[i] = ask(i) if re.fullmatch(r"[A-Za-z0-9_-]+", i) else (0, "", None)
+            write()
         missing = [i for i in ids if read[i][0] != 200 and re.fullmatch(r"[A-Za-z0-9_-]+", i)]
         start = time.monotonic()
         for k in range(1, GEN_DEADLINE_S // GEN_WAIT_S + 1):
-            if not missing:
+            if not missing or time.monotonic() - start >= GEN_DEADLINE_S + GEN_WAIT_S:
                 break
             time.sleep(max(0.0, start + k * GEN_WAIT_S - time.monotonic()))
             for i in missing:
+                if time.monotonic() - start >= GEN_DEADLINE_S + GEN_WAIT_S:
+                    break
                 read[i] = ask(i)
             write()
             missing = [i for i in missing if read[i][0] != 200]
