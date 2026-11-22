@@ -47,7 +47,7 @@ A fifth arm, **none**, has no gstack. The measure is steps followed: whether the
 ## Setup
 
 - Rig: B1d's, unchanged: Claude Code 2.1.312, claude-agent-sdk 0.2.174, Claude Code's own system prompt, bundled skills off, a 100-turn limit, Harbor tasks and verifier, six sessions at a time. A check that every path deciding what a session gets matches B1's run passed before each launch.
-- Tasks: 81 bug-fix tasks on all five arms (primary), 81 more on the hook and the two rewrites (extension), so the decision comparisons read on 162; and 27 feature requests on the four gstack arms (non-fit). All from SWE-rebench as pinned in quick/laneb/tasks/swerebench-r3a4.json.
+- Tasks: 81 bug-fix tasks on all five arms (primary), 81 more on the hook and the two rewrites (extension), so the decision comparisons read on 160 counted tasks of those 162 (two extension tasks are gaps, under Sessions); and 27 feature requests on the four gstack arms (non-fit). All from SWE-rebench as pinned in quick/laneb/tasks/swerebench-r3a4.json.
 - Model: Claude Opus 5.5 only.
 - Sessions: 756 planned, 763 rows with the reruns. 750 count. Two extension tasks, opsmill__infrahub-8407 and -8423, got no model response on any of the three arms, twice (RuntimeError before the first reply), so they are 6 gaps. One sphinx-autodoc-typehints session hit a verifier timeout and was graded on its rerun. No cap stops and no provider safety stops.
 - A 14-session pilot ran first under R111 and never enters a reading: every arm passed, and the 10 supply tasks all counted.
@@ -125,7 +125,7 @@ The long rewrite is a clear loss against the hook (-44.6 to -29.3), and a null o
 
 Verdict, by the plan's row: **KEEP** for the hook as gstack's route. Nothing is cut, because neither rewrite was a shipped part.
 
-In plain words: Opus 5.5 reads the skill list but doesn't act on a description unless it is told to. Telling it to works, but it can't tell a feature request from a bug fix when the order says "any task that asks you to change behavior".
+In plain words: Opus 5.5 reads the skill list but doesn't act on a description unless it is told to. Telling it to works, but it can't tell a feature request from a bug fix when the order says "When a task, issue or bug report asks you to fix or change behavior, invoke this skill first".
 
 ## Limits and threats
 
