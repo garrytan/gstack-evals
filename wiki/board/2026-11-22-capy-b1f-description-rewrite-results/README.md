@@ -89,7 +89,7 @@ Required minus hook in loads on these 27, paired and descriptive: +70.4 points [
 
 ### What the hook did
 
-On the 160 counted bug-fix sessions the hook named prove-it on 142, and Opus loaded it on 134 of those; it loaded it once on the other 18, where the hook named nothing (17) or /review (1). Every named line reached the request (157 of 157 across all hook sessions). On the feature requests the hook named prove-it on 13 and Opus loaded it on 5.
+On the 160 counted bug-fix sessions the hook named prove-it on the opening request in 143, and Opus loaded it on 135 of those; on the other 17 the hook named nothing and Opus never loaded it. Six sessions show a second routed line, each fired by a background-task notification that Claude Code passes through the prompt hook: five named prove-it again, and on jlowin__fastmcp-3237_interface the hook matched /review's trigger phrase in that notification. Opus didn't load /review there. The session table keeps each session's last routed line, so its named field reads prove-it on 142. Every named line reached the request (157 of 157 across all hook sessions). On the feature requests the hook named prove-it on 13 and Opus loaded it on 5.
 
 ### The decision, by the plan's rules
 
@@ -100,8 +100,17 @@ On the 160 counted bug-fix sessions the hook named prove-it on 142, and Opus loa
 ## Checks on the run's records
 
 1. Completeness. Every part's result file lists no cap stop, no loss and nothing unclassified. The attempt 2 check ran after every part: two parts owed reruns (the sphinx-autodoc-typehints verifier timeout, and the 6 infrahub sessions) and both reruns ran as their own parts.
-2. The part under test ran. Every counted hook session has its hook log. Its named skills match route-table.tsv on every counted hook session but one: on jlowin__fastmcp-3237_interface the hook named /review where the table says prove-it. Every counted own, long and required session shows no routed event and no route line in the request. Each counted session's arm tar matches its pinned sha256.
-3. Hand reading. Six sessions were read by hand from their tool calls. In the pilot: a hook session that loaded prove-it but added its test after the fix (not followed), a hook session that wrote a failing test, fixed and saw it pass (followed), and a required session whose only run after the fix had failures (not followed). In the main run: required on the feature request adrn__gala-495, which called prove-it first and then edited the source before any test (loaded, not followed); long on a2aproject__a2a-python-576, which never touched the skill (not loaded); and required on a2aproject__a2a-python-682_interface, which wrote a failing test, fixed and ran the suite (followed). All six agree with the scorer and the load detector.
+2. The part under test ran. Every counted hook session has its hook log, and on every one the skill named on the opening request matches route-table.tsv. The one session whose last routed line differs from the table, jlowin__fastmcp-3237_interface, named prove-it on the opening request and /review on a later background-task notification. Every counted own, long and required session shows no routed event and no route line in the request. Each counted session's arm tar matches its pinned sha256.
+3. Hand reading. Ten sessions were read by hand from their tool calls, and the hook sessions were also checked against their hook logs. In the pilot: a hook session that loaded prove-it but added its test after the fix (not followed), a hook session that wrote a failing test, fixed and saw it pass (followed), and a required session whose only run after the fix had failures (not followed). In the main run, seven counted sessions, with a load and a non-load on the hook and on required:
+   - hook on a2aproject__a2a-python-576: the hook log routed prove-it once. Opus loaded it at call 1, then fixed the source against a repro before adding tests (loaded, not followed).
+   - hook on jlowin__fastmcp-3237_interface: the hook log routed prove-it on the opening request and /review on a later background-task notification. Opus loaded prove-it at call 1 and wrote a test that failed, then fixed the source, but every test run after the fix had failures (loaded, not followed).
+   - hook on a2aproject__a2a-python-682_interface: the hook log routed prove-it, but Opus never called the skill. It edited the source at call 4 and wrote its test at call 6 (not loaded, not followed).
+   - required on a2aproject__a2a-python-682_interface: wrote a failing test, fixed and ran the suite (followed).
+   - required on genericmappingtools__pygmt-4463: no skill call and no SKILL.md read; it wrote the module at call 8 and its tests at call 11 (not loaded, not followed).
+   - required on the feature request adrn__gala-495: called prove-it first, then edited the source before any test (loaded, not followed).
+   - long on a2aproject__a2a-python-576: never touched the skill (not loaded).
+
+   All ten agree with the scorer and the load detector, and the three hook logs agree with the session table's routed-event counts.
 4. The read audit found one hit, on a required session (vndee__llm-sandbox-101): the matched path is the root folder, not a gstack file or a drive. It is descriptive.
 5. Reproduction. Both reports and both reason files rebuild byte for byte from the attached session rows.
 
@@ -110,7 +119,7 @@ On the 160 counted bug-fix sessions the hook named prove-it on 142, and Opus loa
 The long rewrite is a null against both the hook and its own baseline.
 
 - Exposure. The description reached the model: each long session's skill listing carried prove-it with the rewritten text (checked in the pilot transcripts and by `b1f arms check`). Opus loaded the skill in 2 of 160.
-- Task fit. These are bug fixes, the tasks prove-it is for; the hook named it on 142 of 160.
+- Task fit. These are bug fixes, the tasks prove-it is for; the hook named it on the opening request of 143 of 160.
 - Power and headroom. 160 paired tasks; the interval sits 29 to 45 points below the hook. No ceiling: the hook followed 38%, none 0%.
 - Does the model do it unaided? No: none followed the steps in 0 of 81.
 
