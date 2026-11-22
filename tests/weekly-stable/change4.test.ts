@@ -5,7 +5,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSha, noneArchiveProblem } from "../../lanes/weekly-stable/arms.ts";
@@ -13,6 +13,7 @@ import { main, paidGate, partProblems, recordLook, type WeekFile } from "../../l
 import { partItems, taskLists } from "../../lanes/weekly-stable/plan.ts";
 import { MODEL } from "../../lanes/weekly-stable/pins.ts";
 import { beyond, look, owed, reading, uniqueTrials, type WeeklyRow } from "../../lanes/weekly-stable/read.ts";
+import { Ledger } from "../../quick/laneb/runner/ledger.ts";
 import { stageArms } from "../../quick/laneb/runner/prepare-run.ts";
 
 const roots: string[] = [];
@@ -133,6 +134,49 @@ describe("section 8: paid commands wait for their checks, and a STOP ends them",
   });
   test("after a STOP, prepare, host-up, launch, relaunch and rerun are refused on every part", () => {
     for (const cmd of ["prepare", "host-up", "launch", "relaunch", "rerun"]) for (const p of ["p1", "p2", "p3"]) expect(paidGate(stopped, cmd, p, "s390-" + p.slice(1)).join("; ")).toMatch(/look stopped for HOLD.*only attach, recover and host-down/);
+  });
+  test("after a STOP, attach salvages a lost controller without preparing or launching new cells", () => {
+    const w = workDir(week(), []), item = partItems("ws-2026-11-28")[2]!, work = join(w.dir, "p3");
+    const part = { name: "s390-3", prefix: item + "/s390-3/" }, runner = join(w.dir, "ubi");
+    const salvaged = join(w.dir, "salvaged"), calls = join(w.dir, "calls"), ledger = join(w.dir, item + ".jsonl");
+    const books = new Ledger(ledger, item), reserveId = item + "/host-1";
+    books.approve(20, { quotes: ["test approval"] });
+    expect(books.reserve(reserveId, 1_000_000).ok).toBe(true);
+    mkdirSync(join(work, "host"), { recursive: true });
+    writeFileSync(join(work, "plan.json"), JSON.stringify({ item, parts: [part] }));
+    writeFileSync(join(work, "host/pointer"), JSON.stringify({ ledger }));
+    writeFileSync(join(work, "host/hosts.jsonl"), jsonl([{ event: "up", n: 1, name: "host-1", up_at: Date.now() / 1000, ttl_hours: 1, reserve_id: reserveId }]));
+    writeFileSync(join(work, part.name + ".launch.json"), JSON.stringify({ at: stopped.start, prefix: part.prefix }));
+    writeFileSync(runner, [
+      "#!/usr/bin/env bash",
+      'printf "%s\\n" "$*" >> "$CALLS"',
+      'case "$1:$3" in',
+      '  ssh:*host-status*) if test -e "$SALVAGED"; then',
+      '    echo \'{"parts":{"s390-3":{"alive":false,"launch_exit":null,"salvage":{"pulled":false}}}}\'',
+      '  else echo \'{"parts":{"s390-3":{"alive":false,"launch_exit":null}}}\'; fi ;;',
+      '  ssh:*host-salvage*) touch "$SALVAGED" ;;',
+      '  pull:*/ledger) mkdir -p "$4/ledger"; cp "$LEDGER" "$4/ledger/" ;;',
+      '  pull:*/recovery) ;;',
+      '  down:*) ;;',
+      '  *) exit 2 ;;',
+      'esac',
+    ].join("\n") + "\n", { mode: 0o700 });
+    const cli = (cmd: string, ...args: string[]) => spawnSync(process.execPath, [join(import.meta.dir, "../../lanes/weekly-stable/cli.ts"), cmd, work, ...args], {
+      encoding: "utf8", env: { PATH: process.env.PATH, UBI_OWNER: "test", UBI_RUNNER: runner, UBI_RUNNER_SHA256: sha(readFileSync(runner)), UBI_RECOVERY_DIR: w.dir, CALLS: calls, SALVAGED: salvaged, LEDGER: ledger },
+    });
+    const before = cli("attach");
+    expect([before.status, before.stderr, before.stdout]).toEqual([0, "", expect.stringContaining("NEXT: relaunch --part s390-3")]);
+    expect(existsSync(salvaged)).toBe(false);
+    writeFileSync(join(w.dir, "week.json"), JSON.stringify(stopped));
+    expect(cli("relaunch", "--part", part.name).stderr).toMatch(/refused: the look stopped for HOLD/);
+    const after = cli("attach");
+    expect([after.status, after.stderr, after.stdout]).toEqual([0, "", expect.stringContaining("NEXT: host-down")]);
+    expect(JSON.parse(readFileSync(join(work, part.name + ".result.json"), "utf8"))).toMatchObject({ salvage: { pulled: false }, loss: [expect.stringContaining("controller was lost")] });
+    const down = cli("host-down");
+    expect([down.status, down.stderr]).toEqual([0, ""]);
+    expect(books.status().openIds).toEqual([]);
+    expect(existsSync(join(work, part.name + "-relaunch"))).toBe(false);
+    expect(readFileSync(calls, "utf8")).not.toMatch(/^(?:up|sync) |host\.sh .*launch/m);
   });
   test("the command line refuses host-up on part 2 before the smoke, and prepare after a STOP, before L1 runs", async () => {
     const w = workDir(week({ smoke: null }), []), [, item2] = partItems("ws-2026-11-28");

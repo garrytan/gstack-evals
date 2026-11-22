@@ -291,7 +291,7 @@ async function run(argv: string[]): Promise<number> {
     if (week && PAID.includes(cmd)) { const gate = paidGate(week, cmd, basename(work), ["launch", "relaunch", "rerun"].includes(cmd) ? (opt("part") ?? usage(USAGE)) : undefined); if (gate.length) return usage("refused: " + gate.join("; ")); }
     if (GUARDED.includes(cmd)) { if (cmd === "relaunch" && !opt("part")) return usage(USAGE); guardWork(work, cmd === "relaunch" ? opt("part") : undefined); }
     (L1.vm as { ttlHours: number }).ttlHours = WEEKLY.vmTtlHours;
-    l1Main(argv, profileFor(item, week));
+    l1Main(argv, { ...profileFor(item, week), salvageOnAttach: !!week?.look?.stop });
     return 0;
   }
   if (cmd === "table") {

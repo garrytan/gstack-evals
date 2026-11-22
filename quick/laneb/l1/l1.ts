@@ -216,6 +216,7 @@ export type Profile = {
   /** A lane's own prepare step, run in place of runner/prepare-run.ts with the same arguments and env (the Codex hooks eval's
    * part R wraps it to swap in its Codex agent and proxy route). L1_PREPARE_RUN still wins. L1 declares none. */
   prepareRun?: string;
+  salvageOnAttach?: boolean;
   /** The proxy config whose route for the item's model names the key host-up ships, in place of config/proxy.json (part R's
    * OpenAI Responses route). L1 declares none. */
   proxyConfig?: string;
@@ -954,9 +955,9 @@ function finishPart(work: string, host: any, st: any, name: string, plan: Plan) 
 function attach(work: string) {
   const plan = readPlan(work);
   const host = currentHost(work);
-  if (!host) { console.log("NEXT: " + nextWithoutHost(work, plan)); return; }
+  if (!host) { console.log("NEXT: " + (P.salvageOnAttach ? "none: no host is up" : nextWithoutHost(work, plan))); return; }
   if (cleanupPending(work, host)) { console.log("NEXT: host-down (cleanup of a failed host-up is pending)"); return; }
-  const st = status(host);
+  let st = status(host);
   const unreachable = join(work, "host/unreachable.jsonl");
   if (!st) {
     if (ubi(["ssh", host.name, "true"]).code === 0) refuse("host " + host.name + " answers ssh but host-status failed on it, so it is not lost and no miss is counted; check ~/" + H + " on it");
@@ -980,8 +981,11 @@ function attach(work: string) {
       if (want.vm !== l.vm || want.controller_started_at !== l.controller_started_at) writeJson(lp, want);
     }
     if (h.alive) { lines.push(s.part.name + ": running (controller pid " + h.pid + ", VM " + (h.vm ?? "not up yet") + ")"); continue; }
-    if (s.result) continue;
-    if (h.launch_exit === null && !h.salvage) { lines.push(s.part.name + ": CONTROLLER_LOST (no exit recorded). NEXT: relaunch --part " + s.part.name + " (it salvages first)"); continue; }
+    if (P.salvageOnAttach && !h.salvage && (h.launch_exit === null || h.launch_exit === 7)) {
+      st = salvageOnHost(host, s.part.name, s.part.prefix, h, "attach");
+      mirror(work, host);
+    } else if (s.result) continue;
+    else if (h.launch_exit === null && !h.salvage) { lines.push(s.part.name + ": CONTROLLER_LOST (no exit recorded). NEXT: relaunch --part " + s.part.name + " (it salvages first)"); continue; }
     const r = finishPart(work, host, st, s.part.name, plan);
     lines.push(s.part.name + ": finished, launch exit " + r.launch_exit + (r.cap_stop.length ? "; CAP STOP: " + r.cap_stop.join("; ") : "") + (r.loss.length ? "; LOSS: " + r.loss.join("; ") : "") + (r.unclassified.length ? "; UNCLASSIFIED: " + r.unclassified.join("; ") : ""));
   }
@@ -989,7 +993,7 @@ function attach(work: string) {
   const t = totals(readRows(mirrorPath(work)));
   lines.push(plan.item + " ledger (mirror): settled $" + fromMicros(t.settledMicros).toFixed(2) + ", open reserves $" + fromMicros(t.openReservedMicros).toFixed(2) + " in " + t.openIds.length + ", cap $" + fromMicros(t.capMicros));
   lines.push("host " + host.name + ": " + ((host.up_at + host.ttl_hours * 3600 - nowSec()) / 3600).toFixed(1) + " h of TTL left");
-  lines.push("NEXT: " + next(work, plan));
+  lines.push("NEXT: " + (P.salvageOnAttach ? (Object.values(st.parts).some((s: any) => s.alive) ? "attach again (a controller is running)" : "host-down") : next(work, plan)));
   console.log(lines.join("\n"));
 }
 
