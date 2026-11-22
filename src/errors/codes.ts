@@ -4195,6 +4195,33 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_WEEKLY_PIN: {
+    exit: 2,
+    meaning: "A weekly stable number pin does not hold (lanes/weekly-stable): tasks.txt or s390-tasks.txt is not at its pinned digest, the first 80 of the 130 are not the preregistration's run order, a task id is not owner__repo-N, or a built arm's fetch record names another commit.",
+    fix: "Fix the named input or rebuild the arm into an empty folder. Never edit a frozen file, a manifest or a fixture to make it match.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_WEEKLY_LAUNCH: {
+    exit: 2,
+    meaning: "A weekly launch was refused before it started (lanes/weekly-stable/plan.ts guard): the item's projection (spend so far, parts still to run at the planning rates, the open-session reserve and the VM and host reserves) would pass its cap, the week's projection plus the weekly thread's own meter would pass the $645 week stop, or the item is marked done.",
+    fix: "Take the guard's lines to the gstack-evals Captain before launching. A cap raise needs a dated change and a new approval row; nothing launches until the guard passes.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_WEEKLY_BUILD: {
+    exit: 2,
+    meaning: "A weekly arm build or its contamination search failed for a reason other than gstack's own ./setup (lanes/weekly-stable/build.sh or arms.ts): docker, the depth-1 fetch, a tree check or grep failed. A failed ./setup is not this code: the week is INCOMPLETE for that arm.",
+    fix: "Read the arm's build.log in the arms folder, fix the machine or the network, and build again into an empty folder.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;
