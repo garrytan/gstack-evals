@@ -1,0 +1,82 @@
+== B2 reading at the end on 183 tasks a model; models read: claude-opus-5-5, gpt-6.2-sol, particle-1
+== claude-opus-5-5
+  none: graded 183/183 (gaps 0, cap stops 0); pass 115 62.8% [55.6%, 69.5%]; regression 104 56.8% [49.6%, 63.8%]; followed 0 0.0% [0.0%, 2.1%]
+  line: graded 183/183 (gaps 0, cap stops 0); pass 116 63.4% [56.2%, 70.0%]; regression 116 63.4% [56.2%, 70.0%]; followed 133 72.7% [65.8%, 78.6%]
+  gstack: graded 183/183 (gaps 0, cap stops 0); pass 119 65.0% [57.9%, 71.6%]; regression 110 60.1% [52.9%, 66.9%]; followed 0 0.0% [0.0%, 2.1%]
+  prove-it: graded 183/183 (gaps 0, cap stops 0); pass 113 61.7% [54.5%, 68.5%]; regression 113 61.7% [54.5%, 68.5%]; followed 134 73.2% [66.4%, 79.1%]
+  prove-it - gstack pass: -3.3 points [-8.1, +1.6] on 183 paired tasks (7 vs 13 discordant)
+  prove-it - gstack regression: +1.6 points [-3.8, +7.0] on 183 paired tasks (14 vs 11 discordant)
+  prove-it - gstack followed: +73.2 points [+66.1, +79.1] on 183 paired tasks (134 vs 0 discordant)
+  prove-it - none pass: -1.1 points [-4.6, +2.5] on 183 paired tasks (4 vs 6 discordant)
+  prove-it - none regression: +4.9 points [-0.0, +9.8] on 183 paired tasks (15 vs 6 discordant)
+  prove-it - none followed: +73.2 points [+66.1, +79.1] on 183 paired tasks (134 vs 0 discordant)
+  prove-it - line pass: -1.6 points [-5.3, +2.1] on 183 paired tasks (4 vs 7 discordant)
+  prove-it - line regression: -1.6 points [-5.3, +2.1] on 183 paired tasks (4 vs 7 discordant)
+  prove-it - line followed: +0.5 points [-7.0, +8.1] on 183 paired tasks (25 vs 24 discordant)
+  gstack - none pass: +2.2 points [-1.9, +6.3] on 183 paired tasks (9 vs 5 discordant)
+  gstack - none regression: +3.3 points [-1.6, +8.1] on 183 paired tasks (13 vs 7 discordant)
+  gstack - none followed: +0.0 points [-2.1, +2.1] on 183 paired tasks (0 vs 0 discordant)
+  line - none pass: +0.5 points [-2.5, +3.6] on 183 paired tasks (4 vs 3 discordant)
+  line - none regression: +6.6 points [+2.0, +11.1] on 183 paired tasks (15 vs 3 discordant)
+  line - none followed: +72.7 points [+65.5, +78.6] on 183 paired tasks (133 vs 0 discordant)
+  none: steps seen 0, line seen 0, prove-it loaded 0, a gstack skill loaded 0, hook named something 0 (no hook log 183), start step seen 0, questions 0; mean cost $0.32, mean tokens 517362, mean wall 255 s; allowance stops 0, turn-limit stops 0, time stops 2, safety stops 0; writes no parser can name in 13 sessions, unreadable Codex items in 0 (followed 0 to 13 of 183 scored both ways); touches a test file 165, regression test only at the root 0; followed under B1's rule 0, as merged 0; read audit: 0 sessions read a gstack path, a skill or a drive
+  line: steps seen 0, line seen 183, prove-it loaded 0, a gstack skill loaded 0, hook named something 0 (no hook log 183), start step seen 0, questions 0; mean cost $0.31, mean tokens 491347, mean wall 260 s; allowance stops 0, turn-limit stops 0, time stops 1, safety stops 0; writes no parser can name in 15 sessions, unreadable Codex items in 0 (followed 128 to 143 of 183 scored both ways); touches a test file 183, regression test only at the root 0; followed under B1's rule 132, as merged 128; read audit: 0 sessions read a gstack path, a skill or a drive
+  gstack: steps seen 0, line seen 0, prove-it loaded 0, a gstack skill loaded 4, hook named something 22 (no hook log 0), start step seen 4, questions 0; mean cost $0.34, mean tokens 581885, mean wall 237 s; allowance stops 0, turn-limit stops 0, time stops 0, safety stops 0; writes no parser can name in 15 sessions, unreadable Codex items in 0 (followed 0 to 15 of 183 scored both ways); touches a test file 169, regression test only at the root 0; followed under B1's rule 0, as merged 0
+  prove-it: steps seen 183, line seen 0, prove-it loaded 0, a gstack skill loaded 0, hook named something 9 (no hook log 0), start step seen 183, questions 0; mean cost $0.52, mean tokens 820002, mean wall 474 s; allowance stops 0, turn-limit stops 0, time stops 2, safety stops 0; writes no parser can name in 19 sessions, unreadable Codex items in 0 (followed 121 to 140 of 183 scored both ways); touches a test file 182, regression test only at the root 0; followed under B1's rule 127, as merged 119
+== gpt-6.2-sol
+  none: graded 183/183 (gaps 0, cap stops 0); pass 96 52.5% [45.2%, 59.6%]; regression 90 49.2% [42.0%, 56.4%]; followed 5 2.7% [1.2%, 6.2%]
+  line: graded 183/183 (gaps 0, cap stops 0); pass 92 50.3% [43.1%, 57.4%]; regression 92 50.3% [43.1%, 57.4%]; followed 157 85.8% [80.0%, 90.1%]
+  gstack: graded 183/183 (gaps 0, cap stops 0); pass 97 53.0% [45.8%, 60.1%]; regression 94 51.4% [44.2%, 58.5%]; followed 17 9.3% [5.9%, 14.4%]
+  prove-it: graded 183/183 (gaps 0, cap stops 0); pass 92 50.3% [43.1%, 57.4%]; regression 92 50.3% [43.1%, 57.4%]; followed 146 79.8% [73.4%, 85.0%]
+  prove-it - gstack pass: -2.7 points [-6.4, +0.9] on 183 paired tasks (3 vs 8 discordant)
+  prove-it - gstack regression: -1.1 points [-5.2, +3.0] on 183 paired tasks (6 vs 8 discordant)
+  prove-it - gstack followed: +70.5 points [+62.3, +76.7] on 183 paired tasks (132 vs 3 discordant)
+  prove-it - none pass: -2.2 points [-5.7, +1.3] on 183 paired tasks (3 vs 7 discordant)
+  prove-it - none regression: +1.1 points [-3.0, +5.2] on 183 paired tasks (8 vs 6 discordant)
+  prove-it - none followed: +77.0 points [+69.9, +82.4] on 183 paired tasks (141 vs 0 discordant)
+  prove-it - line pass: +0.0 points [-3.2, +3.2] on 183 paired tasks (4 vs 4 discordant)
+  prove-it - line regression: +0.0 points [-3.2, +3.2] on 183 paired tasks (4 vs 4 discordant)
+  prove-it - line followed: -6.0 points [-12.5, +0.4] on 183 paired tasks (12 vs 23 discordant)
+  gstack - none pass: +0.5 points [-2.8, +3.9] on 183 paired tasks (5 vs 4 discordant)
+  gstack - none regression: +2.2 points [-1.9, +6.3] on 183 paired tasks (9 vs 5 discordant)
+  gstack - none followed: +6.6 points [+2.3, +11.5] on 183 paired tasks (14 vs 2 discordant)
+  line - none pass: -2.2 points [-6.0, +1.6] on 183 paired tasks (4 vs 8 discordant)
+  line - none regression: +1.1 points [-3.3, +5.5] on 183 paired tasks (9 vs 7 discordant)
+  line - none followed: +83.1 points [+76.3, +87.6] on 183 paired tasks (152 vs 0 discordant)
+  none: steps seen 0, line seen 0, prove-it loaded 0, a gstack skill loaded 0, hook named something 0 (no hook log 183), start step seen 0, questions 0; mean cost $0.10, mean tokens 279035, mean wall 53 s; allowance stops 0, turn-limit stops 0, time stops 0, safety stops 0; writes no parser can name in 24 sessions, unreadable Codex items in 9 (followed 5 to 38 of 183 scored both ways); touches a test file 169, regression test only at the root 0; followed under B1's rule 5, as merged 5; read audit: 0 sessions read a gstack path, a skill or a drive
+  line: steps seen 0, line seen 183, prove-it loaded 0, a gstack skill loaded 0, hook named something 0 (no hook log 183), start step seen 0, questions 0; mean cost $0.11, mean tokens 296005, mean wall 59 s; allowance stops 0, turn-limit stops 0, time stops 0, safety stops 0; writes no parser can name in 20 sessions, unreadable Codex items in 17 (followed 133 to 167 of 183 scored both ways); touches a test file 182, regression test only at the root 0; followed under B1's rule 153, as merged 151; read audit: 0 sessions read a gstack path, a skill or a drive
+  gstack: steps seen 0, line seen 0, prove-it loaded 0, a gstack skill loaded 78, hook named something 22 (no hook log 0), start step seen 65, questions 0; mean cost $0.14, mean tokens 432315, mean wall 73 s; allowance stops 0, turn-limit stops 0, time stops 0, safety stops 0; writes no parser can name in 21 sessions, unreadable Codex items in 18 (followed 14 to 51 of 183 scored both ways); touches a test file 169, regression test only at the root 0; followed under B1's rule 18, as merged 18
+  prove-it: steps seen 183, line seen 0, prove-it loaded 183, a gstack skill loaded 0, hook named something 0 (no hook log 0), start step seen 183, questions 0; mean cost $0.27, mean tokens 1262815, mean wall 282 s; allowance stops 0, turn-limit stops 0, time stops 0, safety stops 0; writes no parser can name in 29 sessions, unreadable Codex items in 85 (followed 65 to 167 of 183 scored both ways); touches a test file 180, regression test only at the root 0; followed under B1's rule 134, as merged 132
+== particle-1
+  none: graded 183/183 (gaps 0, cap stops 0); pass 112 61.2% [54.0%, 68.0%]; regression 99 54.1% [46.9%, 61.2%]; followed 3 1.6% [0.6%, 4.7%]
+  line: graded 183/183 (gaps 0, cap stops 0); pass 113 61.7% [54.5%, 68.5%]; regression 113 61.7% [54.5%, 68.5%]; followed 147 80.3% [74.0%, 85.4%]
+  gstack: graded 183/183 (gaps 0, cap stops 0); pass 110 60.1% [52.9%, 66.9%]; regression 105 57.4% [50.1%, 64.3%]; followed 1 0.5% [0.1%, 3.0%]
+  prove-it: graded 183/183 (gaps 0, cap stops 0); pass 113 61.7% [54.5%, 68.5%]; regression 113 61.7% [54.5%, 68.5%]; followed 160 87.4% [81.8%, 91.5%]
+  prove-it - gstack pass: +1.6 points [-2.9, +6.1] on 183 paired tasks (10 vs 7 discordant)
+  prove-it - gstack regression: +4.4 points [-0.5, +9.2] on 183 paired tasks (14 vs 6 discordant)
+  prove-it - gstack followed: +86.9 points [+80.8, +91.0] on 183 paired tasks (159 vs 0 discordant)
+  prove-it - none pass: +0.5 points [-4.0, +5.1] on 183 paired tasks (9 vs 8 discordant)
+  prove-it - none regression: +7.7 points [+2.4, +12.8] on 183 paired tasks (19 vs 5 discordant)
+  prove-it - none followed: +85.8 points [+79.4, +90.0] on 183 paired tasks (157 vs 0 discordant)
+  prove-it - line pass: +0.0 points [-3.5, +3.5] on 183 paired tasks (5 vs 5 discordant)
+  prove-it - line regression: +0.0 points [-3.5, +3.5] on 183 paired tasks (5 vs 5 discordant)
+  prove-it - line followed: +7.1 points [+0.7, +13.6] on 183 paired tasks (24 vs 11 discordant)
+  gstack - none pass: -1.1 points [-6.0, +3.8] on 183 paired tasks (9 vs 11 discordant)
+  gstack - none regression: +3.3 points [-2.0, +8.5] on 183 paired tasks (15 vs 9 discordant)
+  gstack - none followed: -1.1 points [-4.1, +1.3] on 183 paired tasks (0 vs 2 discordant)
+  line - none pass: +0.5 points [-4.0, +5.1] on 183 paired tasks (9 vs 8 discordant)
+  line - none regression: +7.7 points [+2.2, +13.0] on 183 paired tasks (20 vs 6 discordant)
+  line - none followed: +78.7 points [+71.7, +83.9] on 183 paired tasks (144 vs 0 discordant)
+  none: steps seen 0, line seen 0, prove-it loaded 0, a gstack skill loaded 0, hook named something 0 (no hook log 183), start step seen 0, questions 0; mean cost $0.09, mean tokens 2113274, mean wall 268 s; allowance stops 0, turn-limit stops 7, time stops 0, safety stops 0; writes no parser can name in 6 sessions, unreadable Codex items in 0 (followed 3 to 9 of 183 scored both ways); touches a test file 158, regression test only at the root 0; followed under B1's rule 3, as merged 3; read audit: 1 sessions read a gstack path, a skill or a drive
+  line: steps seen 0, line seen 183, prove-it loaded 0, a gstack skill loaded 0, hook named something 0 (no hook log 183), start step seen 0, questions 0; mean cost $0.09, mean tokens 1978614, mean wall 257 s; allowance stops 0, turn-limit stops 7, time stops 0, safety stops 0; writes no parser can name in 10 sessions, unreadable Codex items in 0 (followed 141 to 151 of 183 scored both ways); touches a test file 180, regression test only at the root 0; followed under B1's rule 147, as merged 147; read audit: 0 sessions read a gstack path, a skill or a drive
+  gstack: steps seen 0, line seen 0, prove-it loaded 0, a gstack skill loaded 6, hook named something 23 (no hook log 0), start step seen 6, questions 0; mean cost $0.09, mean tokens 2074922, mean wall 246 s; allowance stops 0, turn-limit stops 6, time stops 0, safety stops 0; writes no parser can name in 7 sessions, unreadable Codex items in 0 (followed 1 to 8 of 183 scored both ways); touches a test file 166, regression test only at the root 0; followed under B1's rule 1, as merged 1
+  prove-it: steps seen 183, line seen 0, prove-it loaded 0, a gstack skill loaded 0, hook named something 5 (no hook log 0), start step seen 181, questions 0; mean cost $0.09, mean tokens 2178661, mean wall 425 s; allowance stops 0, turn-limit stops 10, time stops 1, safety stops 0; writes no parser can name in 10 sessions, unreadable Codex items in 0 (followed 151 to 161 of 183 scored both ways); touches a test file 182, regression test only at the root 0; followed under B1's rule 160, as merged 160
+  procedure gate PASS: followed pooled prove-it 80.1%, gstack 3.3%, gap +76.9 points (needs +20); Opus prove-it 73.2% (needs 50%); claude-opus-5-5 73.2% vs 0.0%, gpt-6.2-sol 79.8% vs 9.3%, particle-1 87.4% vs 0.5%
+  pooled primary (bound 2.068) prove-it - gstack pass: -1.5 points [-3.8, +0.9], z -1.222 on 549 pairs in 126 repositories
+  pooled co-primary (bound 2.576) prove-it - gstack regression: +1.6 points [-1.0, +4.3], z 1.219 on 549 pairs in 126 repositories
+  beside (descriptive) prove-it - none pass: -0.9 points [-3.1, +1.3], z -0.825 on 549 pairs in 126 repositories
+  beside (descriptive) gstack - none pass: +0.5 points [-1.7, +2.8], z 0.480 on 549 pairs in 126 repositories
+  beside (descriptive) line - none pass: -0.4 points [-2.6, +1.9], z -0.315 on 549 pairs in 126 repositories
+  decision: Neither shown (passes z -1.222, passes with a regression test z 1.219). A null: one Why null? cycle (below), then CUT-CANDIDATE for the routing rule and the bug line's clause, unless the cycle finds an exposure, task-fit or power cause (FIX-METHOD), or a ceiling (FIX-METHOD once, with one attempt to raise it).
+  why null? exposure: the gate above, steps seen per model in the descriptive lines; task fit: the corrections post's bug-report check, and passes split by whether none passed: claude-opus-5-5: where none passed -0.9 on 115, where none failed -7.4 on 68; gpt-6.2-sol: where none passed -3.1 on 96, where none failed -2.3 on 87; particle-1: where none passed +2.7 on 112, where none failed +0.0 on 71
+  why null? power: realized discordance on passes claude-opus-5-5 10.9%, gpt-6.2-sol 6.0%, particle-1 9.3%; floor and ceiling: none's pass rate claude-opus-5-5 62.8%, gpt-6.2-sol 52.5%, particle-1 61.2%; unaided: followed in none and gstack claude-opus-5-5 0.0% and 0.0%, gpt-6.2-sol 2.7% and 9.3%, particle-1 1.6% and 0.5%; gate gap +76.9

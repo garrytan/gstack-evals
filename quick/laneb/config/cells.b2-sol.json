@@ -1,0 +1,12 @@
+{
+  "note": "Cells for B2's Sol parts (lanes/test-first, prereg 2026-11-21-capy-b2-test-first-prereg sections 2 and 5): gpt-6.2-sol in Codex CLI 0.170.0 through Lane B's metering proxy on the OpenAI Responses API (lanes/test-first/proxy.json), reserved in the item's ledger before each session, with a $5 allowance per session. max_output_tokens is a Claude Code setting the Codex agent does not take; B2's prepare step drops it from the agent kwargs, and the proxy writes max_output_tokens at the model's output_cap_tokens on a Responses request that sends none.",
+  "models": [
+    {
+      "id": "gpt-6.2-sol",
+      "harbor_model": "openai/gpt-6.2-sol",
+      "session_cap_usd": 5
+    }
+  ],
+  "max_output_tokens": 32000,
+  "verifier_timeout_multiplier": 2
+}
