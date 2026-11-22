@@ -25,7 +25,7 @@ attachments:
 
 # Does following test-first steps fix more bugs? B2 results
 
-Call settled: cut gstack's routing-hook bug-report rule and the "focused failing test first" clause of its CLAUDE.md bug line (CUT-CANDIDATE)
+CUT-CANDIDATE, pending the owner's decision: cut gstack's routing-hook bug-report rule and the "focused failing test first" clause of its CLAUDE.md bug line
 
 ## What we found
 
@@ -145,7 +145,7 @@ The line costs nothing extra; the typed skill roughly doubles Opus's time and mu
 - Floor or ceiling? No. Without gstack the models passed 52.5% to 62.8%.
 - Does the frontier model already do it unaided? No. Without the steps, the models followed them in 0% to 9% of sessions, so the steps changed what the agents did. It just didn't change how many bugs they fixed.
 
-None of the four finds a cause, so the verdict is **CUT-CANDIDATE**: gstack drops the routing hook's bug-report rule and the "focused failing test first" clause of its CLAUDE.md bug line. In plain words for the owner: making the agent write a failing test first doesn't fix more bugs, and gstack's own bug line was followed in almost no session anyway, so both can go.
+None of the four finds a cause, though task fit was checked only by the split on whether the no-gstack arm passed, because the bug-report-only split could not be run. So the verdict is **CUT-CANDIDATE**: gstack drops the routing hook's bug-report rule and the "focused failing test first" clause of its CLAUDE.md bug line. In plain words for the owner: making the agent write a failing test first doesn't fix more bugs, and gstack's own bug line was followed in almost no session anyway, so both can go.
 
 ## Limits and threats
 
