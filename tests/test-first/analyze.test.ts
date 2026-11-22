@@ -2,9 +2,22 @@
 // B2's reading (lanes/test-first/analyze.ts): the pooled contrast's cluster-robust variance against a hand-computed table, the
 // procedure gate and INCOMPLETE both ways, every row of the decision table, the interim look, and the pilot report.
 import { describe, expect, test } from "bun:test";
-import { checkRows, clusterContrast, incompleteWhy, look, outcomeOf, paired, pilotReport, pooled, procedureGate, reading, REGRESSION_AFTER_STOP, report } from "../../lanes/test-first/analyze.ts";
-import { B2, BOUNDS, PILOT_TASKS } from "../../lanes/test-first/pins.ts";
+import { checkRows, clusterContrast, incompleteWhy, look, modelRows, outcomeOf, paired, pilotReport, pooled, procedureGate, reading, REGRESSION_AFTER_STOP, report } from "../../lanes/test-first/analyze.ts";
+import { B2, BOUNDS, MODEL_KEYS, PILOT_TASKS } from "../../lanes/test-first/pins.ts";
 import { row, table } from "./fixtures/rows.ts";
+
+describe("rows by model", () => {
+  test("a session with no model record that is not graded counts only under its planned model, never under the other model on its host", () => {
+    const rows = [...table(2, () => ({ pass: true }), ["opus", "p1"]), row("p1", "none", "t9", { outcome: "infra" }, "repo-9", { model: null, planned_model: "particle-1" })];
+    const stray = rows.at(-1)!;
+    expect(modelRows(rows, "p1")).toContain(stray);
+    expect(modelRows(rows, "opus")).not.toContain(stray);
+    expect(modelRows(rows, "opus").length).toBe(8);
+    expect(modelRows(rows, "p1").length).toBe(9);
+    const unplanned = row("opus", "none", "t8", { outcome: "cap_stop" }, "repo-8", { model: null });
+    expect(MODEL_KEYS.some((m) => modelRows([...rows, unplanned], m).includes(unplanned))).toBe(false);
+  });
+});
 
 describe("pooled contrast (section 9.2)", () => {
   test("the cluster-robust variance matches the hand table", () => {

@@ -4,12 +4,13 @@
 // record, and each check fails on a capture changed the way a broken arm would be. The Codex stub session's capture shows the
 // typed mention and prove-it's injected item; codexProblems is checked both ways on request bodies.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CLAUDE_CASES, claudeProblems, CODEX_CASE, codexProblems, startDigest, type StartCapture } from "../../lanes/test-first/sessions.ts";
 import { MANIFESTS } from "../../lanes/test-first/arms.ts";
 import { LINE, PROVE_IT, SKILL } from "../../lanes/test-first/pins.ts";
 import { START_MARK } from "../../lanes/test-first/table.ts";
+import { isReasonCode } from "../../src/errors/codes.ts";
 
 const FIX = join(import.meta.dir, "fixtures/start");
 const cap = (name: string): StartCapture => JSON.parse(readFileSync(join(FIX, name, "capture.json"), "utf8"));
@@ -69,5 +70,14 @@ describe("Codex start capture", () => {
     expect(codexProblems([body([typed, skill], "gpt-6.1-sol")])[0]).toContain("model gpt-6.1-sol");
     expect(codexProblems([body([typed, skill], "gpt-6.2-sol", "medium")])[0]).toContain("effort");
     expect(codexProblems([])[0]).toContain("no request");
+  });
+});
+
+describe("reason codes", () => {
+  test("every reason code the B2 lane prints is registered in src/errors/codes.ts", () => {
+    const dir = join(import.meta.dir, "../../lanes/test-first");
+    const used = new Set(readdirSync(dir).filter((f) => f.endsWith(".ts")).flatMap((f) => [...readFileSync(join(dir, f), "utf8").matchAll(/\bE_B2_[A-Z_]+\b/g)].map((m) => m[0])));
+    expect(used.has("E_B2_SESSIONS")).toBe(true);
+    expect([...used].filter((c) => !isReasonCode(c))).toEqual([]);
   });
 });

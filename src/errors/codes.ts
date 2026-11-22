@@ -4276,6 +4276,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_B2_SESSIONS: {
+    exit: 2,
+    meaning: "B2's keyless start captures could not run (lanes/test-first/sessions.ts): the stub model did not start, or the Codex binary given is not the pinned Codex 0.170.0 binary. A capture that ran but failed its checks prints its problem with this code, and the command exits 1.",
+    fix: "Point the capture at the pinned Codex binary (its sha256 is in lanes/test-first/pins.ts), check the stub model's log, and run the captures again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   E_B2_SCORER: {
     exit: 2,
     meaning: "B2's scorer seam is not built yet (lanes/test-first/scorer.ts): the Codex rollout reader comes with the B2 scorer branch.",

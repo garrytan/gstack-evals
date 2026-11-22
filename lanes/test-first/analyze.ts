@@ -46,8 +46,9 @@ export function checkRows(rows: B2Row[], scope: string[]): string[] {
   return bad;
 }
 
-/** The rows of one model: by the session's own model record, falling back to the arm's host for a session that left none. */
-export const modelRows = (rows: B2Row[], m: ModelKey) => rows.filter((r) => (r.model ?? "") === MODELS[m].id || (r.model === null && r.host === MODELS[m].host && r.outcome !== "graded" && rows.some((x) => x.trial !== r.trial && x.model === MODELS[m].id)));
+/** The rows of one model: by the session's own model record, falling back to the planned model for a session that is not
+ *  graded and left none. */
+export const modelRows = (rows: B2Row[], m: ModelKey) => rows.filter((r) => (r.model ?? "") === MODELS[m].id || (r.model === null && r.outcome !== "graded" && r.planned_model === MODELS[m].id));
 const armRows = (rows: B2Row[], a: Arm) => rows.filter((r) => r.arm === a);
 
 export type ArmCount = { arm: Arm; planned: number; graded: number; gaps: number; cap_stops: number; counts: Record<Outcome, number>; ci: Record<Outcome, [number, number] | null>; followed_low: number; followed_high: number };

@@ -16,7 +16,7 @@ const CODEX = join(import.meta.dir, "../scoring/fixtures/codex/sub");
 const PATCH = "diff --git a/calc.py b/calc.py\n--- a/calc.py\n+++ b/calc.py\n@@ -1,2 +1,2 @@\n def add(a, b):\n-    return a - b\n+    return a + b\ndiff --git a/tests/test_calc.py b/tests/test_calc.py\nnew file mode 100644\n--- /dev/null\n+++ b/tests/test_calc.py\n@@ -0,0 +1 @@\n+import calc\n";
 const TASK = "koxudaxi__datamodel-code-generator-3071";
 let n = 0;
-type Trial = { arm: string; agent?: string; upstream?: string; reward?: number | null; exc?: string; result?: boolean; responses?: number; patch?: string; sdk?: string | null; rollouts?: ((t: string) => string) | null };
+type Trial = { arm: string; agent?: string; upstream?: string; reward?: number | null; exc?: string; result?: boolean; responses?: number; patch?: string; sdk?: string | null; rollouts?: ((t: string) => string) | null; metered?: string[] | null };
 function trial(t: Trial): string {
   const dir = join(root, "t" + ++n), ev = join(dir, "evaluator");
   mkdirSync(join(dir, "artifacts/logs/artifacts"), { recursive: true }); mkdirSync(ev, { recursive: true });
@@ -33,7 +33,10 @@ function trial(t: Trial): string {
   } else if (t.sdk !== null) writeFileSync(join(ev, "sdk-messages.jsonl"), t.sdk ?? readFileSync(CLAUDE_SDK, "utf8"));
   return dir;
 }
-const row = (t: Trial) => b2Row(trial(t), { part: "b2-1", sessions: new Map(), home: "/root" })!;
+const row = (t: Trial) => {
+  const dir = trial(t);
+  return b2Row(dir, { part: "b2-1", sessions: new Map(), home: "/root", metered: t.metered === null ? undefined : new Map([[TASK + "__" + n, new Set(t.metered ?? ["low"])]]) })!;
+};
 
 describe("Claude Code rows", () => {
   test("a graded session: the model and CLI from its own record, the detector's readings, the regression rule and the repository", () => {
@@ -83,8 +86,24 @@ describe("Codex rows", () => {
     expect(m.has("other")).toBe(false);
     const dir = trial({ arm: "cx-none" }), name = JSON.parse(readFileSync(join(dir, "result.json"), "utf8")).trial_name;
     expect(b2Row(dir, { part: null, sessions: new Map(), home: "/root", metered: new Map([[name, new Set(["low"])]]) })!.metered_effort).toEqual(["low"]);
-    expect(row({ arm: "cx-none" }).metered_effort).toBeNull();
+    expect(row({ arm: "cx-none", metered: null }).metered_effort).toBeNull();
     expect(row({ arm: "none" }).metered_effort).toBeNull();
+  });
+  test("infrastructure (sections 2 and 8): a request metered at another effort, or no metered request at all, before the reward is read", () => {
+    expect([row({ arm: "cx-none" }).outcome, row({ arm: "cx-none" }).metered_effort]).toEqual(["graded", ["low"]]);
+    const medium = row({ arm: "cx-none", metered: ["medium"] });
+    expect([medium.outcome, medium.reason, medium.pass]).toEqual(["infra", "the proxy metered a request at effort medium, not low", false]);
+    expect(row({ arm: "cx-none", metered: ["low", "none"] }).reason).toBe("the proxy metered a request at effort low/none, not low");
+    expect(row({ arm: "cx-none", metered: [] }).reason).toBe("no metered request for the trial in the proxy's request log");
+    const unlogged = row({ arm: "cx-none", metered: null });
+    expect([unlogged.outcome, unlogged.reason]).toEqual(["infra", "no metered request for the trial in the proxy's request log"]);
+  });
+  test("a row that is not graded carries its planned model; a graded row leaves it out", () => {
+    expect("planned_model" in row({ arm: "none" })).toBe(false);
+    expect("planned_model" in row({ arm: "cx-none" })).toBe(false);
+    expect(row({ arm: "none", upstream: "particle-1", sdk: null, responses: 0 }).planned_model).toBe("particle-1");
+    expect(row({ arm: "none", reward: null }).planned_model).toBe("claude-opus-5-5");
+    expect(row({ arm: "cx-none", rollouts: null }).planned_model).toBe("gpt-6.2-sol");
   });
   test("a Codex arm under the Claude Code agent is refused, and another agent's trial is left out", () => {
     expect(() => row({ arm: "cx-none", agent: "laneb-claude-code" })).toThrow("E_B2_TABLE");

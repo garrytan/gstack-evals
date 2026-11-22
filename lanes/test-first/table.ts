@@ -3,8 +3,8 @@
 // the metering proxy's session rows. Claude Code trials (Lane B's Claude agent): the SDK log, Claude Code's transcript and
 // gstack's hook log. Codex trials (B2's Codex agent, laneb_b2_codex.py): laneb-summary.json, init.json, the copied rollouts
 // in codex-sessions/ and gstack's hook log. Section 8's outcome: a session is graded when it has a verifier reward and a model
-// response reached the agent (on Codex also: its rollout was copied out, and every thread ran gpt-6.2-sol at effort low in
-// Codex 0.170.0), whatever stopped it; LedgerCapStop is a cap stop; anything else is infrastructure. The model and CLI version
+// response reached the agent (on Codex also: its rollout was copied out, every thread ran gpt-6.2-sol at effort low in
+// Codex 0.170.0, and the proxy metered at least one request for the trial, every one at effort low), whatever stopped it; LedgerCapStop is a cap stop; anything else is infrastructure. The model and CLI version
 // come from the session's own record: Claude Code's init message (model, claude_code_version), and Codex's session_meta
 // cli_version and turn_context model. Passes with a regression test read testFilesInDiff on the graded diff; followed,
 // followed_b2 and followed_as_merged read the detector on the SDK log, or on codexTranscript of the rollouts (scorer.ts).
@@ -40,6 +40,9 @@ export type B2Row = {
   /** Codex: each distinct reasoning.effort the proxy's request log metered for the trial ("none" when a request sent none);
    *  null on Claude Code or with no request log. */
   metered_effort: string[] | null;
+  /** The model the trial's config planned (its upstream_model), on a row that is not graded, so a session that left no model
+   *  record still counts under its own model; graded rows read model and leave it out. */
+  planned_model?: string;
   outcome: "graded" | "cap_stop" | "infra";
   reason: string;
   pass: boolean;
@@ -187,7 +190,7 @@ export function claudeRow(dir: string, ctx: Ctx): B2Row {
   const hookLog = readText(join(b.ev, "gstack-hooks", "hooks", "skill-route.log"));
   return {
     schema: "b2-session/1", host: "claude", label: b.d.label, arm: b.d.arm, part: ctx.part, task: b.task, repo: b.repo, trial: b.trial,
-    model, cli_version: cli, sdk_version: null, effort: null, metered_effort: null, ...o, pass, reward: b.reward, ...regression(b.patch, pass),
+    model, cli_version: cli, sdk_version: null, effort: null, metered_effort: null, ...(o.outcome === "graded" ? {} : { planned_model: planned }), ...o, pass, reward: b.reward, ...regression(b.patch, pass),
     followed: det ? det.followed : null, followed_b2: det ? det.followed_b2 ?? null : null, followed_as_merged: det ? det.followed_as_merged : null, detect: det, unreadable_items: null,
     steps_seen: transcript === null ? null : ccSteps(transcript), line_seen: sdk.includes(LINE) || (transcript ?? "").includes(LINE), skills_listed: Array.isArray(init?.skills) ? init.skills.map(String) : [], prove_it_loads: loads.prove_it, gstack_loads: loads.others,
     routing_named: b.d.gstack ? namedOf(hookLog) : null, start_seen: claudeStartSeen(sdk),
@@ -206,10 +209,13 @@ export function codexRow(dir: string, ctx: Omit<Ctx, "home">): B2Row {
   const root = threads.find((t) => rootId !== null && t.id === rootId) ?? (rootId === null ? threads.find((t) => t.parent === null) ?? null : null);
   const responded = b.rows.length ? (b.rows.at(-1)!.ok_responses ?? 0) > 0 : (b.summary?.session?.ok_responses ?? 0) > 0;
   const efforts = [...new Set(threads.flatMap((t) => t.efforts))];
+  const metered = ctx.metered ? [...(ctx.metered.get(b.trial) ?? [])].sort() : null;
   const other = !root ? "no rollout copied out for the root thread"
     : root.cli_version !== CODEX.version ? "the root rollout's Codex is " + root.cli_version + ", not " + CODEX.version
     : root.models.some((m) => m !== MODELS.sol.id) ? "the root thread ran " + root.models.join("/") + ", not " + MODELS.sol.id
-    : efforts.some((e) => e !== SOL_EFFORT) ? "a thread ran at effort " + efforts.join("/") + ", not " + SOL_EFFORT : null;
+    : efforts.some((e) => e !== SOL_EFFORT) ? "a thread ran at effort " + efforts.join("/") + ", not " + SOL_EFFORT
+    : !metered?.length ? "no metered request for the trial in the proxy's request log"
+    : metered.some((e) => e !== SOL_EFFORT) ? "the proxy metered a request at effort " + metered.join("/") + ", not " + SOL_EFFORT : null;
   const time = b.exc === "AgentTimeoutError";
   const o = outcomeOf(b, responded, other, b.allowance ? "allowance stop" : time ? "time limit stop" : "");
   const pass = o.outcome === "graded" && b.reward !== null && b.reward >= 1;
@@ -220,7 +226,7 @@ export function codexRow(dir: string, ctx: Omit<Ctx, "home">): B2Row {
   const events = readText(join(b.ev, "codex-events.jsonl")) ?? "";
   return {
     schema: "b2-session/1", host: "codex", label: b.d.label, arm: b.d.arm, part: ctx.part, task: b.task, repo: b.repo, trial: b.trial,
-    model: root?.models[0] ?? null, cli_version: root?.cli_version ?? null, sdk_version: null, effort: efforts, metered_effort: ctx.metered ? [...(ctx.metered.get(b.trial) ?? [])].sort() : null, ...o, pass, reward: b.reward, ...regression(b.patch, pass),
+    model: root?.models[0] ?? null, cli_version: root?.cli_version ?? null, sdk_version: null, effort: efforts, metered_effort: metered, ...(o.outcome === "graded" ? {} : { planned_model: String(b.kwargs.upstream_model ?? "") }), ...o, pass, reward: b.reward, ...regression(b.patch, pass),
     followed: det ? det.followed : null, followed_b2: det ? det.followed_b2 ?? null : null, followed_as_merged: det ? det.followed_as_merged : null, detect: det, unreadable_items: unreadable,
     steps_seen: loads ? loads.steps_arrived || loads.loads["prove-it"].loaded : null, line_seen: texts.some((x) => x.includes(LINE)), skills_listed: codexListed(texts), prove_it_loads: loads?.loads["prove-it"].loaded ? 1 : 0, gstack_loads: codexGstackLoads(texts),
     routing_named: hook && hook.position !== "log missing" ? hook.named : null, start_seen: codexStartSeen(texts),

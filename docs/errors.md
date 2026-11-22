@@ -500,6 +500,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_B2_IMAGES](#e_b2_images) | 2 | U20 |
 | [E_B2_TABLE](#e_b2_table) | 2 | U20 |
 | [E_B2_LOOK](#e_b2_look) | 2 | U20 |
+| [E_B2_SESSIONS](#e_b2_sessions) | 2 | U20 |
 | [E_B2_SCORER](#e_b2_scorer) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -3935,6 +3936,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 B2's interim look was refused (lanes/test-first/cli.ts lookRows): parts 1 to 4 of all three items are not all settled, so some model, arm and task on the look's half has no row.
 
 Fix: Finish and pull the missing parts, rebuild the table, and run the look once. The look runs exactly once.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B2_SESSIONS
+
+B2's keyless start captures could not run (lanes/test-first/sessions.ts): the stub model did not start, or the Codex binary given is not the pinned Codex 0.170.0 binary. A capture that ran but failed its checks prints its problem with this code, and the command exits 1.
+
+Fix: Point the capture at the pinned Codex binary (its sha256 is in lanes/test-first/pins.ts), check the stub model's log, and run the captures again.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
