@@ -431,7 +431,6 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_B1_PIN](#e_b1_pin) | 2 | U20 |
 | [E_B1_INPUT](#e_b1_input) | 2 | U20 |
 | [E_B1_LAUNCH](#e_b1_launch) | 2 | U20 |
-| [E_B1_AS_MERGED_UNREAD](#e_b1_as_merged_unread) | 2 | U20 |
 | [E_OHR_READ_INPUT](#e_ohr_read_input) | 2 | U20 |
 | [E_OHR_READ_POWER](#e_ohr_read_power) | 2 | U20 |
 | [E_OHR_PACKET_INPUT](#e_ohr_packet_input) | 2 | U20 |
@@ -492,6 +491,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CODEX_R_MONEY](#e_codex_r_money) | 2 | U20 |
 | [E_CH_ALL_IN](#e_ch_all_in) | 2 | U20 |
 | [E_CODEX_R_LAUNCH](#e_codex_r_launch) | 2 | U20 |
+| [E_WEEKLY_PIN](#e_weekly_pin) | 2 | U20 |
+| [E_WEEKLY_LAUNCH](#e_weekly_launch) | 2 | U20 |
+| [E_WEEKLY_BUILD](#e_weekly_build) | 2 | U20 |
 | [E_B2_INPUT](#e_b2_input) | 2 | U20 |
 | [E_B2_ARMS](#e_b2_arms) | 2 | U20 |
 | [E_B2_PREPARE](#e_b2_prepare) | 2 | U20 |
@@ -3411,14 +3413,6 @@ Fix: Take the line to the Captain before launching. A cap raise needs the Captai
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
-### E_B1_AS_MERGED_UNREAD
-
-The delivery route report's as-merged table (lanes/delivery-route/analyze.ts asMerged) was given a session row whose detection has no followed_as_merged field, such as a row written before deviation D1. The table refuses it rather than count the row as not followed. The message names the trial.
-
-Fix: Rescore the named session with lanes/delivery-route/detect.ts so its row carries followed_as_merged, then read the report again. Never fill the field by hand.
-
-Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
-
 ### E_OHR_READ_INPUT
 
 Office-hours rewrite eval (lanes/office-hours-rewrite/read): the readings refused their input. Two scored rows share a stage, brief, model and arm; one brief's rows disagree on its kind, cluster, set or traction flag; a G1 hand read names a session that is not a new-arm builder session or a detector hit has no hand read; an admission or decision input is missing a flag; or a statistic was asked for outside its range. The message names the row or flag.
@@ -3872,6 +3866,30 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 A part R launch was refused before it started (lanes/codex-hooks/r/money.ts launchGuard): the item's projection would pass its cap, every item's projection plus the crew file's counter would pass the all-in stop the Captain set, the item is marked done, or r-main was asked to start before r-pilot was marked done.
 
 Fix: Take the guard's lines to the Captain before launching. A cap raise needs the Captain's record and a new approval row; nothing launches until the guard passes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_WEEKLY_PIN
+
+A weekly stable number pin does not hold (lanes/weekly-stable): tasks.txt or s390-tasks.txt is not at its pinned digest, the first 80 of the 130 are not the preregistration's run order, a task id is not owner__repo-N, or a built arm's fetch record names another commit.
+
+Fix: Fix the named input or rebuild the arm into an empty folder. Never edit a frozen file, a manifest or a fixture to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_WEEKLY_LAUNCH
+
+A weekly launch was refused before it started (lanes/weekly-stable/plan.ts guard): the item's projection (spend so far, parts still to run at the planning rates, the open-session reserve and the VM and host reserves) would pass its cap, the week's projection plus the weekly thread's own meter would pass the $645 week stop, or the item is marked done.
+
+Fix: Take the guard's lines to the gstack-evals Captain before launching. A cap raise needs a dated change and a new approval row; nothing launches until the guard passes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_WEEKLY_BUILD
+
+A weekly arm build or its contamination search failed for a reason other than gstack's own ./setup (lanes/weekly-stable/build.sh or arms.ts): docker, the depth-1 fetch, a tree check or grep failed. A failed ./setup is not this code: the week is INCOMPLETE for that arm.
+
+Fix: Read the arm's build.log in the arms folder, fix the machine or the network, and build again into an empty folder.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 

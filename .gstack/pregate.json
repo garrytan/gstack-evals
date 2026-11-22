@@ -766,7 +766,26 @@
     ],
     "lanes/test-first/proxy.json": [
       "tests/test-first/prepare-run.test.ts"
-    ]
+    ],
+    "tests/weekly-stable/fixtures/gstack-fixture-ids.txt": [
+      "tests/weekly-stable/arms.test.ts"
+    ],
+    "tests/weekly-stable/fixtures/results-check-ok.*": [
+      "tests/weekly-stable/read.test.ts"
+    ],
+    "tests/weekly-stable/fixtures/gh-release-*": [
+      "tests/weekly-stable/resolve.test.ts"
+    ],
+    "tests/weekly-stable/fixtures/resolve-2026-11-22.json": [
+      "tests/weekly-stable/resolve.test.ts"
+    ],
+    "tests/weekly-stable/fixtures/weekly-record.json": [
+      "tests/weekly-stable/resolve.test.ts"
+    ],
+    "lanes/weekly-stable/resolve-shim.ts": [
+      "tests/weekly-stable/resolve.test.ts"
+    ],
+    "lanes/weekly-stable/build.sh": []
   },
   "guards": [
     {
