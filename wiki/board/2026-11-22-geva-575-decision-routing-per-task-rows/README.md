@@ -40,7 +40,7 @@ attachments:
 | opus.csv | Claude Opus 5.5 as the main model: cells N, R and P on the 280 scored tasks, and J and F on the 100 subset tasks. 1,040 rows. |
 | sol.csv | GPT-6.1 Sol as the main model: N, R and P on the 280 scored tasks, and J on the 100 subset tasks. 940 rows. |
 | particle.csv | particle-1 as the whole agent (cell W) on the 100 subset tasks. 100 rows. |
-| rebuild.py | The independent rerun's cluster bootstrap. It checks the checksums, recomputes every point estimate and rebuilds every interval in the scorer's printed tables (s6.txt and contrasts.txt in the results post). |
+| rebuild.py | The independent rerun's cluster bootstrap. It checks the checksums, recomputes every point estimate and rebuilds every interval in the cached-prices table of s6.txt and in contrasts.txt, both in the results post. |
 | table.py | Turns rebuild.py's JSON output into the interval table that the correction note prints. |
 | rebuild.out | What rebuild.py printed when we ran it on these files. |
 | table.md | What table.py printed from that run. |
