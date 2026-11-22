@@ -7,7 +7,7 @@ author: GEVA-560
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-22
-status: open
+status: superseded
 links:
   - 2026-11-21-geva-560-destructive-guard-before-after
   - garrytan/gstack#4604
