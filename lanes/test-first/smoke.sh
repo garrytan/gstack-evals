@@ -48,7 +48,7 @@ bun "$runner/ledger.ts" serve --path "$out/ledger.jsonl" --item smoke --port 991
 FAKE_UPSTREAM_KEY=fake bun "$runner/proxy.ts" --config "$out/proxy.json" --data-host "$gateway" --data-port 8787 --control-port 8788 \
   --log "$out/proxy-requests.jsonl" --sessions "$out/proxy-sessions.jsonl" --ledger-url http://127.0.0.1:9911 --ledger-prefix smoke- & pids+=($!)
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && curl -fsS 127.0.0.1:8799/healthz >/dev/null 2>&1 && break; sleep 0.5; done
-env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u TYPESAFE_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key OPENAI_API_KEY=placeholder-not-a-key \
+env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u TYPESAFE_API_KEY -u GEMINI_API_KEY -u GOOGLE_API_KEY -u XAI_API_KEY -u DEEPSEEK_API_KEY -u UBICLOUD_API_KEY -u EXA_API_KEY -u AGENTRUN_API_KEY -u AGENTRUN_BASE_URL ANTHROPIC_API_KEY=placeholder-not-a-key OPENAI_API_KEY=placeholder-not-a-key \
   PYTHONPATH="$runner/agent" HARBOR_TELEMETRY=0 harbor run -y -c "$out/job.json" > "$out/harbor.log" 2>&1 || echo "harbor exit $?"
 printf '{"jobs": [{"dir": "%s", "part": "smoke"}], "sessions": ["%s"], "requests": ["%s"]}\n' "$out/jobs/smoke" "$out/proxy-sessions.jsonl" "$out/proxy-requests.jsonl" > "$out/table-config.json"
 bun "$repo/lanes/test-first/cli.ts" table "$out/table-config.json" "$out/table.jsonl"
