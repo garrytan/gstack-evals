@@ -465,3 +465,46 @@ test.skipIf(!existsSync(PY))("a wait cut short keeps every record already read i
   expect(rows.map((r) => [r.id, r.status])).toEqual([["msg_ready0123456789abcd", 200], [GEN404.answer_id, 404]]);
   expect(existsSync(join(out, "generations.jsonl.part"))).toBe(false);
 });
+
+test.skipIf(!existsSync(PY))("a route that stalls every ask for 30 s is not asked again once 190 s have passed since the first pass", async () => {
+  const stall = ["_open = h2h_turns.urllib.request.urlopen", "def stall(*a, **k):", "    h2h_turns.time.t += 30", "    return _open(*a, **k)", "h2h_turns.urllib.request.urlopen = stall"];
+  const { rows, seen, clock } = await runGenerations({
+    ".claude/projects/p/s1.jsonl": JSON.stringify({ type: "assistant", message: { id: GEN404.answer_id } }) + "\n",
+  }, () => notFound(), stall);
+  expect(seen.length).toBe(1 + 6);
+  expect(clock).toBe(30 + 190);
+  expect(rows).toEqual([{ id: GEN404.answer_id, status: 404, text: GEN404.body, generation_id: GEN404.generation_id }]);
+});
+
+test.skipIf(!existsSync(PY))("an error answer whose body cannot be read is kept with the read error, and the other records are still read", async () => {
+  const broken = [
+    "import io, urllib.error",
+    "class Broken(io.RawIOBase):",
+    "    def readable(self): return True",
+    "    def read(self, *a): raise ConnectionResetError('reset while reading the body')",
+    "_open = h2h_turns.urllib.request.urlopen",
+    "def broken(req, *a, **k):",
+    "    if 'msg_broken' in req.full_url: raise urllib.error.HTTPError(req.full_url, 502, 'Bad Gateway', {'x-h2h-generation-id': 'gen-x'}, Broken())",
+    "    return _open(req, *a, **k)",
+    "h2h_turns.urllib.request.urlopen = broken",
+  ];
+  const { rows, clock } = await runGenerations({
+    ".claude/projects/p/s1.jsonl": ["msg_broken0123456789abcd", "msg_ready0123456789abcd"].map((id) => JSON.stringify({ type: "assistant", message: { id } })).join("\n") + "\n",
+  }, (id) => record(id), broken);
+  expect(clock).toBe(180);
+  expect(rows.map((r) => [r.id, r.status, r.text, r.generation_id])).toEqual([
+    ["msg_broken0123456789abcd", 502, "ConnectionResetError: reset while reading the body", "gen-x"],
+    ["msg_ready0123456789abcd", 200, JSON.stringify({ data: { id: "gen-of-msg_ready0123456789abcd", provider_name: "Particle AI" } }), "gen-of-msg_ready0123456789abcd"],
+  ]);
+});
+
+test.skipIf(!existsSync(PY))("a first pass cut short keeps every record it already read in generations.jsonl", async () => {
+  const cut = ["_open = h2h_turns.urllib.request.urlopen", "def cut(req, *a, **k):", "    if 'msg_second' in req.full_url: raise KeyboardInterrupt", "    return _open(req, *a, **k)", "h2h_turns.urllib.request.urlopen = cut"];
+  const { rows, seen, out } = await runGenerations({
+    ".claude/projects/p/s1.jsonl": ["msg_ready0123456789abcd", "msg_second0123456789abcd"].map((id) => JSON.stringify({ type: "assistant", message: { id } })).join("\n") + "\n",
+  }, (id) => record(id), cut);
+  expect(seen.length).toBe(1);
+  expect(rows.map((r) => [r.id, r.status])).toEqual([["msg_ready0123456789abcd", 200]]);
+  expect(existsSync(join(out, "generations.jsonl.part"))).toBe(false);
+});
+
