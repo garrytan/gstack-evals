@@ -5,8 +5,8 @@
 // launch guard with this thread's counter, and l1.ts under B2_PROFILE on the real b2-pilot plan: a refused host-up with no
 // counter and with a counter past the all-in stop, host-up, launch pilot-opus, attach until it settles, a counted item's
 // host-up refused before the pilot is done, and host-down.
-import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readRows } from "../../quick/laneb/runner/ledger.ts";
@@ -18,7 +18,7 @@ import { AGENT } from "../../lanes/test-first/prepare-run.ts";
 const FIX = join(REPO, "quick/laneb/tests/fixtures/l1"), CLI = join(REPO, "lanes/test-first/cli.ts");
 function freePort() { const s = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() }), p = s.port; s.stop(true); return p; }
 type Rig = { root: string; fake: string; work: string; ledgers: string; env: Record<string, string> };
-const rigs: Rig[] = [];
+const rigs: Rig[] = [], roots: string[] = [];
 function rig(): Rig {
   const root = mkdtempSync(join(tmpdir(), "b2-launch-")), fake = join(root, "vms"), ledgers = join(root, "ledgers");
   for (const d of [fake, join(root, "recovery"), join(root, "state"), join(root, "arms"), ledgers]) mkdirSync(d, { recursive: true });
@@ -33,9 +33,11 @@ function rig(): Rig {
   };
   const r = { root, fake, work: join(root, "work"), ledgers, env };
   rigs.push(r);
+  roots.push(root);
   return r;
 }
 afterEach(() => { for (const r of rigs.splice(0)) Bun.spawnSync(["pkill", "-9", "-f", r.root]); });
+afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
 function b2(r: Rig, args: string[], extra: Record<string, string> = {}) {
   const p = Bun.spawnSync([process.execPath, CLI, ...args], { env: { ...r.env, ...extra }, cwd: REPO, stdout: "pipe", stderr: "pipe" });
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };

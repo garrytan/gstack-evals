@@ -33,7 +33,7 @@ We learned that a coding agent that writes a failing test first, sees it fail, f
 
 We learned that the agents already ship a test with most fixes. Without any instruction, 90% of Opus's passing fixes and 88% of particle-1's carried a test file. The test-first arms raised that to 100%, but the planned comparison (+1.6 points, interval -1.0 to +4.3) did not clear its bar.
 
-We learned that one plain line in the agent's instructions file gets the steps followed as often as a full skill typed in front of the task, at no extra time: 73% to 86% followed with the line, 73% to 87% with the skill. The typed skill took about twice as long per session as the line on Opus, and about five times as long on Sol. If you want test-first behaviour, one line does it.
+We learned that one plain line in the agent's instructions file and a full skill typed in front of the task get the steps followed about as often on Opus and Sol; on particle-1 the typed skill was followed 7.1 points more often [+0.7, +13.6]. With the line 73% to 86% of sessions followed the steps, with the skill 73% to 87%, and the skill fixed no more bugs than the line on any model. The typed skill took about twice as long per session as the line on Opus, and about five times as long on Sol. If you want test-first behaviour, one line does it.
 
 By the plan's decision table this is a null, and after the "Why null?" check below it is a CUT-CANDIDATE: gstack drops the routing hook's bug-report rule (it names an installed bug-fix skill on bug reports) and the "focused failing test first" clause of its CLAUDE.md bug line.
 
@@ -140,7 +140,7 @@ The line costs nothing extra; the typed skill roughly doubles Opus's time and mu
 ## Why null? (R48)
 
 - Did the models use it? Yes. 80.1% of prove-it sessions followed the steps, against 3.3% with gstack alone. This is not an exposure failure.
-- Do the tasks fit? They are real bug fixes with a hidden test, the kind the steps are written for. Split by whether the no-gstack arm passed, prove-it minus gstack was -7.4 points on the 68 tasks Opus failed without help, -2.3 on Sol's 87 and 0.0 on particle-1's 71. Test-first didn't help where there was room to help.
+- Do the tasks fit? They are real bug fixes with a hidden test, the kind the steps are written for. The plan also asked for a split on bug-report tasks only (plan section 9.4). We did not run it, because no task carries a bug-report label: the tasks were drawn as bug fixes, not checked as bug reports (plan section 3). The split by whether the no-gstack arm passed is the only task-fit split reported. Split that way, prove-it minus gstack was -7.4 points on the 68 tasks Opus failed without help, -2.3 on Sol's 87 and 0.0 on particle-1's 71. Test-first didn't help where there was room to help.
 - Were there enough samples? Discordance on passes came out at 10.9% (Opus), 6.0% (Sol) and 9.3% (particle-1), close to the plan's figures, and the plan's smallest difference found 80% of the time was about 4 points pooled. The interval's top, +0.9, rules out a gain of that size.
 - Floor or ceiling? No. Without gstack the models passed 52.5% to 62.8%.
 - Does the frontier model already do it unaided? No. Without the steps, the models followed them in 0% to 9% of sessions, so the steps changed what the agents did. It just didn't change how many bugs they fixed.
@@ -164,6 +164,8 @@ Three dated changes went in before the first counted session, each committed on 
 1. Caps moved $250 from Sol to Opus after the pilot measured Opus at about twice its estimated cost per session and Sol at about a third. No outcome was read (2026-11-21-geva-569-b2-test-first-change-1).
 2. Codex runs with `allow_login_shell=false`. In the first pilot, Codex 0.170.0 ran every command in a login shell (`bash -lc`), and the task image's /etc/profile reset PATH. That dropped Bun, so every gstack skill start refused, and it also dropped the task's Python environment prefix. That evidence came from inside real Codex tool calls in our rollouts. With the setting, all 154 commands in a Sol-only re-pilot ran as `bash -c` and no start refused. Another team measured Codex keeping PATH in a Debian image, so this may depend on the image (2026-11-21-geva-569-b2-test-first-change-2).
 3. The launch guard projects Sol at 1.25 times its measured pilot cost, and the all-in guard counts every pilot ledger (2026-11-21-geva-569-b2-test-first-change-3).
+
+One dated change came after the run, on 2026-11-22: the plan's "Why null?" cycle asked for a task-fit split on bug-report tasks only (plan section 9.4). It was not run, because no task carries a bug-report label (the tasks were drawn as bug fixes, plan section 3). The split by whether the no-gstack arm passed is the only task-fit split reported.
 
 The scorer reads the plan's followed rule conservatively in a few places: a command that prints a log file is never read as a passing test run; a runner whose summary was cut off falls back to reading the whole call; pytest's "no tests ran" counts as a failing run; a passing run made while the fix is stashed still counts. The five-session hand-check agreed with the detector but was not built to test these readings one by one.
 
