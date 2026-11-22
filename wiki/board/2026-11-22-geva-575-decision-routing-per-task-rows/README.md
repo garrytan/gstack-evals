@@ -27,7 +27,7 @@ attachments:
 
 # Per-task rows behind the decision-routing results, with the script that rebuilds their intervals
 
-- We learned that every interval in the decision-routing correction rebuilds from the files in this folder. Running rebuild.py here reproduces the independent rerun's results exactly, and all 18 rows of the correction's interval table come back identical. You should be able to check our numbers without asking us for anything.
+- We learned that every interval in the correction note's interval table rebuilds from the files in this folder: all 18 rows, the router against the plain agent, the router against particle-1 alone and particle-1 alone against the plain agent, on both models. Running rebuild.py here reproduces the independent rerun's results exactly. You should be able to check those numbers without asking us for anything. Other intervals the correction quotes, such as the bill with caching priced away and the no-edit share, need data these rows don't hold (see What the rows can't rebuild).
 - We learned that every row is a public SWE-rebench task. All 280 task ids, and the repository on every one of the 2,080 rows, match the public SWE-rebench leaderboard dataset, so no row was left out. None of it is sealed or held-out material.
 - The rows can't rebuild everything. The bill with prompt caching priced away and every decision-level number need token counts or decision logs, which aren't here (see What the rows can't rebuild).
 
@@ -98,13 +98,13 @@ Our results pages normally leave per-task cost out. We kept bill_micros because 
 
 ## Rebuilding the intervals
 
-You need a full clone of this repository (not a shallow one), uv and Python 3. rebuild.py reads the scorer's printed tables and the task pool from two earlier commits on main, a2272688 (the results post) and 47d7964 (the preregistration), so a shallow clone fails. Run it from any folder outside this one, because it writes rebuild.json to the folder you run it in:
+You need a full clone of this repository (not a shallow one), uv and Python 3.12 or newer (numpy 2.5.5 needs it). rebuild.py reads the scorer's printed tables and the task pool from two earlier commits on main, a2272688 (the results post) and 47d7964 (the preregistration), so a shallow clone fails. Run it from any folder outside this one, because it writes rebuild.json to the folder you run it in:
 
 ```
 git clone https://github.com/garrytan/gstack-evals.git
-mkdir rerun && cd rerun
-uv run --with numpy==2.5.5 python3 ../gstack-evals/wiki/board/2026-11-22-geva-575-decision-routing-per-task-rows/rebuild.py > rebuild.out
-uv run --with numpy==2.5.5 python3 ../gstack-evals/wiki/board/2026-11-22-geva-575-decision-routing-per-task-rows/table.py > table.md
+mkdir -p rerun && cd rerun && \
+  uv run --with numpy==2.5.5 python3 ../gstack-evals/wiki/board/2026-11-22-geva-575-decision-routing-per-task-rows/rebuild.py > rebuild.out && \
+  uv run --with numpy==2.5.5 python3 ../gstack-evals/wiki/board/2026-11-22-geva-575-decision-routing-per-task-rows/table.py > table.md
 ```
 
 It takes about 10 seconds. What we got:
