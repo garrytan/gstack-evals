@@ -12,7 +12,8 @@ import { gunzipSha, noneArchiveProblem } from "../../lanes/weekly-stable/arms.ts
 import { main, paidGate, partProblems, recordLook, type WeekFile } from "../../lanes/weekly-stable/cli.ts";
 import { partItems, taskLists } from "../../lanes/weekly-stable/plan.ts";
 import { MODEL } from "../../lanes/weekly-stable/pins.ts";
-import { beyond, look, owed, reading, uniqueTrials, type WeeklyRow } from "../../lanes/weekly-stable/read.ts";
+import { pulledInputs } from "../../lanes/delivery-route/table.ts";
+import { beyond, buildWeeklyTable, look, openCells, owed, pairsOf, reading, uniqueTrials, type WeeklyRow } from "../../lanes/weekly-stable/read.ts";
 import { Ledger } from "../../quick/laneb/runner/ledger.ts";
 import { stageArms } from "../../quick/laneb/runner/prepare-run.ts";
 
@@ -241,10 +242,10 @@ describe("section 6: part results", () => {
   test("every planned part, and every attempt 2 or relaunch prepared, needs a result file", () => {
     const dir = scratch("weekly-parts-");
     parts(dir);
-    expect(partProblems(dir)).toEqual({ caps: [], missing: ["p2/s390-2", "p2/s390-2-a2"] });
+    expect(partProblems(dir)).toEqual({ caps: [], missing: ["p2/s390-2", "p2/s390-2-a2"], unsettled: [] });
     writeFileSync(join(dir, "p2", "s390-2.result.json"), JSON.stringify({ cap_stop: [], loss: [] }));
     writeFileSync(join(dir, "p2", "s390-2-a2.result.json"), JSON.stringify({ cap_stop: ["the proxy latched a cap stop"], loss: [] }));
-    expect(partProblems(dir)).toEqual({ caps: ["p2/s390-2-a2: the proxy latched a cap stop"], missing: [] });
+    expect(partProblems(dir)).toEqual({ caps: ["p2/s390-2-a2: the proxy latched a cap stop"], missing: [], unsettled: [] });
   });
   test("a full report with a part that wrote no result is INCOMPLETE; a stopped one is not (A1)", async () => {
     const full = workDir(week({ look: { stop: null, at: "2026-11-29T00:00:00Z", rows: "look-rows.jsonl", rows_sha256: "0".repeat(64) } }), RUN.flatMap((t) => [...[1, 1, 1].map(() => row(t, "candidate", true)), ...[1, 1, 1].map(() => row(t, "stable", true)), row(t, "none", true)]));
@@ -300,5 +301,60 @@ describe("section 9: archives are checked whole", () => {
     expect(() => stageArms("none", { armDir, run: runDir, root, armManifests: "m", vm: "/vm" })).toThrow(/gzip exited/);
     gz(armDir, "none", "none-bytes");
     expect(stageArms("none", { armDir, run: runDir, root, armManifests: "m", vm: "/vm" })[0]!.sha256).toBe(sha("none-bytes"));
+  });
+});
+
+describe("round 2: settled part results, one replacement per never-started session, and canonical part ids", () => {
+  const layout = (root: string, part: string, trials: { task: string; arm: string; started: boolean }[], job = part) => {
+    const dir = join(root, part, "pulled"), sessions: object[] = [];
+    for (const t of trials) {
+      const name = t.task + "__" + Math.random().toString(36).slice(2, 9), d = join(dir, "jobs", job, name);
+      mkdirSync(join(d, "evaluator"), { recursive: true });
+      writeFileSync(join(d, "config.json"), JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm: t.arm, upstream_model: MODEL.id } }, task: { path: "tasks/" + t.task } }));
+      writeFileSync(join(d, "result.json"), JSON.stringify(t.started ? { trial_name: name, verifier_result: { rewards: { reward: 1 } } } : { trial_name: name, exception_info: { exception_type: "AgentCancelled" } }));
+      if (t.started) sessions.push({ id: "s-" + name, trial: name, opened_at: name, ok_responses: 2, refused_budget: 0, spent_micros: 1000 });
+    }
+    mkdirSync(join(dir, "out"), { recursive: true });
+    writeFileSync(join(dir, "out", "proxy-sessions.jsonl"), sessions.map((s) => JSON.stringify(s)).join("\n") + "\n");
+    return dir;
+  };
+  test("a part whose VM was lost (exit 7) and not yet salvaged has no settled result, so a full report is INCOMPLETE", () => {
+    const dir = scratch("weekly-unsettled-"), [, , item3] = partItems("ws-2026-11-28");
+    mkdirSync(join(dir, "p3"), { recursive: true });
+    writeFileSync(join(dir, "p3", "plan.json"), JSON.stringify({ item: item3, parts: [{ name: "s390-3" }] }));
+    writeFileSync(join(dir, "p3", "s390-3.result.json"), JSON.stringify({ launch_exit: 7, pulled: false, cap_stop: [], loss: ["the part's results could not be pulled"], salvage: null }));
+    expect(partProblems(dir)).toEqual({ caps: [], missing: [], unsettled: ["p3/s390-3"] });
+    writeFileSync(join(dir, "p3", "s390-3.result.json"), JSON.stringify({ launch_exit: 7, pulled: true, cap_stop: ["cap-stop.json: refused"], loss: [], salvage: { by: "relaunch" } }));
+    expect(partProblems(dir)).toEqual({ caps: ["p3/s390-3: cap-stop.json: refused"], missing: [], unsettled: [] });
+  });
+  test("a full report names an unsettled part as INCOMPLETE", async () => {
+    const full = workDir(week({ look: { stop: null, at: "2026-11-29T00:00:00Z", rows: "look-rows.jsonl", rows_sha256: "0".repeat(64) } }), RUN.flatMap((t) => [...[1, 1, 1].map(() => row(t, "candidate", true)), ...[1, 1, 1].map(() => row(t, "stable", true)), row(t, "none", true)]));
+    mkdirSync(join(full.dir, "p3"), { recursive: true });
+    writeFileSync(join(full.dir, "p3", "plan.json"), JSON.stringify({ item: partItems("ws-2026-11-28")[2], parts: [{ name: "s390-3" }] }));
+    writeFileSync(join(full.dir, "p3", "s390-3.result.json"), JSON.stringify({ launch_exit: 7, pulled: false, cap_stop: [], loss: [], salvage: null }));
+    expect((await run(["report", full.table, full.dir, "--out", full.out])).code).toBe(0);
+    expect([full.record().verdict, full.record().incomplete_reason]).toEqual(["INCOMPLETE", "a part's VM was lost and its records were never salvaged, so a cap stop can't be ruled out (1 part; detail in the private report)"]);
+    expect(readFileSync(join(full.out, "report.txt"), "utf8")).toContain("  not settled: p3/s390-3");
+  });
+  test("a session that never started and was relaunched owes no attempt 2, and its arm settles with the relaunch's row", () => {
+    const root = scratch("weekly-replaced-"), t = RUN[0]!;
+    const orig = layout(root, "s390-1", [...["candidate", "stable"].flatMap((arm) => [{ task: t, arm, started: true }, { task: t, arm, started: true }, { task: t, arm, started: false }]), { task: t, arm: "none", started: true }]);
+    const rel = layout(root, "s390-1-relaunch", ["candidate", "stable"].map((arm) => ({ task: t, arm, started: true })));
+    expect(owed([{ part: "s390-1", dir: orig }, { part: "s390-1-relaunch", dir: rel }]).owed).toEqual([]);
+    const rows = [...buildWeeklyTable(pulledInputs(orig, "s390-1")), ...buildWeeklyTable(pulledInputs(rel, "s390-1-relaunch"))];
+    expect(openCells(rows, [t])).toEqual([]);
+    expect(pairsOf(rows, [t]).length).toBe(3);
+    expect(owed([{ part: "s390-1", dir: orig }]).owed.length).toBe(2);
+  });
+  test("a week table takes each job's part from L1's layout, so a Harbor job suffix or a missing label still reads as its part", () => {
+    const root = scratch("weekly-layout-"), t = RUN[0]!;
+    const dir = layout(root, "s390-1-a2", [{ task: t, arm: "stable", started: true }], "s390-1-a2-2");
+    const cfg = pulledInputs(dir, "s390-1-a2-2");
+    expect(buildWeeklyTable(cfg).map((r) => r.part)).toEqual(["s390-1-a2"]);
+    expect(buildWeeklyTable({ ...cfg, jobs: cfg.jobs.map((j) => ({ dir: j.dir })) }).map((r) => r.part)).toEqual(["s390-1-a2"]);
+    const flat = scratch("weekly-flat-");
+    mkdirSync(join(flat, "jobs", "job1"), { recursive: true });
+    spawnSync("cp", ["-r", join(dir, "jobs", "s390-1-a2-2", "."), join(flat, "jobs", "job1")]);
+    expect(() => buildWeeklyTable({ jobs: [{ dir: join(flat, "jobs", "job1") }], sessions: cfg.sessions })).toThrow(/names no L1 part/);
   });
 });

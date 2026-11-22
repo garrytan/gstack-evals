@@ -32,7 +32,7 @@ The look stops when candidate minus stable lies beyond 2.797 standard errors fro
 
 ## 2. When the look is ready
 
-The look reads the first 65 run tasks, less dropped tasks. It is ready when every arm of each of those tasks has settled: candidate (3 sessions), stable (3) and none (1). An arm has settled when it holds as many first-attempt sessions as planned, and every one of them that ended with no response (and so owes an attempt 2, preregistration section 9) has its attempt-2 row. This amends change 1, which waited only for the candidate and stable sessions and did not wait for reruns. A look that is not ready records nothing.
+The look reads the first 65 run tasks, less dropped tasks. It is ready when every arm of each of those tasks has settled: candidate (3 sessions), stable (3) and none (1). An arm has settled when it holds as many first-attempt sessions as planned, and every one of them that ended with no response (and so owes an attempt 2, preregistration section 9) has its attempt-2 row. A session that never opened and that its part's relaunch replaced counts as neither: the relaunch's session stands in its place, so the slot is filled once. A row's part is L1's part id from the pulled folder (`<part>/pulled/jobs/<job>`), so a Harbor job name never hides an attempt 2. This amends change 1, which waited only for the candidate and stable sessions and did not wait for reruns. A look that is not ready records nothing.
 
 ## 3. The look is required
 
@@ -50,11 +50,11 @@ When the look is ready, the lane writes the rows of its tasks to `look-rows.json
 
 ## 6. Part results
 
-A week that did not stop reads its part results before it reports. Every part in each part folder's plan, and every attempt 2 or relaunch prepared for one, must have written a result file. A part without one makes the week INCOMPLETE, and the private report names it. A cap stop in any part's result makes the week INCOMPLETE, as change 3 already says.
+A week that did not stop reads its part results before it reports. Every part in each part folder's plan, and every attempt 2 or relaunch prepared for one, must have written a result file. A part without one makes the week INCOMPLETE, and the private report names it. So does a part whose VM was lost and whose records were never salvaged: its result was written before the cap-stop records were pulled, so a cap stop can't be ruled out. A cap stop in any part's result makes the week INCOMPLETE, as change 3 already says.
 
 ## 7. Each session is read once
 
-Every table the lane reads refuses a trial id that appears twice: the table built from trial folders, a JSONL file passed to `smoke`, `look`, `report` or `pilot-report`, and the attempt-2 planner, which merges the pulls of a part and its relaunch. In the planner, one session pulled twice would otherwise owe two reruns.
+Every table the lane reads refuses a trial id that appears twice: the table built from trial folders, a JSONL file passed to `smoke`, `look`, `report` or `pilot-report`, and the attempt-2 planner, which merges the pulls of a part and its relaunch. In the planner, one session pulled twice would otherwise owe two reruns, and a session the relaunch replaced owes none.
 
 ## 8. Paid commands wait for their checks
 

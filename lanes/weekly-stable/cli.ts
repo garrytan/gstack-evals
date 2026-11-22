@@ -102,11 +102,21 @@ export function partCapStops(work: string): string[] {
 }
 /** Each part's cap stops, and each part with no result file: every part in p1..p3's plan, and every attempt 2 or relaunch
  *  prepared for one (pre-run change 4 section 6). */
-export function partProblems(work: string): { caps: string[]; missing: string[] } {
-  const missing = ["p1", "p2", "p3"].filter((p) => existsSync(join(work, p, "plan.json"))).flatMap((p) => { const s = partState(join(work, p)); return s.parts.map((x) => x.name).filter((x) => !s.finished.includes(x)).map((x) => p + "/" + x); });
-  return { caps: partCapStops(work), missing };
+export function partProblems(work: string): { caps: string[]; missing: string[]; unsettled: string[] } {
+  const missing: string[] = [], unsettled: string[] = [];
+  for (const p of ["p1", "p2", "p3"].filter((x) => existsSync(join(work, x, "plan.json")))) {
+    const s = partState(join(work, p));
+    for (const x of s.parts.map((y) => y.name)) {
+      if (!s.finished.includes(x)) missing.push(p + "/" + x);
+      else { const r = readJson(join(work, p, x + ".result.json")); if (r.launch_exit === 7 && !r.salvage) unsettled.push(p + "/" + x); }
+    }
+  }
+  return { caps: partCapStops(work), missing, unsettled };
 }
-const missingReason = (missing: string[]) => (missing.length ? ["a part wrote no result (" + missing.length + " part" + (missing.length === 1 ? "" : "s") + "; detail in the private report)"] : []);
+const plural = (n: number) => n + " part" + (n === 1 ? "" : "s");
+const missingReason = (missing: string[]) => (missing.length ? ["a part wrote no result (" + plural(missing.length) + "; detail in the private report)"] : []);
+/** A part whose VM was lost (exit 7) and never salvaged has only a provisional result: its cap-stop records were not pulled. */
+const unsettledReason = (unsettled: string[]) => (unsettled.length ? ["a part's VM was lost and its records were never salvaged, so a cap stop can't be ruled out (" + plural(unsettled.length) + "; detail in the private report)"] : []);
 export function capStopReason(caps: string[]): string[] {
   return caps.length ? ["a part ended at a cap stop (" + caps.length + " cap-stop line" + (caps.length === 1 ? "" : "s") + " across parts; detail in the private report)"] : [];
 }
@@ -340,9 +350,9 @@ async function run(argv: string[]): Promise<number> {
       const rows = frozen ? frozenLookRows(work, w) : rowsOf(table);
       const gate = reportGate(w, rows, stopped);
       if (gate.length) return usage("refused: " + gate.join("; "));
-      const l = taskLists(), counted = reportRows(w, rows, stopped), parts = stopped ? { caps: [], missing: [] } : partProblems(work), caps = parts.caps;
+      const l = taskLists(), counted = reportRows(w, rows, stopped), parts = stopped ? { caps: [], missing: [], unsettled: [] } : partProblems(work), caps = parts.caps;
       writeFileSync(join(out, "results.md"), resultsMarkdown(counted.rows, counted.kept, "gstack weekly benchmark " + isoWeek(w.week_of ?? w.date).label));
-      const check = resultsCheck(work, out), incomplete = [...(w.look ? [] : ["the interim look was never recorded, so the week has no verdict"]), ...opts("incomplete"), ...capStopReason(caps), ...missingReason(parts.missing), ...(w.smoke?.rig.length ? ["the weekly smoke failed for a rig reason in " + w.smoke.rig.length + " of its checks"] : []), ...(check === "pass" ? [] : ["gstack's results check: " + check])];
+      const check = resultsCheck(work, out), incomplete = [...(w.look ? [] : ["the interim look was never recorded, so the week has no verdict"]), ...opts("incomplete"), ...capStopReason(caps), ...missingReason(parts.missing), ...unsettledReason(parts.unsettled), ...(w.smoke?.rig.length ? ["the weekly smoke failed for a rig reason in " + w.smoke.rig.length + " of its checks"] : []), ...(check === "pass" ? [] : ["gstack's results check: " + check])];
       const r = reading({ rows, run: l.run, dropped: w.dropped, seed: w.seed, incomplete, flags: [...(w.smoke?.flag ? [w.smoke.flag] : []), ...opts("flag")], stoppedAt: stopped ?? null });
       rec = weekRecord(r, recordInput(w, check).input);
       const s = r.stat, p = (x: number) => (100 * x).toFixed(1);
@@ -351,7 +361,7 @@ async function run(argv: string[]): Promise<number> {
         "  candidate minus none (descriptive): " + p(r.none.diff) + " points [" + p(r.none.lo) + ", " + p(r.none.hi) + "] on " + r.none.pairs + " pairs",
         "  cost ratio, candidate over stable: " + (r.cost ? r.cost.ratio.toFixed(3) + " [" + r.cost.lo.toFixed(3) + ", " + r.cost.hi.toFixed(3) + "] on " + r.cost.tasks + " tasks" : "n/a"),
         "  ungraded sessions: " + WEEKLY_ARM_NAMES.map((a) => a + " " + r.ungraded[a]).join(", ") + "; safety stops: " + WEEKLY_ARM_NAMES.map((a) => a + " " + r.safety[a]).join(", ") + "; dropped " + w.dropped.length,
-        ...rec.flags.map((f) => "  FLAG " + f), ...caps.map((c) => "  cap stop: " + c), ...parts.missing.map((m) => "  no result: " + m), ...(frozen ? ["  rows: the look's frozen " + (w.look?.rows ?? LOOK_ROWS) + ", not " + table] : []), ...(w.smoke ? [...w.smoke.rig, ...w.smoke.detail].map((x) => "  smoke: " + x) : []), "  results check: " + check];
+        ...rec.flags.map((f) => "  FLAG " + f), ...caps.map((c) => "  cap stop: " + c), ...parts.missing.map((m) => "  no result: " + m), ...parts.unsettled.map((m) => "  not settled: " + m), ...(frozen ? ["  rows: the look's frozen " + (w.look?.rows ?? LOOK_ROWS) + ", not " + table] : []), ...(w.smoke ? [...w.smoke.rig, ...w.smoke.detail].map((x) => "  smoke: " + x) : []), "  results check: " + check];
     }
     writeJson(join(out, RECORD.asset), rec);
     writeFileSync(join(out, "report.txt"), lines.join("\n") + "\n");

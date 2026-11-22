@@ -46,17 +46,22 @@ export function weeklyRow(dir: string, ctx: Parameters<typeof b1Row>[1]): Weekly
     skill_reads: b.filter((x) => x?.name === "Read" && x.input && /\/\.claude\/skills\/.+\/SKILL\.md$/.test(String(x.input?.file_path ?? ""))).length,
   };
 }
+/** A job's L1 part id from L1's folder layout, <part>/pulled/jobs/<job>; null outside that layout. */
+const layoutPart = (dir: string) => /([^/]+)\/pulled\/jobs\/[^/]+\/?$/.exec(dir)?.[1] ?? null;
 /** Every trial folder under the config's jobs, each job folder read once; one trial found in two folders is refused, so no
- *  session counts twice. */
+ *  session counts twice. Each row's part is L1's part id from the folder layout, else the config's label (pre-run change 4
+ *  section 2), so a Harbor job suffix never hides an attempt 2; a job with neither is refused. */
 export function buildWeeklyTable(cfg: B1TableConfig): WeeklyRow[] {
   const sessions = sessionsByTrial(readSessionRows(cfg.sessions)), out: WeeklyRow[] = [], jobs = new Set<string>(), trials = new Map<string, string>();
   for (const job of cfg.jobs) {
     if (jobs.has(realpathSync(job.dir))) continue;
     jobs.add(realpathSync(job.dir));
+    const part = layoutPart(job.dir) ?? job.part ?? null;
+    if (!part) throw new Error("E_USAGE job " + job.dir + " names no L1 part: its path is not <part>/pulled/jobs/<job> and the config gives none");
     for (const name of readdirSync(job.dir).sort()) {
       const d = join(job.dir, name);
       if (!statSync(d).isDirectory()) continue;
-      const row = weeklyRow(d, { part: job.part ?? null, sessions, home: cfg.home ?? "/root" });
+      const row = weeklyRow(d, { part, sessions, home: cfg.home ?? "/root" });
       if (!row) continue;
       if (trials.has(row.trial)) throw new Error("E_USAGE trial " + row.trial + " appears twice, in " + trials.get(row.trial) + " and " + d + "; a session is read once");
       trials.set(row.trial, d);
@@ -71,10 +76,23 @@ export function uniqueTrials<T extends { trial: string }>(rows: T[], source: str
   for (const r of rows) { if (seen.has(r.trial)) throw new Error("E_USAGE trial " + r.trial + " appears twice in " + source + "; a session is read once"); seen.add(r.trial); }
   return rows;
 }
+/** Sessions a relaunch replaced (pre-run change 4 section 2): in part P, rows that never opened a proxy session, for a task and
+ *  arm that P-relaunch ran, up to the number of rows P-relaunch holds there. L1's relaunch starts one session for each
+ *  session that never started, so these are neither first attempts nor owed an attempt 2. */
+export function replacedTrials(rows: WeeklyRow[]): Set<string> {
+  const key = (p: string, t: string, a: string) => p + "\t" + t + "\t" + a, left = new Map<string, number>(), out = new Set<string>();
+  for (const r of rows) if (/-relaunch$/.test(r.part ?? "")) { const k = key(r.part!.slice(0, -"-relaunch".length), r.task, r.arm); left.set(k, (left.get(k) ?? 0) + 1); }
+  for (const r of [...rows].sort((a, b) => a.trial.localeCompare(b.trial))) {
+    const k = key(r.part ?? "", r.task, r.arm), n = left.get(k) ?? 0;
+    if (n > 0 && r.opened_at === null && r.outcome !== "graded") { out.add(r.trial); left.set(k, n - 1); }
+  }
+  return out;
+}
 /** An infrastructure session (no model response) reruns once, in a part of its own after its part ends. The pulls of a part
- *  and its relaunch are one table, so one session pulled twice never owes two reruns. */
+ *  and its relaunch are one table, so one session pulled twice never owes two reruns, and a session the relaunch replaced owes
+ *  none. */
 export function owed(runs: { part: string; dir: string }[]) {
-  const rows = uniqueTrials(runs.flatMap((r) => { const c = pulledInputs(r.dir, r.part); return c.jobs.length ? buildWeeklyTable(c) : []; }), "the attempt-2 planner's pulls of " + runs.map((r) => r.part).join(", ")), owe = rows.filter((r) => needsRerun(r as unknown as B1Row));
+  const rows = uniqueTrials(runs.flatMap((r) => { const c = pulledInputs(r.dir, r.part); return c.jobs.length ? buildWeeklyTable(c) : []; }), "the attempt-2 planner's pulls of " + runs.map((r) => r.part).join(", ")), gone = replacedTrials(rows), owe = rows.filter((r) => needsRerun(r as unknown as B1Row) && !gone.has(r.trial));
   const n = new Map<string, number>();
   for (const r of owe) n.set(r.task + "\t" + r.arm, (n.get(r.task + "\t" + r.arm) ?? 0) + 1);
   return { owed: owe.map((r) => ({ task: r.task, arm: r.arm, reason: r.reason })), rects: relaunchRects([...n].map(([k, replicates]) => ({ task: k.split("\t")[0]!, arm: k.split("\t")[1]!, replicates }))) };
@@ -131,10 +149,12 @@ export function costRatio(rows: WeeklyRow[], tasks: string[], seed: number, resa
 // arm of each has settled. It prints STOP or CONTINUE and no estimate.
 const attempt2 = (r: WeeklyRow) => /-a2$/.test(r.part ?? "");
 /** Each arm of these tasks that has not settled: fewer first-attempt sessions than planned, or a session with no response
- *  whose attempt-2 row has not arrived. A first-attempt cap stop owes no rerun, so it settles its arm. */
+ *  whose attempt-2 row has not arrived. A first-attempt cap stop owes no rerun, so it settles its arm; a session a relaunch
+ *  replaced is not counted, and the relaunch's row stands in its place. */
 export function openCells(rows: WeeklyRow[], tasks: string[]): string[] {
+  const gone = replacedTrials(rows);
   return tasks.flatMap((t) => WEEKLY_ARM_NAMES.flatMap((a) => {
-    const mine = rows.filter((r) => r.task === t && r.arm === a), first = mine.filter((r) => !attempt2(r)), owe = first.filter((r) => needsRerun(r as unknown as B1Row)).length, ran = mine.length - first.length;
+    const mine = rows.filter((r) => r.task === t && r.arm === a && !gone.has(r.trial)), first = mine.filter((r) => !attempt2(r)), owe = first.filter((r) => needsRerun(r as unknown as B1Row)).length, ran = mine.length - first.length;
     if (first.length < WEEKLY_ARMS[a].sessions) return [t + " " + a + ": " + first.length + " of " + WEEKLY_ARMS[a].sessions + " sessions"];
     return ran < owe ? [t + " " + a + ": " + owe + " attempt 2 owed, " + ran + " ran"] : [];
   }));
