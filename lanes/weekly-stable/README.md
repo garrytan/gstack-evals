@@ -1,6 +1,6 @@
 # Weekly stable number
 
-Not ready to run. Until the follow-up fix merges, nothing paid runs from this lane and the weekly automation stays disabled. Sessions currently reserve the $5 cap from cells.l1.json instead of the frozen $3 allowance, and the pilot's launch guard does not yet count settled spend.
+Not ready to run. Until the follow-up fix merges, nothing paid runs from this lane and the weekly automation stays disabled: sessions reserve the $5 cap in cells.l1.json while the plan projects the frozen $3 allowance, and the pilot's $14 cap leaves too little room beside spend already settled for its later sessions to open.
 
 Each Saturday at 06:00 UTC, this lane measures gstack's release candidate (the newest commit on gstack's main branch that gstack's release gate reads as green) against gstack's current stable release and against no gstack, on 130 frozen SWE-rebench Python bug fixes with Claude Opus 5.5 in Claude Code. The result is a public record, weekly.json, that gstack's Monday release cut reads: HOLD, GAIN, NO CHANGE or INCOMPLETE, with FLAG lines.
 
