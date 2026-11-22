@@ -35,7 +35,7 @@ FAKE_UPSTREAM_KEY=fake bun "$here/proxy.ts" --config "$out/proxy.json" --data-ho
   --log "$out/proxy-requests.jsonl" --sessions "$out/proxy-sessions.jsonl" --ledger-url http://127.0.0.1:9911 --ledger-prefix smoke- & pids+=($!)
 for _ in $(seq 1 40); do curl -fsS 127.0.0.1:8788/healthz >/dev/null 2>&1 && curl -fsS 127.0.0.1:8799/healthz >/dev/null 2>&1 && break; sleep 0.5; done
 for arm in ${ARMS:-none skill}; do
-  PYTHONPATH="$here/agent" ANTHROPIC_API_KEY=placeholder-not-a-key harbor run -y -p "$task" \
+  env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u TYPESAFE_API_KEY -u GEMINI_API_KEY -u GOOGLE_API_KEY -u XAI_API_KEY -u DEEPSEEK_API_KEY -u UBICLOUD_API_KEY -u EXA_API_KEY -u AGENTRUN_API_KEY -u AGENTRUN_BASE_URL PYTHONPATH="$here/agent" ANTHROPIC_API_KEY=placeholder-not-a-key harbor run -y -p "$task" \
     -a laneb_agent:LanebAgent -m anthropic/claude-opus-5-5 --base-url "http://$gateway:8787" \
     --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm="$arm" --ak arm_tar="$armdir/$arm.tar" \
     --ak session_cap_usd=6 --ak wrapper_path="$here/prompt-wrapper.md" --ak upstream_model=claude-opus-5-5 --ak repo_dir=${REPO_DIR-/testbed} --ak workdir=${WORKDIR-/testbed} \

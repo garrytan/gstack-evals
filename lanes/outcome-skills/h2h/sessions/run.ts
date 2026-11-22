@@ -22,16 +22,16 @@ import { BROWSER, type ArmInstall, type H2hSession, type H2hUnit } from "../type
 import { h2hLimits, H2H_PREFIX } from "./driver.ts";
 import { exposure, planningDirs, readAudit, readEvents } from "./exposure.ts";
 import { checkArmHome, type ArmHome } from "./home.ts";
-import { readMarkers } from "./markers.ts";
+import { readMarkers, type Markers } from "./markers.ts";
 import type { H2hPlanned } from "./plan.ts";
 import { attemptUsage, endOf, retries, retryCovered, SESSION_RERUN, sessionRecord, withRefusalFallback, writeSessionRecord, type AttemptUsage, type H2hSessionRecord } from "./session.ts";
 import { turnPlan } from "./turns.ts";
 import { buildRuntimeVolume, runtimePath, RUNTIMES_DIR } from "./runtimes.ts";
+import { keylessEnv } from "../../../../src/trial/env.ts";
 
 const ROOT = join(import.meta.dir, "../../../..");
 /** The Claude Code binary every session mounts: the pinned 2.1.325 native build (part A installs the same version). */
 export const H2H_CLAUDE = process.env.H2H_CLAUDE_BIN ?? join(homedir(), ".capy/work/h2h-s/claude/claude-2.1.325/package/claude");
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 /** Claude Code's environment in every arm: pfchecks' fixed block, the todo tools Claude Code withholds from Opus 5.5 by
  *  default (DEVIATIONS.md, 2026-11-16) and prereg.json's env. */
 export const claudeEnv = (p: H2hPrereg = readPrereg()): Record<string, string> => ({ CLAUDE_CONFIG_DIR: "/root/.claude", HOME: "/root", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000", DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1", IS_SANDBOX: "1", CLAUDE_CODE_ENABLE_TODO_TOOLS: "1", ...p.env });
@@ -112,7 +112,7 @@ export function runCopy(i: H2hRunInput, attempt: 1 | 2, dir: string, p: H2hPrere
   const manifestSha = sessionManifest(manifest, label, u.image);
   const armTar = join(dir, "arm.tar");
   writeFileSync(armTar, Buffer.alloc(10240));
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
+  const env = keylessEnv();
   env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
   env.HARBOR_TELEMETRY = "0";
   env.PYTHONPATH = [import.meta.dir, join(ROOT, "lanes/outcome-skills/pfchecks"), join(ROOT, "lanes/real-outcome/agent"), join(ROOT, "quick/laneb/runner/agent")].join(":");
@@ -125,7 +125,8 @@ export function runCopy(i: H2hRunInput, attempt: 1 | 2, dir: string, p: H2hPrere
   return { argv, env, config };
 }
 
-function harbor(bin: string, argv: string[], env: Record<string, string>, timeoutMs: number, log: string): Promise<{ exit: number; killed: boolean }> {
+/** Runs Harbor with argv and env, killing it at timeoutMs; its output goes to log. */
+export function harbor(bin: string, argv: string[], env: Record<string, string>, timeoutMs: number, log: string): Promise<{ exit: number; killed: boolean }> {
   return new Promise((done) => {
     const c = spawn(bin, argv, { env, stdio: ["ignore", "pipe", "pipe"] });
     const chunks: Buffer[] = [];
@@ -144,7 +145,8 @@ function harbor(bin: string, argv: string[], env: Record<string, string>, timeou
   });
 }
 
-function find(dir: string, name: string): string | null {
+/** The first directory named name under dir, depth first, or null. */
+export function find(dir: string, name: string): string | null {
   if (!existsSync(dir)) return null;
   for (const e of readdirSync(dir)) {
     const p = join(dir, e);
@@ -159,7 +161,7 @@ function find(dir: string, name: string): string | null {
 
 /** The finalize-halt rules after an attempt: a close whose proxy finalize failed with no allowance stop, or an attempt
  *  that wrote an open line and left no summary, halts the session with no retry and no record. */
-export async function haltCheck(i: H2hRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null, dir: string): Promise<void> {
+export async function haltCheck(i: { session: { unit: string; arm: string; stage: string; index: number }; control: string }, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null, dir: string): Promise<void> {
   const label = i.session.unit + "/" + i.session.arm + "/" + i.session.stage + "/" + i.session.index + " attempt " + attempt;
   const close = summary?.slot?.close;
   if (close?.finalized === false && !((close.allowance_stops ?? 0) > 0)) h2hFail("E_H2H_FINALIZE_HALT", label + ": the proxy's finalize failed at the close of slot " + summary?.slot?.id + ", so its counts are unknown; the session halts with no retry and no record, and the driver's E_H2H_FINALIZE_HALT line names the journal; " + dir);
@@ -169,19 +171,15 @@ export async function haltCheck(i: H2hRunInput, attempt: 1 | 2, summary: Record<
   h2hFail("E_H2H_FINALIZE_HALT", label + ": the attempt wrote an open line (" + join(ev!, OPENS) + ") and left no summary, so its slot may have spent; the session halts with no retry and no record, and " + (stop ? "POST " + i.control + "/stop failed (" + stop + "): stop the driver by hand; " : "the driver was stopped through POST /stop; ") + dir);
 }
 
-/** Exposure and the read audit from an attempt's transcripts and the paths its tree.tar holds. A GSD planning path that
- *  the unit's base commit (image.head) already tracks is left out of those paths, read by git ls-tree from the tar's own
- *  .git, so a repository that commits .planning/quick or .planning/debug never reads as GSD's procedure; the session's own
- *  writes into such a file still count. With no planning path in the tree, git never runs. */
-export function readExposure(i: Pick<H2hRunInput, "session" | "installs" | "unit">, dir: string): H2hSession["exposure"] {
-  const files = ["sdk-messages.jsonl", "claude-session.jsonl"].map((f) => join(dir, f)).filter(existsSync);
-  if (!files.length) return null;
-  const evs = readEvents(files);
+/** The paths an attempt's tree.tar holds (.git left out), less each GSD planning path that the unit's base commit
+ *  (image.head) already tracks, read by git ls-tree from the tar's own .git, so a repository that commits .planning/quick
+ *  or .planning/debug never reads as GSD's procedure; the session's own writes into such a file still count. With no
+ *  planning path in the tree, git never runs. No tree.tar: no paths. */
+export function sessionFiles(i: Pick<H2hRunInput, "unit">, dir: string, m: Markers = readMarkers()): string[] {
   const tar = join(dir, "tree.tar");
   const listed = existsSync(tar) ? spawnSync("tar", ["-tf", tar, "--exclude=.git"], { encoding: "utf8", maxBuffer: 64 << 20 }) : null;
   if (listed && listed.status !== 0) h2hFail("E_H2H_EXPOSURE", tar + " does not list (" + (listed.error?.message ?? "tar exit " + listed.status) + "): " + String(listed.stderr ?? "").trim().slice(0, 500) + "; the session's exposure can't be read, so the session halts with no record and is never read as not exercised");
   const paths = listed ? listed.stdout.split("\n").filter(Boolean) : [];
-  const m = readMarkers();
   const dirs = planningDirs(m);
   const planning = paths.filter((p) => dirs.some((d) => p.includes(d)));
   const based = new Set<string>();
@@ -196,7 +194,16 @@ export function readExposure(i: Pick<H2hRunInput, "session" | "installs" | "unit
       rmSync(tmp, { recursive: true, force: true });
     }
   }
-  const e = exposure(i.session.arm, i.session.entry, evs, { markers: m, files: paths.filter((p) => !based.has(p)) });
+  return paths.filter((p) => !based.has(p));
+}
+
+/** Exposure and the read audit from an attempt's transcripts and the paths its tree.tar holds (sessionFiles). */
+export function readExposure(i: Pick<H2hRunInput, "session" | "installs" | "unit">, dir: string): H2hSession["exposure"] {
+  const files = ["sdk-messages.jsonl", "claude-session.jsonl"].map((f) => join(dir, f)).filter(existsSync);
+  if (!files.length) return null;
+  const evs = readEvents(files);
+  const m = readMarkers();
+  const e = exposure(i.session.arm, i.session.entry, evs, { markers: m, files: sessionFiles(i, dir, m) });
   return { ...e, foreign_reads: i.installs ? readAudit(evs, i.installs, i.session.arm).foreign_reads : [] };
 }
 

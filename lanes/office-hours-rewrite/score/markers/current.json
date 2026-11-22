@@ -1,9 +1,9 @@
 {
   "pin": "current",
-  "sha": "fc5c285035b58ce0552d25cf7cb71749795b6d30",
+  "sha": "858679423cc4778f9961d4aaf3c061a9368985ec",
   "note": "Candidate markers read from the pin's office-hours files in their prose-question form. Stage 1 transcripts freeze the final sets (prereg section 12 stage 4); until then these are build-time candidates.",
   "source_files": {
-    "office-hours/SKILL.md": "0e898ac8d2eb8bf022ef9b344a29c93d1fb0139f2e93afd7ff7fd34ddfc27963",
+    "office-hours/SKILL.md": "6cfa24bd67d8ea29563ae9c4d0e35ed1a96fa46b36c68f11582400aebe32d12d",
     "office-hours/sections/design-and-handoff.md": "b861eeaf809c9350b217cf1f5db9b9752631ef83a5f211f163ad1eaeac318dce",
     "office-hours/sections/phase-2a-startup-diagnostic.md": "35ed1e419eca359e454b9f18dddcce0aeb553a0ee519a7e635f4f0b7d484a393",
     "office-hours/sections/phase-2b-builder-brainstorm.md": "05251d190b32f1da63165e8339211404963556ef5b9cf4c3e46361cbc51027e2",

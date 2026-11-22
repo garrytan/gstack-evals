@@ -18,7 +18,7 @@ import type { H2hUnit } from "../../lanes/outcome-skills/h2h/types.ts";
 
 const P = readPrereg();
 const W = mkdtempSync(join(tmpdir(), "h2h-retry-"));
-const close = (usd: number, end: "error_result" | "completed") => ({ finalized: true, allowance_stops: 0, refusals: end === "error_result" ? ["UPSTREAM 529"] : [], spent_micros: usd * 1_000_000, usage: { input: 1000, output: 100, cache_read: 10, cache_write: 5 }, reservation_bound: 0 });
+const close = (usd: number, end: "error_result" | "completed") => ({ finalized: true, allowance_stops: 0, refusals: end === "error_result" ? ["UPSTREAM 529"] : [], spent_micros: usd * 1_000_000, usage: { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 10, cache_creation_input_tokens: 5 }, reservation_bound: 0 });
 const summary = (usd: number, end: "error_result" | "completed", id: string) => ({ turns: [{ phase: "t1", termination: end, drive: {}, refusal: false }], continuations: 0, slot: { id, close: close(usd, end) } });
 const planned: H2hPlanned = { unit: "u1", kind: "O", entry: "bug", stage: "stage1", index: 0, arm: "gstack", item: "h2h-pilot" };
 
@@ -35,7 +35,7 @@ const spent = Math.min(step.usd ?? 0, cap);
 appendFileSync(process.env.H2H_FAKE_LOG, JSON.stringify({ job, cap, rerun: ak.rerun ?? null }) + "\\n");
 const ev = val("-o") + "/" + job + "/trial/evaluator";
 mkdirSync(ev, { recursive: true });
-writeFileSync(ev + "/h2h-summary.json", JSON.stringify(step.cap_stop ? { cap_stop: true, turns: [], slot: null } : { turns: [{ phase: "t1", termination: step.end, drive: {}, refusal: false }], continuations: 0, slot: { id: "slot-" + job, close: { finalized: true, allowance_stops: 0, refusals: step.end === "error_result" ? ["UPSTREAM 529"] : [], spent_micros: Math.round(spent * 1e6), usage: { input: 1000, output: 100, cache_read: 0, cache_write: 0 }, reservation_bound: 0 } } }));
+writeFileSync(ev + "/h2h-summary.json", JSON.stringify(step.cap_stop ? { cap_stop: true, turns: [], slot: null } : { turns: [{ phase: "t1", termination: step.end, drive: {}, refusal: false }], continuations: 0, slot: { id: "slot-" + job, close: { finalized: true, allowance_stops: 0, refusals: step.end === "error_result" ? ["UPSTREAM 529"] : [], spent_micros: Math.round(spent * 1e6), usage: { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, reservation_bound: 0 } } }));
 `);
 chmodSync(HARBOR, 0o755);
 

@@ -79,6 +79,11 @@
 //   Before any session, every plan arm that runs a gstack tree with a session kind set runs that tree's own
 //   bin/gstack-session-kind in the arm's session env, and the run is refused (E_SESSION_KIND_PIN) unless it prints the kind.
 // - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
+// - On host codex (code units only) every arm takes its session settings from the run's codex arms (codex.ts): its effort,
+//   hook trust, extra -c settings, the pinned CLI and the gstack switches its sessions record, all in the session key's
+//   task. Before the first session each arm's model input is captured keylessly (captures/<arm id>.txt) and its sha256
+//   rides in init.json; after each session the trial copies the state root's hooks/ and skill-contracts/ and the driver
+//   copies the rollouts, and the journal records the session's allowance stops (codex.allowance_stops).
 // - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
 //   (E_USAGE), as review-units refuses an in-repo --out. A sink holding a symlink on the way to, at or under a receipt's
 //   path, or a dangling one at or above the sink, is refused too. Both checks run before any session.
@@ -115,6 +120,7 @@ import { ENFORCED_ARM, GATE_DEADLINE_MS, GATE_KEY, GATE_SETTINGS_ARGS, gateRecor
 import { endStateOf, PV_PARSER_SHA256, pvOutcome, type InfraReason, type PvParse } from "../../../lanes/product-value/parse.ts";
 import type { EndState, Family } from "../../../lanes/product-value/types.ts";
 import { STATE_ROOT_DIR } from "../state-root.ts";
+import { captureArgv, captureArm, CODEX_COPY_DIRS, type CodexArms } from "./codex.ts";
 import { PV_GATE_ARM, PV_GATE_KEY, PV_GSTACK, PV_LENS, PV_TEMPLATE_SHA256, pvArm, pvArmLine, pvGateSettings, pvPrompt, pvRecUser, renderPvChanges } from "./product-value.ts";
 
 type Env = Record<string, string | undefined>;
@@ -189,6 +195,8 @@ export interface ReviewRunInput {
   pv?: { family: Family; fallback: boolean };
   /** The models each named arm runs on; an arm not named runs on every model. */
   armModels?: Readonly<Record<string, readonly string[]>>;
+  /** Host codex only, and every Codex run needs it: each arm's session settings and the CLI the sessions run (codex.ts). */
+  codex?: CodexArms;
   /** The most model turns a session may take; the driver's MAX_TURNS when unset. */
   maxTurns?: number;
   /** GSTACK_SESSION_KIND=unattended in every arm's agent env; unset, none is set. */
@@ -228,6 +236,8 @@ export interface ReviewEntry {
   scored_turn?: ScoredTurn;
   /** ceo-outcome sessions: the proxy's record of the session's peak in-flight reservation, largest prompt, bytes per token and cache-write modes; null when the rig's meter keeps none. */
   meter?: SessionMeter | null;
+  /** Codex sessions: the refusals at the slot's allowance (a limit stop when above 0) and the arm's prompt-input capture. */
+  codex?: { allowance_stops: number; prompt_input_sha256: string };
 }
 
 /** A product-value session's record (lanes/product-value/parse.ts): end_state is null for a session a cap stop ended. */
@@ -399,7 +409,11 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (pvRun) return [dir, dir + "-attempt1"].flatMap((d) => [join(d, "trial.json"), ...["transcript.ndjson", "session.json", "gstack-state", "skill-gates"].map((f) => join(d, "host", f))]);
     return [join(dir, "trial.json"), ...["transcript.ndjson", "ceo-review", "skill-gates"].map((f) => join(dir, "host", f))];
   }).flat())));
-  const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.plan?.lens === CEO_LENS || pvRun ? [join(o.out, "stops.json")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : []), ...transcripts];
+  const codexFiles = o.host !== "codex" ? [] : [join(o.out, "captures"), ...o.arms.flatMap((arm) => (o.armModels?.[arm.name] ?? o.models).flatMap((model) => o.units.flatMap((unit) => Array.from({ length: o.passes }, (_, i) => {
+    const dir = sessionDir(o.out, model, arm.name, unit.task, i + 1);
+    return [join(dir, "trial.json"), ...["init.json", "transcript.ndjson", "codex-sessions", ...CODEX_COPY_DIRS.map((d) => d.to)].map((f) => join(dir, "host", f))];
+  }).flat())))];
+  const receipts = [...codexFiles, join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.plan?.lens === CEO_LENS || pvRun ? [join(o.out, "stops.json")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : []), ...transcripts];
   const sealedSink = sealedSinkProblem(o.suite, env);
   if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
   const linked = "sink" in sink && sink.sink ? sinkLinkProblem(o.out, receipts, sink.sink) : null;
@@ -424,6 +438,9 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (bindingOf(prior) !== bindingOf(o.suite)) throw new Error("E_USAGE: " + file + " binds suite " + (prior?.id ?? "none") + " (catalogs_sha256 " + (prior?.catalogs_sha256 ?? "none") + ", units dir " + (prior?.units_dir ?? "none") + "), and this resume gives suite " + o.suite.id + " (catalogs_sha256 " + (o.suite.catalogs_sha256 ?? "none") + ", units dir " + (o.suite.units_dir ?? "none") + "); its cached cells would be labelled with units they did not run on\n  fix: resume with the units dir and suite the run started with, or start a new run in a new --out");
   }
   if (plan && o.host !== "claude") throw new Error("E_USAGE: plan units score from the Claude Code driver's model_output, which host " + o.host + " does not record; run plan units with host claude");
+  if (o.host === "codex" && !o.codex) throw new Error("E_USAGE: a Codex review run takes each arm's effort and settings from --codex-arms, and none was given");
+  const codexArm = (arm: string) => o.codex?.arms[arm] ?? null;
+  for (const arm of o.host === "codex" ? o.arms : []) if (!codexArm(arm.name)) throw new Error("E_USAGE: --codex-arms has no entry for arm " + arm.name);
   const modelsOf = (arm: string): readonly string[] => o.armModels?.[arm] ?? o.models;
   const ids = new Set<string>();
   for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
@@ -490,7 +507,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: pv ? pvPrompt(pv.family, arm.name, pv.fallback) : ceo ? ceoRunPrompt(arm.name as CeoRunArm) : plan ? planToldPrompt(arm.told as PlanArm, plan.lens as PlanLens, arm.toldPrefix) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix, unit.pr_text) });
   const planKey = (arm: ReviewArm) => (plan ? { plan: { lens: plan.lens, rec_user_sha256: pv ? pvRecUser(pv.family).sha256 : REC_USER_SHA256, preferences_sha256: prefs.has(arm.name) ? createHash("sha256").update(prefs.get(arm.name)!).digest("hex") : null } } : {});
   const keyOf = (model: string, arm: ReviewArm, unit: PreparedUnit): SessionKey =>
-    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: pv ? PV_TEMPLATE_SHA256 : ceo ? CEO_TEMPLATE_SHA256 : toldSha, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...(unit.pr_text !== undefined ? { pr_sha256: sha256(unit.pr_text) } : {}), ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(ceo || pv ? { allowance_micros: allowance(model) } : capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(arm.sessionKind ?? o.sessionKind ? { session_kind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}), ...(pv && arm.name === PV_GATE_ARM ? { skill_gates: PV_GATE_KEY } : {}), ...(o.backgroundWaitS !== undefined && o.backgroundWaitS * 1000 !== BACKGROUND_WAIT_MS ? { background_wait_s: o.backgroundWaitS } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: pv ? PV_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : ceo ? CEO_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: ceo || pv ? envValuesHash(Object.keys(CEO_CONTEXT_ENV), CEO_CONTEXT_ENV) : envValuesHash([], env), policy: o.policy.sha256 });
+    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: pv ? PV_TEMPLATE_SHA256 : ceo ? CEO_TEMPLATE_SHA256 : toldSha, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...(unit.pr_text !== undefined ? { pr_sha256: sha256(unit.pr_text) } : {}), ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(ceo || pv ? { allowance_micros: allowance(model) } : capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(arm.sessionKind ?? o.sessionKind ? { session_kind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}), ...(pv && arm.name === PV_GATE_ARM ? { skill_gates: PV_GATE_KEY } : {}), ...(o.backgroundWaitS !== undefined && o.backgroundWaitS * 1000 !== BACKGROUND_WAIT_MS ? { background_wait_s: o.backgroundWaitS } : {}), ...(codexArm(arm.name) ? { codex: { bin: o.codex!.bin, effort: codexArm(arm.name)!.effort, hook_trust: codexArm(arm.name)!.hook_trust, settings: codexArm(arm.name)!.settings, switches: codexArm(arm.name)!.switches } } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: pv ? PV_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : ceo ? CEO_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: ceo || pv ? envValuesHash(Object.keys(CEO_CONTEXT_ENV), CEO_CONTEXT_ENV) : envValuesHash([], env), policy: o.policy.sha256 });
 
   const groups: Planned[][] = [];
   for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
@@ -516,6 +533,23 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const unitsJson = pv ? JSON.stringify({ schema_version: 1, suite: o.suite, lens: PV_LENS, told_sha256: PV_TEMPLATE_SHA256, parser_sha256: PV_PARSER_SHA256, pv: { family: pv.family, fallback: pv.fallback, passes: o.passes, arms: o.arms.map((a) => ({ name: a.name, told: a.told, models: [...modelsOf(a.name)] })), units: o.units.map((u) => ({ id: u.unit.id, task: u.task, tree_sha256: u.tree_sha256 })) } }, null, 2) + "\n" : JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: ceo ? CEO_TEMPLATE_SHA256 : toldSha, parser_sha256: ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null, ...(u.pr_text !== undefined ? { pr_sha256: sha256(u.pr_text) } : {}) })) }, null, 2) + "\n";
   mkdirSync(o.out, { recursive: true });
   if (ceo || pv) writeFileSync(join(o.out, "units.json"), unitsJson);
+  const captures = new Map<string, string>();
+  if (o.host === "codex" && settled.size < planned.size) {
+    const dir = join(o.out, "captures");
+    mkdirSync(dir, { recursive: true });
+    const taken: Record<string, { sha256: string; argv: string[] }> = {};
+    for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
+      const id = armId(arm.name, model);
+      const argv = captureArgv(o.codex!.bin, model, codexArm(arm.name)!, toldPrompt(arm.told as ToldArm, "main", arm.toldPrefix));
+      const sandbox = rig.sandbox(arm.name, false, model);
+      const got = await captureArm(sandbox, { argv, dir, id, home: sandbox.homePath(join(dir, id)) });
+      if ("problem" in got) throw new Error("E_CODEX_CAPTURE: arm " + arm.name + " on " + model + ": the keyless prompt-input capture failed: " + got.problem + "\n  fix: check that the arm image holds " + argv[0] + ", then rerun; nothing was spent");
+      captures.set(id, got.sha256);
+      taken[id] = { sha256: got.sha256, argv: argv.slice(0, -1) };
+      log("captured " + id + "'s model input: " + got.file + " (sha256 " + got.sha256 + ")");
+    }
+    writeFileSync(join(dir, "captures.json"), JSON.stringify({ schema_version: 1, codex_arms_sha256: o.codex!.sha256, captures: taken }, null, 2) + "\n");
+  }
   const empty = join(o.out, "fixtures");
   mkdirSync(empty, { recursive: true });
   const journal = join(o.out, "cells.ndjson");
@@ -523,6 +557,18 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   let wall = 0;
   let ran = 0;
 
+  const codexSession = (cx: NonNullable<ReturnType<typeof codexArm>>, name: string, install: HostRig["arms"][string], home: string, model: string) => {
+    const dir = gstackDir(install);
+    const prov = (install as { provenance?: { stack?: { repo?: unknown; sha?: unknown } } }).provenance?.stack;
+    const gstack = install.gstack && typeof prov?.repo === "string" && typeof prov.sha === "string" ? { repo: prov.repo, sha: prov.sha, version: gstackVersion(dir) ?? "unknown" } : null;
+    return {
+      hookTrust: cx.hook_trust,
+      ...(o.codex!.bin ? { bin: o.codex!.bin } : {}),
+      settings: cx.settings,
+      ...(install.gstack && cx.switches.length ? { switches: { bin: posix.join(home, posix.dirname(install.gstack), "gstack-config"), keys: cx.switches } } : {}),
+      arm: { gstack, tree_sha256: armTree(rig, name, model), prompt_input_sha256: captures.get(armId(name, model)) ?? null },
+    };
+  };
   const session = async (p: Planned, attempt = 1, before: PvSession["attempts"] = []): Promise<ReviewEntry> => {
     const { cell, arm, unit } = p;
     const provider = providerOf(o.policy, cell.model);
@@ -538,12 +584,13 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const plugins = (install.plugins ?? []).map((pl) => posix.join(home, pl));
     const name = pv ? pvArm(pv.family, arm.name)!.skill : plan ? planSkill(arm.told as PlanArm, ceo ? lens : (plan.lens as PlanLens)) : toldSkill(arm.told as ToldArm, arm.toldPrefix);
     const enforced = (ceo && arm.name === ENFORCED_ARM) || (pv !== null && arm.name === PV_GATE_ARM);
+    const cx = o.host === "codex" ? codexArm(arm.name) : null;
     let printedSha: string | null = null;
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
-    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(pv ? { entry: { user: pvRecUser(pv.family).user }, freeform: pvRecUser(pv.family).freeform } : plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(arm.sessionKind ?? o.sessionKind ? { sessionKind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo || pv ? { disable1mContext: true } : {}), ...(enforced ? { skillGateDeadlineMs: GATE_DEADLINE_MS, settings: { command: [posix.join(home, posix.dirname(install.gstack ?? ""), "gstack-skill-gates"), ...GATE_SETTINGS_ARGS].map((w) => "'" + w.replace(/'/g, "'\\''") + "'").join(" "), make: (printed: string) => ((printedSha = sha256(printed)), pv ? pvGateSettings(printed) : gateSettings(printed)) } } : {}), ...(capStops ? { capStops } : {}), ...(ceo ? { followUp: { text: FOLLOW_UP, needed: needsFollowUp } } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000 });
+    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(pv ? { entry: { user: pvRecUser(pv.family).user }, freeform: pvRecUser(pv.family).freeform } : plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(arm.sessionKind ?? o.sessionKind ? { sessionKind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo || pv ? { disable1mContext: true } : {}), ...(enforced ? { skillGateDeadlineMs: GATE_DEADLINE_MS, settings: { command: [posix.join(home, posix.dirname(install.gstack ?? ""), "gstack-skill-gates"), ...GATE_SETTINGS_ARGS].map((w) => "'" + w.replace(/'/g, "'\\''") + "'").join(" "), make: (printed: string) => ((printedSha = sha256(printed)), pv ? pvGateSettings(printed) : gateSettings(printed)) } } : {}), ...(capStops ? { capStops } : {}), ...(ceo ? { followUp: { text: FOLLOW_UP, needed: needsFollowUp } } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000, ...(cx ? { effort: cx.effort, codexSession: codexSession(cx, arm.name, install, home, cell.model) } : {}) });
     const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
     const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! }, stateProjectFiles: { [PROJECT_PREFERENCES]: prefs.get(arm.name)! } } : {}), ...(enforced ? { gate: (work: string) => gateRecord({ work, host: join(dir, "host"), gstack: gstackDir(install) ?? "", settingsSha256: printedSha }) } : {}) };
-    const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...(ceo ? { copyOut: { name: "ceo-review.md", to: join(dir, "host", "ceo-review") } } : {}), ...(pv ? { copyDir: { from: STATE_ROOT_DIR, to: join(dir, "host", "gstack-state") } } : {}), ...state });
+    const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...(ceo ? { copyOut: { name: "ceo-review.md", to: join(dir, "host", "ceo-review") } } : {}), ...(pv ? { copyDir: { from: STATE_ROOT_DIR, to: join(dir, "host", "gstack-state") } } : {}), ...(cx ? { copyDirs: CODEX_COPY_DIRS.map((d) => ({ from: STATE_ROOT_DIR + "/" + d.from, to: join(dir, "host", d.to) })) } : {}), ...state });
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros;
     trial.record.cost_micros = meter.micros;
@@ -584,7 +631,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const pvSession: PvSession | null = pvRead ? { parser_sha256: PV_PARSER_SHA256, end_state: endStateOf(pvRead.outcome), reason: pvRead.outcome.state === "infra" ? pvRead.outcome.reason : null, attempts: pvAttempts, web: pvRead.outcome.state === "contaminated" ? pvRead.outcome.web.length : 0, usd: pvAttempts.reduce((s, a) => s + a.usd, 0), wall_s: typeof clock.session_ms === "number" ? clock.session_ms / 1000 : null } : null;
     if (pvSession?.end_state === "missing") log("E_PV_INFRA_MISSING " + cellName(cell) + ": " + pvAttempts.map((a) => a.reason + " (" + a.detail + ")").join(", then ") + "; the session is missing, never 0");
     if (pvSession?.end_state === "contaminated") log("E_PV_WEB_CONTAMINATED " + cellName(cell) + ": " + pvSession.web + " successful web result" + (pvSession.web === 1 ? "" : "s") + "; the session is excluded as missing");
-    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(pvSession ? { pv: pvSession, meter: sessionMeter(meter) } : {}), ...(code ? { scored_turn: code.scored_turn } : {}), ...(ceoOutcome ? { ceo_outcome: ceoOutcome, meter: sessionMeter(meter) } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
+    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(pvSession ? { pv: pvSession, meter: sessionMeter(meter) } : {}), ...(code ? { scored_turn: code.scored_turn } : {}), ...(ceoOutcome ? { ceo_outcome: ceoOutcome, meter: sessionMeter(meter) } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}), ...(cx ? { codex: { allowance_stops: (meter as Partial<Meter>).allowance_stops ?? 0, prompt_input_sha256: captures.get(armId(arm.name, cell.model))! } } : {}) };
     entries.set(reviewCellId(cell), entry);
     wall += trial.record.wall_ms ?? 0;
     ran++;
@@ -721,6 +768,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { ...(ceo || pv ? {} : { completed_without_text: withoutText }), ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
       arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default", ...(ceo || pv ? { context_env: CEO_CONTEXT_ENV } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}), ...(pv && arm.name === PV_GATE_ARM ? { skill_gates: PV_GATE_KEY } : {}) }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts, ...(plan ? {} : { held_rescues: held }),
       ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
+      ...(codexArm(arm.name) ? { codex: { ...codexArm(arm.name)!, bin: o.codex!.bin, codex_arms_sha256: o.codex!.sha256, prompt_input_sha256: captures.get(id) ?? null } } : {}),
       ...(pv ? { product_value: { end_states: pvStates, retries, lenient, missing: pvMissing, parser_sha256: PV_PARSER_SHA256, template_sha256: PV_TEMPLATE_SHA256 } } : {}),
       ...(ceo ? { ceo_outcome: { end_states: states, follow_ups: followUps, follow_up_terminations: followEnds, over_three: overThree, zero_output: zeroOutput, gaps: ceoGaps, parser_sha256: CEO_PARSER_SHA256, template_sha256: CEO_TEMPLATE_SHA256 } } : {}),
     };

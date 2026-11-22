@@ -196,14 +196,14 @@ export function localSandbox(install: (home: string) => void): Sandbox {
  * The main agent's requests carry Claude Code's tools; side requests (titles, summaries) carry none and get a plain text
  * answer, so the script only sees the session's own turns.
  */
-export function harness(script: Script, opts: { capMicros?: number; env?: Record<string, string>; responses?: ResponsesScript; stop?: (turn: Turn) => string | undefined } = {}): Harness {
+export function harness(script: Script, opts: { capMicros?: number; env?: Record<string, string>; responses?: ResponsesScript; stop?: (turn: Turn) => string | undefined; requestFields?: string[] } = {}): Harness {
   const dir = mkdtempSync(join(tmpdir(), "gse-adapter-"));
   const children: ChildProcess[] = [];
   const ledger = new MemoryLedger(opts.capMicros);
   const upstream: Upstream[] = [];
   const proxy = new MeteringProxy({
     ledger, leaseId: "lease-test", host: "127.0.0.1", managementSocket: join(dir, "management.sock"), managementToken: MANAGEMENT,
-    journal: join(dir, "journal.ndjson"), retry: { attempts: 1, elapsed_ms: 10_000 }, env: opts.env ?? KEYS,
+    journal: join(dir, "journal.ndjson"), retry: { attempts: 1, elapsed_ms: 10_000 }, env: opts.env ?? KEYS, ...(opts.requestFields ? { requestFields: opts.requestFields } : {}),
     fetch: async (url, init) => {
       const body = JSON.parse(String(init.body ?? "{}"));
       upstream.push({ url, headers: new Headers(init.headers), body });

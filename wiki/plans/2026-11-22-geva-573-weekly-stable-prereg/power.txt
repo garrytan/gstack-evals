@@ -1,0 +1,27 @@
+Weekly passes, this week's stable minus last week's, paired over K = 80 tasks, one session per task per arm.
+B1 measured 9 of 60 tasks discordant between a treated arm and no gstack on Opus 5.5 (15%).
+  discordant share 0.10: 95% half-width 6.9 points, MDD 9.9 points
+  discordant share 0.15: 95% half-width 8.5 points, MDD 12.1 points
+  discordant share 0.20: 95% half-width 9.8 points, MDD 14.0 points
+  discordant share 0.25: 95% half-width 11.0 points, MDD 15.7 points
+
+Weekly cost, geometric mean ratio of dollars per session, this week's over last week's, K = 80.
+FOUN-404 measured an SD of 0.23 to 0.33 for the per-task log cost difference between arms.
+  SD 0.23: MDD a ratio of 1.075
+  SD 0.28: MDD a ratio of 1.092
+  SD 0.33: MDD a ratio of 1.109
+
+Block (4 weeks), stable minus no gstack pooled over 4 x 80 pairs, clustered by task.
+rho is the correlation of a task's paired difference across weeks; 0 is pure session noise, 1 is a fixed task effect.
+  discordant share 0.10, rho 0.00: MDD 5.0 points
+  discordant share 0.10, rho 0.33: MDD 7.0 points
+  discordant share 0.10, rho 1.00: MDD 9.9 points
+  discordant share 0.15, rho 0.00: MDD 6.1 points
+  discordant share 0.15, rho 0.33: MDD 8.6 points
+  discordant share 0.15, rho 1.00: MDD 12.1 points
+  discordant share 0.20, rho 0.00: MDD 7.0 points
+  discordant share 0.20, rho 0.33: MDD 9.9 points
+  discordant share 0.20, rho 1.00: MDD 14.0 points
+
+False alarms: with no true change, a two-sided 95% interval lies wholly below 0 in about 2.5% of weeks,
+about 1.3 weeks a year.

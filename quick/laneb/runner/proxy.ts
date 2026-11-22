@@ -1,12 +1,14 @@
 // Metering proxy for the Lane B quick look.
-// Data plane: Anthropic Messages API for trial containers, authenticated by a per-session token.
+// Data plane: Anthropic Messages API for trial containers, authenticated by a per-session token, and the OpenAI Responses
+// API for Codex sessions on the same sessions, caps and ledger (paths ending in /v1/responses; runner/responses.ts).
 // Control plane (127.0.0.1 only): open and close sessions, read totals.
 // Real provider keys stay in this process; containers only ever hold a session token.
 import { appendFileSync, readFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
+import { applyOutputCap, isResponsesPath, reasoningEffort, responsesError, responsesImageBound, responsesRefusal, responsesUsage, ResponsesSseUsage, RESPONSES_PATH } from "./responses.ts";
 
 export type Price = { input: number; output: number; cache_write_5m: number; cache_write_1h: number; cache_read: number };
-export type ModelCfg = { route: string; upstream_model: string; price_per_mtok: Price; long_prompt?: { over_tokens: number; price_per_mtok: Price }; body_overrides?: Record<string, unknown>; strip_fields?: string[]; bound_bytes_per_token?: number };
+export type ModelCfg = { route: string; upstream_model: string; price_per_mtok: Price; long_prompt?: { over_tokens: number; price_per_mtok: Price }; body_overrides?: Record<string, unknown>; strip_fields?: string[]; bound_bytes_per_token?: number; output_cap_tokens?: number };
 export type RouteCfg = { base_url: string; key_env: string; auth: "x-api-key" | "bearer"; count_tokens: "forward" | "estimate" };
 export type ProxyConfig = { routes: Record<string, RouteCfg>; models: Record<string, ModelCfg> };
 
@@ -432,44 +434,49 @@ export function startProxy(opts: ProxyOptions) {
       if (req.method === "HEAD" || req.method === "GET") return new Response(null, { status: 200 });
       const token = req.headers.get("x-api-key") ?? (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
       const s = token ? byToken.get(token) : undefined;
-      if (!s || !s.open) return anthropicError(401, "authentication_error", "laneb proxy: unknown or closed session");
+      const responses = isResponsesPath(url.pathname);
+      const fail = responses ? responsesError : anthropicError;
+      if (!s || !s.open) return fail(401, "authentication_error", "laneb proxy: unknown or closed session");
       const beforeOutput = !s.outputReturned;
       const model = opts.config.models[s.model];
       const route = opts.config.routes[model.route];
       const raw = await req.text();
       let body: any;
-      try { body = JSON.parse(raw); } catch { return anthropicError(400, "invalid_request_error", "laneb proxy: body is not JSON"); }
-      if (!body || typeof body !== "object" || Array.isArray(body)) return anthropicError(400, "invalid_request_error", "laneb proxy: body is not a JSON object");
+      try { body = JSON.parse(raw); } catch { return fail(400, "invalid_request_error", "laneb proxy: body is not JSON"); }
+      if (!body || typeof body !== "object" || Array.isArray(body)) return fail(400, "invalid_request_error", "laneb proxy: body is not a JSON object");
       const requested = String(body.model ?? "");
       s.requestedModels[requested] = (s.requestedModels[requested] ?? 0) + 1;
       const isCount = url.pathname.endsWith("/count_tokens");
-      if (!url.pathname.endsWith("/v1/messages") && !isCount) return anthropicError(404, "not_found_error", "laneb proxy: only /v1/messages is served");
-      const mark = isCount ? false : routeMark(body);
-      const routeEvidence = isCount ? {} : { route_mark: mark, before_output: beforeOutput };
-      if (!isCount && beforeOutput) s.routeMarkBeforeOutput = s.routeMarkBeforeOutput === "quoted" || mark === "quoted" ? "quoted" : s.routeMarkBeforeOutput === true || mark;
+      if (!url.pathname.endsWith("/v1/messages") && !isCount && !responses) return anthropicError(404, "not_found_error", "laneb proxy: only /v1/messages is served");
+      const mark = isCount || responses ? false : routeMark(body);
+      const routeEvidence = isCount ? {} : responses ? { wire: "responses", reasoning_effort: reasoningEffort(body), before_output: beforeOutput } : { route_mark: mark, before_output: beforeOutput };
+      if (!isCount && !responses && beforeOutput) s.routeMarkBeforeOutput = s.routeMarkBeforeOutput === "quoted" || mark === "quoted" ? "quoted" : s.routeMarkBeforeOutput === true || mark;
       const refuse = (reason: string, message: string, extra: Record<string, unknown> = {}) => {
         s.refused++;
         log({ event: "refused", session: s.id, reason, ...routeEvidence, ...extra });
-        return anthropicError(400, "invalid_request_error", "laneb proxy: " + message);
+        return fail(400, "invalid_request_error", "laneb proxy: " + message);
       };
-      const server = serverTools(body);
+      const bad = responses ? responsesRefusal(body, model) : null;
+      if (bad) return refuse(bad.reason, bad.message, bad.extra);
+      const maxOut: number = responses ? applyOutputCap(body, model) : body.max_tokens;
+      const server = responses ? [] : serverTools(body);
       if (server.length) return refuse("server_tools", "provider-side tools are not allowed: " + server.join(","), { tools: server });
-      const unknown = unknownBodyKeys(body);
+      const unknown = responses ? [] : unknownBodyKeys(body);
       if (unknown.length) return refuse("body_keys", "request fields are not allowed: " + unknown.join(","), { keys: unknown });
-      const remote = remoteSources([body.messages, body.system]);
+      const remote = responses ? [] : remoteSources([body.messages, body.system]);
       if (remote.length) return refuse("remote_source", "image and document content with a url or file source is not allowed", { sources: remote });
-      if (!isCount && !validMaxTokens(body.max_tokens)) return refuse("max_tokens", "max_tokens must be a positive integer", { max_tokens: body.max_tokens });
+      if (!isCount && !responses && !validMaxTokens(body.max_tokens)) return refuse("max_tokens", "max_tokens must be a positive integer", { max_tokens: body.max_tokens });
       body.model = model.upstream_model;
       for (const f of model.strip_fields ?? []) delete body[f];
       Object.assign(body, model.body_overrides ?? {});
       const key = env[route.key_env];
-      if (!key) return anthropicError(500, "api_error", "laneb proxy: no upstream key configured for route " + model.route);
+      if (!key) return fail(500, "api_error", "laneb proxy: no upstream key configured for route " + model.route);
       const headers: Record<string, string> = { "content-type": "application/json" };
-      for (const h of ["anthropic-version", "accept"]) {
+      for (const h of responses ? ["accept"] : ["anthropic-version", "accept"]) {
         const v = req.headers.get(h);
         if (v) headers[h] = v;
       }
-      const betas = splitBetas(req.headers.get("anthropic-beta"));
+      const betas = splitBetas(responses ? null : req.headers.get("anthropic-beta"));
       if (betas.kept.length) headers["anthropic-beta"] = betas.kept.join(",");
       if (betas.dropped.length) log({ event: "beta_dropped", session: s.id, betas: betas.dropped });
       if (route.auth === "x-api-key") headers["x-api-key"] = key;
@@ -482,9 +489,9 @@ export function startProxy(opts: ProxyOptions) {
         return new Response(res.body, { status: res.status, headers: responseHeaders(res, { "content-type": res.headers.get("content-type") ?? "application/json" }) });
       }
 
-      let inputTokens = byteBoundTokens(outBody, route.count_tokens === "estimate" ? model.bound_bytes_per_token ?? 1 : 1);
+      let inputTokens = byteBoundTokens(outBody, route.count_tokens === "estimate" ? model.bound_bytes_per_token ?? 1 : 1) + (responses ? responsesImageBound(body) : 0);
       let counted = false;
-      if (route.count_tokens === "forward") {
+      if (route.count_tokens === "forward" && !responses) {
         try {
           const countBody = JSON.stringify(Object.fromEntries(COUNT_FIELDS.filter((f) => body[f] !== undefined).map((f) => [f, body[f]])));
           const res = await fetch(route.base_url + "/v1/messages/count_tokens", { method: "POST", headers, body: countBody });
@@ -495,33 +502,34 @@ export function startProxy(opts: ProxyOptions) {
           log({ event: "count_failed", session: s.id, error: String(e).slice(0, 200) });
         }
       }
-      if (!s.open) return anthropicError(401, "authentication_error", "laneb proxy: unknown or closed session");
+      if (!s.open) return fail(401, "authentication_error", "laneb proxy: unknown or closed session");
       // Body-load probe (from tag laneb-stacks-1-runner): on the session's first forwarded request, record whether the CLI
       // expanded a slash command (the messages carry "<command-name>", so a skill body was injected), which commands it
       // expanded, and that request's token bound. Only the messages are searched: Claude Code's Skill tool description also
       // names <command-name>. Cost accounting is untouched.
-      if (s.cmdExpanded === undefined) {
+      if (s.cmdExpanded === undefined && !responses) {
         const messages = JSON.stringify(body.messages ?? []);
         s.cmdExpanded = messages.includes("<command-name>");
         s.cmdNames = [...new Set([...messages.matchAll(/<command-name>\/?([^<]{1,100})<\/command-name>/g)].map((m) => m[1]))];
         s.firstReqPromptTokens = inputTokens;
         log({ event: "body_load_probe", session: s.id, cmd_expanded: s.cmdExpanded, cmd_names: s.cmdNames, first_req_prompt_tokens: inputTokens });
       }
-      if (route.count_tokens === "forward" && !counted && hasMedia([body.messages, body.system])) {
+      if (route.count_tokens === "forward" && !responses && !counted && hasMedia([body.messages, body.system])) {
         log({ event: "count_failed_media", session: s.id, input_tokens_bound: inputTokens, max_tokens: body.max_tokens });
         return anthropicError(529, "overloaded_error", "laneb proxy: token count unavailable, retry");
       }
-      const worst = worstCaseMicros(inputTokens, body.max_tokens, maxPrice(model), asksLongTtl(outBody));
+      const longTtl = !responses && asksLongTtl(outBody);
+      const worst = worstCaseMicros(inputTokens, maxOut, maxPrice(model), longTtl);
       if (!Number.isFinite(worst) || worst <= 0) return refuse("worst_case", "the request's worst-case cost is not a positive number", { worst_micros: worst });
       const inflight = [...s.pending.values()].reduce((x, p) => x + p.worst, 0);
       if (s.spentMicros + inflight + worst > s.capMicros) {
         // A failed count is not a budget stop: the byte bound overstates the input, so Claude Code is told to retry.
-        if (route.count_tokens === "forward" && !counted) {
+        if (route.count_tokens === "forward" && !responses && !counted) {
           log({ event: "count_failed_over_budget", session: s.id, spent_micros: s.spentMicros, inflight_micros: inflight, worst_micros: worst, cap_micros: s.capMicros, input_tokens_bound: inputTokens, max_tokens: body.max_tokens });
           return anthropicError(529, "overloaded_error", "laneb proxy: token count unavailable, retry");
         }
         s.refusedBudget++;
-        return refuse("session_cap", "session budget exhausted", { spent_micros: s.spentMicros, inflight_micros: inflight, worst_micros: worst, cap_micros: s.capMicros, input_tokens_bound: inputTokens, counted, max_tokens: body.max_tokens });
+        return refuse("session_cap", "session budget exhausted", { spent_micros: s.spentMicros, inflight_micros: inflight, worst_micros: worst, cap_micros: s.capMicros, input_tokens_bound: inputTokens, counted, max_tokens: maxOut });
       }
       const rid = ++reqSeq;
       const abort = new AbortController();
@@ -531,10 +539,10 @@ export function startProxy(opts: ProxyOptions) {
       // complete=false charges the worst case: a stream cut off before its final usage, a body that failed mid-read,
       // a 200 without usage, or a request that failed after it may have reached the provider. Its input side is raised to
       // any input the response already reported, so a request whose real count passed its bound is never charged below it.
-      const failWorst = (u: Usage) => Math.max(worst, worstCaseMicros(u.input_tokens + u.cache_creation_input_tokens + u.cache_creation_1h_input_tokens + u.cache_read_input_tokens, body.max_tokens, maxPrice(model), asksLongTtl(outBody)));
+      const failWorst = (u: Usage) => Math.max(worst, worstCaseMicros(u.input_tokens + u.cache_creation_input_tokens + u.cache_creation_1h_input_tokens + u.cache_read_input_tokens, maxOut, maxPrice(model), longTtl));
       const account = (usage: Usage, providerCost: number | null, status: number, stream: boolean, stopReason: string | null, complete: boolean, extra: Record<string, unknown> = {}) => {
         const micros = complete ? costMicros(usage, priceFor(usage, model)) : failWorst(usage);
-        const entry = { session: s.id, trial: s.trial, model: s.model, request: rid, requested_model: requested, upstream_model: model.upstream_model, status, stream, complete, usage, cost_micros: micros, worst_micros: worst, input_tokens_bound: inputTokens, counted, body_bytes: outBody.length, max_tokens: body.max_tokens, provider_cost_usd: providerCost, stop_reason: stopReason, ms: Date.now() - started, ...routeEvidence, ...extra };
+        const entry = { session: s.id, trial: s.trial, model: s.model, request: rid, requested_model: requested, upstream_model: model.upstream_model, status, stream, complete, usage, cost_micros: micros, worst_micros: worst, input_tokens_bound: inputTokens, counted, body_bytes: outBody.length, max_tokens: maxOut, provider_cost_usd: providerCost, stop_reason: stopReason, ms: Date.now() - started, ...routeEvidence, ...extra };
         if (!s.pending.delete(rid)) { log({ event: "late_usage", ...entry }); return; }
         if (status === 200 && !extra.sse_error && !extra.error) s.okResponses++;
         s.spentMicros += micros;
@@ -544,11 +552,11 @@ export function startProxy(opts: ProxyOptions) {
       };
       let upstream: Response;
       try {
-        upstream = await fetch(route.base_url + "/v1/messages", { method: "POST", headers, body: outBody, signal: abort.signal });
+        upstream = await fetch(route.base_url + (responses ? RESPONSES_PATH : "/v1/messages"), { method: "POST", headers, body: outBody, signal: abort.signal });
       } catch (e: any) {
         log({ event: "upstream_error", session: s.id, request: rid, error: String(e), code: e?.code ?? null });
         if (s.pending.has(rid)) account(emptyUsage(), null, 0, Boolean(body.stream), null, NOT_SENT_CODES.has(e?.code), { error: String(e).slice(0, 300) });
-        return anthropicError(529, "overloaded_error", "laneb proxy: upstream unreachable");
+        return fail(529, "overloaded_error", "laneb proxy: upstream unreachable");
       }
       const contentType = upstream.headers.get("content-type") ?? "";
       if (!upstream.body || !contentType.includes("text/event-stream")) {
@@ -557,7 +565,7 @@ export function startProxy(opts: ProxyOptions) {
           text = await upstream.text();
         } catch (e) {
           account(emptyUsage(), null, upstream.status, false, null, false, { error: String(e).slice(0, 300) });
-          return anthropicError(502, "api_error", "laneb proxy: upstream response failed mid-body");
+          return fail(502, "api_error", "laneb proxy: upstream response failed mid-body");
         }
         const usage = emptyUsage();
         let providerCost: number | null = null;
@@ -565,17 +573,18 @@ export function startProxy(opts: ProxyOptions) {
         let hasUsage = false;
         try {
           const j = JSON.parse(text);
-          mergeUsage(usage, j.usage);
+          if (responses) Object.assign(usage, responsesUsage(j.usage));
+          else mergeUsage(usage, j.usage);
           hasUsage = typeof j.usage?.input_tokens === "number" && typeof j.usage?.output_tokens === "number";
           if (typeof j.usage?.cost === "number") providerCost = j.usage.cost;
-          stopReason = j.stop_reason ?? null;
+          stopReason = (responses ? j.status : j.stop_reason) ?? null;
           if (upstream.status >= 400) log({ event: "upstream_status", session: s.id, status: upstream.status, error_type: j.error?.type, message: String(j.error?.message ?? "").slice(0, 300) });
         } catch {}
         account(usage, providerCost, upstream.status, false, stopReason, upstream.status !== 200 || hasUsage);
         if (upstream.status === 200) s.outputReturned = true;
         return new Response(text, { status: upstream.status, headers: responseHeaders(upstream, { "content-type": contentType || "application/json" }) });
       }
-      const parser = new SseUsage();
+      const parser = responses ? new ResponsesSseUsage() : new SseUsage();
       const decoder = new TextDecoder();
       let done = false;
       // A stream with an error event is never an ok response. It costs nothing when the error came before message_start,

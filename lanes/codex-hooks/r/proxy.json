@@ -1,0 +1,35 @@
+{
+  "routes": {
+    "openai": {
+      "base_url": "https://api.openai.com",
+      "key_env": "OPENAI_API_KEY",
+      "auth": "bearer",
+      "count_tokens": "estimate"
+    }
+  },
+  "models": {
+    "gpt-6.1-sol": {
+      "route": "openai",
+      "upstream_model": "gpt-6.1-sol",
+      "bound_bytes_per_token": 3,
+      "output_cap_tokens": 32000,
+      "price_per_mtok": {
+        "input": 2,
+        "output": 10,
+        "cache_write_5m": 2.5,
+        "cache_write_1h": 2.5,
+        "cache_read": 0.1
+      },
+      "long_prompt": {
+        "over_tokens": 272000,
+        "price_per_mtok": {
+          "input": 4,
+          "output": 15,
+          "cache_write_5m": 5,
+          "cache_write_1h": 5,
+          "cache_read": 0.2
+        }
+      }
+    }
+  }
+}

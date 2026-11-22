@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
+// pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
 // Section 22's money, keyless: item approvals at their caps, reserve mechanics through the real ledger against every
 // item's cap, the line and the C1 guard before each launch (wired into hm launch), section 13's infrastructure rerun, and
 // dry-run steps 6-ledger, leases-per-item and reserve-mechanics.

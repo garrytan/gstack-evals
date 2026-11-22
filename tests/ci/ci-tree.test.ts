@@ -47,7 +47,7 @@ type CiJob = { name?: string; needs?: unknown; if?: unknown; strategy?: { "fail-
 const workflow = Bun.YAML.parse(readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8")) as { on: Record<string, unknown>; jobs: Record<string, CiJob> };
 const policy = JSON.parse(readFileSync(join(root, ".gstack", "pregate.json"), "utf8")) as {
   run_profiles: Record<string, { workflow: string; events: string[]; jobs: string[]; artifact: string; os?: string }>;
-  ship_lanes_from: Record<string, { profiles: string[]; inventory: string }>;
+  ship_lanes_from: Record<string, { profiles: string[]; inventory: string; per_file?: string }>;
 };
 const testInventory = policy.ship_lanes_from["bun test"]!.inventory;
 
@@ -92,8 +92,16 @@ describe("treeRecord", () => {
       tree: TREE,
       os: "Linux",
       files: ["quick/x/s.test.ts", "tests/a.test.ts", "tests/b.test.ts", CHECK + "bun run typecheck", CHECK + "bun run errors:check"],
+      skipped_files: ["quick/x/s.test.ts"],
       tests: 2,
     });
+  });
+
+  test("lists a file as skipped only when every case in it skipped, nested describes included", () => {
+    const nested = JUNIT.replace('<testcase name="three" />', '<testcase name="three"><skipped /></testcase>');
+    expect(treeRecord(env(), { junit: nested, checks: "", tree: TREE }).skipped_files).toEqual(["quick/x/s.test.ts", "tests/a.test.ts"]);
+    const none = JUNIT.replace('<testcase name="only skipped"><skipped /></testcase>', '<testcase name="only skipped" />');
+    expect(treeRecord(env(), { junit: none, checks: "", tree: TREE }).skipped_files).toEqual([]);
   });
 
   test("takes the head from GITHUB_SHA on a dispatch", () => {
@@ -345,6 +353,12 @@ describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
       expect(runs[at]!.split("\n").at(-1)).toBe("echo '" + command + "' >> \"$RUNNER_TEMP/checks-passed.txt\"");
     }
     expect(runs[record]).toContain('--checks "$RUNNER_TEMP/checks-passed.txt"');
+  });
+
+  test("the bun test lane runs the files CI skipped entirely here, with the tests stage's runner", () => {
+    const runner = (JSON.parse(readFileSync(join(root, ".gstack", "pregate.json"), "utf8")) as { runner: string }).runner;
+    expect(policy.ship_lanes_from["bun test"]!.per_file).toBe(runner);
+    expect(Object.entries(policy.ship_lanes_from).filter(([, lane]) => lane.per_file).map(([command]) => command)).toEqual(["bun test"]);
   });
 
   test("the wiki:check entry is written only when the run checked against the default branch", () => {

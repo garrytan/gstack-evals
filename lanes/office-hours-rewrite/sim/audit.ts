@@ -21,14 +21,14 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { auditTurn, combine, type AuditCall, type AuditorRead, type TurnVerdict } from "../../../src/persona-sim/audit.ts";
-import { SIM_SHA256, type PersonSheet, type SimCall, type VisibleTurn } from "../../../src/persona-sim/sim.ts";
+import { SIM_SHA256, type PersonSheet, type SimCall } from "../../../src/persona-sim/sim.ts";
 import { seededRandom } from "../../../src/runner/stats/paired.ts";
 import { VIOLATIONS } from "../../office-hours-founder/sim/fidelity.ts";
 import { pool } from "../../product-value/meter.ts";
 import { shuffle } from "../../product-value/stats.ts";
 import { AUDIT, AUDIT_SCRIPT, SEED, SIM_RULES_SHA256 } from "../frozen.ts";
 import type { BriefKind } from "../types.ts";
-import { simTurn, type SimOutcome } from "./founder.ts";
+import { simTurn, type HistoryTurn, type OwnTurn, type SimOutcome } from "./founder.ts";
 
 const sha256 = (t: string | Buffer) => createHash("sha256").update(t).digest("hex");
 
@@ -79,10 +79,10 @@ export interface AuditRecord {
   sampled: AuditedTurn[];
 }
 
-/** The script transcript before turn n (0-based): the script messages so far and the replies the simulator delivered. */
-export function scriptTranscript(replies: readonly string[], n: number): VisibleTurn[] {
-  if (replies.length !== n) throw new Error("E_USAGE audit: turn " + (n + 1) + " needs " + n + " delivered replies");
-  return AUDIT_SCRIPT.slice(0, n + 1).flatMap((m, i): VisibleTurn[] => [{ role: "assistant", text: m }, ...(i < n ? [{ role: "person" as const, text: replies[i]! }] : [])]);
+/** The script transcript before turn n (0-based): the script messages so far and the turns the simulator delivered, each with its JSON. */
+export function scriptTranscript(delivered: readonly OwnTurn[], n: number): HistoryTurn[] {
+  if (delivered.length !== n) throw new Error("E_USAGE audit: turn " + (n + 1) + " needs " + n + " delivered replies");
+  return AUDIT_SCRIPT.slice(0, n + 1).flatMap((m, i): HistoryTurn[] => [{ role: "assistant", text: m }, ...(i < n ? [{ role: "person" as const, text: delivered[i]!.reply, own: delivered[i]! }] : [])]);
 }
 
 /** What ends the whole audit: a cap stop or a drift on any sheet. Every sheet checks it before its next turn. */
@@ -93,15 +93,15 @@ export interface AuditStop {
 
 /** Runs the script over one sheet; stops at the first turn with no delivered reply, or once any sheet has stopped the audit. */
 export async function runScript(s: AuditSheet, call: SimCall, stop: AuditStop = { cap: null, drift: null }): Promise<{ turns: ScriptTurn[] }> {
-  const replies: string[] = [];
+  const delivered: OwnTurn[] = [];
   const turns: ScriptTurn[] = [];
   for (let n = 0; n < AUDIT_SCRIPT.length && !stop.cap && !stop.drift; n++) {
-    const out = await simTurn({ kind: s.kind, sheet: s.sheet, transcript: scriptTranscript(replies, n), call });
+    const out = await simTurn({ kind: s.kind, sheet: s.sheet, transcript: scriptTranscript(delivered, n), call });
     turns.push({ brief: s.brief, turn: n + 1, outcome: out.kind, reply: out.kind === "reply" ? out.reply : null, revealed: out.kind === "reply" ? out.revealed : [], attempts: "attempts" in out ? out.attempts : out.requests.length });
     if (out.kind === "call-failed" && out.reason === "cap") stop.cap ??= s.brief + ": " + out.detail;
     if (out.kind === "call-failed" && out.reason === "drift") stop.drift ??= s.brief + ": " + out.detail;
     if (out.kind !== "reply") break;
-    replies.push(out.reply);
+    delivered.push({ reply: out.reply, revealed: out.revealed, rules: out.rules, done: out.done });
   }
   return { turns };
 }
