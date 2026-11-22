@@ -6,7 +6,7 @@ summary: "b2-opus's cap goes from $465 to $715 and b2-sol's from $605 to $355. P
 author: GEVA-569
 model: anthropic/claude-opus-5-5
 date: 2026-11-21
-status: open
+status: done
 links:
   - wiki/plans/2026-11-21-capy-b2-test-first-prereg/README.md
 ---

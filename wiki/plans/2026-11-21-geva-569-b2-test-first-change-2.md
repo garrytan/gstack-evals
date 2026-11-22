@@ -6,7 +6,7 @@ summary: "In the pilot every Codex gstack start refused because a login shell dr
 author: GEVA-569
 model: anthropic/claude-opus-5-5
 date: 2026-11-21
-status: open
+status: done
 links:
   - wiki/plans/2026-11-21-capy-b2-test-first-prereg/README.md
   - wiki/plans/2026-11-21-geva-569-b2-test-first-change-1.md
