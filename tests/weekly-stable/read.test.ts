@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pulledInputs } from "../../lanes/delivery-route/table.ts";
-import { MODEL, SOL_LINE } from "../../lanes/weekly-stable/pins.ts";
+import { MODEL, S390, SOL_LINE } from "../../lanes/weekly-stable/pins.ts";
 import { buildWeeklyTable, clusterStat, costRatio, look, pairsOf, pilotCheck, reading, recomputedHold, resultsMarkdown, smokeCheck, vsNone, weekRecord, type Pair, type WeeklyRow } from "../../lanes/weekly-stable/read.ts";
 
 const FIX = join(import.meta.dir, "fixtures"), CAPTURED = join(import.meta.dir, "../delivery-route/fixtures/b1f-sessions"), roots: string[] = [];
@@ -105,6 +105,14 @@ describe("verdicts, flags and the record", () => {
     const r = reading({ rows: look65, run, dropped: [], seed: 1, incomplete: [], flags: [], stoppedAt: "HOLD" });
     expect([r.verdict, r.incomplete_reason, r.kept, r.ungraded]).toEqual(["HOLD", null, 65, { candidate: 0, stable: 0, none: 0 }]);
     expect(reading({ rows: look65, run, dropped: [], seed: 1, incomplete: [], flags: [], stoppedAt: null }).verdict).toBe("INCOMPLETE");
+  });
+  test("after a stop at the look, results.md over the look's 65 tasks and their rows counts only those tasks' sessions and cost", () => {
+    const run = Array.from({ length: 130 }, (_, i) => "u" + i), rows = run.flatMap((t) => task(t, [1, 1, 0], [1, 0, 0]));
+    const kept = run.slice(0, S390.look.tasks), md = resultsMarkdown(rows.filter((r) => kept.includes(r.task)), kept, "gstack weekly benchmark test");
+    expect(md).toContain("| 195 of 195 | 130 of 195 | $93.60 |");
+    expect(md).toContain("| 195 of 195 | 65 of 195 | $93.60 |");
+    expect(md).toContain("| 65 of 65 | 65 of 65 | $20.15 |");
+    expect(resultsMarkdown(rows, kept, "gstack weekly benchmark test")).toContain("| 195 of 195 | 130 of 195 | $187.20 |");
   });
   test("the results table has the shape gstack's results check passed on 2026-11-22 (fixtures/results-check-ok.txt)", () => {
     const ok = readFileSync(join(FIX, "results-check-ok.md"), "utf8"), md = resultsMarkdown(week(() => [[1, 0, 1], [1, 1, 0]]), RUN, "gstack weekly benchmark test");
