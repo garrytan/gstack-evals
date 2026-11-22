@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { launchGate, meterReading, partCapStops, publishArgs, recordLook, reportGate, reportRows, type GhRun, type WeekFile } from "../../lanes/weekly-stable/cli.ts";
+import { capStopReason, launchGate, main, meterReading, partCapStops, publishArgs, recordLook, reportGate, reportRows, tableGate, type GhRun, type WeekFile } from "../../lanes/weekly-stable/cli.ts";
 import type { WeeklyRow } from "../../lanes/weekly-stable/read.ts";
 import { taskLists } from "../../lanes/weekly-stable/plan.ts";
 
@@ -76,9 +76,20 @@ describe("the look runs once and is recorded", () => {
     expect(w.look).toEqual({ stop: "GAIN", at: "2026-11-29T00:00:00Z" });
     expect(() => recordLook(w, { ready: true, stop: null }, "2026-11-29T01:00:00Z")).toThrow(/look already ran/);
   });
+  test("a look on a table with another week's tar is refused and records nothing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "weekly-look-"));
+    roots.push(dir);
+    const first = taskLists().run.slice(0, 65), rows = first.flatMap((t) => [row(t, "candidate"), row(t, "stable")]);
+    rows[0] = row(first[0]!, "candidate", "tar-last-week");
+    writeFileSync(join(dir, "week.json"), JSON.stringify(week()));
+    writeFileSync(join(dir, "rows.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+    expect(tableGate(week(), rows)[0]).toMatch(/1 graded session.*not this week's/);
+    expect(await main(["look", join(dir, "rows.jsonl"), dir])).toBe(2);
+    expect(JSON.parse(readFileSync(join(dir, "week.json"), "utf8")).look).toBeNull();
+  });
 });
 
-describe("a cap stop in any part's result makes the week INCOMPLETE", () => {
+describe("report cap stops", () => {
   test("cap stops are read from each part's result files beside week.json", () => {
     const w = mkdtempSync(join(tmpdir(), "weekly-cap-"));
     roots.push(w);
@@ -87,6 +98,47 @@ describe("a cap stop in any part's result makes the week INCOMPLETE", () => {
     mkdirSync(join(w, "p1"), { recursive: true });
     writeFileSync(join(w, "p1", "smoke.result.json"), JSON.stringify({ cap_stop: [], loss: [] }));
     expect(partCapStops(w)).toEqual(["p2/s390-2: the proxy latched a cap stop"]);
+  });
+  test("the public INCOMPLETE reason counts cap stops and names no part, trial or task", () => {
+    const caps = ["p2/s390-2: trial weekly-task-a1b2 latched a cap stop on task-x", "p3/s390-3: the proxy latched a cap stop"];
+    expect(capStopReason([])).toEqual([]);
+    const [reason] = capStopReason(caps);
+    expect(reason).toBe("a part ended at a cap stop (2 cap-stop lines across parts; detail in the private report)");
+    for (const bit of ["p2", "p3", "s390", "trial", "task", "proxy"]) expect(reason).not.toContain(bit);
+  });
+  test.each([
+    { name: "a full report is INCOMPLETE on a part cap stop, with details only in report.txt", stopped: false, partStop: true, rowStop: false, verdict: "INCOMPLETE" },
+    { name: "a STOP for HOLD stands after a later part cap stop", stopped: true, partStop: true, rowStop: false, verdict: "HOLD" },
+    { name: "a cap-stop row inside the look still makes a stopped report INCOMPLETE", stopped: true, partStop: false, rowStop: true, verdict: "INCOMPLETE" },
+  ])("$name", async ({ stopped, partStop, rowStop, verdict }) => {
+    const dir = mkdtempSync(join(tmpdir(), "weekly-report-")), out = join(dir, "out"), table = join(dir, "table.jsonl");
+    roots.push(dir);
+    mkdirSync(join(dir, "gstack-clone", "bin"), { recursive: true });
+    writeFileSync(join(dir, "gstack-clone", "bin", "gstack-eval-plan"), "process.exit(0);\n");
+    const run = taskLists().run, rows = run.slice(0, stopped ? 65 : run.length).flatMap((t) => [
+      ...Array.from({ length: 3 }, () => ({ ...row(t, "candidate"), pass: false })),
+      ...Array.from({ length: 3 }, () => row(t, "stable")),
+      row(t, "none"),
+    ]);
+    if (rowStop) rows[0] = { ...rows[0]!, outcome: "cap_stop", pass: null };
+    const detail = "trial test-only-id reached a cap stop";
+    if (partStop) {
+      mkdirSync(join(dir, "p3"), { recursive: true });
+      writeFileSync(join(dir, "p3", "s390-3.result.json"), JSON.stringify({ cap_stop: [detail] }));
+    }
+    writeFileSync(join(dir, "week.json"), JSON.stringify(week(stopped ? { look: { stop: "HOLD", at: "2026-11-28T08:00:00Z" } } : {})));
+    writeFileSync(table, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+    expect(await main(["report", table, dir, "--out", out, ...(stopped ? ["--stopped", "HOLD"] : [])])).toBe(0);
+    const record = JSON.parse(readFileSync(join(out, "weekly.json"), "utf8"));
+    expect(record.verdict).toBe(verdict);
+    if (!stopped) {
+      expect(record.incomplete_reason).toBe("a part ended at a cap stop (1 cap-stop line across parts; detail in the private report)");
+      expect(readFileSync(join(out, "report.txt"), "utf8")).toContain("  cap stop: p3/s390-3: " + detail);
+    } else if (rowStop) {
+      expect(record.incomplete_reason).toBe("a ledger item hit a cap stop");
+    } else {
+      expect(record.incomplete_reason).toBeNull();
+    }
   });
 });
 

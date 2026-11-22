@@ -57,13 +57,15 @@ export function reportRows(w: WeekFile, rows: WeeklyRow[], stopped: "HOLD" | "GA
   const run = taskLists().run, kept = run.slice(0, stopped ? S390.look.tasks : run.length).filter((t) => !w.dropped.includes(t));
   return { kept, rows: rows.filter((r) => kept.includes(r.task)) };
 }
-/** Why the report refuses to read a table: the week's checks never ran, a graded session ran a tar that is not this week's,
- *  or --stopped disagrees with the recorded look. */
-export function reportGate(w: WeekFile, rows: WeeklyRow[], stopped: "HOLD" | "GAIN" | undefined): string[] {
+export function tableGate(w: WeekFile, rows: WeeklyRow[]): string[] {
   const why: string[] = [];
   if (w.contamination === null) why.push("the contamination search has not run for this week");
   if (!w.arms?.pass) why.push("the arms check has not passed for this week");
   else { const off = rows.filter((r) => r.outcome === "graded" && r.tar_sha256 !== w.arms!.tars[r.arm]); if (off.length) why.push(off.length + " graded session" + (off.length === 1 ? "" : "s") + " ran a tar that is not this week's " + off[0]!.arm + " arm; the table is not this week's"); }
+  return why;
+}
+export function reportGate(w: WeekFile, rows: WeeklyRow[], stopped: "HOLD" | "GAIN" | undefined): string[] {
+  const why = tableGate(w, rows);
   if (w.look?.stop && stopped !== w.look.stop) why.push("the look stopped for " + w.look.stop + " at " + w.look.at + "; report with --stopped " + w.look.stop);
   else if (stopped && !w.look?.stop) why.push("--stopped " + stopped + " but no look recorded a stop");
   return why;
@@ -81,6 +83,9 @@ export function partCapStops(work: string): string[] {
     const cap = readJson(join(work, p, f)).cap_stop;
     return Array.isArray(cap) ? cap.map((c: string) => p + "/" + f.slice(0, -".result.json".length) + ": " + c) : [p + "/" + f + " has no cap_stop list, so a cap stop can't be ruled out"];
   }));
+}
+export function capStopReason(caps: string[]): string[] {
+  return caps.length ? ["a part ended at a cap stop (" + caps.length + " cap-stop line" + (caps.length === 1 ? "" : "s") + " across parts; detail in the private report)"] : [];
 }
 /** The release create command, with GitHub's latest pointer only on the newest week; a release list that fails or isn't JSON
  *  is an error, never an empty list. */
@@ -280,7 +285,10 @@ async function run(argv: string[]): Promise<number> {
     return s.rig.length ? 1 : 0;
   }
   if (cmd === "look") {
-    const work = resolve(rest[1] ?? usage(USAGE)), rows = rowsOf(rest[0] ?? usage(USAGE)), w = readWeek(work), l = look(rows, taskLists().run, w.dropped);
+    const work = resolve(rest[1] ?? usage(USAGE)), rows = rowsOf(rest[0] ?? usage(USAGE)), w = readWeek(work);
+    const gate = tableGate(w, rows);
+    if (gate.length) return usage("refused: " + gate.join("; "));
+    const l = look(rows, taskLists().run, w.dropped);
     if (recordLook(w, l, new Date().toISOString())) writeJson(weekFile(work), w);
     console.log(!l.ready ? "WEEKLY LOOK NOT READY: the first " + l.tasks.length + " tasks' candidate and stable sessions have not all settled" : l.stop ? "WEEKLY LOOK STOP " + l.stop : "WEEKLY LOOK CONTINUE");
     return 0;
@@ -306,9 +314,9 @@ async function run(argv: string[]): Promise<number> {
       if (stopped && stopped !== "HOLD" && stopped !== "GAIN") return usage("--stopped is HOLD or GAIN");
       const gate = reportGate(w, rows, stopped);
       if (gate.length) return usage("refused: " + gate.join("; "));
-      const l = taskLists(), counted = reportRows(w, rows, stopped), caps = partCapStops(work);
+      const l = taskLists(), counted = reportRows(w, rows, stopped), caps = stopped ? [] : partCapStops(work);
       writeFileSync(join(out, "results.md"), resultsMarkdown(counted.rows, counted.kept, "gstack weekly benchmark " + isoWeek(w.week_of ?? w.date).label));
-      const check = resultsCheck(work, out), incomplete = [...opts("incomplete"), ...(caps.length ? ["a part ended at a cap stop (" + caps.join("; ") + ")"] : []), ...(w.smoke?.rig.length ? ["the weekly smoke failed for a rig reason in " + w.smoke.rig.length + " of its checks"] : []), ...(check === "pass" ? [] : ["gstack's results check: " + check])];
+      const check = resultsCheck(work, out), incomplete = [...opts("incomplete"), ...capStopReason(caps), ...(w.smoke?.rig.length ? ["the weekly smoke failed for a rig reason in " + w.smoke.rig.length + " of its checks"] : []), ...(check === "pass" ? [] : ["gstack's results check: " + check])];
       const r = reading({ rows, run: l.run, dropped: w.dropped, seed: w.seed, incomplete, flags: [...(w.smoke?.flag ? [w.smoke.flag] : []), ...opts("flag")], stoppedAt: stopped ?? null });
       rec = weekRecord(r, recordInput(w, check).input);
       const s = r.stat, p = (x: number) => (100 * x).toFixed(1);
@@ -317,7 +325,7 @@ async function run(argv: string[]): Promise<number> {
         "  candidate minus none (descriptive): " + p(r.none.diff) + " points [" + p(r.none.lo) + ", " + p(r.none.hi) + "] on " + r.none.pairs + " pairs",
         "  cost ratio, candidate over stable: " + (r.cost ? r.cost.ratio.toFixed(3) + " [" + r.cost.lo.toFixed(3) + ", " + r.cost.hi.toFixed(3) + "] on " + r.cost.tasks + " tasks" : "n/a"),
         "  ungraded sessions: " + WEEKLY_ARM_NAMES.map((a) => a + " " + r.ungraded[a]).join(", ") + "; safety stops: " + WEEKLY_ARM_NAMES.map((a) => a + " " + r.safety[a]).join(", ") + "; dropped " + w.dropped.length,
-        ...rec.flags.map((f) => "  FLAG " + f), ...(w.smoke ? [...w.smoke.rig, ...w.smoke.detail].map((x) => "  smoke: " + x) : []), "  results check: " + check];
+        ...rec.flags.map((f) => "  FLAG " + f), ...caps.map((c) => "  cap stop: " + c), ...(w.smoke ? [...w.smoke.rig, ...w.smoke.detail].map((x) => "  smoke: " + x) : []), "  results check: " + check];
     }
     writeJson(join(out, RECORD.asset), rec);
     writeFileSync(join(out, "report.txt"), lines.join("\n") + "\n");
