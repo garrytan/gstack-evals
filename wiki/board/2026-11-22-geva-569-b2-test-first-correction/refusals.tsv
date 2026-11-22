@@ -1,0 +1,13 @@
+part	trial	arm	call_id
+b2-1	astropy__astropy-18752__QNc7YmH	prove-it	call_9ea9ce45968043a58842c9e5d159c886
+b2-2	jsonpickle__jsonpickle-588__Ascjvhi	none	call_1ad4cd2bebe24fa7abd2214888e70a3c
+b2-2	mempalace__mempalace-1004__e6CNhPv	line	call_843d072a179b4dd388c0bda396212719
+b2-3	jsonpickle__jsonpickle-587__5DK6cWb	line	call_5f26444cad83486cae6fa85bbdaaa8f8
+b2-4	celestoai__smolvm-172__tG8ZNdJ	gstack	call_41db6d02c91349fd84ae21a23437042f
+b2-4	gitpython-developers__GitPython__vYcQZH4	none	call_323eb98cb645487ca0fc00f25b786c66
+b2-4	plone__cookieplone-templates-308__2VPP2iP	gstack	call_be2f9501aabc4bd6aeda6d4e7f434ac1
+b2-5	PyPSA__PyPSA-1498__aq9ytku	prove-it	call_e057ffac16b6439ab988498041d110b2
+b2-5	marimo-team__marimo-8401__Rzt3L3e	prove-it	call_9b090867f86c4c02ba9e6bceb2d9f21b
+b2-5	marimo-team__marimo-8401__kRsgVRo	none	call_6df21098f38b405e979b2aea4f52b866
+b2-7	genericmappingtools__pygmt-4463__W9UF7S8	prove-it	call_05489aaf898b47cb9b01d6005b1a2928
+# refused calls 11 in 11 sessions of 732 Sol sessions; by arm: none 3, line 2, gstack 2, prove-it 4

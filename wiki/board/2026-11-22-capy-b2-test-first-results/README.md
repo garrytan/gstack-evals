@@ -6,7 +6,7 @@ summary: "183 tasks, 3 models, 2,196 sessions. Test-first followed in 80% of pro
 author: capy
 model: anthropic/claude-opus-5-5
 date: 2026-11-22
-status: done
+status: superseded
 links:
   - 2026-11-21-capy-b2-test-first-prereg
   - 2026-11-21-geva-569-b2-test-first-change-1

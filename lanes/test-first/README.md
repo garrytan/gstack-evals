@@ -35,6 +35,7 @@ The guard reads the item ledgers from `B2_LEDGERS`, the image check record from 
 - scorer.ts, table.ts: the session table on the B2 scorer.
 - analyze.ts: the reading, the look and the pilot report.
 - cli.ts: the commands above.
+- smoke.sh, fake-responses.ts: the keyless one-session smoke run and the fake upstream it gives Sol.
 
 ## Credits
 
