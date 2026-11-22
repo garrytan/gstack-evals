@@ -20,9 +20,9 @@ import { h2hStageLimits } from "./driver.ts";
 import type { ExtPlanned } from "./plan.ts";
 import { extItemOf, extScriptedTurns, partOf, readExtPrereg, type ExtArm, type ExtPrereg } from "./prereg.ts";
 import { solAgentPath } from "./runtimes.ts";
+import { keylessEnv } from "../../../../src/trial/env.ts";
 
 const ROOT = join(import.meta.dir, "../../../..");
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 /** CODEX_HOME inside every part S session container. */
 export const CODEX_HOME = "/root/.codex";
 
@@ -82,7 +82,7 @@ export function extRunCopy(i: ExtRunInput, attempt: 1 | 2, dir: string, x: ExtPr
   const manifestSha = sessionManifest(manifest, label, u.image);
   const armTar = join(dir, "arm.tar");
   writeFileSync(armTar, Buffer.alloc(10240));
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
+  const env = keylessEnv();
   env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
   env.HARBOR_TELEMETRY = "0";
   env.PYTHONPATH = [import.meta.dir, join(import.meta.dir, "../sessions"), join(ROOT, "lanes/outcome-skills/pfchecks"), join(ROOT, "lanes/real-outcome/agent"), join(ROOT, "quick/laneb/runner/agent")].join(":");

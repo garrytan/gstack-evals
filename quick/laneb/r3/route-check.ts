@@ -59,6 +59,7 @@ import { loadR3Trial } from "./exposure.ts";
 import { A4, itemCheck, portTaken, R3_ARMS, R3A, R3A4, readRoute, routeRecordPath, SOL, type R3aModel, type RouteGate, type RouteVerdict } from "./screen.ts";
 import { R3B4 } from "./r3b.ts";
 import { L1_ROUTE, L1_ROUTE_P1, L1_ROUTE_SOL_F } from "../l1/l1.ts";
+import { keylessEnv } from "../../../src/trial/env.ts";
 
 // An item the route check runs on: R3's models, or L1's l1-route-sol with its own cells file and the arm of each part.
 type RouteItem = RouteGate & Pick<R3aModel, "ledgerPort" | "a4" | "armManifests"> & { cells?: string; routeArms?: Record<(typeof PARTS)[number]["kind"], string> };
@@ -292,7 +293,7 @@ async function main(argv: string[]): Promise<number> {
     }
     return null;
   };
-  const harborEnv: Record<string, string> = Object.fromEntries(Object.entries(process.env).filter(([k, v]) => v !== undefined && !SECRET.test(k)) as [string, string][]);
+  const harborEnv = Object.fromEntries(Object.entries(keylessEnv()).filter(([k]) => !SECRET.test(k)));
   Object.assign(harborEnv, { ANTHROPIC_API_KEY: "placeholder-not-a-key", PYTHONPATH: join(RUNNER, "agent") });
   let verdict: { verdict: "pass" | "drop"; reason: string } | null = null;
   let current: RouteSession | null = null;

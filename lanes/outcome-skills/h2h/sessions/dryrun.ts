@@ -35,8 +35,8 @@ import { exposure, readEvents, readInstalls } from "./exposure.ts";
 import { armHome, homeRule } from "./home.ts";
 import { h2hConfig } from "./run.ts";
 import { endOf } from "./session.ts";
+import { dropKeyEnv, keylessEnv } from "../../../../src/trial/env.ts";
 
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 const ALIASES = ["ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_FABLE_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL"];
 const HOLD = "h2h-dry-hold";
 const SH = [join(import.meta.dir, "../../pfchecks/sh"), join(import.meta.dir, "sh")];
@@ -107,7 +107,7 @@ const run = (cmd: string, args: string[], env: Record<string, string>, timeoutMs
 
 export async function main(argv: string[]): Promise<number> {
   const arg = (k: string) => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : undefined);
-  for (const k of Object.keys(process.env)) if (KEYS.test(k)) delete process.env[k];
+  dropKeyEnv();
   const P = readPrereg();
   const python = arg("--python") ?? process.env.REAL_OUTCOME_PYTHON ?? join(homedir(), ".capy/work/real/venv/bin/python");
   const claude = arg("--claude") ?? process.env.H2H_CLAUDE_BIN ?? join(homedir(), ".capy/work/h2h-s/claude/claude-2.1.325/package/claude");
@@ -185,7 +185,7 @@ export async function main(argv: string[]): Promise<number> {
     };
     writeFileSync(join(dir, "config.json"), JSON.stringify(cfg, null, 1));
     current = { script, n: 0, first: null, said: [], at: [] };
-    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
+    const env = keylessEnv();
     const r = await run(python, [join(import.meta.dir, "h2h_turns.py"), join(dir, "config.json")], { ...env, PATH: join(W, "bin") + ":" + env.PATH, PYTHONDONTWRITEBYTECODE: "1" }, 900_000);
     writeFileSync(join(dir, "python.log"), r.out);
     const s = current;

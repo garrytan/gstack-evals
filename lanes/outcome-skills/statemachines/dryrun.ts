@@ -6,9 +6,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { keylessEnv } from "../../../src/trial/env.ts";
 
 const BIN = join(import.meta.dir, "../../../bin/gstack-evals");
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 
 /** A contain case reads its record whatever sm contain's exit: the check exits 2 (E_SM_CONTAIN) after writing it. */
 export interface DryrunCase {
@@ -46,7 +46,7 @@ export function caseArgs(c: DryrunCase, unitDir: string, out: string): string[] 
 /** Runs the config's cases in order from the named one; returns 0 when every case passed, 1 at the first miss. */
 export function dryrun(cfg: DryrunConfig, outDir: string, o: { from?: string; run?: (args: string[]) => { status: number; out: string }; log?: (line: string) => void } = {}): number {
   const log = o.log ?? ((l: string) => console.log(l));
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k)));
+  const env = keylessEnv();
   const run = o.run ?? ((args: string[]) => {
     const r = spawnSync(BIN, args, { encoding: "utf8", env, maxBuffer: 1 << 28 });
     return { status: r.status ?? -1, out: (r.stdout ?? "") + (r.stderr ?? "") };

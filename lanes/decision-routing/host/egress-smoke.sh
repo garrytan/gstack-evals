@@ -41,7 +41,7 @@ cat > "$out/job.json" << JSON
 }
 JSON
 rm -rf "$out/harbor"
-DR_SMOKE_PROXY_HOST=$host DR_SMOKE_PROXY_PORT=$port DR_SMOKE_OFF_PORT=$off HARBOR_TELEMETRY=0 PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}" \
+env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u TYPESAFE_API_KEY -u GEMINI_API_KEY -u GOOGLE_API_KEY -u XAI_API_KEY -u DEEPSEEK_API_KEY -u UBICLOUD_API_KEY -u EXA_API_KEY -u AGENTRUN_API_KEY -u AGENTRUN_BASE_URL DR_SMOKE_PROXY_HOST=$host DR_SMOKE_PROXY_PORT=$port DR_SMOKE_OFF_PORT=$off HARBOR_TELEMETRY=0 PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}" \
   harbor run -c "$out/job.json" > "$out/harbor.log" 2>&1 || true
 result=$(find "$out/harbor" -name egress.json | head -1)
 [ -n "$result" ] || { echo "E_DR_RUNNER: the smoke trial wrote no egress.json; see $out/harbor.log" >&2; exit 2; }

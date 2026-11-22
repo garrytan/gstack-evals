@@ -37,6 +37,7 @@ import type { Arm, Reviewer, SessionOutcome, SkillArm } from "./types.ts";
 import { sessionImage, type SessionImage } from "./session-image.ts";
 import { readUnit } from "./unit.ts";
 import { openMeter } from "../product-value/meter.ts";
+import { keylessEnv } from "../../src/trial/env.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
@@ -175,7 +176,6 @@ export function reviewEnd(read: ErOutcome, cell: string): { end: AttemptEnd; why
   return { end: "completed", why: null };
 }
 
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 
 /** Removes the dependency files the launcher copied into the build tree and the empty mountpoints Docker made for the
  * dependency volumes, and each parent made with them, so the tree holds what it held before the session. */
@@ -303,7 +303,7 @@ export function buildLauncher(o: { arm: Arm | Arm[]; units: Map<string, { dir: s
       writeFileSync(manifest, manifestText);
       const armTar = join(out, "arm.tar");
       writeFileSync(armTar, Buffer.alloc(10240));
-      const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
+      const env = keylessEnv();
       env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
       env.PYTHONPATH = join(ROOT, "lanes/real-outcome/agent") + ":" + join(ROOT, "quick/laneb/runner/agent");
       env.PYTHONDONTWRITEBYTECODE = "1";

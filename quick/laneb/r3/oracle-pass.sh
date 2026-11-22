@@ -78,7 +78,7 @@ xargs -a "$out/images.txt" -P 4 -I{} bash -c 'pull "$1"' _ {} | sort -k3 > "$out
 ratelimit > "$out/ratelimit-after.txt" 2>&1
 left=$((deadline - $(date +%s)))
 [ "$left" -gt 0 ] || left=1
-(cd "$run" && sg docker -c "timeout --kill-after=60 $left harbor run -y -c '$run/oracle.json'") > "$out/oracle.log" 2>&1
+(cd "$run" && sg docker -c "env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u TYPESAFE_API_KEY -u GEMINI_API_KEY -u GOOGLE_API_KEY -u XAI_API_KEY -u DEEPSEEK_API_KEY -u UBICLOUD_API_KEY -u EXA_API_KEY -u AGENTRUN_API_KEY -u AGENTRUN_BASE_URL timeout --kill-after=60 $left harbor run -y -c '$run/oracle.json'") > "$out/oracle.log" 2>&1
 rc=$?
 echo $rc > "$out/harbor.exit"
 [ "$rc" != 0 ] || ! grep -q '^FAIL' "$out/pulls.tsv" || rc=10

@@ -25,7 +25,7 @@ for _ in $(seq 1 20); do
   curl -fsS "$gateway:$port/healthz" >/dev/null 2>&1 && break
 done
 curl -fsS "$gateway:$port/healthz" >/dev/null || { echo "fake upstream never answered on $gateway:$port" >&2; exit 1; }
-PYTHONPATH="$here" ANTHROPIC_API_KEY=fake-key-for-the-spike harbor run -y -p "$task" \
+env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u TYPESAFE_API_KEY -u GEMINI_API_KEY -u GOOGLE_API_KEY -u XAI_API_KEY -u DEEPSEEK_API_KEY -u UBICLOUD_API_KEY -u EXA_API_KEY -u AGENTRUN_API_KEY -u AGENTRUN_BASE_URL PYTHONPATH="$here" ANTHROPIC_API_KEY=fake-key-for-the-spike harbor run -y -p "$task" \
   -a sdk_claude_code:SdkClaudeCode -m anthropic/claude-opus-5-5 \
   --base-url "http://$gateway:$port" --ak skip_install=true --ak persona_path="$here/persona.json" \
   -e docker -o "$out/jobs" --job-name "spike-${NETWORK:-allowlist}-$(date +%s)"
