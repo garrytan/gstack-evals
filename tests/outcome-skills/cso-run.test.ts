@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { homeTreeSha256 } from "../../lanes/outcome-skills/h2h/arms/hash.ts";
 import { pathId } from "../../lanes/outcome-skills/cso/exposure.ts";
 import { loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
-import { CSO_BASE_IMAGE, CSO_RERUN, csoRunCopy, runCsoSession, treePaths, type CsoSessionInput } from "../../lanes/outcome-skills/cso/run.ts";
+import { buildCsoImage, CSO_BASE_IMAGE, CSO_RERUN, csoRunCopy, runCsoSession, treePaths, type CsoSessionInput } from "../../lanes/outcome-skills/cso/run.ts";
 import { csoRunner } from "../../lanes/outcome-skills/cso/rerunner.ts";
 import { isSealedRow, openBytes, openRow, readKey } from "../../lanes/outcome-skills/cso/analysis/readout.ts";
 import type { UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
@@ -246,4 +246,20 @@ test("rerun's runner needs CSO_READOUT_KEY for stage 1 and the re-pilot, and not
   expect(pre({ ...env, CSO_STAGE: "repilot", CSO_READOUT_KEY: join(work, "missing.key") })).toThrow(/^E_CSO_READOUT_KEY/);
   expect(pre({ ...env, CSO_STAGE: "stage1", CSO_READOUT_KEY: sealKeyFile() })).not.toThrow();
   expect(pre({ ...env, CSO_STAGE: "stage0" })).not.toThrow();
+});
+
+test("deviation (e): a session image runs by a tag pinned to its own image id, so a build of the same unit can't repoint it", () => {
+  const bin = tmp(), log = join(bin, "docker.log"), id = "sha256:" + "0123456789abcdef".repeat(4);
+  writeFileSync(join(bin, "docker"), "#!/bin/sh\necho \"$@\" >> " + log + "\n[ \"$1\" = build ] && echo " + id + "\nexit 0\n");
+  chmodSync(join(bin, "docker"), 0o755);
+  const old = process.env.PATH;
+  process.env.PATH = bin + ":" + old;
+  try {
+    const img = buildCsoImage(UNIT, tree());
+    expect(img.image_id).toBe(id);
+    expect(img.tag).toBe("gstack-evals-cso-session:" + "a".repeat(16) + "-" + "0123456789ab");
+    expect(readFileSync(log, "utf8")).toContain("tag " + id + " " + img.tag);
+  } finally {
+    process.env.PATH = old;
+  }
 });

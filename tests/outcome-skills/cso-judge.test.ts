@@ -12,6 +12,7 @@ import { treeIndex } from "../../lanes/outcome-skills/cso/score/checks.ts";
 import { scoredText } from "../../lanes/outcome-skills/cso/score/text.ts";
 import { askParsed, judgeBody, judgeClient, JUDGE_MODELS, judgeRoutes, routeClients, type Transport } from "../../lanes/outcome-skills/cso/judge/client.ts";
 import { excerpts, passBPacket, renderHunks } from "../../lanes/outcome-skills/cso/judge/packets.ts";
+import { parsePassB, type Finding } from "../../lanes/outcome-skills/cso/judge/schema.ts";
 import { checkSetOrder, extraAnchorsAllowed, FORMAT, formatVariants, goldNamed, judgeCheck, judgeSession, kappa, oracleReport, runReport, stockReport, type FormatResult, type GoldResult, type ReportResult } from "../../lanes/outcome-skills/cso/judge/check.ts";
 
 const p = loadCsoPrereg();
@@ -258,5 +259,40 @@ describe("section 7: anchors and format variants", () => {
     expect(v.near_lines).toContain("| 74-74 |");
     const tight = { ...UNIT, hunks: [{ ...UNIT.hunks[0]!, start: 20, end: 100 }] };
     expect(() => formatVariants(tight, TREE, p)).toThrow(/^E_CSO_ANCHOR/);
+  });
+});
+
+describe("deviation (e): the check's own items and pass B's known field", () => {
+  const SRC = ['import fs from "node:fs";', "", "// joins paths", ...Array.from({ length: 117 }, (_, i) => "parse line " + (i + 4))].join("\n") + "\n";
+  const T2 = treeIndex({ "src/parse.js": SRC });
+  const U2: UnitRecord = {
+    ...UNIT,
+    hunks: [{ file: "src/parse.js", start: 1, end: 2, insert_only: true, text: "" }, { file: "src/parse.js", start: 40, end: 44, insert_only: false, text: "a\nb\nc\nd\ne" }],
+    advisory: { summary: "Path traversal in `parse()`", details: "### Summary\nThe `parse()` function in src/parse.js joins the request path without normalizing it.\n\n### Impact\n\nFiles outside the root can be read." },
+  };
+  test("the oracle skips a hunk that only touches imports, blank lines or comments, and keeps the first hunk when every hunk does", () => {
+    expect(oracleReport(U2, T2, p)).toContain("Location: src/parse.js:40-44");
+    expect(formatVariants(U2, T2, p).table).toContain("| F1 | src/parse.js | 40-44 |");
+    expect(oracleReport({ ...U2, hunks: [U2.hunks[0]!] }, T2, p)).toContain("Location: src/parse.js:1-2");
+  });
+  test("the mechanism is the first paragraph of the advisory details that is not a heading", () => {
+    const o = oracleReport(U2, T2, p);
+    expect(o).toContain("joins the request path without normalizing it");
+    expect(o).not.toContain("###");
+    expect(formatVariants(U2, T2, p).prose).toContain("joins the request path without normalizing it");
+  });
+  test("the near-lines near miss keeps the right class at a line 30 from every hunk and names nothing from the advisory", () => {
+    const v = formatVariants(U2, T2, p);
+    expect(v.near_lines).toContain("| F1 | src/parse.js | 74-74 | CWE-22 path-traversal |");
+    expect(v.near_lines).not.toContain("parse()");
+    expect(v.near_lines).not.toContain("normalizing");
+    expect(v.near_lines).not.toContain("Path traversal in");
+  });
+  test("pass B shows known as null or an object with the ghsa and its four labels; the parser takes that object and still refuses a bare id", () => {
+    const pk = passBPacket({ unit: UNIT, helper: HELPER, tree: TREE, label: [KEPT as Finding] }, p);
+    expect(pk.text).toContain('"known":{"ghsa":"GHSA-');
+    const known = { ghsa: "GHSA-aaaa-bbbb-cccc", location: "yes", class: "yes", same_defect: "no", grounding: "yes" };
+    expect(parsePassB(JSON.stringify({ labels: [{ finding: 1, ...LAB(false), known }] }), 1)?.[0]?.known).toEqual(known as never);
+    expect(parsePassB(JSON.stringify({ labels: [{ finding: 1, ...LAB(false), known: "GHSA-aaaa-bbbb-cccc" }] }), 1)).toBeNull();
   });
 });
