@@ -34,7 +34,7 @@ mkdir -p tests && printf 'def test_other():\n    assert True\n' > tests/test_oth
 export CODEX_HOME=$OUT/home; mkdir -p $CODEX_HOME
 export HOME_SAVE=$HOME
 export PATH=$W/venv/bin:$W/bin/bin:/usr/local/bin:/usr/bin:/bin
-export OPENAI_API_KEY=stub-not-a-key
+export OPENAI_API_KEY="${STUB_OPENAI_KEY:?set any placeholder; the stub model ignores it}"
 echo "[fx:$NAME] Fix the failing test in this repository." | timeout 120 codex exec --json --strict-config --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --color never -m gpt-6.2-sol \
   -c model_provider='"gstack_evals_proxy"' -c model_providers.gstack_evals_proxy.name='"stub"' -c model_providers.gstack_evals_proxy.base_url='"http://127.0.0.1:18555/v1"' \
   -c model_providers.gstack_evals_proxy.wire_api='"responses"' -c model_providers.gstack_evals_proxy.env_key='"OPENAI_API_KEY"' \

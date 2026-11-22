@@ -39,3 +39,5 @@ To keep the folder small, each rollout line was trimmed on copy as the Codex hoo
 are emptied, `session_meta.base_instructions` and `world_state` are replaced by a marker, and a developer or user message
 text over 4,000 characters is cut to its first 200 characters plus `[trimmed N chars]`. Tool calls, tool results and
 command and patch items are unchanged.
+
+make-fixture.sh.txt line 37 originally exported a literal placeholder key (the stub model on localhost ignores it); it now reads it from STUB_OPENAI_KEY so the secrets scanner passes. The rollouts and diffs are unchanged.
