@@ -358,3 +358,30 @@ describe("round 2: settled part results, one replacement per never-started sessi
     expect(() => buildWeeklyTable({ jobs: [{ dir: join(flat, "jobs", "job1") }], sessions: cfg.sessions })).toThrow(/names no L1 part/);
   });
 });
+
+describe("round 2: a relaunch replaces only what L1 counts as never started", () => {
+  test("a session in flight when its VM died (a ledger reserve, no proxy row) is started: it owes its attempt 2, and the relaunch replaces only the session that never started", () => {
+    const work = scratch("weekly-inflight-"), t = RUN[0]!, part = "s390-1";
+    const trial = (p: string, name: string, arm: string, state: "graded" | "inflight" | "cancelled") => {
+      const d = join(work, p, "pulled", "jobs", p, name);
+      mkdirSync(join(d, "evaluator"), { recursive: true });
+      writeFileSync(join(d, "config.json"), JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm, upstream_model: MODEL.id } }, task: { path: "tasks/" + t } }));
+      if (state === "graded") writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: name, verifier_result: { rewards: { reward: 1 } } }));
+      if (state === "cancelled") writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: name, exception_info: { exception_type: "AgentCancelled" } }));
+      return name;
+    };
+    const sessions = (p: string, names: string[]) => { mkdirSync(join(work, p, "pulled", "out"), { recursive: true }); writeFileSync(join(work, p, "pulled", "out", "proxy-sessions.jsonl"), names.map((x) => JSON.stringify({ id: "s-" + x, trial: x, opened_at: x, ok_responses: 2, refused_budget: 0, spent_micros: 1000 })).join("\n") + "\n"); };
+    const a = trial(part, t + "__aaaaaaa", "candidate", "inflight"), b = trial(part, t + "__bbbbbbb", "candidate", "graded"), c = trial(part, t + "__zzzzzzz", "candidate", "cancelled");
+    const others = ["stable", "stable", "stable", "none"].map((arm, i) => trial(part, t + "__o" + i + "ooooo", arm, "graded"));
+    sessions(part, [b, ...others]);
+    const r1 = trial(part + "-relaunch", t + "__rrrrrrr", "candidate", "graded");
+    sessions(part + "-relaunch", [r1]);
+    mkdirSync(join(work, "host"), { recursive: true });
+    writeFileSync(join(work, "host", "ledger.jsonl"), [a, b, ...others].map((x) => JSON.stringify({ kind: "reserve", id: "ws-2026-11-28-1:" + x, trial: x + "__env" })).join("\n") + "\n");
+    const runs = [part, part + "-relaunch"].map((p) => ({ part: p, dir: join(work, p, "pulled") }));
+    expect(owed(runs).owed.map((o) => [o.task, o.arm, o.reason.split(",")[0]])).toEqual([[t, "candidate", "no result.json"]]);
+    const rows = runs.flatMap((r) => buildWeeklyTable(pulledInputs(r.dir, r.part)));
+    expect(openCells(rows, [t])).toEqual([t + " candidate: 1 attempt 2 owed, 0 ran"]);
+    expect(openCells([...rows, row(t, "candidate", true, { part: part + "-a2" })], [t])).toEqual([]);
+  });
+});

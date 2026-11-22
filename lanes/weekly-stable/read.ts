@@ -5,7 +5,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readSessionRows, rng, sessionsByTrial } from "../../quick/laneb/analysis/analyze.ts";
-import { relaunchRects } from "../../quick/laneb/l1/l1.ts";
+import { relaunchRects, trialName } from "../../quick/laneb/l1/l1.ts";
 import { parseLog, type Rec } from "../../quick/laneb/l1/probes.ts";
 import { newcombe } from "../delivery-route/analyze.ts";
 import { namedOf } from "../delivery-route/b1d.ts";
@@ -23,6 +23,8 @@ export type WeeklyRow = Omit<B1Row, "arm"> & {
   hook_events: number | null; routed: string[] | null;
   /** Skill tool calls by name, and reads of a SKILL.md under ~/.claude/skills. */
   skill_calls: string[]; skill_reads: number;
+  /** L1's start evidence (startedCells): a proxy session row, or a ledger reserve for the trial in the part's ledger mirror. */
+  started?: boolean;
 };
 const blocks = (recs: Rec[]) => recs.filter((r) => r.type === "AssistantMessage").flatMap((r) => (Array.isArray(r.content) ? r.content : [])) as any[];
 function armEvent(dir: string): string | null {
@@ -48,6 +50,13 @@ export function weeklyRow(dir: string, ctx: Parameters<typeof b1Row>[1]): Weekly
 }
 /** A job's L1 part id from L1's folder layout, <part>/pulled/jobs/<job>; null outside that layout. */
 const layoutPart = (dir: string) => /([^/]+)\/pulled\/jobs\/[^/]+\/?$/.exec(dir)?.[1] ?? null;
+/** The trials with a ledger reserve in the part work dir's ledger mirror (<work>/host/ledger.jsonl), the evidence L1's
+ *  relaunch reads besides proxy rows: the proxy writes a session's row only when it closes. */
+function reservedTrials(jobDir: string): Set<string> {
+  const mirror = join(jobDir, "../../../../host/ledger.jsonl"), out = new Set<string>();
+  for (const l of existsSync(mirror) ? readFileSync(mirror, "utf8").split("\n") : []) { try { const r = JSON.parse(l); if (r?.kind === "reserve" && r.trial) out.add(trialName(String(r.trial))); } catch { continue; } }
+  return out;
+}
 /** Every trial folder under the config's jobs, each job folder read once; one trial found in two folders is refused, so no
  *  session counts twice. Each row's part is L1's part id from the folder layout, else the config's label (pre-run change 4
  *  section 2), so a Harbor job suffix never hides an attempt 2; a job with neither is refused. */
@@ -58,6 +67,7 @@ export function buildWeeklyTable(cfg: B1TableConfig): WeeklyRow[] {
     jobs.add(realpathSync(job.dir));
     const part = layoutPart(job.dir) ?? job.part ?? null;
     if (!part) throw new Error("E_USAGE job " + job.dir + " names no L1 part: its path is not <part>/pulled/jobs/<job> and the config gives none");
+    const reserved = layoutPart(job.dir) ? reservedTrials(job.dir) : new Set<string>();
     for (const name of readdirSync(job.dir).sort()) {
       const d = join(job.dir, name);
       if (!statSync(d).isDirectory()) continue;
@@ -65,7 +75,7 @@ export function buildWeeklyTable(cfg: B1TableConfig): WeeklyRow[] {
       if (!row) continue;
       if (trials.has(row.trial)) throw new Error("E_USAGE trial " + row.trial + " appears twice, in " + trials.get(row.trial) + " and " + d + "; a session is read once");
       trials.set(row.trial, d);
-      out.push(row);
+      out.push({ ...row, started: row.opened_at !== null || reserved.has(row.trial) });
     }
   }
   return out;
@@ -76,15 +86,15 @@ export function uniqueTrials<T extends { trial: string }>(rows: T[], source: str
   for (const r of rows) { if (seen.has(r.trial)) throw new Error("E_USAGE trial " + r.trial + " appears twice in " + source + "; a session is read once"); seen.add(r.trial); }
   return rows;
 }
-/** Sessions a relaunch replaced (pre-run change 4 section 2): in part P, rows that never opened a proxy session, for a task and
- *  arm that P-relaunch ran, up to the number of rows P-relaunch holds there. L1's relaunch starts one session for each
- *  session that never started, so these are neither first attempts nor owed an attempt 2. */
+/** Sessions a relaunch replaced (pre-run change 4 section 2): in part P, rows L1 counts as never started (no proxy row and no
+ *  ledger reserve), for a task and arm that P-relaunch ran, up to the number of rows P-relaunch holds there. L1's relaunch
+ *  starts one session for each session that never started, so these are neither first attempts nor owed an attempt 2. */
 export function replacedTrials(rows: WeeklyRow[]): Set<string> {
   const key = (p: string, t: string, a: string) => p + "\t" + t + "\t" + a, left = new Map<string, number>(), out = new Set<string>();
   for (const r of rows) if (/-relaunch$/.test(r.part ?? "")) { const k = key(r.part!.slice(0, -"-relaunch".length), r.task, r.arm); left.set(k, (left.get(k) ?? 0) + 1); }
   for (const r of [...rows].sort((a, b) => a.trial.localeCompare(b.trial))) {
     const k = key(r.part ?? "", r.task, r.arm), n = left.get(k) ?? 0;
-    if (n > 0 && r.opened_at === null && r.outcome !== "graded") { out.add(r.trial); left.set(k, n - 1); }
+    if (n > 0 && !(r.started ?? r.opened_at !== null) && r.outcome !== "graded") { out.add(r.trial); left.set(k, n - 1); }
   }
   return out;
 }
