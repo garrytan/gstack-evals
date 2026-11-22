@@ -97,7 +97,7 @@ The rig stays pinned for the program's life, so that a weekly change can only co
 | Arm | gstack | Prompt |
 |---|---|---|
 | this | the sha refs/heads/stable points to at run start | B1's plain prompt |
-| last | the sha the previous weekly run recorded as this; for the first week, the stable sha seven days before run start | B1's plain prompt |
+| last | the sha the previous weekly run recorded as this; for the first week, the newest v-tag reachable from origin/stable whose tag date is at or before run start minus 7 days, peeled to its sha | B1's plain prompt |
 | none | none (R44) | B1's plain prompt |
 
 **this** and **last** are each built the way B1f builds its stable arm, without any added skill: `git init; git fetch --depth 1 https://github.com/garrytan/gstack.git <sha>; git checkout FETCH_HEAD`, then `./setup --host claude --no-browser --loadout full` in Lane B's builder with Lane B's seeded long-time user, hooks on as shipped, GSTACK_SESSION_KIND=unattended and gstack's telemetry off. Nobody types a skill name and nothing tells the model to load gstack, so the arm is gstack as a user who installed it gets it on a bug report. The stable sha must be the peeled target of a v-tag; the page names the tag.
@@ -118,7 +118,7 @@ The draw uses no outcome from any earlier run, so it can't favour an arm. The se
 
 ## 6. Each week, in order
 
-1. **Resolve.** In a full clone used only by the resolver, outside every arm and every VM that runs a session: this = refs/heads/stable at run start, peeled to its v-tag; last = the previous run's recorded this, or for the first week `git log --first-parent -1 --before=<start minus 7 days> origin/stable`. Record both shas, tags and the commit count between them.
+1. **Resolve.** In a full clone used only by the resolver, outside every arm and every VM that runs a session: this = refs/heads/stable at run start, peeled to its v-tag; last = the previous run's recorded this, or for the first week the newest v-tag reachable from origin/stable whose tag date is at or before run start minus 7 days, peeled to its sha. Record both shas, tags and the commit count between them. Every week records its this, including a week where stable didn't move and an INCOMPLETE week.
 2. **Build.** The this arm's tar at its sha (section 4), and the last arm's tar, rebuilt the same way at its sha. Both are checked against the recorded sha's git archive digest, like B1f's tree check.
 3. **Contamination check.** In each built gstack tree (the source tree and everything ./setup wrote under ~/.claude and ~/.gstack), search for each of the 83 task ids in four forms: `owner__repo-N`, `owner/repo#N`, `owner/repo/pull/N` and `owner/repo/issues/N`. A task with a hit in either tree drops from that week's pairs in every arm and is listed on the page. More than 8 dropped makes the week INCOMPLETE and calls for a refreshed set by a new preregistration.
 4. **Weekly smoke.** The three pilot tasks on the this arm only, read for exposure, not outcomes, before any counted session: the arm passes its Part ran row in the Pilots table. Smoke sessions never enter a number.
@@ -144,7 +144,7 @@ GPT-6.2 Sol in Codex CLI and particle-1 are left out of the weekly run, and this
 
 B1's and B2's rules. A session is graded when it has a verifier reward and a model response reached the agent, whatever stopped it: an allowance stop, the turn limit, or a model or upstream error after a response all score on the diff at session end. Anything else is infrastructure: no result, no model response, or no verifier reward. An infrastructure session reruns once; if the rerun isn't graded, the cell is a gap. A ledger cap stop never reruns and makes the week INCOMPLETE. A provider safety stop keeps its outcome and is counted on its own line.
 
-A week is INCOMPLETE when any arm has more than 8 of its 80 tasks ungraded or dropped, when its ledger item hits a cap stop, or when the weekly smoke fails for a rig reason. Pairs use the tasks graded in both arms of a contrast.
+A week is INCOMPLETE when any arm has more than 8 of its 80 tasks ungraded, when the contamination check drops more than 8 tasks, when its ledger item hits a cap stop, or when the weekly smoke fails for a rig reason. Pairs use the tasks graded in both arms of a contrast.
 
 ## 10. Reading
 
