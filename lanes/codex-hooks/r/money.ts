@@ -1,17 +1,18 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Part R's money on the Lane B ledger (quick/laneb/runner/ledger.ts) and L1's host and part machinery, as B1's
 // (lanes/delivery-route/money.ts): each item's approval row at its recorded cap, its done mark, the cap rule of section 11, the
-// launch guard (the item's projection against its cap, and every item's projection plus the crew's counter against the
-// Captain's all-in stop, pins.ts ALL_IN_STOP_USD), the one infrastructure rerun, and the dry run that opens and settles one lease per item on a
+// launch guard (the item's projection against its cap, and the all-in stop over both parts and the judge item, ../allin.ts),
+// the one infrastructure rerun, and the dry run that opens and settles one lease per item on a
 // temporary ledger. A session reserves its $5 allowance on the item's ledger as it opens (the metering proxy), so six parallel
 // sessions hold six allowances open; each settles at its metered cost. A cap stop is never relaunched or rerun.
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostTtlHours, itemCheck, L1, plannedCells, relaunchRects, type PartPlan } from "../../../quick/laneb/l1/l1.ts";
 import { appendRow, fromMicros, Ledger, readRows, toMicros, type Row } from "../../../quick/laneb/runner/ledger.ts";
 import { VM_HOURS_PER_SESSION } from "../../delivery-route/pins.ts";
-import { ALL_IN_STOP_USD, armRate, isArm, isItem, ITEM_NAMES, ITEMS_USD, R, type Item } from "./pins.ts";
+import { allIn, checkCrew, type Crew, type Spend } from "../allin.ts";
+import { armRate, isArm, isItem, ITEM_NAMES, ITEMS_USD, R, type Item } from "./pins.ts";
 import { itemPlan } from "./plans.ts";
 import { buildRTable, pulledInputs, type RRow } from "./table.ts";
 
@@ -21,8 +22,8 @@ const VM_ID = /(^|\/)vm(-\d+)?$|^host-\d+$/;
 const blockUsd = Number(L1.vm.usdPerHour) * Number(L1.vm.reserveHours);
 const anyRun = () => Array.from({ length: R.tasks }, (_, i) => "t" + i);
 
-/** Section 11's cap rule: 1.35 x central plus the parallel sessions' reserve, rounded up to $5. */
-export const capRule = (i: Item) => Math.ceil((1.35 * ITEMS_USD[i].central + R.concurrent * R.allowanceUsd) / 5) * 5;
+/** Section 11's cap rule: 1.35 x central plus the parallel sessions' reserve plus any VM share the central leaves out, rounded up to $5. */
+export const capRule = (i: Item) => Math.ceil((1.35 * ITEMS_USD[i].central + R.concurrent * R.allowanceUsd + ITEMS_USD[i].vmOutside) / 5) * 5;
 
 /** The approval row an item's ledger starts with, at the item's recorded cap and no other amount. */
 export function approve(path: string, item: string, capUsd: number, by: string) {
@@ -82,35 +83,39 @@ export function itemGuard(item: Item, rows: Row[], parts: PartPlan[], finished: 
   return { item, cap: t.cap, model, parallel, vm, host, parts_left: left.length, total: model + vm, fits: model + vm <= t.cap };
 }
 
-/** The crew file the operator writes from this thread's Capy counter (cost.dollars, list price) before each launch. */
-export type Crew = { as_of: string; usd: number };
-export function crewOf(crew: Crew) {
-  if (typeof crew?.as_of !== "string" || typeof crew.usd !== "number" || !(crew.usd >= 0)) throw new Error("E_USAGE codex-hooks r guard: the crew file needs as_of and usd, a number of at least 0");
-  return { spent: toMicros(crew.usd), stop: toMicros(ALL_IN_STOP_USD) };
+/** Every part R item's ledger as <dir>/<item>.jsonl; an item with no file yet has no rows. */
+export function readLedgers(dir: string): Partial<Record<Item, Row[]>> {
+  if (!dir || !existsSync(dir)) throw new Error("E_USAGE codex-hooks all-in: name the folder of part R's item ledgers (<item>.jsonl)");
+  return Object.fromEntries(ITEM_NAMES.filter((i) => existsSync(join(dir, i + ".jsonl"))).map((i) => [i, readRows(join(dir, i + ".jsonl"))]));
 }
 
-/** Before each launch: the item's guard against its cap, and the all-in stop: each done item at its settled, each other item at
- *  the larger of its spend and its guard projection, plus the crew's counter. A refusal goes to the Captain. */
-export function launchGuard(item: Item, ledgers: Partial<Record<Item, Row[]>>, plans: Partial<Record<Item, { parts: PartPlan[]; finished: string[] }>>, crew: Crew) {
-  const why: string[] = [];
-  const c = crewOf(crew);
-  const items = ITEM_NAMES.map((i) => {
-    const t = itemTotals(ledgers[i] ?? [], i), plan = plans[i] ?? { parts: itemPlan(i, anyRun()).parts, finished: [] };
-    const g = itemGuard(i, ledgers[i] ?? [], plan.parts, plan.finished);
-    return { item: i, ...t, guard: g, counted: t.done ? t.settled : Math.max(t.settled + t.open, g.total) };
+/** Part R's items for the all-in stop: spent is settled plus open reservations; an item whose parts the guard knows projects as its
+ *  item guard, any other at section 11's central with the VM share it leaves out, plus the parallel sessions' allowances. */
+export function rSpends(ledgers: Partial<Record<Item, Row[]>>, plans: Partial<Record<Item, { parts: PartPlan[]; finished: string[] }>> = {}): Spend[] {
+  return ITEM_NAMES.map((i) => {
+    const t = itemTotals(ledgers[i] ?? [], i), plan = plans[i];
+    const projection = plan ? itemGuard(i, ledgers[i] ?? [], plan.parts, plan.finished).total : toMicros(ITEMS_USD[i].central + ITEMS_USD[i].vmOutside + R.concurrent * R.allowanceUsd);
+    return { item: i, done: t.done, spent: t.settled + t.open, projection };
   });
-  const own = items.find((i) => i.item === item)!;
-  if (own.done) why.push(item + " is marked done; a done item never launches again");
-  if (item === "r-main" && !items.find((i) => i.item === "r-pilot")!.done) why.push("r-pilot is not marked done; the main run starts after the pilot's readout (section 9)");
-  if (!own.guard.fits) why.push(item + "'s projection " + usd(own.guard.total) + " (model " + usd(own.guard.model) + " with the " + usd(own.guard.parallel) + " parallel reserve, VM share " + usd(own.guard.vm) + ") passes its cap " + usd(own.guard.cap));
-  const total = items.reduce((x, i) => x + i.counted, 0) + c.spent;
-  if (total > c.stop) why.push("all-in " + usd(total) + " (items " + usd(total - c.spent) + ", crew " + usd(c.spent) + " as of " + crew.as_of + ") passes the " + usd(c.stop) + " stop");
+}
+
+/** Before each launch: the item's guard against its cap, and the all-in stop over part R's items, others (part C's items and the
+ *  judge item) and the crew's counter. A refusal goes to the Captain. */
+export function launchGuard(item: Item, ledgers: Partial<Record<Item, Row[]>>, plans: Partial<Record<Item, { parts: PartPlan[]; finished: string[] }>>, crew: Crew, others: Spend[]) {
+  checkCrew(crew);
+  const why: string[] = [];
+  const t = itemTotals(ledgers[item] ?? [], item), plan = plans[item] ?? { parts: itemPlan(item, anyRun()).parts, finished: [] };
+  const own = itemGuard(item, ledgers[item] ?? [], plan.parts, plan.finished);
+  if (t.done) why.push(item + " is marked done; a done item never launches again");
+  if (item === "r-main" && !itemTotals(ledgers["r-pilot"] ?? [], "r-pilot").done) why.push("r-pilot is not marked done; the main run starts after the pilot's readout (section 9)");
+  if (!own.fits) why.push(item + "'s projection " + usd(own.total) + " (model " + usd(own.model) + " with the " + usd(own.parallel) + " parallel reserve, VM share " + usd(own.vm) + ") passes its cap " + usd(own.cap));
+  const a = allIn([...rSpends(ledgers, { [item]: plan }), ...others], crew);
+  why.push(...a.why);
   const lines = [
-    "R_LAUNCH " + (why.length ? "REFUSE" : "PASS") + " " + item + ": all-in " + usd(total) + " of " + usd(c.stop) + "; " + item + " " + usd(own.guard.total) + " of cap " + usd(own.guard.cap) + " (" + own.guard.parts_left + " parts to run)",
-    ...items.map((i) => "  " + i.item + (i.done ? " done" : "") + ": settled " + usd(i.settled) + ", open " + usd(i.open) + ", cap " + usd(i.cap) + ", counted " + usd(i.counted)),
-    "  crew " + usd(c.spent),
+    "R_LAUNCH " + (why.length ? "REFUSE" : "PASS") + " " + item + ": all-in " + usd(a.total) + "; " + item + " " + usd(own.total) + " of cap " + usd(own.cap) + " (" + own.parts_left + " parts to run), settled " + usd(t.settled) + ", open " + usd(t.open),
+    ...a.lines,
   ];
-  return { ok: !why.length, why, lines, total };
+  return { ok: !why.length, why, lines, total: a.total };
 }
 
 /** Each item's plan beside section 11's central and cap; the cap rule must give the recorded cap. */
@@ -164,7 +169,7 @@ export function infraRerun(first: RRow[], second: RRow[] = []) {
 }
 export function attempt2Owed(runs: { part: string; dir: string }[]) {
   const cfgs = runs.map((r) => pulledInputs(r.dir, r.part));
-  const jobs = cfgs.flatMap((c) => c.jobs), sessions = cfgs.flatMap((c) => c.sessions);
-  const rows = jobs.length ? buildRTable({ jobs, sessions }) : [];
+  const jobs = cfgs.flatMap((c) => c.jobs), sessions = cfgs.flatMap((c) => c.sessions), requests = cfgs.flatMap((c) => c.requests);
+  const rows = jobs.length ? buildRTable({ jobs, sessions, requests }) : [];
   return { owed: rows.filter(needsRerun).map((r) => ({ task: r.task, arm: r.arm, reason: r.reason })), rects: infraRerun(rows).rects };
 }

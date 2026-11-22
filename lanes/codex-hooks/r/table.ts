@@ -6,10 +6,13 @@
 // stop is a cap stop; a session that hit its $5 allowance or the task's agent time limit is a limit stop, graded on what it
 // left; anything else is infrastructure. Section 10 of pre-run change 1: the root thread's model and Codex version come from
 // its rollout (turn_context.model, session_meta.cli_version), and a root thread on another model or version is an
-// infrastructure gap; sub-agents on another model are counted. The load fields come from detect.ts (section 4.5 and 4.6), and an
+// infrastructure gap; sub-agents on another model are counted. Section 2: every request the proxy metered for the trial
+// (its request log's request lines) must carry the arm's reasoning effort, so a sub-agent started at another effort, a
+// request with no effort or a trial with no request line is an infrastructure gap. The load fields come from detect.ts (section 4.5 and 4.6), and an
 // allowance stop says whether the proxy refused a reservation before the session spent $5 or its spend reached $5. The
 // destructive-command check's denies and r-none's read audit (calls naming gstack or skill paths, and whether any skill text
-// arrived) come from the rollout too.
+// arrived) come from the rollout too, and so does the count of shell calls Codex refused for asking for a login shell
+// (pre-run change 3).
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readSessionRows, sessionsByTrial, type SessionRow } from "../../../quick/laneb/analysis/analyze.ts";
@@ -40,11 +43,26 @@ export type RRow = {
   init: { model: string | null; reasoning_effort: string | null; codex_version: string | null; hook_trust: boolean | null; switches: Record<string, string | null> | null } | null;
   loads: { prove_it: SkillLoad; verify: SkillLoad; steps_arrived: boolean; named_in_text: boolean; line_delivered: boolean; hook: HookRead; why_no_load: Reason | null } | null;
   destructive: { denies: number; codex_rejects: number } | null;
+  login_refused: number | null;
   read_audit: { calls: number; skill_text: boolean } | null;
 };
 
 let SKILLS: ReturnType<typeof readSkillLines> | null = null;
-export type RTableConfig = { jobs: { dir: string; part?: string }[]; sessions: string[] };
+export type RTableConfig = { jobs: { dir: string; part?: string }[]; sessions: string[]; requests: string[] };
+export type RequestLine = { event: string; trial?: string; reasoning_effort?: unknown };
+
+/** The proxy's request lines grouped by Harbor trial name (the session's trial less its "__env" suffix). */
+export function requestsByTrial(paths: string[]): Map<string, RequestLine[]> {
+  const out = new Map<string, RequestLine[]>();
+  for (const p of paths) for (const l of readFileSync(p, "utf8").split("\n")) {
+    if (!l.trim()) continue;
+    const e = JSON.parse(l) as RequestLine;
+    if (e.event !== "request" || typeof e.trial !== "string") continue;
+    const key = e.trial.replace(/__env$/, "");
+    out.set(key, [...(out.get(key) ?? []), e]);
+  }
+  return out;
+}
 
 const readJson = (p: string) => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
 const walk = (d: string): string[] => (existsSync(d) ? readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)])) : []);
@@ -72,7 +90,7 @@ export function safetyStop(events: string): boolean {
   return events.split("\n").some((l) => { try { const e = JSON.parse(l); return (e.type === "turn.failed" || e.type === "error") && SAFETY.test(JSON.stringify(e)); } catch { return false; } });
 }
 
-export function rRow(dir: string, ctx: { part: string | null; sessions: Map<string, SessionRow[]> }): RRow | null {
+export function rRow(dir: string, ctx: { part: string | null; sessions: Map<string, SessionRow[]>; requests: Map<string, RequestLine[]> }): RRow | null {
   const config = readJson(join(dir, "config.json"));
   if (!config || config.agent?.name !== AGENT.name) return null;
   const result = readJson(join(dir, "result.json"));
@@ -97,6 +115,9 @@ export function rRow(dir: string, ctx: { part: string | null; sessions: Map<stri
   const root = threads.find((t) => rootId !== null && t.id === rootId) ?? (rootId === null ? threads.find((t) => t.parent === null) ?? null : null);
   const subs = threads.filter((t) => t !== root);
   const offRoot = root && (root.cli_version !== CODEX.version || root.models.some((m) => m !== MODEL) || root.efforts.some((e) => e !== R_EFFORT));
+  const reqs = ctx.requests.get(trial) ?? [];
+  const efforts = [...new Set(reqs.map((e) => (typeof e.reasoning_effort === "string" ? e.reasoning_effort : "none")))].sort();
+  const offEffort = !reqs.length ? "the request log holds no request for this trial" : efforts.some((e) => e !== R_EFFORT) ? "a request ran at effort " + efforts.filter((e) => e !== R_EFFORT).join("/") + ", not " + R_EFFORT : null;
   let outcome: RRow["outcome"] = "infra";
   let reason: string;
   if (exc === "LedgerCapStop") { outcome = "cap_stop"; reason = "ledger cap stop"; }
@@ -104,6 +125,7 @@ export function rRow(dir: string, ctx: { part: string | null; sessions: Map<stri
   else if (!responded) reason = "no model response reached the agent" + (exc ? " (" + exc + ")" : "");
   else if (!root) reason = "no rollout copied out for the root thread";
   else if (offRoot) reason = "root thread on " + root.models.join("/") + " at " + root.efforts.join("/") + " in Codex " + root.cli_version + ", not " + MODEL + " at " + R_EFFORT + " in " + CODEX.version;
+  else if (offEffort) reason = offEffort;
   else if (reward === null) reason = "no verifier reward, verifier infrastructure error" + (limit ? " (" + limit + " limit stop)" : exc ? " (" + exc + ")" : "");
   else { outcome = "graded"; reason = limit ? limit + " limit stop, graded on what it left" : exc ? exc + ", graded on the shipped diff" : "graded"; }
   const det = threads.length ? detect(ev, (SKILLS ??= readSkillLines())) : null;
@@ -124,6 +146,7 @@ export function rRow(dir: string, ctx: { part: string | null; sessions: Map<stri
     sub_agents: { count: subs.length, other_models: [...new Set(subs.flatMap((t) => t.models).filter((m) => m !== MODEL))] },
     init: init ? { model: init.model ?? null, reasoning_effort: init.reasoning_effort ?? null, codex_version: init.codex_version ?? null, hook_trust: init.hook_trust ?? null, switches: init.switches ?? null } : null,
     destructive: det ? det.guard : null,
+    login_refused: det ? det.login_refused : null,
     read_audit: det && arm === "r-none" ? { calls: det.audit.calls, skill_text: Object.values(det.loads).some((l) => l.loaded || l.b_excluded > 0) } : null,
     loads: det && hook ? { prove_it: det.loads["prove-it"], verify: det.loads["gstack-verify"], steps_arrived: det.steps_arrived, named_in_text: det.named_in_text, line_delivered: det.line_delivered, hook, why_no_load: arm === "r-on" ? whyNoLoad(det, hook) : null } : null,
   };
@@ -132,12 +155,14 @@ export function rRow(dir: string, ctx: { part: string | null; sessions: Map<stri
 export function buildRTable(cfg: RTableConfig): RRow[] {
   if (!Array.isArray(cfg.jobs) || !cfg.jobs.length) throw new Error("E_USAGE codex-hooks r table: the config needs jobs, each {dir, part}");
   if (!Array.isArray(cfg.sessions)) throw new Error("E_USAGE codex-hooks r table: the config needs sessions, the proxy-sessions.jsonl files of the runs in jobs");
+  if (!Array.isArray(cfg.requests) || !cfg.requests.length) throw new Error("E_USAGE codex-hooks r table: the config needs requests, the proxy-requests.jsonl files of the runs in jobs");
   const sessions = sessionsByTrial(readSessionRows(cfg.sessions));
+  const requests = requestsByTrial(cfg.requests);
   const out: RRow[] = [];
   for (const job of cfg.jobs) for (const name of readdirSync(job.dir).sort()) {
     const d = join(job.dir, name);
     if (!statSync(d).isDirectory()) continue;
-    const row = rRow(d, { part: job.part ?? null, sessions });
+    const row = rRow(d, { part: job.part ?? null, sessions, requests });
     if (row) out.push(row);
   }
   return out;
@@ -145,6 +170,6 @@ export function buildRTable(cfg: RTableConfig): RRow[] {
 
 /** A pulled part dir's Harbor jobs and its proxy's session rows, as buildRTable takes them. */
 export function pulledInputs(pulled: string, part: string): RTableConfig {
-  const d = join(pulled, "jobs"), s = join(pulled, "out/proxy-sessions.jsonl");
-  return { jobs: existsSync(d) ? readdirSync(d).filter((j) => statSync(join(d, j)).isDirectory()).map((j) => ({ dir: join(d, j), part })) : [], sessions: existsSync(s) ? [s] : [] };
+  const d = join(pulled, "jobs"), s = join(pulled, "out/proxy-sessions.jsonl"), q = join(pulled, "out/proxy-requests.jsonl");
+  return { jobs: existsSync(d) ? readdirSync(d).filter((j) => statSync(join(d, j)).isDirectory()).map((j) => ({ dir: join(d, j), part })) : [], sessions: existsSync(s) ? [s] : [], requests: existsSync(q) ? [q] : [] };
 }

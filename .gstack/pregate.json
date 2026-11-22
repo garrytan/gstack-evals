@@ -69,6 +69,114 @@
     }
   ],
   "dependencies": {
+    "wiki/plans/2026-11-21-geva-568-skill-pack-h2h-sol-particle-prereg/**": [
+      "tests/outcome-skills/h2hx-analysis.test.ts",
+      "tests/outcome-skills/h2hx-codex-arms.test.ts",
+      "tests/outcome-skills/h2hx-codex.test.ts",
+      "tests/outcome-skills/h2hx-driver.test.ts",
+      "tests/outcome-skills/h2hx-exposure.test.ts",
+      "tests/outcome-skills/h2hx-items.test.ts",
+      "tests/outcome-skills/h2hx-lhomes.test.ts",
+      "tests/outcome-skills/h2hx-lwalk.test.ts",
+      "tests/outcome-skills/h2hx-power.test.ts",
+      "tests/outcome-skills/h2hx-prereg.test.ts",
+      "tests/outcome-skills/h2hx-route.test.ts",
+      "tests/outcome-skills/h2hx-run.test.ts",
+      "tests/outcome-skills/h2hx-runtimes.test.ts",
+      "tests/outcome-skills/h2hx-session.test.ts",
+      "tests/outcome-skills/h2hx-units.test.ts"
+    ],
+    "wiki/plans/2026-11-15-geva-538-skill-pack-h2h-prereg/**": [
+      "tests/outcome-skills/h2hx-analysis.test.ts",
+      "tests/outcome-skills/h2hx-codex-arms.test.ts",
+      "tests/outcome-skills/h2hx-codex.test.ts",
+      "tests/outcome-skills/h2hx-driver.test.ts",
+      "tests/outcome-skills/h2hx-exposure.test.ts",
+      "tests/outcome-skills/h2hx-items.test.ts",
+      "tests/outcome-skills/h2hx-lhomes.test.ts",
+      "tests/outcome-skills/h2hx-lwalk.test.ts",
+      "tests/outcome-skills/h2hx-power.test.ts",
+      "tests/outcome-skills/h2hx-prereg.test.ts",
+      "tests/outcome-skills/h2hx-route.test.ts",
+      "tests/outcome-skills/h2hx-run.test.ts",
+      "tests/outcome-skills/h2hx-runtimes.test.ts",
+      "tests/outcome-skills/h2hx-session.test.ts",
+      "tests/outcome-skills/h2hx-units.test.ts"
+    ],
+    "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data/**": [
+      "tests/outcome-skills/h2hx-analysis.test.ts",
+      "tests/outcome-skills/h2hx-units.test.ts"
+    ],
+    "tests/outcome-skills/fixtures/h2hx-codex/**": [
+      "tests/outcome-skills/h2hx-exposure.test.ts",
+      "tests/outcome-skills/h2hx-session.test.ts"
+    ],
+    "tests/outcome-skills/fixtures/h2hx-l/**": [
+      "tests/outcome-skills/h2hx-lhomes.test.ts"
+    ],
+    "tests/outcome-skills/h2hx_codex_test.py": [
+      "tests/outcome-skills/h2hx-codex.test.ts"
+    ],
+    "lanes/outcome-skills/h2h/ext/h2h_codex.py": [
+      "tests/outcome-skills/h2hx-codex.test.ts",
+      "tests/outcome-skills/h2hx-driver.test.ts"
+    ],
+    "lanes/outcome-skills/h2h/ext/codex-pins.json": [
+      "tests/outcome-skills/h2hx-codex-arms.test.ts",
+      "tests/outcome-skills/h2hx-session.test.ts"
+    ],
+    "lanes/outcome-skills/h2h/sessions/markers.json": [
+      "tests/outcome-skills/h2hx-exposure.test.ts",
+      "tests/outcome-skills/h2hx-session.test.ts"
+    ],
+    "lanes/outcome-skills/h2h/sessions/h2h_turns.py": [
+      "tests/outcome-skills/h2hx-session.test.ts"
+    ],
+    "lanes/outcome-skills/h2h/sessions/sh/**": [
+      "tests/outcome-skills/h2hx-driver.test.ts"
+    ],
+    "lanes/outcome-skills/pfchecks/sh/**": [
+      "tests/outcome-skills/h2hx-driver.test.ts"
+    ],
+    "lanes/codex-hooks/cli.ts": [
+      "tests/cli.test.ts"
+    ],
+    "lanes/codex-hooks/c/cli.ts": [
+      "tests/cli.test.ts"
+    ],
+    "lanes/codex-hooks/r/cli.ts": [
+      "tests/cli.test.ts"
+    ],
+    "lanes/codex-hooks/c/analysis/judge-policy.json": [
+      "tests/codex-hooks/c/analysis/meter.test.ts"
+    ],
+    "lanes/codex-hooks/r/route-table.tsv": [
+      "tests/codex-hooks/r/report.test.ts"
+    ],
+    "lanes/codex-hooks/r/proxy.json": [
+      "tests/codex-hooks/r/rig.test.ts"
+    ],
+    "lanes/codex-hooks/r/arms/Dockerfile": [
+      "tests/codex-hooks/r/rig.test.ts"
+    ],
+    "lanes/codex-hooks/r/task-setup.Dockerfile": [
+      "tests/codex-hooks/r/rig.test.ts"
+    ],
+    "lanes/codex-hooks/r/fake-responses.ts": [
+      "tests/codex-hooks/r/proxy-responses.test.ts"
+    ],
+    "lanes/codex-hooks/r/smoke.sh": [
+      "tests/codex-hooks/r/rig.test.ts"
+    ],
+    "tests/codex-hooks/c/fixtures/**": [
+      "tests/codex-hooks/c/outcomes.test.ts",
+      "tests/codex-hooks/c/readouts.test.ts",
+      "tests/codex-hooks/c/records.test.ts",
+      "tests/codex-hooks/c/run.test.ts"
+    ],
+    "tests/codex-hooks/r/fixtures/**": [
+      "tests/codex-hooks/r/detect.test.ts"
+    ],
     "wiki/plans/2026-11-17-geva-546-day-one-usefulness-prereg/**": [
       "tests/day-one/frozen.test.ts",
       "tests/day-one/dryrun.test.ts"
@@ -712,7 +820,8 @@
       "profiles": [
         "ci-carry/checks"
       ],
-      "inventory": "git ls-tree -r --name-only HEAD | grep -Ei '(^|/)[^/]+[._](test|spec)\\.([cm]?[jt]s|[jt]sx)$' | grep -Ev '(^|/)(\\.[^/]*|node_modules)/'"
+      "inventory": "git ls-tree -r --name-only HEAD | grep -Ei '(^|/)[^/]+[._](test|spec)\\.([cm]?[jt]s|[jt]sx)$' | grep -Ev '(^|/)(\\.[^/]*|node_modules)/'",
+      "per_file": "bun test {files}"
     },
     "bun run typecheck": {
       "profiles": [

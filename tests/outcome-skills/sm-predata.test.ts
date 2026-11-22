@@ -1787,6 +1787,7 @@ describe("stock diffs keep the program's behavior: the #316 follow-ups (GST-1959
     expect(run({ "c.ts": plain }, r, call(".ts", "m.sum([1, 2, 3])"))).toBe(run({ "c.ts": plain }, null, call(".ts", "m.sum([1, 2, 3])")));
   }, 120_000);
 
+  // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
   // Value: protects=section 10's rename-only control in JavaScript and TypeScript when the binder check cannot run; fails_when=a child that fails or prints nothing reads as a file with no safe rename, or as a safe one; why_new=the testing finding on bindcheck.ts:22 in this PR's /ship review; seam=bindcheck.ts checkRename; no_claim=why the child failed
   test("a JavaScript or TypeScript rename check that cannot run refuses with E_SM_PACKET", () => {
     expect(() => checkRename({ path: "", before: "let a = 1;", after: "let aValue = 1;", name: "a", renamed: "aValue" })).toThrow(/^E_SM_PACKET /);

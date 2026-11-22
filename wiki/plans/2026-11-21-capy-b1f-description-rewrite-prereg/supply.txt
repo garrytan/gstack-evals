@@ -1,0 +1,10 @@
+scipp__plopp-513	own	primary
+iluvcapra__pycmx-15	hook	primary
+itsdnns__docsight-437	long	primary
+joke2k__faker-2309	required	primary
+openai__openai-agents-python-1984	hook	primary
+pgmpy__pgmpy-3137	long	primary
+mmornati__home-assistant-csnet-home-132	required	primary
+sciunto-org__python-bibtexparser-515	hook	primary
+bluesky__ophyd-async-1165	long	nonfit
+line__line-bot-sdk-python-981_interface	required	nonfit

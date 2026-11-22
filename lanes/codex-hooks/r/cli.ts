@@ -5,12 +5,14 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { l1Main, type PartPlan } from "../../../quick/laneb/l1/l1.ts";
-import { readRows, type Row } from "../../../quick/laneb/runner/ledger.ts";
+import { readRows } from "../../../quick/laneb/runner/ledger.ts";
+import { readCrew } from "../allin.ts";
+import { cSpends } from "../c/plan.ts";
 import { drawnTasks, loadBundle } from "../../delivery-route/pins.ts";
 import { buildArms, checkArms } from "./arms.ts";
-import { approve, dryRun, launchGuard, markDone, planLines, type Crew } from "./money.ts";
+import { approve, dryRun, launchGuard, markDone, planLines, readLedgers } from "./money.ts";
 import { R_PROFILE } from "./plans.ts";
-import { ITEM_NAMES, isItem, ROUTE_TABLE_SHA256, sha256, type Item } from "./pins.ts";
+import { isItem, ROUTE_TABLE_SHA256, sha256, type Item } from "./pins.ts";
 import { checkPilot, routeTable } from "./routes.ts";
 import { reportMain } from "./report.ts";
 import { buildRTable } from "./table.ts";
@@ -27,18 +29,17 @@ export function guardParts(work: string, planned: PartPlan[], relaunching?: stri
 }
 
 // The launch guard's inputs: the work dir's plan and parts, the item's own ledger (LEDGER, or the host mirror l1.ts keeps),
-// every other item's ledger as R_LEDGERS/<item>.jsonl, and R_CREW, the crew file (as_of, and usd from this thread's counter).
-// The all-in stop is pins.ts ALL_IN_STOP_USD.
+// every other item's ledger as R_LEDGERS/<item>.jsonl, R_CREW, the crew file (as_of, and usd from this thread's counter), and
+// CH_RECORD, the ledger record of part C's items and the judge item, for the all-in stop (../allin.ts).
 function guard(work: string, relaunching?: string) {
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
-  const dir = process.env.R_LEDGERS ?? "", crewPath = process.env.R_CREW ?? "", own = process.env.LEDGER ?? "";
-  if (!dir || !crewPath || !existsSync(crewPath)) throw new Error("E_USAGE codex-hooks r launch guard: set R_LEDGERS to the folder of item ledgers (<item>.jsonl) and R_CREW to the crew file");
+  const dir = process.env.R_LEDGERS ?? "", crewPath = process.env.R_CREW ?? "", record = process.env.CH_RECORD ?? "", own = process.env.LEDGER ?? "";
+  if (!dir || !crewPath || !record) throw new Error("E_USAGE codex-hooks r launch guard: set R_LEDGERS to the folder of item ledgers (<item>.jsonl), R_CREW to the crew file and CH_RECORD to part C's ledger record");
   if (!isItem(plan.item)) throw new Error("E_USAGE codex-hooks r launch guard: " + work + " plans " + plan.item + ", not a part R item");
-  const ledgers: Partial<Record<Item, Row[]>> = {};
-  for (const i of ITEM_NAMES) if (existsSync(join(dir, i + ".jsonl"))) ledgers[i] = readRows(join(dir, i + ".jsonl"));
+  const ledgers = readLedgers(dir);
   const mirror = join(work, "host/ledger.jsonl");
   ledgers[plan.item as Item] = own && existsSync(own) ? readRows(own) : existsSync(mirror) ? readRows(mirror) : ledgers[plan.item as Item] ?? [];
-  const g = launchGuard(plan.item, ledgers, { [plan.item]: guardParts(work, plan.parts, relaunching) }, JSON.parse(readFileSync(crewPath, "utf8")) as Crew);
+  const g = launchGuard(plan.item, ledgers, { [plan.item]: guardParts(work, plan.parts, relaunching) }, readCrew(crewPath), cSpends(record));
   for (const l of g.lines) console.log(l);
   if (!g.ok) throw new Error("E_CODEX_R_LAUNCH " + plan.item + ": " + g.why.join("; ") + "; take it to the Captain before launching");
 }

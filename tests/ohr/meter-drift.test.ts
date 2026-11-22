@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=the meter's provider-drift stop and its empty-reply bound (pre-run change 5): only a reply that carries an answer can show which provider served it, so an empty, error or cut-off reply is a failed call, an answer from another provider or from an unnamed one still stops the command, and empty replies stop the run at three in a row or past 1% of its calls; fails_when=a timed-out or error reply stops a run as a provider drift, an answer with missing or wrong provenance is counted, or empty replies pile up without a stop.
-import { expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { afterAll, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
@@ -15,8 +15,14 @@ const answered = (content: string, provider: string | null = "Google", model = "
 const errored = () => Response.json({ id: "gen-1", error: { code: 524, message: "upstream timed out" }, usage });
 const SIM_TEXT = JSON.stringify({ reply: "Two services pay me.", revealed: ["f1"], rules: [3], done: false });
 
+// The ledger and the wire fsync every write (the 506-call test makes about 2,600), so on a busy CI disk that test ran
+// past 5 s. Wires live in RAM-backed /dev/shm where there is one, so fsync costs nothing; durability is not under test.
+const made: string[] = [];
+afterAll(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
+const ramDir = () => { const d = mkdtempSync(join(existsSync("/dev/shm") ? "/dev/shm" : tmpdir(), "ohr-drift-")); made.push(d); return d; };
+
 /** A wire on a temporary ledger whose upstream answers each Argon call with the next reply in turn. */
-async function withArgon<T>(replies: (() => Response | Promise<Response>)[], body: (w: Wire) => Promise<T>, dir = mkdtempSync(join(tmpdir(), "ohr-drift-")), drainMs?: number): Promise<T> {
+async function withArgon<T>(replies: (() => Response | Promise<Response>)[], body: (w: Wire) => Promise<T>, dir = ramDir(), drainMs?: number): Promise<T> {
   const record = join(dir, "record");
   try {
     recordApproval(record, { action: "init", item: "ohr-drift-test", cap_micros: 20 * D, quotes: [{ words: "drift test on a temporary ledger, not an approval", by: "tests/ohr/meter-drift.test.ts", source: "pre-run change 5" }], admission: "warn" });

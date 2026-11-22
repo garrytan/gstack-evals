@@ -100,7 +100,9 @@ describe("the decision", () => {
   test("B1b's controls are its published rows: hook 58 of 60 loaded, claude-md 20 of 60", () => {
     expect(["hook", "claude-md"].map((a) => controls.filter((r) => r.arm === a && r.outcome === "graded" && r.load?.loaded).length)).toEqual([58, 20]);
   });
+  // pregate-literal: cap=41 this test's own number, not the office-hours rewrite ledger's cap
   test("every band at its edges: matches down to 55 of 60, middle from 54 to 42, clearly loses from 41", () => {
+    // pregate-literal: cap=41 this test's own number, not the office-hours rewrite ledger's cap
     expect([58, 55, 54, 42, 41, 20].map((k) => read(rows(k)))).toEqual(["matches", "matches", "middle", "middle", "clearly-loses", "clearly-loses"]);
     expect(read(rows(58, 7))).toBe("incomplete");
     const capped = rows(58);
@@ -113,6 +115,7 @@ describe("the decision", () => {
     expect(placementReading({ lo: 0.1, hi: 0.5 })).toContain("loads more");
     expect(placementReading({ lo: -0.5, hi: -0.1 })).toContain("loads less");
     expect(placementReading({ lo: -0.1, hi: 0.1 })).toContain("not shown");
+    // pregate-literal: cap=41 this test's own number, not the office-hours rewrite ledger's cap
     const rep = b1cReport(rows(41));
     expect(rep.reading?.key).toBe("clearly-loses");
     expect(rep.lines.find((l) => l.includes("control, B1b hook"))).toBe("  control, B1b hook (the hook line): loaded 58/60, followed 36/60");

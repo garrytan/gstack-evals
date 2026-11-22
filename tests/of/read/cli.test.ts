@@ -153,6 +153,7 @@ describe("of stage2 and of headline", () => {
   const est = Object.fromEntries(MODELS.map((m) => [m, { model: m, units: 16, sessions: 48, p0: 0.375, rho: 0.99, s: 0.01 }]));
   const projection = file("projection.json", JSON.stringify({ rerun: { estimates: est } }));
   const stage1 = file("stage1.json", JSON.stringify({ reading: { band: { reading: "HEADROOM" }, untested: { opus: [], sol: [], particle: [] }, smoke_drop: { opus: false, sol: false, particle: false }, repairs: [] } }));
+  // pregate-literal: cap=22 this test's own number, not the office-hours rewrite ledger's cap
   const args = (out: string, audit = "pass") => ["--units-dir", unitsDir, "--scored", scored2, "--stock", stock2, "--manifest", primary, "--manifest", pitch, "--stage1", stage1, "--projection", projection, "--map", file("gold-map.json", JSON.stringify(goldMap)), "--labels", goldLabels, "--audit", file("audit2-" + audit + ".json", JSON.stringify({ read: audit })), "--arm-guess", "22/30", "--out", out];
   test("reads every model against the frozen manifests and writes stage2.json", async () => {
     calls = 0;

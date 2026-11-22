@@ -47,6 +47,13 @@ describe("the day-one prereg holds the frozen values", () => {
     expect(change).toContain("2026-11-17-geva-546-day-one-usefulness-prereg");
     expect(prereg).toContain(F.BROWSER_IMAGE.split("@")[1]!);
   });
+  // Value: protects=the checker's identity, which binds a validation to the check stages it may count: fails_when=a check stage that ran another checker model or other limits carries the validated checker's hash; why_new=the day-one results review, which found the hash covered only the checker's texts; seam=checkerIdentity and CHECKER_SHA256 in lanes/day-one/frozen.ts; no_claim=the validation gate, which tests/day-one/cli.test.ts covers
+  test("the checker's identity covers its texts, its model and its limits", () => {
+    expect(F.CHECKER_SHA256).toBe(F.checkerIdentity(F.MODELS.checker, F.LIMITS.check));
+    expect(F.checkerIdentity("openai/gpt-6.2-sol", F.LIMITS.check)).not.toBe(F.CHECKER_SHA256);
+    expect(F.checkerIdentity(F.MODELS.checker, { ...F.LIMITS.check, turns: 401 })).not.toBe(F.CHECKER_SHA256);
+    expect(F.checkerIdentity(F.MODELS.checker, { ...F.LIMITS.check, minutes: 90 })).not.toBe(F.CHECKER_SHA256);
+  });
   test("the checker repair is in its dated change and sits between the frozen header and the tasks", () => {
     const change = readFileSync(join(import.meta.dir, "../..", F.REPAIR_CHANGE), "utf8");
     expect(change).toContain(F.CHECK_REPAIR);

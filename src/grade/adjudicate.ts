@@ -25,8 +25,8 @@ export function redact(text: string, names: readonly string[]): { text: string; 
   return { text: text.replace(new RegExp("(?<!\\w)(?:" + words.join("|") + ")(?!\\w)", "gi"), () => (hits++, "[redacted]")), hits };
 }
 
-/** The judge's prompt: no arm, skill, model or host in it; the answer and evidence sit between nonce tags. */
-export function judgePrompt(o: { prompt: string; rubric: string; answer: string; evidence: string; nonce: string }): string {
+/** The part of the judge's prompt every run of a task shares (the instructions, the task's prompt and the rubric), which the judge's request marks for the provider's prompt cache. */
+export function judgePrefix(o: { prompt: string; rubric: string }): string {
   return [
     "You are grading one answer an AI agent gave to a task. You do not know which agent or setup produced it, and it does not matter.",
     "Read the material below and decide whether the answer meets the rubric.",
@@ -39,6 +39,12 @@ export function judgePrompt(o: { prompt: string; rubric: string; answer: string;
     o.rubric,
     "</rubric>",
     "",
+  ].join("\n");
+}
+
+/** The judge's prompt: no arm, skill, model or host in it; the answer and evidence sit between nonce tags, after the shared prefix. */
+export function judgePrompt(o: { prompt: string; rubric: string; answer: string; evidence: string; nonce: string }): string {
+  return judgePrefix(o) + "\n" + [
     "<answer-" + o.nonce + ">",
     o.answer || "(the agent showed no text)",
     "</answer-" + o.nonce + ">",

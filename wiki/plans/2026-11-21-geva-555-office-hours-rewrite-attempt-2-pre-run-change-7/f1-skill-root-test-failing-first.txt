@@ -1,0 +1,42 @@
+# bun test tests/ohr/run/home-watch.test.ts -t 'pre-run change 7' at the change-7 tree before the F1 fix, 2026-11-21
+bun test v1.4.4 (38afee6c8)
+
+tests/ohr/run/home-watch.test.ts:
+220 |   const exec = (c: string) => JSON.stringify({ type: "response_item", payload: { type: "custom_tool_call", name: "exec", input: "const r = await tools.exec_command({cmd: " + JSON.stringify(c) + "});" } });
+221 |   const call = (c: string) => JSON.stringify({ type: "response_item", payload: { type: "function_call", name: "exec_command", arguments: JSON.stringify({ cmd: c }) } });
+222 |   const ROOT = "$" + "{CODEX_HOME:-~/.codex}/skills/gstack";
+223 |   test("the exact skill-root token, alone or followed by a path with no '..', is no flag in a command or a rollout tool call", () => {
+224 |     const seeded = ["GSTACK_ROOT=" + ROOT + "\n\"$GSTACK_ROOT/bin/gstack-skill-start\"", "_r=" + ROOT + ";[ -d \"$_r/bin\" ]||echo none", "[ -x \"" + ROOT + "/bin/gstack-skill-start\" ]&&\"" + ROOT + "/bin/gstack-skill-start\""];
+225 |     expect(streamFlags(seeded.map(cmd).join("\n"), [seeded.map(exec).join("\n"), seeded.map(call).join("\n")])).toEqual([]);
+                                                                                                                      ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   
++ "stream: command GSTACK_ROOT=${CODEX_HOME:-~/.codex}/skills/gstack
++ "$GSTACK_ROOT/bin/gstack-skill-start""
++ ,
++   "stream: command _r=${CODEX_HOME:-~/.codex}/skills/gstack;[ -d "$_r/bin" ]||echo none",
++   "stream: command [ -x "${CODEX_HOME:-~/.codex}/skills/gstack/bin/gstack-skill-start" ]&&"${CODEX_HOME:-~/.codex}/skills/gstack/bin/gstack-skill-start"",
++   "stream: rollout custom_tool_call exec const r = await tools.exec_command({cmd: "GSTACK_ROOT=${CODEX_HOME:-~/.codex}/skills/gstack\n\"$GSTACK_ROOT/bin/gstack-skill-start\""});",
++   "stream: rollout custom_tool_call exec const r = await tools.exec_command({cmd: "_r=${CODEX_HOME:-~/.codex}/skills/gstack;[ -d \"$_r/bin\" ]||echo none"});",
++   "stream: rollout custom_tool_call exec const r = await tools.exec_command({cmd: "[ -x \"${CODEX_HOME:-~/.codex}/skills/gstack/bin/gstack-skill-start\" ]&&\"${CODEX_HOME:-~/.codex}/skills/gstack/bin/gstack-skill-start\""});",
++   "stream: rollout function_call exec_command {"cmd":"GSTACK_ROOT=${CODEX_HOME:-~/.codex}/skills/gstack\n\"$GSTACK_ROOT/bin/gstack-skill-start\""}",
++   "stream: rollout function_call exec_command {"cmd":"_r=${CODEX_HOME:-~/.codex}/skills/gstack;[ -d \"$_r/bin\" ]||echo none"}",
++   "stream: rollout function_call exec_command {"cmd":"[ -x \"${CODEX_HOME:-~/.codex}/skills/gstack/bin/gstack-skill-start\" ]&&\"${CODEX_HOME:-~/.codex}/skills/gstack/bin/gstack-skill-start\""}",
++ ]
+
+- Expected  - 1
++ Received  + 14
+
+      at <anonymous> (tests/ohr/run/home-watch.test.ts:225:113)
+(fail) pre-run change 7: gstack's Codex skill root > the exact skill-root token, alone or followed by a path with no '..', is no flag in a command or a rollout tool call [6.52ms]
+(pass) pre-run change 7: gstack's Codex skill root > every other CODEX_HOME use still flags, the token with '..' after it included, and so does a file_change path [0.16ms]
+
+ 1 pass
+ 19 filtered out
+ 1 fail
+ 14 expect() calls
+Ran 2 tests across 1 file. [563.00ms]
+exit 1

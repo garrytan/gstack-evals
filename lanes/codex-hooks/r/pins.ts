@@ -14,6 +14,12 @@ export { ARM_SETTINGS, CHANGE_1, CLOSING, CODEX, EFFORT, GSTACK, MODEL, PREREG, 
 export const sha256 = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
 export const HERE = "lanes/codex-hooks/r";
 
+// Part R's Codex settings (pre-run change 3): ARM_SETTINGS, and the model's shell commands run in a non-login shell. A
+// login shell reads the task image's /etc/profile, which resets PATH and drops the testbed's bin and /opt/laneb/bin (bun),
+// so every gstack command refused and the model ran another Python. Codex refuses a request for a login shell under this
+// setting; table.ts counts those requests.
+export const R_SETTINGS: Readonly<Record<string, boolean>> = { ...ARM_SETTINGS, allow_login_shell: false };
+
 // The part machinery's settings: B1's seed orders each part's tasks and arms (seeded() in quick/laneb/l1/l1.ts), six
 // sessions at once, 20 tasks a part (60 sessions with three arms), its own host root, ledger port and manifests.
 export const R = {
@@ -110,15 +116,14 @@ export const AGENT = { name: "laneb-codex", import_path: "laneb_codex:LanebCodex
 // The pilot (section 9 and change 1 section 4): B1's two smoke tasks and the first four covered candidates.
 export const PILOT_TASKS = [...SMOKE_TASKS, "BerriAI__litellm-16997", "narwhals-dev__narwhals-3480", "delgan__loguru-1425", "koxudaxi__datamodel-code-generator-2996"] as const;
 
-// Items (section 11): central and cap in USD, and the sessions each pays for.
+// Items (section 11): central and cap in USD, the sessions each pays for, and the VM share its central leaves out. r-main's
+// central includes its VM share; r-pilot's pays for sessions only, so its host and part VM ($7.20) go on top, and pre-run
+// change 2 (decision A, 2026-11-21) records its cap at $50.
 export const ITEMS_USD = {
-  "r-pilot": { central: 9, cap: 45, sessions: 18 },
-  "r-main": { central: 99, cap: 165, sessions: 180 },
+  "r-pilot": { central: 9, cap: 50, sessions: 18, vmOutside: 7.2 },
+  "r-main": { central: 99, cap: 165, sessions: 180, vmOutside: 0 },
 } as const;
 export type Item = keyof typeof ITEMS_USD;
-// The all-in stop the launch guard reads: the Captain's recorded point to come back, $1,200 (2026-11-21), against every
-// item's projection plus the crew's counter (lanes/codex-hooks/r/money.ts launchGuard).
-export const ALL_IN_STOP_USD = 1200;
 export const ITEM_NAMES = Object.keys(ITEMS_USD) as Item[];
 export const isItem = (x: string): x is Item => Object.hasOwn(ITEMS_USD, x);
 // Planning prices per session (section 11): a bug task at $0.55 in a gstack arm and $0.45 in r-none.

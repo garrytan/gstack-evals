@@ -1,4 +1,6 @@
 {
   "claude": "2.1.314",
-  "codex": "0.166.0"
+  "codex": "0.166.0",
+  "codex_hooks_eval": "0.170.0",
+  "codex_office_hours_rewrite": "0.170.0"
 }

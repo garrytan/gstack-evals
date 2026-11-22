@@ -102,9 +102,12 @@ export async function checkBrief(id: string, b: BriefFiles, c: { role: Role; aut
   return { ok: true, record: { validators: { unanimous: full, opening_only: opening }, audit: a.by, probe: p.records, generic_unlabelled: g.unlabelled } };
 }
 
+/** A draft's brief id: d<draw> for an unpaired brief, d<draw>a for a first twin, and its partner's id ending in b for a second twin. */
+export const draftId = (role: Role, draw: number, partner: Pick<Partner, "id"> | null): string => (role === "second" ? partner!.id.replace(/a$/, "b") : "d" + draw + (role === "first" ? "a" : ""));
+
 /** One draft for a slot and role, end to end. A second twin is written against its partner. */
 export async function runDraft(slot: Slot, role: Role, o: { draw: number; attempt: number; author: AuthorFamily; pilot: boolean; partner: Partner | null }, deps: Deps): Promise<Outcome> {
-  const id = role === "second" ? o.partner!.id.replace(/a$/, "b") : "d" + o.draw + (role === "first" ? "a" : "");
+  const id = draftId(role, o.draw, o.partner);
   const ref = id + (o.attempt > 1 ? "." + o.attempt : "");
   const spec: ReadSpec = { role, goal: slot.kind === "builder" ? (slot.type as BuilderGoal) : null, prior: slot.type === "T8", twin: role === "first" ? id.replace(/a$/, "b") : role === "second" ? o.partner!.id : null, opening: o.partner?.files.opening };
   const prompt = promptFor(slot, role, o.partner) + refLine(ref);

@@ -6,6 +6,7 @@ import { armSpec, jobConfig } from "../../../quick/laneb/runner/grid.ts";
 import { drawnTasks, loadBundle } from "../../../lanes/delivery-route/pins.ts";
 import { armProblems, MANIFESTS, normalizePromptInput, skillsListed, type ArmManifest } from "../../../lanes/codex-hooks/r/arms.ts";
 import { approve, capRule, dryRun, launchGuard, needsRerun, planLines } from "../../../lanes/codex-hooks/r/money.ts";
+import { cSpends } from "../../../lanes/codex-hooks/c/plan.ts";
 import { ITEMS, itemPlan, R_PROFILE } from "../../../lanes/codex-hooks/r/plans.ts";
 import { ARM_NAMES, ARMS, CODEX_BIN, ITEMS_USD, PILOT_TASKS, PROXY_CONFIG, QUESTION_REPLY, REPO, TASK_SETUP, sha256 } from "../../../lanes/codex-hooks/r/pins.ts";
 import { codexAgent } from "../../../lanes/codex-hooks/r/prepare-run.ts";
@@ -20,11 +21,11 @@ describe("part R plan and money", () => {
     expect(itemPlan("r-pilot", run).parts.map((p) => p.name)).toEqual(["r-pilot"]);
     expect(new Set(itemPlan("r-pilot", run).parts[0]!.rects.flatMap((r) => r.tasks))).toEqual(new Set(PILOT_TASKS));
     expect(itemPlan("r-main", run).parts.map((p) => p.name)).toEqual(["r-1", "r-2", "r-3"]);
-    expect([capRule("r-pilot"), capRule("r-main")]).toEqual([45, 165]);
+    expect([capRule("r-pilot"), capRule("r-main")]).toEqual([50, 165]);
     expect(ITEMS["r-main"]).toMatchObject({ capUsd: 165, allowanceUsd: 5, model: "gpt-6.1-sol", cells: "cells.codex-hooks-r.json", taskSet: "swerebench-r3a4" });
   });
   test("the dry run opens and settles one lease per item on a temporary ledger", () => {
-    expect(dryRun()).toEqual(["dry run r-pilot: approval $45, one lease of $5 opened and settled, done", "dry run r-main: approval $165, one lease of $5 opened and settled, done"]);
+    expect(dryRun()).toEqual(["dry run r-pilot: approval $50, one lease of $5 opened and settled, done", "dry run r-main: approval $165, one lease of $5 opened and settled, done"]);
   });
   test("an approval at any amount but the recorded cap is refused", () => {
     const d = mkdtempSync(join(tmpdir(), "r-approve-"));
@@ -32,18 +33,24 @@ describe("part R plan and money", () => {
     approve(join(d, "r-main.jsonl"), "r-main", 165, "x");
     expect(() => approve(join(d, "r-main.jsonl"), "r-main", 165, "x")).toThrow("already holds rows");
   });
-  test("the guard reads the Captain's $1,200 all-in stop, holds r-main until r-pilot is done, and reads r-pilot's projection against its cap", () => {
-    expect(() => launchGuard("r-pilot", {}, {}, { as_of: "now" } as any)).toThrow("usd");
-    const main = launchGuard("r-main", {}, {}, { as_of: "now", usd: 0 });
+  test("the guard reads the Captain's $1,200 all-in stop over both parts and the judge item, holds r-main until r-pilot is done, and reads r-pilot's projection against its cap", () => {
+    const others = cSpends(mkdtempSync(join(tmpdir(), "r-record-")));
+    expect(() => launchGuard("r-pilot", {}, {}, { as_of: "now" } as any, others)).toThrow("usd");
+    const main = launchGuard("r-main", {}, {}, { as_of: "now", usd: 0 }, others);
     expect(main.ok).toBe(false);
     expect(main.why.join()).toContain("r-pilot is not marked done");
     // The pilot's projection: $9.30 planned, the $30 parallel reserve and a $7.20 VM share (host TTL and one part VM block)
-    // come to $46.50, over its recorded $45 cap; that is a decision for the Captain, not a bug in the guard.
-    const pilot = launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 0 });
-    expect(pilot.lines[0]).toContain("r-pilot $46.50 of cap $45.00");
-    expect(pilot.lines[0]).toContain("all-in $184.38 of $1200.00");
-    expect(launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 1016 }).why.join()).toContain("passes the $1200.00 stop");
-    expect(launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 1015 }).why.join()).not.toContain("stop");
+    // come to $46.50, inside the $50 cap pre-run change 2 records (decision A); the VM share is the one its cap rule adds.
+    const pilot = launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 0 }, others);
+    expect(pilot.lines[0]).toContain("r-pilot $46.50 of cap $50.00");
+    expect(pilot.ok).toBe(true);
+    // All-in: r-pilot's $46.50, r-main at its $99 central and $30 reserve, part C's items at central plus four allowances
+    // ($53, $78, $266, $261) and the judge item's $55 central come to $888.50.
+    expect(pilot.lines[0]).toContain("all-in $888.50");
+    expect(pilot.lines).toContain("ALL_IN PASS: $888.50 of $1200.00");
+    expect(launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 311.51 }, others).why.join()).toContain("passes the $1200.00 stop");
+    expect(launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 311.5 }, others).why.join()).not.toContain("stop");
+    expect(launchGuard("r-pilot", {}, {}, { as_of: "now", usd: 0 }, others.slice(1)).why).toEqual(["c-pilot is missing from the count"]);
   });
 });
 
@@ -60,6 +67,7 @@ describe("part R's prepare step and profile", () => {
       expect(k.codex_argv).toContain('model_providers.gstack_evals_proxy.base_url="http://__GATEWAY__:8787/laneb/openai/v1"');
       expect(k.codex_argv).toContain('model_reasoning_effort="low"');
       expect(k.codex_argv).toContain("features.sleep_tool=false");
+      expect(k.codex_argv).toContain("allow_login_shell=false");
       expect(k.codex_argv.slice(k.codex_argv.indexOf("-m"), k.codex_argv.indexOf("-m") + 2)).toEqual(["-m", "gpt-6.1-sol"]);
       expect(k.codex_argv.includes("--dangerously-bypass-hook-trust")).toBe(gstack);
       expect(k.codex_resume_argv.slice(-3)).toEqual(["resume", "__THREAD__", "-"]);
@@ -107,28 +115,34 @@ describe("part R's arms", () => {
 
 describe("part R's session table", () => {
   const root = "019a0000-0000-7000-8000-000000000001";
-  function trial(jobs: string, name: string, o: { arm?: string; reward?: number | null; exc?: string; rollout?: boolean; model?: string; version?: string; ok?: number; refusedBudget?: number }) {
+  function trial(jobs: string, name: string, o: { arm?: string; reward?: number | null; exc?: string; rollout?: boolean; model?: string; version?: string; ok?: number; refusedBudget?: number; efforts?: (string | null)[] }) {
     const d = join(jobs, name), ev = join(d, "evaluator");
     mkdirSync(join(ev, "codex-sessions/2026/11/20"), { recursive: true });
     writeFileSync(join(d, "config.json"), JSON.stringify({ agent: { name: "laneb-codex", kwargs: { arm: o.arm ?? "r-on" } }, task: { path: "/t/" + name.split("__x")[0] } }));
     writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: name, ...(o.exc ? { exception_info: { exception_type: o.exc } } : {}), ...(o.reward === null ? {} : { verifier_result: { rewards: { reward: o.reward ?? 1 } } }) }));
     writeFileSync(join(ev, "laneb-summary.json"), JSON.stringify({ result: { thread_id: root, questions: 1, resumes: 1 }, session: { ok_responses: o.ok ?? 2, usage: { input_tokens: 10, output_tokens: 5 } }, wall_s: 12.5 }));
     if (o.rollout !== false) writeFileSync(join(ev, "codex-sessions/2026/11/20/rollout-x-" + root + ".jsonl"), [{ type: "session_meta", payload: { id: root, cli_version: o.version ?? "0.170.0" } }, { type: "turn_context", payload: { model: o.model ?? "gpt-6.1-sol", effort: "low" } }].map((x) => JSON.stringify(x)).join("\n") + "\n");
+    for (const e of o.efforts ?? ["low"]) reqs.push({ event: "request", session: "s-" + name, trial: name + "__env", ...(e === null ? {} : { reasoning_effort: e }) });
     return { id: "s-" + name, trial: name, spent_micros: 120000, ok_responses: o.ok ?? 2, requests: 3, refused: 0, refused_budget: o.refusedBudget ?? 0, opened_at: "2026-11-20T00:00:00Z" };
   }
+  const reqs: object[] = [];
   test("graded, limit stops, cap stops and the infrastructure reasons follow section 4.7 and change 1 section 10", () => {
     const d = mkdtempSync(join(tmpdir(), "r-table-")), jobs = join(d, "jobs/j1");
     mkdirSync(jobs, { recursive: true });
     const sess = [
       trial(jobs, "a__x1", {}), trial(jobs, "b__x2", { arm: "r-off", reward: 0, refusedBudget: 1 }), trial(jobs, "c__x3", { exc: "LedgerCapStop", reward: null }),
       trial(jobs, "d__x4", { rollout: false }), trial(jobs, "e__x5", { model: "gpt-6.2-sol" }), trial(jobs, "f__x6", { ok: 0 }), trial(jobs, "g__x7", { exc: "AgentTimeoutError" }), trial(jobs, "h__x8", { reward: null }),
+      trial(jobs, "i__x9", { efforts: ["low", "high"] }), trial(jobs, "j__x10", { efforts: ["low", null] }), trial(jobs, "k__x11", { efforts: [] }),
     ];
     writeFileSync(join(d, "sessions.jsonl"), sess.map((s) => JSON.stringify(s)).join("\n") + "\n");
-    const rows = buildRTable({ jobs: [{ dir: jobs, part: "r-1" }], sessions: [join(d, "sessions.jsonl")] });
+    writeFileSync(join(d, "requests.jsonl"), [...reqs, { event: "session_open", trial: "a__x1__env" }].map((s) => JSON.stringify(s)).join("\n") + "\n");
+    expect(() => buildRTable({ jobs: [{ dir: jobs, part: "r-1" }], sessions: [join(d, "sessions.jsonl")], requests: [] })).toThrow("needs requests");
+    const rows = buildRTable({ jobs: [{ dir: jobs, part: "r-1" }], sessions: [join(d, "sessions.jsonl")], requests: [join(d, "requests.jsonl")] });
     expect(rows.map((r) => [r.task, r.outcome, r.reason])).toEqual([
       ["a", "graded", "graded"], ["b", "graded", "allowance limit stop, graded on what it left"], ["c", "cap_stop", "ledger cap stop"],
       ["d", "infra", "no rollout copied out for the root thread"], ["e", "infra", "root thread on gpt-6.2-sol at low in Codex 0.170.0, not gpt-6.1-sol at low in 0.170.0"],
       ["f", "infra", "no model response reached the agent"], ["g", "graded", "time limit stop, graded on what it left"], ["h", "infra", "no verifier reward, verifier infrastructure error"],
+      ["i", "infra", "a request ran at effort high, not low"], ["j", "infra", "a request ran at effort none, not low"], ["k", "infra", "the request log holds no request for this trial"],
     ]);
     expect(rows.filter(needsRerun).map((r) => r.task)).toEqual(["d", "f", "h"]);
     expect(rows[0]).toMatchObject({ pass: true, questions: 1, resumes: 1, wall_s: 12.5, cost_usd: 0.12, tokens: 15 });

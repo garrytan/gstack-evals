@@ -1,0 +1,19 @@
+== claude-opus-5-5, B1e in-sample (B1's run tasks): gstack main 5df6b5a8cf21 (1.102.0.0), hooks on by default, 60 tasks
+  gstack-main: loaded 45/60 75.0% [62.8, 84.2]; at the first call 44; /verify loaded 0; followed 16/60 [17.1, 39.0]; gaps 0, cap stops 0, safety stops 0, audit 0, passes 37 (descriptive), cost $23.45 ($0.391 a graded session); not loaded: hook log missing 0, hook did not name prove-it 9, line not delivered 0, loaded /verify instead 0, load failed 0, named, not loaded 6, never named 0
+  reading: in-sample: the hook loaded prove-it in 45 of 60, at or above the bar of 39
+  hook put prove-it only (51 sessions): prove-it loaded 45, /verify loaded 0, neither 6
+  hook put prove-it first of two (0 sessions): prove-it loaded 0, /verify loaded 0, neither 0
+  hook put prove-it second of two (0 sessions): prove-it loaded 0, /verify loaded 0, neither 0
+  hook put prove-it not named (9 sessions): prove-it loaded 0, /verify loaded 0, neither 9
+  hook log missing (0 sessions): prove-it loaded 0
+  hook line before the first output (proxy): 53 of 60, quoted 0
+  loaded, gstack-main - B1c project-md (published rows): +10.0 points [+0.5, +19.5] on 60 paired tasks (7 vs 1 discordant)
+  loaded, gstack-main - B1d gstack-main at 5afef04 (published rows): +21.7 points [+10.5, +32.0] on 60 paired tasks (13 vs 0 discordant)
+  followed, gstack-main - B1 none (published rows): +26.7 points [+15.4, +39.0] on 60 paired tasks (16 vs 0 discordant)
+  hook names prove-it (51 tasks): gstack-main 45/51
+  hook does not name prove-it (9 tasks): gstack-main 0/9
+  _interface tasks (7 tasks): gstack-main 1/7
+  other tasks (53 tasks): gstack-main 44/53
+  length tertile 1 (418 to 1471 characters) (20 tasks): gstack-main 14/20
+  length tertile 2 (1523 to 3058 characters) (20 tasks): gstack-main 13/20
+  length tertile 3 (3071 to 48984 characters) (20 tasks): gstack-main 18/20
