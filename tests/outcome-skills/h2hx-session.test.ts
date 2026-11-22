@@ -476,6 +476,17 @@ test.skipIf(!existsSync(PY))("a route that stalls every ask for 30 s is not aske
   expect(rows).toEqual([{ id: GEN404.answer_id, status: 404, text: GEN404.body, generation_id: GEN404.generation_id }]);
 });
 
+test.skipIf(!existsSync(PY))("a round with several stalled ids starts no ask once 190 s have passed since the first pass", async () => {
+  const stall = ["_open = h2h_turns.urllib.request.urlopen", "def stall(*a, **k):", "    h2h_turns.time.t += 30", "    return _open(*a, **k)", "h2h_turns.urllib.request.urlopen = stall"];
+  const ids = ["msg_a0123456789abcd", "msg_b0123456789abcd", "msg_c0123456789abcd", "msg_d0123456789abcd"];
+  const { rows, seen, clock } = await runGenerations({
+    ".claude/projects/p/s1.jsonl": ids.map((id) => JSON.stringify({ type: "assistant", message: { id } })).join("\n") + "\n",
+  }, () => notFound(), stall);
+  expect(seen.length).toBe(4 + 4 + 2);
+  expect(clock).toBe(120 + 190);
+  expect(rows.map((r) => [r.id, r.status])).toEqual(ids.map((id) => [id, 404]));
+});
+
 test.skipIf(!existsSync(PY))("an error answer whose body cannot be read is kept with the read error, and the other records are still read", async () => {
   const broken = [
     "import io, urllib.error",
