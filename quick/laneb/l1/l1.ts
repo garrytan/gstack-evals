@@ -585,7 +585,7 @@ function hostSalvage(root: string, part: string, prefix: string) {
   const ledger = new Ledger(env.LEDGER!, env.ITEM!);
   if (pulled) record.reconcile = reconcile(ledger, readRows(join(dir, "pulled/out/proxy-sessions.jsonl")) as any[], prefix);
   if (vm) record.vm_down = ubi(["down", vm]).code === 0;
-  if (vm && !record.vm_down) refuse("VM " + vm + " could not be destroyed; its blocks stay open. Run relaunch again to salvage again");
+  if (vm && !record.vm_down) refuse("VM " + vm + " could not be destroyed; its blocks stay open. Salvage it again: attach does after a STOP, relaunch does otherwise");
   const hours = (nowSec() - Number(st.started_at)) / 3600;
   const block = Number(env.VM_USD_PER_HOUR) * Number(env.VM_RESERVE_HOURS);
   const shares = blockShares(ledger.status().openIds, prefix + "vm", block, Number(env.VM_USD_PER_HOUR) * hours);
@@ -1214,7 +1214,7 @@ function recover(work: string) {
   // The running part's rows after the last mirror live only in its records. A kept part's rows were all on the mirror before
   // its launch.sh exited, so it ends the item only when its VM is unknown; otherwise it is a salvage like the host's.
   const complete = parts.every((p) => (p === run ? p.pulled && !p.missing.length : !!p.vm));
-  writeJson(join(work, "host/recover.json"), { host: host.name, down_confirmed_at: goneAt, mirror_sha256: mirrorSha, running: running?.part.name ?? null,
+  writeJsonAtomic(join(work, "host/recover.json"), { host: host.name, down_confirmed_at: goneAt, mirror_sha256: mirrorSha, running: running?.part.name ?? null,
     ...(run ? { part_vm: run.vm, part_vm_gone: run.how === "RECOVER_GONE", part_results_pulled: run.pulled, missing_sessions: run.missing } : {}),
     kept: parts.filter((p) => p !== run).map((p) => ({ part: p.name, vm: p.vm, vm_gone: p.how === "RECOVER_GONE", results_pulled: p.pulled, missing_sessions: p.missing })), rows_added: add.length, complete });
   if (!complete) {
