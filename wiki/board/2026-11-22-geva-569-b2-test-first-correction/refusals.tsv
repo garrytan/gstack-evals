@@ -10,4 +10,4 @@ b2-5	PyPSA__PyPSA-1498__aq9ytku	prove-it	call_e057ffac16b6439ab988498041d110b2
 b2-5	marimo-team__marimo-8401__Rzt3L3e	prove-it	call_9b090867f86c4c02ba9e6bceb2d9f21b
 b2-5	marimo-team__marimo-8401__kRsgVRo	none	call_6df21098f38b405e979b2aea4f52b866
 b2-7	genericmappingtools__pygmt-4463__W9UF7S8	prove-it	call_05489aaf898b47cb9b01d6005b1a2928
-# refused calls 11 in 11 sessions of 732 Sol sessions; by arm: none 3, line 2, gstack 2, prove-it 4
+# refused calls 11 in 11 sessions of 732 counted Sol sessions, each with its rollout; rollouts outside the table skipped: 0; by arm: gstack 2, line 2, none 3, prove-it 4
