@@ -26,23 +26,25 @@ const weekFile = (work: string) => join(work, "week.json");
 export const readWeek = (work: string): WeekFile => (existsSync(weekFile(work)) ? readJson(weekFile(work)) : usage(work + " has no week.json; run weekly resolve first"));
 const shasOf = (w: WeekFile): Record<GstackArm, string> => ({ candidate: w.candidate, stable: w.stable });
 
-/** The latest published record's HOLD, if it is one: the commit it held and the week. No published release is no HOLD;
- *  any other failure to read the record is an error, and the week stops INCOMPLETE rather than risk measuring a held commit. */
-/** The HOLD that stands, read from the published weekly records newest week first, past any INCOMPLETE ones. A read
- *  error returns error, so the week is INCOMPLETE; a repository with no weekly record has no HOLD. */
+/** The HOLD that stands, read from every published weekly record ordered by run start (window.start), newest first, ties
+ *  by tag, past any INCOMPLETE ones. A read error, or a record whose run start is not a time, returns error, so the week is
+ *  INCOMPLETE; a repository with no weekly record has no HOLD. */
 export function latestHold(run: GhRun = gh): { held: Held | null } | { error: string } {
   const list = run(["release", "list", "--repo", RECORD.repo, "--limit", "200", "--json", "tagName"]);
   if (list.status !== 0) return { error: "gh release list failed: " + (list.stderr ?? "").trim().slice(0, 200) };
   let listed: { tagName: string }[];
   try { listed = JSON.parse(list.stdout); } catch { return { error: "gh release list did not return JSON: " + list.stdout.trim().slice(0, 200) }; }
-  const tags = listed.map((x) => x.tagName).filter((t) => /^weekly-\d{4}-w\d{2}(-r\d+)?$/.test(t)).sort(byWeekDesc), recs = [];
-  for (const tag of tags) {
+  const recs: { tag: string; start: number; rec: { verdict: string; week: string; candidate: { sha: string } } }[] = [];
+  for (const tag of listed.map((x) => x.tagName).filter((t) => /^weekly-\d{4}-w\d{2}(-r\d+)?$/.test(t))) {
     const d = run(["release", "download", tag, "--repo", RECORD.repo, "-p", RECORD.asset, "-O", "-"]);
     if (d.status !== 0) return { error: "gh release download " + tag + " failed: " + (d.stderr ?? "").trim().slice(0, 200) };
-    try { recs.push(JSON.parse(d.stdout)); } catch { return { error: tag + "'s " + RECORD.asset + " is not JSON" }; }
-    if (recs.at(-1).verdict !== "INCOMPLETE") break;
+    let rec;
+    try { rec = JSON.parse(d.stdout); } catch { return { error: tag + "'s " + RECORD.asset + " is not JSON" }; }
+    const start = Date.parse(rec?.window?.start);
+    if (!Number.isFinite(start)) return { error: tag + "'s window.start is not a time" };
+    recs.push({ tag, start, rec });
   }
-  return { held: standingHold(recs) };
+  return { held: standingHold(recs.sort((a, b) => b.start - a.start || byWeekDesc(a.tag, b.tag)).map((x) => x.rec)) };
 }
 function rowsOf(path: string): WeeklyRow[] { return readFileSync(path, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); }
 const tarShas = () => Object.fromEntries(WEEKLY_ARM_NAMES.map((a) => [a, readJson(join(manifestDir(), a + ".json")).tar.sha256])) as Record<WeeklyArm, string>;
@@ -113,7 +115,9 @@ async function run(argv: string[]): Promise<number> {
     const date = new Date(now).toISOString().slice(0, 10), weekOf = opt("week") ?? null;
     if (remeasure && !weekOf) return usage("--remeasure needs --week <YYYY-MM-DD>, the date of the week whose record it re-measures");
     if (!remeasure && weekOf) return usage("--week goes only with --remeasure");
-    if (weekOf && isoWeek(weekOf) && weekOf > date) return usage("--week " + weekOf + " is after the run date " + date);
+    const weekAt = weekOf && /^\d{4}-\d{2}-\d{2}$/.test(weekOf) ? Date.parse(weekOf + "T00:00:00Z") : NaN;
+    if (weekOf && (!Number.isFinite(weekAt) || new Date(weekAt).toISOString().slice(0, 10) !== weekOf)) return usage("--week " + weekOf + " is not a real date (YYYY-MM-DD)");
+    if (weekOf && weekOf > date) return usage("--week " + weekOf + " is after the run date " + date);
     const prior = latestHold(), held = "held" in prior ? prior.held : null, shim = resolveWeek(join(work, "gstack-clone"), now);
     const d = "error" in prior ? { kind: "incomplete" as const, reason: "the latest published record could not be read (" + prior.error + "), so a HOLD cannot be ruled out", candidate: shim.candidate ? { sha: shim.candidate.sha } : null, stable: null, hold: shim.hold ?? null } : decide(shim, held);
     writeJson(join(work, "resolve.json"), shim);

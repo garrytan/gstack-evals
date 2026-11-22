@@ -58,49 +58,54 @@ describe("the HOLD that stands", () => {
 });
 
 describe("a re-measure keeps the week it re-measures", () => {
-  const rec = (week: string, verdict: string, sha = "a".repeat(40)) => ({ week, verdict, candidate: { sha } });
   const w: WeekFile = { date: "2026-11-30", week_of: "2026-11-28", base: weekBase("2026-11-30", 1), seed: weekSeed("2026-11-30"), start: "2026-11-30T12:00:00.000Z", decision: decide(newer, null), held: null, candidate: MAIN, stable: STABLE, stable_tag: "v1.102.2.0", dropped: [], setup_failed: [], contamination: null, smoke: null };
-  test("a re-measure run on a Monday keeps the earlier week's tag, and a later regular HOLD still stands", () => {
+  test("a re-measure run on a Monday keeps the earlier week's tag", () => {
     const r = recordInput(w, "pass");
     expect([r.tag, r.input.week, r.input.supersedes]).toEqual(["weekly-2026-w48-r1", "2026-W48", "weekly-2026-w48"]);
     expect(recordInput({ ...w, week_of: null, base: weekBase("2026-11-30") }, "pass").tag).toBe("weekly-2026-w49");
-    const recs: Record<string, ReturnType<typeof rec>> = { [r.tag]: rec("2026-W48", "NO_CHANGE"), "weekly-2026-w49": rec("2026-W49", "HOLD", "b".repeat(40)), "weekly-2026-w48": rec("2026-W48", "HOLD") };
-    expect(standingHold(Object.keys(recs).sort(byWeekDesc).map((t) => recs[t]!))).toEqual({ sha: "b".repeat(40), week: "2026-W49" });
   });
-  test("resolve refuses a re-measure without --week, --week without --remeasure, and a --week after the run date, before reading any record", async () => {
+  test("resolve refuses a re-measure without --week, --week without --remeasure, a --week after the run date and a date that does not exist, before reading any record", async () => {
     const dir = mkdtempSync(join(tmpdir(), "weekly-resolve-"));
     try {
       expect(await main(["resolve", dir, "--remeasure", "1"])).toBe(2);
       expect(await main(["resolve", dir, "--week", "2026-11-28"])).toBe(2);
       expect(await main(["resolve", dir, "--remeasure", "1", "--week", "2026-12-05", "--now", "2026-11-30T12:00:00Z"])).toBe(2);
+      for (const bad of ["2026-02-30", "2026-11-31", "2026-13-01"]) expect(await main(["resolve", dir, "--remeasure", "1", "--week", bad, "--now", "2026-11-30T12:00:00Z"])).toBe(2);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
 
-describe("the HOLD lookup through gh (list and failure shapes recorded from gh on 2026-11-22)", () => {
+describe("the HOLD lookup through gh, ordered by run start (gh's list and failure output and a weekly.json the CLI wrote, recorded on 2026-11-22)", () => {
   const FIX = join(import.meta.dir, "fixtures"), listed: { tagName: string }[] = JSON.parse(readFileSync(join(FIX, "gh-release-list.json"), "utf8"));
   const table = readFileSync(join(FIX, "gh-release-list-table.txt"), "utf8"), missing = readFileSync(join(FIX, "gh-release-download-missing.txt"), "utf8");
-  const rec = (week: string, verdict: string, sha = "a".repeat(40)) => ({ week, verdict, candidate: { sha } });
-  const records = { "weekly-2026-w50": rec("2026-W50", "INCOMPLETE", "c".repeat(40)), "weekly-2026-w49-r1": rec("2026-W49", "INCOMPLETE"), "weekly-2026-w49": rec("2026-W49", "HOLD", "b".repeat(40)), "weekly-2026-w48": rec("2026-W48", "NO_CHANGE") } as Record<string, object>;
-  const list = JSON.stringify([...listed, ...Object.keys(records).map((tagName) => ({ tagName }))]);
-  const fake = (stdout: string, recs: Record<string, object>, asked: string[]): GhRun => (args) => {
+  const REC = JSON.parse(readFileSync(join(FIX, "weekly-record.json"), "utf8"));
+  const rec = (week: string, verdict: string, start: string, sha = "a".repeat(40)) => ({ ...REC, week, verdict, candidate: { sha }, window: { start, end: start } });
+  const fake = (recs: Record<string, object>, stdout = JSON.stringify([...listed, ...Object.keys(recs).map((tagName) => ({ tagName }))])): GhRun => (args) => {
     if (args[1] === "list") return { status: 0, stdout, stderr: "" };
-    asked.push(args[2]!);
     const r = recs[args[2]!];
     return r ? { status: 0, stdout: JSON.stringify(r), stderr: "" } : { status: 1, stdout: "", stderr: missing };
   };
-  test("a HOLD behind INCOMPLETE records stands, and the walk stops at it", () => {
-    expect(Object.keys(listed[0]!)).toEqual(["tagName"]);
-    const asked: string[] = [];
-    expect(latestHold(fake(list, records, asked))).toEqual({ held: { sha: "b".repeat(40), week: "2026-W49" } });
-    expect(asked).toEqual(["weekly-2026-w50", "weekly-2026-w49-r1", "weekly-2026-w49"]);
+  const B = "b".repeat(40), C = "c".repeat(40);
+  test("gh's real list is objects with a tagName", () => expect(Object.keys(listed[0]!)).toEqual(["tagName"]));
+  test("pass 1's order: an earlier re-measure that is NO_CHANGE does not hide the later regular HOLD of the same week", () => {
+    const recs = { "weekly-2026-w48": rec("2026-W48", "HOLD", "2026-11-28T10:00:00.000Z"), "weekly-2026-w49-r1": rec("2026-W49", "NO_CHANGE", "2026-11-30T12:00:00.000Z", C), "weekly-2026-w49": rec("2026-W49", "HOLD", "2026-12-05T10:00:00.000Z", B) };
+    expect(latestHold(fake(recs))).toEqual({ held: { sha: B, week: "2026-W49" } });
   });
-  test("a failed download is an error, so the week is INCOMPLETE", () => {
-    const { "weekly-2026-w49-r1": _, ...rest } = records, r = latestHold(fake(list, rest, []));
-    expect("error" in r && r.error).toBe("gh release download weekly-2026-w49-r1 failed: release not found");
+  test("pass 2's order: a re-measure HOLD that started after a later week's regular non-HOLD stands", () => {
+    const recs = { "weekly-2026-w48": rec("2026-W48", "HOLD", "2026-11-28T10:00:00.000Z"), "weekly-2026-w49": rec("2026-W49", "NO_CHANGE", "2026-12-05T10:00:00.000Z", B), "weekly-2026-w48-r1": rec("2026-W48", "HOLD", "2026-12-07T12:00:00.000Z", C) };
+    expect(latestHold(fake(recs))).toEqual({ held: { sha: C, week: "2026-W48" } });
   });
-  test("a list that is not JSON is an error, not a throw", () => {
-    const r = latestHold(fake(table, records, []));
+  test("an INCOMPLETE record published after a HOLD does not hide it, whatever its tag", () => {
+    const recs = { "weekly-2026-w49": rec("2026-W49", "HOLD", "2026-12-05T10:00:00.000Z", B), "weekly-2026-w48-r1": rec("2026-W48", "INCOMPLETE", "2026-12-07T12:00:00.000Z", C), "weekly-2026-w50": rec("2026-W50", "INCOMPLETE", "2026-12-12T10:00:00.000Z", C) };
+    expect(latestHold(fake(recs))).toEqual({ held: { sha: B, week: "2026-W49" } });
+  });
+  test("a failed download, a list that is not JSON or a record whose window.start does not parse is an error, so the week is INCOMPLETE", () => {
+    const recs = { "weekly-2026-w48": rec("2026-W48", "HOLD", "2026-11-28T10:00:00.000Z"), "weekly-2026-w49": rec("2026-W49", "NO_CHANGE", "2026-12-05T10:00:00.000Z", B) };
+    const gone = fake(recs, JSON.stringify([...listed, { tagName: "weekly-2026-w49" }, { tagName: "weekly-2026-w49-r1" }]));
+    expect(latestHold(gone)).toEqual({ error: "gh release download weekly-2026-w49-r1 failed: release not found" });
+    const r = latestHold(fake(recs, table));
     expect("error" in r && r.error.startsWith("gh release list did not return JSON: gstack v1.102.2.0")).toBe(true);
+    expect(latestHold(fake({ ...recs, "weekly-2026-w50": { ...rec("2026-W50", "NO_CHANGE", "x"), window: { end: "2026-12-12T10:00:00.000Z" } } }))).toEqual({ error: "weekly-2026-w50's window.start is not a time" });
   });
+  test("no weekly record is no HOLD", () => expect(latestHold(fake({}))).toEqual({ held: null }));
 });
