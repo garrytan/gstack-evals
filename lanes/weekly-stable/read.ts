@@ -12,7 +12,7 @@ import { namedOf } from "../delivery-route/b1d.ts";
 import { needsRerun } from "../delivery-route/money.ts";
 import { b1Row, pulledInputs, type B1Row, type B1TableConfig } from "../delivery-route/table.ts";
 import { setOwedReruns } from "./plan.ts";
-import { GSTACK_ARMS, MODEL, PILOT, RECORD, S390, SOL_LINE, TASK_SET, WEEKLY_ARM_NAMES, WEEKLY_ARMS, type GstackArm, type WeeklyArm } from "./pins.ts";
+import { GSTACK_ARMS, MODEL, PILOT, RECORD, S390, SOL_LINE, TASK_SET, WEEKLY, WEEKLY_ARM_NAMES, WEEKLY_ARMS, type GstackArm, type WeeklyArm } from "./pins.ts";
 
 // ---- Session rows: B1's row, plus when the session opened, the arm tar it ran, and exposure.
 export type WeeklyRow = Omit<B1Row, "arm"> & {
@@ -131,16 +131,20 @@ export type WeekInput = {
 };
 const pts = (x: number) => 100 * x;
 const f1 = (x: number) => (x >= 0 ? "+" : "") + x.toFixed(1);
+/** The week's reading. After a stop at the look, every count and statistic reads only the look's 65 tasks: sessions still
+ *  queued for the other tasks are never read (pre-run change 2, section 2). */
 export function reading(w: WeekInput) {
-  const kept = w.run.filter((t) => !w.dropped.includes(t)), why = [...w.incomplete], flags = [...w.flags];
+  const early = w.stoppedAt !== null, kept = w.run.slice(0, early ? S390.look.tasks : w.run.length).filter((t) => !w.dropped.includes(t)), why = [...w.incomplete], flags = [...w.flags];
+  const rows = w.rows.filter((r) => kept.includes(r.task));
   if (w.dropped.length > S390.maxDropped) why.push("the contamination check dropped " + w.dropped.length + " tasks, more than " + S390.maxDropped);
-  if (w.rows.some((r) => r.outcome === "cap_stop")) why.push("the ledger item hit a cap stop");
-  const ungraded = Object.fromEntries(WEEKLY_ARM_NAMES.map((a) => [a, kept.reduce((x, t) => x + Math.max(0, WEEKLY_ARMS[a].sessions - gradedOf(w.rows, t, a).length), 0)])) as Record<WeeklyArm, number>;
-  for (const a of WEEKLY_ARM_NAMES) if (ungraded[a] > S390.maxUngraded[a]) why.push(a + " has " + ungraded[a] + " of " + kept.length * WEEKLY_ARMS[a].sessions + " sessions ungraded, more than " + S390.maxUngraded[a]);
-  const early = w.stoppedAt !== null, lookTasks = w.run.slice(0, S390.look.tasks).filter((t) => !w.dropped.includes(t));
-  const stat = early ? clusterStat(pairsOf(w.rows, lookTasks), S390.look.z) : clusterStat(pairsOf(w.rows, kept), S390.zEnd);
-  const none = vsNone(w.rows, kept), cost = costRatio(w.rows, kept, w.seed);
-  const safety = Object.fromEntries(WEEKLY_ARM_NAMES.map((a) => [a, w.rows.filter((r) => r.arm === a && r.safety_stop).length])) as Record<WeeklyArm, number>;
+  const capStop = rows.some((r) => r.outcome === "cap_stop");
+  if (capStop) why.push("a ledger item hit a cap stop");
+  const share = kept.length / w.run.filter((t) => !w.dropped.includes(t)).length;
+  const ungraded = Object.fromEntries(WEEKLY_ARM_NAMES.map((a) => [a, kept.reduce((x, t) => x + Math.max(0, WEEKLY_ARMS[a].sessions - gradedOf(rows, t, a).length), 0)])) as Record<WeeklyArm, number>;
+  for (const a of WEEKLY_ARM_NAMES) { const max = Math.floor(S390.maxUngraded[a] * (early ? share : 1)); if (ungraded[a] > max) why.push(a + " has " + ungraded[a] + " of " + kept.length * WEEKLY_ARMS[a].sessions + " sessions ungraded, more than " + max); }
+  const stat = clusterStat(pairsOf(rows, kept), early ? S390.look.z : S390.zEnd);
+  const none = vsNone(rows, kept), cost = costRatio(rows, kept, w.seed);
+  const safety = Object.fromEntries(WEEKLY_ARM_NAMES.map((a) => [a, rows.filter((r) => r.arm === a && r.safety_stop).length])) as Record<WeeklyArm, number>;
   let verdict: Verdict = why.length ? "INCOMPLETE" : stat.hi < 0 ? "HOLD" : stat.lo > 0 ? "GAIN" : "NO_CHANGE";
   if (!why.length && early && verdict !== w.stoppedAt) why.push("the look stopped for " + w.stoppedAt + " but the rows read " + verdict), verdict = "INCOMPLETE";
   if (verdict !== "INCOMPLETE") {
@@ -150,7 +154,7 @@ export function reading(w: WeekInput) {
     if (Math.abs(safety.candidate - safety.stable) >= S390.safetyFlag) flags.push("provider safety stops: candidate " + safety.candidate + ", stable " + safety.stable);
     if (stat.hi < 0) flags.push("area " + TASK_SET.area + ": " + f1(pts(stat.d)) + " points [" + f1(pts(stat.lo)) + ", " + f1(pts(stat.hi)) + "], wholly below 0");
   }
-  if (w.rows.some((r) => r.outcome === "cap_stop") && cost) flags.push("the cost ratio covers only the tasks that finished before the cap stop, which lean toward cheaper sessions");
+  if (capStop && cost) flags.push("the cost ratio covers only the tasks that finished before the cap stop, which lean toward cheaper sessions");
   flags.push(SOL_LINE);
   return { verdict, incomplete_reason: why.length ? why.join("; ") : null, stopped_early: early, stat, none, cost, safety, ungraded, flags, kept: kept.length };
 }
@@ -158,9 +162,14 @@ export type Reading = ReturnType<typeof reading>;
 
 export type RecordInput = { week: string; candidate: string; stable: { tag: string; sha: string }; window: { start: string; end: string }; results_check: string; results: string; run: string; supersedes?: string | null };
 /** The public record, schema 1 of GStack Minder's Q16. Numbers are in points, unrounded, so gstack's HOLD recomputation
- *  from the model row (hi below 0) always agrees with the verdict. No task id, repository name or task text. */
+ *  from the model row (hi below 0) always agrees with the verdict; an INCOMPLETE week carries no model row, area or
+ *  realized figure, so it can never recompute as a HOLD (its partial numbers stay in the private report). stale_after
+ *  dates the verdict and the FLAG lines 9 days after the run started; a HOLD has none, because it stands until a later
+ *  candidate's record replaces it (GStack Minder, 2026-11-22). No task id, repository name or task text. */
 export function weekRecord(r: Reading | null, o: RecordInput, verdict: Verdict = r?.verdict ?? "INCOMPLETE", reason: string | null = r?.incomplete_reason ?? null) {
-  const ran = r !== null && r.stat.n > 0;
+  const ran = r !== null && r.stat.n > 0 && verdict !== "INCOMPLETE", start = Date.parse(o.window.start);
+  if (!Number.isFinite(start)) throw new Error("E_USAGE the record's window.start " + o.window.start + " is not an ISO time");
+  const stale = new Date(start + WEEKLY.staleDays * 86_400_000).toISOString();
   return {
     schema: RECORD.schema, week: o.week, task_set: TASK_SET.record, candidate: { sha: o.candidate }, stable: o.stable, window: o.window, verdict,
     mdd_points: S390.mddPoints, interval: RECORD.interval,
@@ -168,6 +177,7 @@ export function weekRecord(r: Reading | null, o: RecordInput, verdict: Verdict =
     areas: ran ? [{ name: TASK_SET.area, model: MODEL.id, d: pts(r!.stat.d), lo: pts(r!.stat.lo), hi: pts(r!.stat.hi) }] : [],
     flags: r?.flags ?? [SOL_LINE], incomplete_reason: verdict === "INCOMPLETE" ? reason : null,
     stopped_early: r?.stopped_early ?? false,
+    stale_after: { verdict: verdict === "HOLD" ? null : stale, flags: stale },
     realized: ran ? { disagreement: r!.stat.disagree, rho: r!.stat.rho, mdd_points: pts(r!.stat.mdd) } : null,
     results_check: o.results_check, prereg: RECORD.prereg, results: o.results, run: o.run,
     ...(o.supersedes ? { supersedes: o.supersedes } : {}),
@@ -218,9 +228,11 @@ export function pilotCheck(rows: WeeklyRow[], tars: ArmTars, tasks: string[]) {
   return { lines, failed };
 }
 /** The weekly smoke on the candidate: a session that did not grade or ran the wrong tar is a rig failure (INCOMPLETE); a
- *  missing listing or hook event, on a tree that passed its build checks, is the release's own change (a FLAG). */
+ *  missing listing or hook event, on a tree that passed its build checks, is the release's own change (a FLAG). rig and
+ *  detail name tasks and stay in the private report; flag is the public line and names none. */
 export function smokeCheck(rows: WeeklyRow[], tars: ArmTars, tasks: string[]) {
-  const p = partRan(rows.filter((r) => r.arm === "candidate"), "candidate", tars, tasks);
-  return { rig: [...p.why, ...p.supply], flag: p.exposure.length ? "exposure changed: " + p.exposure.join("; ") : null };
+  const p = partRan(rows.filter((r) => r.arm === "candidate"), "candidate", tars, tasks), n = (re: RegExp) => p.exposure.filter((x) => re.test(x)).length;
+  const parts = [[n(/skill listing/), "gstack's skill listing did not reach the model"], [n(/routing hook/), "gstack's routing hook logged no event"]].filter(([k]) => k).map(([k, what]) => what + " in " + k + " of " + tasks.length + " smoke sessions");
+  return { rig: [...p.why, ...p.supply], flag: parts.length ? "exposure changed: " + parts.join("; ") : null, detail: p.exposure };
 }
 export const isGstackArm = (a: string): a is GstackArm => (GSTACK_ARMS as readonly string[]).includes(a);

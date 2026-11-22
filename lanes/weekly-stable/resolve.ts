@@ -23,7 +23,15 @@ export type ShimOut = {
   walked?: { sha: string; green: boolean; via?: string; why?: string; pending?: boolean }[];
   candidate?: { sha: string; date: string; version: string | null; contains_stable: boolean | null; first_parent_commits_since_stable: number | null } | null;
 };
-export type Held = { sha: string; week: string; repair?: string | null };
+export type Held = { sha: string; week: string };
+/** Weekly release tags, newest week first; a correction (-r<k>) of a week sorts before the week's earlier records. */
+export const byWeekDesc = (a: string, b: string) => (a.slice(0, 15) !== b.slice(0, 15) ? (a.slice(0, 15) < b.slice(0, 15) ? 1 : -1) : Number(b.slice(17) || 0) - Number(a.slice(17) || 0));
+/** The HOLD that stands, from published records newest first. An INCOMPLETE record never clears a HOLD, and a HOLD never
+ *  goes stale, so the newest record that is not INCOMPLETE decides (GStack Minder, 2026-11-22). */
+export function standingHold(records: { verdict: string; week: string; candidate: { sha: string } }[]): Held | null {
+  const r = records.find((x) => x.verdict !== "INCOMPLETE");
+  return r?.verdict === "HOLD" ? { sha: String(r.candidate.sha), week: String(r.week) } : null;
+}
 export type Decision =
   | { kind: "run"; candidate: { sha: string; version: string | null; date: string; via: string }; stable: { sha: string; tag: string }; commits: number; hold: string | null }
   | { kind: "no-candidate" | "held" | "incomplete"; reason: string; candidate: { sha: string } | null; stable: { sha: string; tag: string } | null; hold: string | null };
@@ -51,7 +59,7 @@ export function decide(o: ShimOut, held: Held | null = null): Decision {
   if (!SHA.test(c.sha)) return stop("incomplete", "resolver: the candidate is not a sha", stable);
   if (c.sha === o.stable) return stop("no-candidate", "no candidate: the newest gated green commit is stable itself (" + tag + ")", stable, c.sha);
   if (c.contains_stable !== true) return stop("incomplete", "the candidate " + c.sha.slice(0, 12) + " does not contain stable " + o.stable.slice(0, 12), stable, c.sha);
-  if (held && held.sha === c.sha && !held.repair) return stop("held", "the candidate " + c.sha.slice(0, 12) + " is the commit " + held.week + " held, and no repair is named: the week runs nothing and the HOLD stands", stable, c.sha);
+  if (held && held.sha === c.sha) return stop("held", "the candidate " + c.sha.slice(0, 12) + " is the commit " + held.week + " held: a held commit is never measured again, so the week runs nothing and the HOLD stands", stable, c.sha);
   const via = o.walked?.find((w) => w.sha === c.sha)?.via ?? "unknown";
   return { kind: "run", candidate: { sha: c.sha, version: c.version, date: c.date, via }, stable, commits: c.first_parent_commits_since_stable ?? 0, hold };
 }

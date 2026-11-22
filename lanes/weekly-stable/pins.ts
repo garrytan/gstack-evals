@@ -51,13 +51,17 @@ export const S390 = {
   realizedMddWatch: 6,
 } as const;
 
-// Items. ws-<YYYY-MM-DD> is one week (the UTC date of its start); weekly-pilot is the one-time pilot. The week's ledger item
-// holds the paid lines, model and Ubicloud ($535 + $75); its all-in stop adds the weekly thread's own meter ($35), $645 in all.
+// Items. L1 runs one item's parts one after another on one host, so a week's three parts run as three items at once, each on
+// its own host: ws-<YYYY-MM-DD>-<k> for part k (the UTC date of the week's start; a re-measure inserts -r<n> before -<k>).
+// Item 1 also runs the smoke. Together they hold the week's paid lines, model and Ubicloud ($535 + $75 = $610, split $204,
+// $203 and $203); the launch guard adds every part's spend and the weekly thread's own meter ($35) against the $645 week
+// stop. weekly-pilot is the one-time pilot.
 export const WEEK_CAPS = { model: 535, ubicloud: 75, meter: 35 } as const;
-export const WEEK_ITEM_CAP = WEEK_CAPS.model + WEEK_CAPS.ubicloud;
-export const WEEK_STOP = WEEK_ITEM_CAP + WEEK_CAPS.meter;
+export const WEEK_PAID = WEEK_CAPS.model + WEEK_CAPS.ubicloud;
+export const WEEK_STOP = WEEK_PAID + WEEK_CAPS.meter;
+export const PART_CAPS = [204, 203, 203] as const;
 export const PILOT = { item: "weekly-pilot", capUsd: 14, concurrent: 2, settleCaps: { candidate: 5, stable: 5, none: 3.5 } } as const;
-export const WEEK_ITEM = /^ws-(\d{4}-\d{2}-\d{2})(-r[1-9]\d*)?$/;
+export const WEEK_ITEM = /^ws-(\d{4}-\d{2}-\d{2})(-r[1-9]\d*)?-([1-3])$/;
 export const isItem = (x: string) => x === PILOT.item || WEEK_ITEM.test(x);
 
 export const WEEKLY = {
@@ -67,6 +71,7 @@ export const WEEKLY = {
   armsDirEnv: "WEEKLY_ARMS_DIR",
   vmTtlHours: 36,
   window: { startUtc: "Sat 06:00", dueUtc: "Mon 10:00", cron: "0 6 * * 6" },
+  /** GAIN, NO CHANGE and FLAG lines stop counting this many days after the run started; a HOLD never goes stale. */
   staleDays: 9,
 } as const;
 

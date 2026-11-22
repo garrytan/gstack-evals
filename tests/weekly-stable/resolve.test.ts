@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { decide, stableTag, type ShimOut } from "../../lanes/weekly-stable/resolve.ts";
+import { byWeekDesc, decide, stableTag, standingHold, type ShimOut } from "../../lanes/weekly-stable/resolve.ts";
 
 // The resolver's real output against gstack on 2026-11-22 at 04:13 UTC (resolve-shim.ts on a full clone of garrytan/gstack).
 const REAL: ShimOut = JSON.parse(readFileSync(join(import.meta.dir, "fixtures/resolve-2026-11-22.json"), "utf8"));
@@ -24,9 +24,8 @@ describe("the candidate, from gstack's release gate", () => {
     expect(d.kind).toBe("run");
     if (d.kind === "run") expect([d.candidate.sha, d.candidate.via, d.stable.tag, d.commits]).toEqual([MAIN, "release gate run 123", "v1.102.2.0", 9]);
   });
-  test("a held candidate runs nothing unless a repair is named; a later candidate runs", () => {
+  test("a held candidate is never measured again; a later candidate runs", () => {
     expect(decide(newer, { sha: MAIN, week: "2026-W48" }).kind).toBe("held");
-    expect(decide(newer, { sha: MAIN, week: "2026-W48", repair: "gstack#4400" }).kind).toBe("run");
     expect(decide(newer, { sha: STABLE, week: "2026-W47" }).kind).toBe("run");
   });
   test("each failure the resolver can meet makes the week INCOMPLETE with its reason", () => {
@@ -40,5 +39,17 @@ describe("the candidate, from gstack's release gate", () => {
   test("stable's tag is the newest v-tag by version", () => {
     expect(stableTag(["v1.9.0.0", "v1.10.0.0", "latest", "v1.10.0"])).toBe("v1.10.0.0");
     expect(stableTag(["nightly"])).toBeNull();
+  });
+});
+
+describe("the HOLD that stands", () => {
+  const rec = (week: string, verdict: string, sha = "a".repeat(40)) => ({ week, verdict, candidate: { sha } });
+  test("an INCOMPLETE week never clears a HOLD, and a HOLD never goes stale; a later non-HOLD record replaces it", () => {
+    expect(standingHold([rec("2027-W05", "INCOMPLETE", "b".repeat(40)), rec("2027-W04", "INCOMPLETE"), rec("2026-W48", "HOLD")])).toEqual({ sha: "a".repeat(40), week: "2026-W48" });
+    expect(standingHold([rec("2026-W49", "NO_CHANGE", "b".repeat(40)), rec("2026-W48", "HOLD")])).toBeNull();
+    expect(standingHold([])).toBeNull();
+  });
+  test("weekly tags sort newest week first, a correction before the week's earlier records", () => {
+    expect(["weekly-2026-w48", "weekly-2026-w49", "weekly-2026-w48-r2", "weekly-2026-w48-r10", "weekly-2026-w48-r1"].sort(byWeekDesc)).toEqual(["weekly-2026-w49", "weekly-2026-w48-r10", "weekly-2026-w48-r2", "weekly-2026-w48-r1", "weekly-2026-w48"]);
   });
 });

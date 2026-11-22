@@ -50,8 +50,8 @@ mdd: 5.5 points at 15% of pairs disagreeing with independent sessions (S390)
 ## Cost
 - paid: $610
 - meter: $20
-- caps: $535 model and $75 Ubicloud a week on the ledger item, and $35 for the weekly thread's own meter; $416 model and $57 Ubicloud expected.
-- ledger: the week's ledger item ws-<YYYY-MM-DD> on the Lane B ledger, in the crew's private run store.
+- caps: $535 model and $75 Ubicloud a week on the week's three ledger items, and $35 for the weekly thread's own meter; $416 model and $57 Ubicloud expected.
+- ledger: the week's ledger items ws-<YYYY-MM-DD>-1, -2 and -3 ($204, $203 and $203) on the Lane B ledger, in the crew's private run store.
 
 ## Interim look
 - at: 50% of the units (the first 65 tasks in run order)
@@ -63,7 +63,7 @@ mdd: 5.5 points at 15% of pairs disagreeing with independent sessions (S390)
 None: each task's own hidden tests score the diff, so no decoy input applies. A wrong arm tar in a session fails the pilot and the weekly smoke.
 
 ## Stop rules
-- the ledger item's cap stop makes the week INCOMPLETE; it never reruns.
+- a ledger item's cap stop makes the week INCOMPLETE; it never reruns.
 - a gstack arm whose own ./setup fails makes the week INCOMPLETE.
 - more than 13 tasks dropped by the contamination check, or more than 39 of a gstack arm's 390 sessions (13 of none's 130) ungraded, makes the week INCOMPLETE.
 - the interim look's stop bound.

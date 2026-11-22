@@ -59,16 +59,17 @@ describe("verdicts, flags and the record", () => {
     const r = read(week((i) => (i % 3 === 0 ? [[1, 1, 1], [1, 1, 1]] : [[0, 1, 0], [1, 1, 1]])));
     expect(r.verdict).toBe("HOLD");
     expect(r.flags.some((f) => f.startsWith("area python-bugfix:"))).toBe(true);
-    const rec = weekRecord(r, { week: "2026-W48", candidate: "c".repeat(40), stable: { tag: "v1.0.0.0", sha: "s".repeat(40) }, window: { start: "a", end: "b" }, results_check: "pass", results: "r", run: "u" });
+    const rec = weekRecord(r, { week: "2026-W48", candidate: "c".repeat(40), stable: { tag: "v1.0.0.0", sha: "s".repeat(40) }, window: { start: "2026-11-28T06:00:00.000Z", end: "2026-11-30T06:00:00.000Z" }, results_check: "pass", results: "r", run: "u" });
     expect([rec.verdict, recomputedHold(rec), rec.models[MODEL.id]!.n, rec.flags.at(-1)]).toEqual(["HOLD", true, 210, SOL_LINE]);
     expect(JSON.stringify(rec)).not.toMatch(/"t\d+"/);
+    expect(rec.stale_after).toEqual({ verdict: null, flags: "2026-12-07T06:00:00.000Z" });
   });
   test("equal arms are NO CHANGE; a clear gain is a GAIN and holds nothing", () => {
     const same = read(week((i) => [[i % 2, 1, 0], [i % 2, 1, 0]]));
     expect(same.verdict).toBe("NO_CHANGE");
     const gain = read(week((i) => (i % 3 === 0 ? [[1, 1, 1], [1, 1, 1]] : [[1, 1, 1], [0, 1, 0]])));
     expect(gain.verdict).toBe("GAIN");
-    expect(recomputedHold(weekRecord(gain, { week: "w", candidate: "c", stable: { tag: "v", sha: "s" }, window: { start: "a", end: "b" }, results_check: "pass", results: "r", run: "u" }))).toBe(false);
+    expect(recomputedHold(weekRecord(gain, { week: "w", candidate: "c", stable: { tag: "v", sha: "s" }, window: { start: "2026-11-28T06:00:00.000Z", end: "2026-11-30T06:00:00.000Z" }, results_check: "pass", results: "r", run: "u" }))).toBe(false);
   });
   test("INCOMPLETE: too many ungraded sessions, a cap stop, too many dropped tasks or an outside reason; never a HOLD", () => {
     const rows = week(() => [[0, 0, 0], [1, 1, 1]]);
@@ -77,7 +78,12 @@ describe("verdicts, flags and the record", () => {
     expect(read(gaps).incomplete_reason).toBe("stable has 42 of 210 sessions ungraded, more than 39");
     expect(read([...rows, row("t1", "candidate", false, { outcome: "cap_stop" })]).verdict).toBe("INCOMPLETE");
     expect(read(rows, { dropped: RUN.slice(0, 14) }).incomplete_reason).toMatch(/dropped 14 tasks/);
-    expect(read(rows, { incomplete: ["gstack's results check: fail"] }).verdict).toBe("INCOMPLETE");
+    const failed = read(rows, { incomplete: ["gstack's results check: fail"] });
+    expect(failed.verdict).toBe("INCOMPLETE");
+    const rec = weekRecord(failed, { week: "w", candidate: "c", stable: { tag: "v", sha: "s" }, window: { start: "2026-11-28T06:00:00.000Z", end: "2026-11-30T06:00:00.000Z" }, results_check: "fail", results: "r", run: "u" });
+    expect([rec.verdict, rec.models, rec.areas, rec.realized, recomputedHold(rec)]).toEqual(["INCOMPLETE", {}, [], null, false]);
+    expect(rec.stale_after).toEqual({ verdict: "2026-12-07T06:00:00.000Z", flags: "2026-12-07T06:00:00.000Z" });
+    expect(() => weekRecord(failed, { week: "w", candidate: "c", stable: { tag: "v", sha: "s" }, window: { start: "a", end: "b" }, results_check: "fail", results: "r", run: "u" })).toThrow(/not an ISO time/);
   });
   test("the FLAG lines: losing to none, a costlier candidate, safety stops", () => {
     const r = read(week((i) => [[i % 2, 1, 1], [i % 2, 1, 1], 1]).map((x) => (x.arm === "candidate" ? { ...x, cost_usd: 0.6, safety_stop: x.task < "t2" } : x)));
@@ -92,6 +98,13 @@ describe("verdicts, flags and the record", () => {
     expect(look(week((i) => [[i % 2, 1, 1], [1 - (i % 2), 1, 1]]), RUN, []).stop).toBeNull();
     const early = read(rows, { stoppedAt: "HOLD" });
     expect([early.verdict, early.stopped_early, early.stat.n, early.stat.bound]).toEqual(["HOLD", true, 195, 2.797]);
+  });
+  test("a stop at the look on 130 planned tasks reads only the look's rows: the unrun half is never ungraded", () => {
+    const run = Array.from({ length: 130 }, (_, i) => "u" + i), look65 = run.slice(0, 65).flatMap((t, i) => task(t, i % 3 === 0 ? [1, 1, 1] : [0, 1, 0], [1, 1, 1]));
+    expect(look(look65, run, []).stop).toBe("HOLD");
+    const r = reading({ rows: look65, run, dropped: [], seed: 1, incomplete: [], flags: [], stoppedAt: "HOLD" });
+    expect([r.verdict, r.incomplete_reason, r.kept, r.ungraded]).toEqual(["HOLD", null, 65, { candidate: 0, stable: 0, none: 0 }]);
+    expect(reading({ rows: look65, run, dropped: [], seed: 1, incomplete: [], flags: [], stoppedAt: null }).verdict).toBe("INCOMPLETE");
   });
   test("the results table has the shape gstack's results check passed on 2026-11-22 (fixtures/results-check-ok.txt)", () => {
     const ok = readFileSync(join(FIX, "results-check-ok.md"), "utf8"), md = resultsMarkdown(week(() => [[1, 0, 1], [1, 1, 0]]), RUN, "gstack weekly benchmark test");
@@ -128,13 +141,14 @@ describe("rows from trial folders, on sessions Claude Code really ran (B1f's cap
       ["candidate", "graded", true, 1, ["prove-it"], ["prove-it"], 0.48], ["stable", "graded", true, 1, ["prove-it"], ["prove-it"], 0.48], ["none", "graded", false, null, null, [], 0.31]]);
     const p = pilotCheck(rows, TARS, PILOT);
     expect(p.failed).toEqual([]);
-    expect(smokeCheck(rows, TARS, PILOT)).toEqual({ rig: [], flag: null });
+    expect(smokeCheck(rows, TARS, PILOT)).toEqual({ rig: [], flag: null, detail: [] });
   });
   test("a candidate whose hook logged nothing is the release's own change (a smoke FLAG) and fails the pilot; a wrong tar is a rig failure", () => {
     const t = rig();
     for (const task of PILOT) { t.trial("candidate", task, "own-load", { hook: "" }); t.trial("stable", task, "hook-load", { hook: "ts=1 event=routed skill=prove-it\n" }); t.trial("none", task, "none-stop"); }
     const rows = t.table(), s = smokeCheck(rows, TARS, PILOT);
-    expect([s.rig, s.flag?.startsWith("exposure changed: psd-tools__psd-tools-593: gstack's routing hook logged no event")]).toEqual([[], true]);
+    expect([s.rig, s.flag]).toEqual([[], "exposure changed: gstack's routing hook logged no event in 3 of 3 smoke sessions"]);
+    expect(s.detail[0]).toMatch(/^psd-tools__psd-tools-593: gstack's routing hook logged no event/);
     expect(pilotCheck(rows, TARS, PILOT).failed).toEqual(["candidate"]);
     expect(smokeCheck(rows, { ...TARS, candidate: "other" }, PILOT).rig.length).toBe(3);
   });
