@@ -763,6 +763,9 @@
     ],
     "quick/laneb/tests/fixtures/l1/**": [
       "tests/test-first/launch.test.ts"
+    ],
+    "lanes/test-first/proxy.json": [
+      "tests/test-first/prepare-run.test.ts"
     ]
   },
   "guards": [
