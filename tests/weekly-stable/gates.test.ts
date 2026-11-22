@@ -120,7 +120,7 @@ describe("report cap stops", () => {
       ...Array.from({ length: 3 }, () => row(t, "stable")),
       row(t, "none"),
     ]);
-    if (rowStop) rows[0] = { ...rows[0]!, outcome: "cap_stop", pass: null };
+    if (rowStop) rows[0] = { ...rows[0]!, outcome: "cap_stop", pass: false };
     const detail = "trial test-only-id reached a cap stop";
     if (partStop) {
       mkdirSync(join(dir, "p3"), { recursive: true });
