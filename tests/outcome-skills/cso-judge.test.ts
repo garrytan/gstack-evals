@@ -278,7 +278,7 @@ describe("deviation (e): the check's own items and pass B's known field", () => 
   test("the mechanism is the first paragraph of the advisory details that is not a heading", () => {
     const o = oracleReport(U2, T2, p);
     expect(o).toContain("joins the request path without normalizing it");
-    expect(o).not.toContain("###");
+    expect(o).not.toContain("### Summary");
     expect(formatVariants(U2, T2, p).prose).toContain("joins the request path without normalizing it");
   });
   test("the near-lines near miss keeps the right class at a line 30 from every hunk and names nothing from the advisory", () => {

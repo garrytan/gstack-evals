@@ -42,7 +42,9 @@ const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|
 const KEEP = ["sdk-messages.jsonl", "claude-session.jsonl", SUMMARY];
 type Rec = Record<string, any>;
 
-/** Builds a unit's session image: CSO_BASE_IMAGE with the session tree (one commit) at /work/repo, pinned by image id. */
+/** Builds a unit's session image: CSO_BASE_IMAGE with the session tree (one commit) at /work/repo, pinned by image id. The
+ *  session runs by a tag that carries the built id (deviation (e)), so another build of the same unit, which moves the
+ *  unit's own tag, can't change the image a running session's task resolves. */
 export function buildCsoImage(unit: UnitRecord, tree: string, base: string = CSO_BASE_IMAGE): SessionImage {
   const head = spawnSync("git", ["-C", tree, "rev-parse", "HEAD"], { encoding: "utf8" });
   if (head.status !== 0) csoFail("E_CSO_SESSION", tree + " is not the unit's session tree: " + head.stderr.trim());
@@ -53,7 +55,10 @@ export function buildCsoImage(unit: UnitRecord, tree: string, base: string = CSO
     const tag = "gstack-evals-cso-session:" + unit.tree_sha256.slice(0, 16);
     const b = spawnSync("docker", ["build", "-q", "-t", tag, ctx], { encoding: "utf8", maxBuffer: 16 << 20 });
     if (b.status !== 0) csoFail("E_CSO_SESSION", "docker build of " + unit.unit + "'s session image failed: " + String(b.stderr).trim().slice(-500));
-    return { image_id: b.stdout.trim(), tag, runtime_id: base, volume: "", commits: 1, head: head.stdout.trim(), home: "none", tree_patch_sha256: null, qa_home: null, removed: [] };
+    const id = b.stdout.trim(), pinned = tag + "-" + id.replace(/^sha256:/, "").slice(0, 12);
+    const t = spawnSync("docker", ["tag", id, pinned], { encoding: "utf8" });
+    if (t.status !== 0) csoFail("E_CSO_SESSION", "docker tag of " + unit.unit + "'s session image failed: " + String(t.stderr).trim().slice(-500));
+    return { image_id: id, tag: pinned, runtime_id: base, volume: "", commits: 1, head: head.stdout.trim(), home: "none", tree_patch_sha256: null, qa_home: null, removed: [] };
   } finally {
     rmSync(ctx, { recursive: true, force: true });
   }

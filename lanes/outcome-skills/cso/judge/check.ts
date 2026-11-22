@@ -174,12 +174,22 @@ const ANCHOR_ROOT: HelperRecords = { snapshot_root: null, handles: {} };
 const familyIds = (p: CsoPrereg) => (p.scoring as { cwe_families: Record<string, number[]> }).cwe_families;
 const cweNum = (c: string) => Number(c.replace(/^CWE-/i, ""));
 
+/** A pre-fix line that is not code under deviation (e): blank, a comment, or an import, package, include or require line
+ *  (a Go import spec included). */
+const NOT_CODE = /^\s*($|\/\/|\/\*|\*|#(?!\[)|--|import\b|package\b|from\s+\S+\s+import\b|using\s|use\s|require\b|(const|let|var)\s+\S+\s*=\s*require\(|(\w+\s+)?"[^"]*"\s*$)/;
+
+/** The oracle's site under deviation (e): the first pre-fix hunk in a fix file that touches a code line (the first such hunk
+ *  when every one touches only blank, comment or import lines), and as mechanism the advisory summary with the first
+ *  paragraph of its details that is not a Markdown heading. */
 function oracleSite(u: UnitRecord, tree: TreeIndex, p: CsoPrereg) {
   const files = fixFiles(u, tree);
-  const h = u.hunks.find((x) => files.includes(x.file)) ?? csoFail("E_CSO_ANCHOR", u.unit + ": no pre-fix hunk lies in a file of the audited tree");
+  const inTree = u.hunks.filter((x) => files.includes(x.file));
+  const code = (x: (typeof inTree)[number]) => (tree.files.get(x.file) ?? []).slice(x.start - 1, x.end).some((l) => !NOT_CODE.test(l));
+  const h = inTree.find(code) ?? inTree[0] ?? csoFail("E_CSO_ANCHOR", u.unit + ": no pre-fix hunk lies in a file of the audited tree");
   const end = Math.min(h.end, h.start + scoringRules(p).wide_range_lines - 1);
   const fam = u.cwe_families[0] ?? u.cwe_ids[0] ?? "the advisory's weakness";
-  return { file: h.file, start: h.start, end, cwe: u.cwe_ids[0] ?? "", fam, mech: u.advisory.summary.replace(/\s+/g, " ").trim() + ". " + (u.advisory.details.split(/\n\s*\n/)[0] ?? "").replace(/\s+/g, " ").trim() };
+  const para = u.advisory.details.split("\n").filter((l) => !/^\s*#{1,6}\s/.test(l)).join("\n").split(/\n\s*\n/).find((x) => x.trim()) ?? "";
+  return { file: h.file, start: h.start, end, cwe: u.cwe_ids[0] ?? "", fam, mech: u.advisory.summary.replace(/\s+/g, " ").trim() + ". " + para.replace(/\s+/g, " ").trim() };
 }
 
 /** The oracle anchor: the advisory's flaw as one finding at its first hunk, written from the advisory (a known hit). */
@@ -197,8 +207,9 @@ export function stockReport(u: UnitRecord, tree: TreeIndex, p: CsoPrereg): strin
 }
 
 /** Section 7's format variants for one stage 1 unit: the oracle finding as a table row and as a prose paragraph, and two near
- *  misses (right file and wrong class; right class 30 lines from every hunk). E_CSO_ANCHOR when no line in the file sits
- *  30 lines from every hunk. */
+ *  misses (right file and wrong class; right class 30 lines from every hunk). Each near miss states a plain mechanism of its
+ *  class and names nothing from the advisory, so no function, type or code path the advisory names can place it (deviation
+ *  (e)). E_CSO_ANCHOR when no line in the file sits 30 lines from every hunk. */
 export function formatVariants(u: UnitRecord, tree: TreeIndex, p: CsoPrereg): { table: string; prose: string; near_class: string; near_lines: string } {
   const o = oracleSite(u, tree, p);
   const fams = familyIds(p);
@@ -212,7 +223,7 @@ export function formatVariants(u: UnitRecord, tree: TreeIndex, p: CsoPrereg): { 
     table: row(o.file, o.start + "-" + o.end, o.cwe + " " + o.fam, o.mech),
     prose: ["## Security audit", "In " + o.file + " at lines " + o.start + "-" + o.end + " there is a " + o.fam + " weakness (" + o.cwe + "). " + o.mech, "", "DONE"].join("\n"),
     near_class: row(o.file, o.start + "-" + o.end, "CWE-" + other[1][0] + " " + other[0], "Untrusted input reaching this code leads to a " + other[0] + " weakness, because no check guards it."),
-    near_lines: row(o.file, far + "-" + far, o.cwe + " " + o.fam, o.mech),
+    near_lines: row(o.file, far + "-" + far, o.cwe + " " + o.fam, "Untrusted input reaching this code leads to a " + o.fam + " weakness, because no check guards it."),
   };
 }
 

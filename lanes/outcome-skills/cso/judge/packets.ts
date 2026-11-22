@@ -81,7 +81,7 @@ const LABEL_RULES = [
   "same_defect: the finding describes the advisory's flaw, not another bug nearby with the same class.",
   "grounding: the finding's own words state the mechanism (what input reaches which code, and which check is missing or wrong).",
   "file_level: the finding names a fix file and the right class, wherever in the file it points.",
-  "known: the GHSA id of a known open advisory the finding matches by the same location, class, same_defect and grounding rules, each labelled, or null.",
+  'known: null, or, when the finding matches a known open advisory by the same location, class, same_defect and grounding rules, an object with that advisory\'s GHSA id and those four labels, such as "known":{"ghsa":"GHSA-xxxx-xxxx-xxxx","location":"yes","class":"yes","same_defect":"yes","grounding":"yes"}.',
   "validity: supported (the cited code exists and does what the finding says, an outside party plausibly controls the input it names, and the impact follows), unsupported (the code isn't there or doesn't do that, the input isn't attacker-controlled in any plausible use, or the impact doesn't follow), or cant_tell.",
   "Each label is yes, no or cant_tell (validity: supported, unsupported or cant_tell), with a short quote from the finding or the code in quotes.",
 ].join("\n");
