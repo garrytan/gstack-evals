@@ -3952,9 +3952,9 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_B2_TABLE
 
-B2's session table cannot be read as it stands (lanes/test-first): a row names a task outside the scope read, an arm that is not B2's, or a model, arm and task with more than one graded row.
+B2's session table cannot be read as it stands (lanes/test-first): a row names a task outside the scope read, an arm that is not B2's, or a model, arm and task with more than one graded row; or a line of a proxy request log is not JSON, so a trial's metered efforts are unknown.
 
-Fix: Rebuild the table from the pulled parts and read it again. Never drop or edit rows by hand.
+Fix: Rebuild the table from the pulled parts and read it again; for an unreadable request log line, pull the part's proxy-requests.jsonl again. Never drop or edit rows by hand.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

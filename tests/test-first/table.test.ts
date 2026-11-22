@@ -4,10 +4,11 @@
 // on gpt-6.2-sol at low effort), graded both ways, and every infrastructure rule each host has: no result, no model
 // response, no reward, a cap stop, a session on another model, Claude Code version or Codex effort, and no rollout.
 import { afterAll, describe, expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { b2Row, meteredEfforts, regression } from "../../lanes/test-first/table.ts";
+import { attempt2Owed } from "../../lanes/test-first/money.ts";
+import { b2Row, buildB2Table, meteredEfforts, regression } from "../../lanes/test-first/table.ts";
 
 const root = mkdtempSync(join(tmpdir(), "b2-table-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -104,6 +105,26 @@ describe("Codex rows", () => {
     expect(row({ arm: "none", upstream: "particle-1", sdk: null, responses: 0 }).planned_model).toBe("particle-1");
     expect(row({ arm: "none", reward: null }).planned_model).toBe("claude-opus-5-5");
     expect(row({ arm: "cx-none", rollouts: null }).planned_model).toBe("gpt-6.2-sol");
+  });
+  test("attempt2Owed reads each pulled part's proxy request log, so a graded Sol session owes no rerun and one with no metered request does", () => {
+    const pulled = (name: string, requests: unknown[] | null) => {
+      const dir = join(root, name), jobs = join(dir, "jobs/j1");
+      mkdirSync(jobs, { recursive: true });
+      const t = trial({ arm: "cx-none", patch: readFileSync(join(CODEX, "final.patch"), "utf8") });
+      const trialName = JSON.parse(readFileSync(join(t, "result.json"), "utf8")).trial_name;
+      renameSync(t, join(jobs, trialName));
+      if (requests) { mkdirSync(join(dir, "out"), { recursive: true }); writeFileSync(join(dir, "out/proxy-requests.jsonl"), requests.map((e) => JSON.stringify({ ...(e as object), trial: trialName + "__env" })).join("\n") + "\n"); }
+      return dir;
+    };
+    expect(attempt2Owed([{ part: "b2-1", dir: pulled("pulled-low", [{ event: "request", wire: "responses", reasoning_effort: "low" }]) }]).owed).toEqual([]);
+    const owed = attempt2Owed([{ part: "b2-1", dir: pulled("pulled-none", null) }]).owed;
+    expect(owed.map((o) => [o.arm, o.reason])).toEqual([["cx-none", "no metered request for the trial in the proxy's request log"]]);
+  });
+  test("the table needs the request logs, and an unreadable request log line is refused, not skipped", () => {
+    expect(() => buildB2Table({ jobs: [{ dir: root }], sessions: [] } as never)).toThrow("E_USAGE b2 table: the config needs requests");
+    const bad = join(root, "bad-requests.jsonl");
+    writeFileSync(bad, JSON.stringify({ event: "request", wire: "responses", trial: "t", reasoning_effort: "low" }) + "\n{\"event\": \"requ\n");
+    expect(() => meteredEfforts([bad])).toThrow("E_B2_TABLE " + bad + " line 2 is not JSON");
   });
   test("a Codex arm under the Claude Code agent is refused, and another agent's trial is left out", () => {
     expect(() => row({ arm: "cx-none", agent: "laneb-claude-code" })).toThrow("E_B2_TABLE");

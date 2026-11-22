@@ -209,8 +209,8 @@ export function infraRerun(first: B2Row[], second: B2Row[] = []) {
 }
 export function attempt2Owed(runs: { part: string; dir: string }[]) {
   const cfgs = runs.map((r) => pulledInputs(r.dir, r.part));
-  const jobs = cfgs.flatMap((c) => c.jobs), sessions = cfgs.flatMap((c) => c.sessions);
-  const rows = jobs.length ? buildB2Table({ jobs, sessions }) : [];
+  const jobs = cfgs.flatMap((c) => c.jobs), sessions = cfgs.flatMap((c) => c.sessions), requests = cfgs.flatMap((c) => c.requests);
+  const rows = jobs.length ? buildB2Table({ jobs, sessions, requests }) : [];
   return { owed: rows.filter(needsRerun).map((r) => ({ task: r.task, arm: r.label, reason: r.reason })), rects: infraRerun(rows).rects };
 }
 export { ITEM_MODEL, MODELS };

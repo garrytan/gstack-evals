@@ -79,7 +79,7 @@ export type B2Row = {
   /** The read audit of the no-gstack arms: reads of gstack paths, skills or a drive. null in a gstack arm. */
   audit: number | null;
 };
-export type B2TableConfig = { jobs: { dir: string; part?: string }[]; sessions: string[]; requests?: string[]; home?: string };
+export type B2TableConfig = { jobs: { dir: string; part?: string }[]; sessions: string[]; requests: string[]; home?: string };
 type Ctx = { part: string | null; sessions: Map<string, SessionRow[]>; home: string; metered?: Map<string, Set<string>> };
 
 const readJson = (p: string) => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
@@ -247,8 +247,9 @@ export function b2Row(dir: string, ctx: Ctx): B2Row | null {
 export function buildB2Table(cfg: B2TableConfig): B2Row[] {
   if (!Array.isArray(cfg.jobs) || !cfg.jobs.length) throw new Error("E_USAGE b2 table: the config needs jobs, each {dir, part}");
   if (!Array.isArray(cfg.sessions)) throw new Error("E_USAGE b2 table: the config needs sessions, the proxy-sessions.jsonl files of the runs in jobs");
+  if (!Array.isArray(cfg.requests)) throw new Error("E_USAGE b2 table: the config needs requests, the proxy-requests.jsonl files of the runs in jobs (a Sol session with no metered request is infrastructure)");
   const sessions = sessionsByTrial(readSessionRows(cfg.sessions));
-  const metered = cfg.requests ? meteredEfforts(cfg.requests) : undefined;
+  const metered = meteredEfforts(cfg.requests);
   const out: B2Row[] = [];
   for (const job of cfg.jobs) for (const name of readdirSync(job.dir).sort()) {
     const d = join(job.dir, name);
@@ -261,9 +262,10 @@ export function buildB2Table(cfg: B2TableConfig): B2Row[] {
 /** The proxy's metered Responses requests (its "request" and "late_usage" lines) by trial: each reasoning.effort sent. */
 export function meteredEfforts(paths: string[]): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
-  for (const p of paths) for (const l of readFileSync(p, "utf8").split("\n")) {
+  for (const p of paths) for (const [i, l] of readFileSync(p, "utf8").split("\n").entries()) {
     if (!l.trim()) continue;
-    const e = JSON.parse(l);
+    let e: any;
+    try { e = JSON.parse(l); } catch { tableErr(p + " line " + (i + 1) + " is not JSON, so the trial's metered efforts are unknown"); }
     if ((e.event !== "request" && e.event !== "late_usage") || e.wire !== "responses" || typeof e.trial !== "string") continue;
     const key = e.trial.replace(/__env$/, "");
     out.set(key, (out.get(key) ?? new Set()).add(typeof e.reasoning_effort === "string" ? e.reasoning_effort : "none"));

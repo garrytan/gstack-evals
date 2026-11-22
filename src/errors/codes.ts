@@ -4287,8 +4287,8 @@ export const CODES = {
   },
   E_B2_TABLE: {
     exit: 2,
-    meaning: "B2's session table cannot be read as it stands (lanes/test-first): a row names a task outside the scope read, an arm that is not B2's, or a model, arm and task with more than one graded row.",
-    fix: "Rebuild the table from the pulled parts and read it again. Never drop or edit rows by hand.",
+    meaning: "B2's session table cannot be read as it stands (lanes/test-first): a row names a task outside the scope read, an arm that is not B2's, or a model, arm and task with more than one graded row; or a line of a proxy request log is not JSON, so a trial's metered efforts are unknown.",
+    fix: "Rebuild the table from the pulled parts and read it again; for an unreadable request log line, pull the part's proxy-requests.jsonl again. Never drop or edit rows by hand.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
