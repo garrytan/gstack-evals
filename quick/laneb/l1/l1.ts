@@ -667,8 +667,9 @@ const recordHost = (work: string, row: Record<string, unknown>) => { mkdirSync(j
 // the newest lost host and the time ubi-runner confirmed it gone. A recovery of an earlier host never settles a later loss.
 export function unsettledHostLoss(work: string): string | null {
   const rows: any[] = [];
+  const absent = (e: unknown) => (e as { code?: string }).code === "ENOENT";
   let text = "";
-  try { text = existsSync(hostsFile(work)) ? readFileSync(hostsFile(work), "utf8") : ""; } catch (e) { return "host/hosts.jsonl can't be read (" + (e as Error).message + "), so a host loss can't be ruled out"; }
+  try { text = readFileSync(hostsFile(work), "utf8"); } catch (e) { if (!absent(e)) return "host/hosts.jsonl can't be read (" + (e as Error).message + "), so a host loss can't be ruled out"; }
   for (const l of text.split("\n").filter((x) => x.trim())) {
     let r: any;
     try { r = JSON.parse(l); } catch { r = null; }
@@ -680,10 +681,12 @@ export function unsettledHostLoss(work: string): string | null {
     try { h = readJson(join(work, f))?.lost_host; } catch { continue; }
     if (typeof h === "string" && !rows.some((r) => r.event === "lost" && r.name === h)) return f + " was written by a recover of host " + h + " that has not finished (no lost row yet); run recover again";
   }
-  const lost = rows.filter((r) => r.event === "lost").at(-1), file = join(work, "host/recover.json");
-  if (!existsSync(file)) return lost ? "host " + lost.name + " was lost and no host/recover.json records its recovery" : null;
+  const lost = rows.filter((r) => r.event === "lost").at(-1);
   let rec: any;
-  try { rec = readJson(file); } catch { return "host/recover.json can't be read, so the host loss it records can't be settled"; }
+  try { rec = readJson(join(work, "host/recover.json")); } catch (e) {
+    if (!absent(e)) return "host/recover.json can't be read, so the host loss it records can't be settled";
+    return lost ? "host " + lost.name + " was lost and no host/recover.json records its recovery" : null;
+  }
   if (rec?.complete !== true) return "the host was lost and recover could not rebuild the ledger (host/recover.json)";
   if (!lost || typeof rec.host !== "string" || rec.host !== lost.name || (lost.down_confirmed_at !== undefined && rec.down_confirmed_at !== lost.down_confirmed_at))
     return "host/recover.json records " + rec.host + "'s recovery, not the newest host loss (" + (lost?.name ?? "none recorded") + ")";
@@ -1198,7 +1201,10 @@ function recover(work: string) {
   }
   const down = ubi(["down", host.name]);
   if (down.code !== 0) refuse("host " + host.name + " could not be confirmed gone (ubi-runner down exit " + down.code + "); run recover again");
-  const goneAt = nowSec();
+  // The first confirmed-gone time stands, so a recover run again later settles the host's hours to the same moment.
+  const hostGone = join(work, "host/host-gone.json"), firstGone = existsSync(hostGone) ? readJson(hostGone) : null;
+  const goneAt: number = firstGone?.host === host.name ? firstGone.confirmed_at : nowSec();
+  if (firstGone?.host !== host.name) writeJsonAtomic(hostGone, { host: host.name, confirmed_at: goneAt });
   const rows = readRows(mirrorPath(work));
   const add: Row[] = [];
   const at = new Date().toISOString(), hostHours = (goneAt - host.up_at) / 3600;

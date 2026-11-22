@@ -5,7 +5,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSha, noneArchiveProblem } from "../../lanes/weekly-stable/arms.ts";
@@ -569,6 +569,12 @@ describe("pre-run change 5: a host loss settles only through the recovery of tha
     expect(partProblems(dir).unsettled).toEqual(["p3/host"]);
     writeFileSync(join(dir, "p3", "host", "hosts.jsonl"), up(1, "host-a") + lost(1, "host-a", 100));
     expect(partProblems(dir).unsettled).toEqual([]);
+  });
+  test("a host folder the report can't search leaves the host unsettled, even with no lost row it could read", () => {
+    const dir = scratch("weekly-c5-eacces-");
+    part3(dir, up(1, "host-a"), null);
+    chmodSync(join(dir, "p3", "host"), 0o000);
+    try { expect(partProblems(dir).unsettled).toEqual(["p3/host"]); } finally { chmodSync(join(dir, "p3", "host"), 0o755); }
   });
   test("an unreadable hosts.jsonl leaves the host unsettled, and the full report still writes an INCOMPLETE record", async () => {
     const dir = scratch("weekly-c5-unreadable-");

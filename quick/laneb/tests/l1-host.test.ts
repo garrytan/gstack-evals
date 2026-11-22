@@ -1367,11 +1367,13 @@ describe("l1.ts host losses (weekly pre-run change 5)", () => {
     expect(recoverJson(r)).toMatchObject({ host: "host-1", running: "pilot", part_results_pulled: true, complete: true });
     expect(JSON.parse(readFileSync(join(r.work, "pilot.result.json"), "utf8")).loss).toContain("the awake host was lost");
     expect(hostRows(r).filter((x) => x.event === "lost")).toEqual([]);
+    const firstGone = recoverJson(r).down_confirmed_at;
+    await Bun.sleep(1100);
     rmSync(pointer, { recursive: true });
     const rec = l1(r, ["recover", r.work]);
     expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part pilot")]);
     const done = recoverJson(r);
-    expect(done).toMatchObject({ host: "host-1", running: "pilot", part_vm: "vm-2", part_results_pulled: true, missing_sessions: [], complete: true });
+    expect(done).toMatchObject({ host: "host-1", down_confirmed_at: firstGone, running: "pilot", part_vm: "vm-2", part_results_pulled: true, missing_sessions: [], complete: true });
     expect(hostRows(r).filter((x) => x.event === "lost")).toEqual([expect.objectContaining({ n: 1, name: "host-1", down_confirmed_at: done.down_confirmed_at })]);
     expect(existsSync(pointer)).toBe(false);
     const sess = readRows(r.ledger).filter((x) => x.id.startsWith("pilot-opus/pilot/s"));
