@@ -51,7 +51,7 @@ A fifth arm, **none**, has no gstack. The measure is steps followed: whether the
 - Model: Claude Opus 5.5 only.
 - Sessions: 756 planned, 763 rows with the reruns. 750 count. Two extension tasks, opsmill__infrahub-8407 and -8423, got no model response on any of the three arms, twice (RuntimeError before the first reply), so they are 6 gaps. One sphinx-autodoc-typehints session hit a verifier timeout and was graded on its rerun. No cap stops and no provider safety stops.
 - A 14-session pilot ran first under R111 and never enters a reading: every arm passed, and the 10 supply tasks all counted.
-- Run code: ef97b345 on this pull request's branch: the plan as merged (1a865ba7) plus one dated commit, under deviations. Runs: pilot ad3b9b7745150ac6, main 26c362111e13be9a, in nine parts of up to 21 tasks.
+- Run code: ef97b345 on this pull request's branch: the plan as merged (1a865ba7) plus one dated commit, under deviations. Runs: pilot ad3b9b7745150ac6, main 26c362111e13be9a, in nine parts: eight bug-fix parts of up to 21 tasks and one part with the 27 feature requests.
 
 ## Result
 
@@ -89,7 +89,7 @@ Required minus hook in loads on these 27, paired and descriptive: +70.4 points [
 
 ### What the hook did
 
-On the 160 counted bug-fix sessions the hook named prove-it on the opening request in 143, and Opus loaded it on 135 of those; on the other 17 the hook named nothing and Opus never loaded it. Six sessions show a second routed line, each fired by a background-task notification that Claude Code passes through the prompt hook: five named prove-it again, and on jlowin__fastmcp-3237_interface the hook matched /review's trigger phrase in that notification. Opus didn't load /review there. The session table keeps each session's last routed line, so its named field reads prove-it on 142. Every named line reached the request (157 of 157 across all hook sessions). On the feature requests the hook named prove-it on 13 and Opus loaded it on 5.
+On the 160 counted bug-fix sessions the hook named prove-it on the opening request in 143, and Opus loaded it on 135 of those; on the other 17 the hook named nothing and Opus never loaded it. Six sessions show a second routed line, each fired by a background-task notification that Claude Code passes through the prompt hook: five named prove-it again, and on jlowin__fastmcp-3237_interface the hook matched /review's trigger phrase in that notification. Opus didn't load /review there. The session table keeps each session's last routed line, so its named field reads prove-it on 142. Every hook session that named a skill had its route line in the request (157 of 157). Those sessions hold 163 routed lines, and the session table marks delivery once per session, so the six later lines are not checked on their own. On the feature requests the hook named prove-it on 13 and Opus loaded it on 5.
 
 ### The decision, by the plan's rules
 
