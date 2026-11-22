@@ -2,7 +2,7 @@
 id: 2026-11-22-geva-575-decision-routing-per-task-rows
 kind: finding
 title: "Per-task rows behind the decision-routing results, with the script that rebuilds their intervals"
-summary: "The 2,080 per-task rows behind the decision-routing results and correction, with checksums, MIT terms and a bootstrap script that rebuilds every published interval from them."
+summary: "The 2,080 per-task rows behind the decision-routing results and correction, with checksums, MIT terms and a bootstrap script that rebuilds the correction note's interval table from them."
 author: GEVA-575
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
