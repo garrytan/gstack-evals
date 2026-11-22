@@ -207,9 +207,11 @@ The one-time pilot runs the three pilot tasks on every arm. Budgets are each arm
 
 | Arm | Budget | Pilot cap | Part ran | Judge check | Supply |
 |---|---|---|---|---|---|
-| this | $54.80 | $5 | the built tree passes the rev-list, remote and contamination checks; gstack's skill listing reached the model and its routing hook logged an event on the prompt in each pilot session; telemetry reads off | none | the three pilot tasks build and grade on the rig, six sessions at once, and the verifier returns a reward for each |
+| this | $54.80 | $5 | the built tree passes the rev-list, remote and contamination checks; gstack's skill listing reached the model and its routing hook logged an event on the prompt in each pilot session; telemetry reads off | none | the three pilot tasks build and grade on the rig, three sessions at once (one per arm, $9 reserved against the $14 pilot item), and the verifier returns a reward for each; the rig's six-at-once rate is B1's and B2's |
 | last | $54.80 | $5 | as this, at last week's sha | none | as this |
 | none | $35.40 | $3.50 | no gstack file, no ~/.gstack and no drive path in the session's environment, and no gstack read in the audit | none | as this |
+
+The pilot runs three sessions at once so its reservations fit its $14 item cap; each counted week runs six at once in each part, and its $145 model cap holds 12 sessions in flight (section 12).
 
 An arm that fails is fixed or left out and reported as left out, never as a loss. A failure goes to the Captain first, and a fix comes back as a dated change with its own pilot. Pilot sessions never enter a reading.
 
