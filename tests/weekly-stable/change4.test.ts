@@ -492,9 +492,9 @@ describe("follow-up review: cap-stopped reruns, interrupted recovery and reruns 
     expect(partProblems(a).unsettled).toEqual(["p3/host"]);
     const b = scratch("weekly-fr-nomarker-");
     part3(b);
-    writeFileSync(join(b, "p3", "host", "hosts.jsonl"), JSON.stringify({ event: "up", n: 1 }) + "\n" + JSON.stringify({ event: "lost", n: 1 }) + "\n");
+    writeFileSync(join(b, "p3", "host", "hosts.jsonl"), JSON.stringify({ event: "up", n: 1, name: "host-1" }) + "\n" + JSON.stringify({ event: "lost", n: 1, name: "host-1" }) + "\n");
     expect(partProblems(b).unsettled).toEqual(["p3/host"]);
-    writeFileSync(join(b, "p3", "host", "recover.json"), JSON.stringify({ complete: true }));
+    writeFileSync(join(b, "p3", "host", "recover.json"), JSON.stringify({ complete: true, host: "host-1" }));
     expect(partProblems(b).unsettled).toEqual([]);
   });
   test("a full report with a torn recover.json still writes an INCOMPLETE record", async () => {
@@ -516,3 +516,61 @@ describe("follow-up review: cap-stopped reruns, interrupted recovery and reruns 
   });
 });
 
+
+describe("pre-run change 5: a host loss settles only through the recovery of that host", () => {
+  const item3 = () => partItems("ws-2026-11-28")[2];
+  const part3 = (dir: string, hosts: string | null, recover: object | null) => {
+    mkdirSync(join(dir, "p3", "host"), { recursive: true });
+    writeFileSync(join(dir, "p3", "plan.json"), JSON.stringify({ item: item3(), parts: [{ name: "s390-3" }] }));
+    writeFileSync(join(dir, "p3", "s390-3.result.json"), JSON.stringify({ launch_exit: 0, pulled: true, cap_stop: [], loss: [], unclassified: [] }));
+    if (hosts !== null) writeFileSync(join(dir, "p3", "host", "hosts.jsonl"), hosts);
+    if (recover) writeFileSync(join(dir, "p3", "host", "recover.json"), JSON.stringify(recover));
+  };
+  const up = (n: number, name: string) => JSON.stringify({ event: "up", n, name }) + "\n";
+  const lost = (n: number, name: string, at: number) => JSON.stringify({ event: "lost", n, name, down_confirmed_at: at }) + "\n";
+  const twoLosses = up(1, "host-a") + lost(1, "host-a", 100) + up(2, "host-b") + lost(2, "host-b", 200);
+  const full = () => workDir(week({ look: { stop: null, at: "2026-11-29T00:00:00Z", rows: "look-rows.jsonl", rows_sha256: "0".repeat(64) } }), RUN.flatMap((t) => [...[1, 1, 1].map(() => row(t, "candidate", true)), ...[1, 1, 1].map(() => row(t, "stable", true)), row(t, "none", true)]));
+  test("an earlier host's complete recovery never settles a later loss", () => {
+    const dir = scratch("weekly-c5-stale-");
+    part3(dir, twoLosses, { complete: true, host: "host-a", down_confirmed_at: 100 });
+    expect(partProblems(dir).unsettled).toEqual(["p3/host"]);
+    writeFileSync(join(dir, "p3", "host", "recover.json"), JSON.stringify({ complete: true, host: "host-b", down_confirmed_at: 150 }));
+    expect(partProblems(dir).unsettled).toEqual(["p3/host"]);
+    writeFileSync(join(dir, "p3", "host", "recover.json"), JSON.stringify({ complete: true, host: "host-b", down_confirmed_at: 200 }));
+    expect(partProblems(dir).unsettled).toEqual([]);
+  });
+  test("a complete recover.json with no recorded loss, or one that names no host, settles nothing", () => {
+    const a = scratch("weekly-c5-nolost-");
+    part3(a, up(1, "host-a"), { complete: true, host: "host-a", down_confirmed_at: 100 });
+    expect(partProblems(a).unsettled).toEqual(["p3/host"]);
+    const b = scratch("weekly-c5-noname-");
+    part3(b, up(1, "host-a") + lost(1, "host-a", 100), { complete: true });
+    expect(partProblems(b).unsettled).toEqual(["p3/host"]);
+  });
+  test("a full report after a later loss that an earlier recovery hides is INCOMPLETE", async () => {
+    const f = full();
+    part3(f.dir, twoLosses, { complete: true, host: "host-a", down_confirmed_at: 100 });
+    expect((await run(["report", f.table, f.dir, "--out", f.out])).code).toBe(0);
+    expect(f.record().verdict).toBe("INCOMPLETE");
+    expect(f.record().incomplete_reason).toContain("a cap stop can't be ruled out");
+    expect(readFileSync(join(f.out, "report.txt"), "utf8")).toContain("  not settled: p3/host");
+  });
+  test("a torn line in hosts.jsonl leaves the host unsettled, even when the recovery matches the newest loss it can read", () => {
+    const dir = scratch("weekly-c5-torn-");
+    part3(dir, up(1, "host-a") + lost(1, "host-a", 100) + up(2, "host-b") + '{"event":"lo\n', { complete: true, host: "host-a", down_confirmed_at: 100 });
+    expect(partProblems(dir).unsettled).toEqual(["p3/host"]);
+  });
+  test("an unreadable hosts.jsonl leaves the host unsettled, and the full report still writes an INCOMPLETE record", async () => {
+    const dir = scratch("weekly-c5-unreadable-");
+    part3(dir, null, null);
+    mkdirSync(join(dir, "p3", "host", "hosts.jsonl"));
+    expect(partProblems(dir).unsettled).toEqual(["p3/host"]);
+    const f = full();
+    part3(f.dir, null, null);
+    mkdirSync(join(f.dir, "p3", "host", "hosts.jsonl"));
+    const r = await run(["report", f.table, f.dir, "--out", f.out]);
+    expect([r.code, r.err]).toEqual([0, expect.not.stringContaining("E_INTERNAL")]);
+    expect(f.record().verdict).toBe("INCOMPLETE");
+    expect(readFileSync(join(f.out, "report.txt"), "utf8")).toContain("  not settled: p3/host");
+  });
+});
