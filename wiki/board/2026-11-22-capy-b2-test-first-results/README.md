@@ -25,7 +25,7 @@ attachments:
 
 # Does following test-first steps fix more bugs? B2 results
 
-CUT-CANDIDATE, pending the owner's decision: cut gstack's routing-hook bug-report rule and the "focused failing test first" clause of its CLAUDE.md bug line
+Call settled: none yet. The verdict is CUT-CANDIDATE, pending the owner's decision: cut gstack's routing-hook bug-report rule and the "focused failing test first" clause of its CLAUDE.md bug line
 
 ## What we found
 
