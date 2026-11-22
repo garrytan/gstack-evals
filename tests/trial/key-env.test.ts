@@ -10,11 +10,11 @@ import { join } from "node:path";
 import { harborEnv } from "../../lanes/decision-routing/host/controller.ts";
 import { dropKeyEnv, isKeyEnv, keylessEnv, KNOWN_KEY_ENV } from "../../src/trial/env.ts";
 
-const REPO = join(import.meta.dir, "../..");
+const TOP = join(import.meta.dir, "../..");
 /** The key names configured on this project's machines (Capy project env, 2026-11-22). */
 const PROJECT_KEYS = ["AGENTRUN_API_KEY", "AGENTRUN_BASE_URL", "ANTHROPIC_API_KEY", "EXA_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "UBICLOUD_API_KEY"];
 const planted = () => Object.fromEntries([...KNOWN_KEY_ENV, ...PROJECT_KEYS].map((k) => [k, "planted-not-a-key-" + k.toLowerCase()]));
-const tracked = (...globs: string[]) => spawnSync("git", ["ls-files", "-z", "--", ...globs], { cwd: REPO, encoding: "utf8" }).stdout.split("\0").filter(Boolean);
+const tracked = (...globs: string[]) => spawnSync("git", ["ls-files", "-z", "--", ...globs], { cwd: TOP, encoding: "utf8" }).stdout.split("\0").filter(Boolean);
 
 describe("the shared key filter", () => {
   // Value: protects=no known key name reaches Harbor's process from any lane; fails_when=a project key such as EXA_API_KEY, AGENTRUN_API_KEY or AGENTRUN_BASE_URL, or a new vendor's *_API_KEY, passes the filter; why_new=the pf, h2h, statemachines and eng-build filters named providers and let EXA and AgentRun keys through; seam=isKeyEnv, keylessEnv, dropKeyEnv; no_claim=what Harbor does with the env
@@ -41,10 +41,10 @@ describe("every lane uses it", () => {
 
   // Value: protects=a lane that starts Harbor builds its env with keylessEnv or dropKeyEnv, never a filter of its own; fails_when=a new or edited launcher spawns Harbor with its own deny-list or the caller's whole env; why_new=fourteen copies of one provider regex drifted from the key list; seam=the import of src/trial/env.ts in each launcher; no_claim=the env a launcher passes is the filtered one, which the per-lane tests check
   test("each TypeScript Harbor launcher imports the shared filter and defines no key list of its own", () => {
-    const launchers = tracked("lanes/*.ts", "quick/*.ts", "src/*.ts").filter((f) => !VERSION_ONLY.includes(f) && LAUNCH.test(readFileSync(join(REPO, f), "utf8")));
+    const launchers = tracked("lanes/*.ts", "quick/*.ts", "src/*.ts").filter((f) => !VERSION_ONLY.includes(f) && LAUNCH.test(readFileSync(join(TOP, f), "utf8")));
     expect(launchers.length).toBeGreaterThanOrEqual(10);
     for (const f of launchers) {
-      const src = readFileSync(join(REPO, f), "utf8");
+      const src = readFileSync(join(TOP, f), "utf8");
       expect({ f, shared: /import \{[^}]*\b(keylessEnv|dropKeyEnv)\b[^}]*\} from "[./]+\/src\/trial\/env\.ts"/.test(src) }).toEqual({ f, shared: true });
       expect({ f, own: /const (KEYS|PROVIDER_KEYS|SECRET_ENV) = /.test(src) }).toEqual({ f, own: false });
     }
@@ -52,7 +52,7 @@ describe("every lane uses it", () => {
 
   // Value: protects=every shell harbor run line unsets every known key name before Harbor starts; fails_when=a script runs harbor with the caller's env, or its env -u list misses a name in KNOWN_KEY_ENV; why_new=vm-run.sh and route-check.sh unset three or four providers only; seam=the env -u flags on each logical harbor run line; no_claim=the scripts run, which their own tests check
   test("each shell harbor run line runs under env -u for every known key name", () => {
-    const lines = tracked("*.sh").flatMap((f) => readFileSync(join(REPO, f), "utf8").replace(/\\\n/g, " ").split("\n").filter((l) => /\bharbor run\b/.test(l) && !/pkill|^\s*#/.test(l)).map((l) => ({ f, l })));
+    const lines = tracked("*.sh").flatMap((f) => readFileSync(join(TOP, f), "utf8").replace(/\\\n/g, " ").split("\n").filter((l) => /\bharbor run\b/.test(l) && !/pkill|^\s*#/.test(l)).map((l) => ({ f, l })));
     expect(lines.length).toBeGreaterThanOrEqual(9);
     for (const { f, l } of lines) {
       const before = l.slice(0, l.indexOf("harbor run"));
