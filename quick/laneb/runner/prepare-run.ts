@@ -46,7 +46,9 @@ export function stageArms(armsCsv: string, o: { armDir: string; run: string; roo
     let extra = {};
     if (existsSync(gz)) {
       copyFileSync(gz, join(o.run, "arms", `${file}.tar.gz`));
-      got = Bun.spawnSync(["sh", "-c", 'gzip -dc "$1" | sha256sum', "sh", gz]).stdout.toString().split(" ")[0]!;
+      const unpacked = Bun.spawnSync(["bash", "-c", 'gzip -dc "$1" | sha256sum; exit "${PIPESTATUS[0]}"', "bash", gz]);
+      if (unpacked.exitCode !== 0) throw new Error(`arm ${name}: gzip exited ${unpacked.exitCode} unpacking ${gz}, so its tar is not checked`);
+      got = unpacked.stdout.toString().split(" ")[0]!;
       extra = { gz_sha256: sha256(gz) };
     } else {
       copyFileSync(join(o.armDir, `${file}.tar`), join(o.run, "arms", `${file}.tar`));
