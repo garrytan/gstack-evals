@@ -130,6 +130,7 @@ describe("report cap stops", () => {
     const detail = "trial test-only-id reached a cap stop";
     if (partStop) {
       mkdirSync(join(dir, "p3"), { recursive: true });
+      writeFileSync(join(dir, "p3", "plan.json"), JSON.stringify({ item: "ws-2026-11-28-3", parts: [{ name: "s390-3" }] }));
       writeFileSync(join(dir, "p3", "s390-3.result.json"), JSON.stringify({ cap_stop: [detail] }));
     }
     const body = rows.map((r) => JSON.stringify(r)).join("\n") + "\n";

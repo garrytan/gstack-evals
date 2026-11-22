@@ -64,10 +64,11 @@ export function buildWeeklyTable(cfg: B1TableConfig): WeeklyRow[] {
   const sessions = sessionsByTrial(readSessionRows(cfg.sessions)), out: WeeklyRow[] = [], jobs = new Set<string>(), trials = new Map<string, string>();
   for (const job of cfg.jobs) {
     if (jobs.has(realpathSync(job.dir))) continue;
-    jobs.add(realpathSync(job.dir));
-    const part = layoutPart(job.dir) ?? job.part ?? null;
+    const real = realpathSync(job.dir);
+    jobs.add(real);
+    const part = layoutPart(real) ?? job.part ?? null;
     if (!part) throw new Error("E_USAGE job " + job.dir + " names no L1 part: its path is not <part>/pulled/jobs/<job> and the config gives none");
-    const reserved = layoutPart(job.dir) ? reservedTrials(job.dir) : new Set<string>();
+    const reserved = layoutPart(real) ? reservedTrials(real) : new Set<string>();
     for (const name of readdirSync(job.dir).sort()) {
       const d = join(job.dir, name);
       if (!statSync(d).isDirectory()) continue;
@@ -159,12 +160,13 @@ export function costRatio(rows: WeeklyRow[], tasks: string[], seed: number, resa
 // arm of each has settled. It prints STOP or CONTINUE and no estimate.
 const attempt2 = (r: WeeklyRow) => /-a2$/.test(r.part ?? "");
 /** Each arm of these tasks that has not settled: fewer first-attempt sessions than planned, or a session with no response
- *  whose attempt-2 row has not arrived. A first-attempt cap stop owes no rerun, so it settles its arm; a session a relaunch
+ *  whose attempt-2 session has not started (an attempt-2 row with no proxy row or ledger reserve has not run). A first-attempt cap stop owes no rerun, so it settles its arm; a session a relaunch
  *  replaced is not counted, and the relaunch's row stands in its place. */
 export function openCells(rows: WeeklyRow[], tasks: string[]): string[] {
   const gone = replacedTrials(rows);
   return tasks.flatMap((t) => WEEKLY_ARM_NAMES.flatMap((a) => {
-    const mine = rows.filter((r) => r.task === t && r.arm === a && !gone.has(r.trial)), first = mine.filter((r) => !attempt2(r)), owe = first.filter((r) => needsRerun(r as unknown as B1Row)).length, ran = mine.length - first.length;
+    const mine = rows.filter((r) => r.task === t && r.arm === a && !gone.has(r.trial)), first = mine.filter((r) => !attempt2(r)), owe = first.filter((r) => needsRerun(r as unknown as B1Row)).length;
+    const ran = mine.filter((r) => attempt2(r) && (r.started ?? r.opened_at !== null)).length;
     if (first.length < WEEKLY_ARMS[a].sessions) return [t + " " + a + ": " + first.length + " of " + WEEKLY_ARMS[a].sessions + " sessions"];
     return ran < owe ? [t + " " + a + ": " + owe + " attempt 2 owed, " + ran + " ran"] : [];
   }));

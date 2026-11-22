@@ -100,23 +100,31 @@ export function partCapStops(work: string): string[] {
     return Array.isArray(cap) ? cap.map((c: string) => p + "/" + f.slice(0, -".result.json".length) + ": " + c) : [p + "/" + f + " has no cap_stop list, so a cap stop can't be ruled out"];
   }));
 }
-/** Each part's cap stops, and each part with no result file: every part in p1..p3's plan, and every attempt 2 or relaunch
- *  prepared for one (pre-run change 4 section 6). */
+/** Each part's cap stops, each part with no result file (every part in p1..p3's plan, and every attempt 2 or relaunch
+ *  prepared for one), and what can't be settled (pre-run change 4 section 6): a part folder with no plan.json, a lost host
+ *  that recover could not fully rebuild (host/recover.json complete:false), and a part result with no cap stop whose
+ *  records were never pulled (unless L1 shows no trial started) or whose ending L1 could not class. */
 export function partProblems(work: string): { caps: string[]; missing: string[]; unsettled: string[] } {
   const missing: string[] = [], unsettled: string[] = [];
-  for (const p of ["p1", "p2", "p3"].filter((x) => existsSync(join(work, x, "plan.json")))) {
+  for (const p of ["p1", "p2", "p3"].filter((x) => existsSync(join(work, x)))) {
+    if (!existsSync(join(work, p, "plan.json"))) { unsettled.push(p); continue; }
+    if (existsSync(join(work, p, "host", "recover.json")) && readJson(join(work, p, "host", "recover.json")).complete !== true) unsettled.push(p + "/host");
     const s = partState(join(work, p));
     for (const x of s.parts.map((y) => y.name)) {
-      if (!s.finished.includes(x)) missing.push(p + "/" + x);
-      else { const r = readJson(join(work, p, x + ".result.json")); if (r.launch_exit === 7 && !r.salvage) unsettled.push(p + "/" + x); }
+      if (!s.finished.includes(x)) { missing.push(p + "/" + x); continue; }
+      const r = readJson(join(work, p, x + ".result.json"));
+      if (r.cap_stop?.length) continue;
+      const noTrial = (r.loss ?? []).some((l: string) => l.endsWith("so no trial started"));
+      if (r.unclassified?.length || (r.pulled !== true && !noTrial)) unsettled.push(p + "/" + x);
     }
   }
   return { caps: partCapStops(work), missing, unsettled };
 }
 const plural = (n: number) => n + " part" + (n === 1 ? "" : "s");
 const missingReason = (missing: string[]) => (missing.length ? ["a part wrote no result (" + plural(missing.length) + "; detail in the private report)"] : []);
-/** A part whose VM was lost (exit 7) and never salvaged has only a provisional result: its cap-stop records were not pulled. */
-const unsettledReason = (unsettled: string[]) => (unsettled.length ? ["a part's VM was lost and its records were never salvaged, so a cap stop can't be ruled out (" + plural(unsettled.length) + "; detail in the private report)"] : []);
+/** A part whose records were never pulled, whose ending L1 could not class, or whose plan or lost host can't be read back has
+ *  only a provisional result: its cap-stop records may be missing. */
+const unsettledReason = (unsettled: string[]) => (unsettled.length ? ["a part's records were never pulled or its ending can't be classed, so a cap stop can't be ruled out (" + plural(unsettled.length) + "; detail in the private report)"] : []);
 export function capStopReason(caps: string[]): string[] {
   return caps.length ? ["a part ended at a cap stop (" + caps.length + " cap-stop line" + (caps.length === 1 ? "" : "s") + " across parts; detail in the private report)"] : [];
 }
@@ -324,7 +332,7 @@ async function run(argv: string[]): Promise<number> {
     if (gate.length) return usage("refused: " + gate.join("; "));
     const l = look(rows, taskLists().run, w.dropped), tasks = new Set(l.tasks), body = jsonl(rows.filter((r) => tasks.has(r.task)));
     if (recordLook(w, l, new Date().toISOString(), { rows: LOOK_ROWS, rows_sha256: createHash("sha256").update(body).digest("hex") })) { writeFileSync(join(work, LOOK_ROWS), body); writeJson(weekFile(work), w); }
-    console.log(!l.ready ? "WEEKLY LOOK NOT READY: " + l.open.length + " arms of the first " + l.tasks.length + " tasks have not settled (" + l.open.slice(0, 3).join("; ") + ")" : l.stop ? "WEEKLY LOOK STOP " + l.stop + ": no new paid work runs; report with --stopped " + l.stop + ", which reads the frozen rows and decides the verdict" : "WEEKLY LOOK CONTINUE");
+    console.log(!l.ready ? "WEEKLY LOOK NOT READY: " + l.open.length + " arms of the first " + l.tasks.length + " tasks have not settled (" + l.open.slice(0, 3).join("; ") + ")" : l.stop ? "WEEKLY LOOK STOP " + l.stop + ": no new launch, relaunch or rerun starts, and parts already running continue to their caps; report with --stopped " + l.stop + ", which reads the frozen rows and decides the verdict" : "WEEKLY LOOK CONTINUE");
     return 0;
   }
   if (cmd === "pilot-report") {

@@ -243,7 +243,7 @@ describe("section 6: part results", () => {
     const dir = scratch("weekly-parts-");
     parts(dir);
     expect(partProblems(dir)).toEqual({ caps: [], missing: ["p2/s390-2", "p2/s390-2-a2"], unsettled: [] });
-    writeFileSync(join(dir, "p2", "s390-2.result.json"), JSON.stringify({ cap_stop: [], loss: [] }));
+    writeFileSync(join(dir, "p2", "s390-2.result.json"), JSON.stringify({ launch_exit: 0, pulled: true, cap_stop: [], loss: [] }));
     writeFileSync(join(dir, "p2", "s390-2-a2.result.json"), JSON.stringify({ cap_stop: ["the proxy latched a cap stop"], loss: [] }));
     expect(partProblems(dir)).toEqual({ caps: ["p2/s390-2-a2: the proxy latched a cap stop"], missing: [], unsettled: [] });
   });
@@ -333,7 +333,7 @@ describe("round 2: settled part results, one replacement per never-started sessi
     writeFileSync(join(full.dir, "p3", "plan.json"), JSON.stringify({ item: partItems("ws-2026-11-28")[2], parts: [{ name: "s390-3" }] }));
     writeFileSync(join(full.dir, "p3", "s390-3.result.json"), JSON.stringify({ launch_exit: 7, pulled: false, cap_stop: [], loss: [], salvage: null }));
     expect((await run(["report", full.table, full.dir, "--out", full.out])).code).toBe(0);
-    expect([full.record().verdict, full.record().incomplete_reason]).toEqual(["INCOMPLETE", "a part's VM was lost and its records were never salvaged, so a cap stop can't be ruled out (1 part; detail in the private report)"]);
+    expect([full.record().verdict, full.record().incomplete_reason]).toEqual(["INCOMPLETE", "a part's records were never pulled or its ending can't be classed, so a cap stop can't be ruled out (1 part; detail in the private report)"]);
     expect(readFileSync(join(full.out, "report.txt"), "utf8")).toContain("  not settled: p3/s390-3");
   });
   test("a session that never started and was relaunched owes no attempt 2, and its arm settles with the relaunch's row", () => {
@@ -385,3 +385,78 @@ describe("round 2: a relaunch replaces only what L1 counts as never started", ()
     expect(openCells([...rows, row(t, "candidate", true, { part: part + "-a2" })], [t])).toEqual([]);
   });
 });
+
+describe("follow-up: a part whose records were never pulled, or whose ending can't be classed, is never settled", () => {
+  const item3 = () => partItems("ws-2026-11-28")[2];
+  const p3 = (dir: string, result: object | null, o: { plan?: boolean; recover?: object } = {}) => {
+    mkdirSync(join(dir, "p3", "host"), { recursive: true });
+    if (o.plan !== false) writeFileSync(join(dir, "p3", "plan.json"), JSON.stringify({ item: item3(), parts: [{ name: "s390-3" }] }));
+    if (result) writeFileSync(join(dir, "p3", "s390-3.result.json"), JSON.stringify(result));
+    if (o.recover) writeFileSync(join(dir, "p3", "host", "recover.json"), JSON.stringify(o.recover));
+  };
+  test("a salvage that pulled nothing leaves the part unsettled", () => {
+    const dir = scratch("weekly-fu-salvage-");
+    p3(dir, { launch_exit: 7, pulled: false, cap_stop: [], loss: ["the part's results could not be pulled"], unclassified: [], salvage: { by: "relaunch", pulled: false, vm_down: true } });
+    expect(partProblems(dir)).toEqual({ caps: [], missing: [], unsettled: ["p3/s390-3"] });
+  });
+  test("a lost host whose running part's records were lost (exit null, no salvage, recover incomplete) leaves the part and the host unsettled", () => {
+    const dir = scratch("weekly-fu-recover-");
+    p3(dir, { launch_exit: null, pulled: false, cap_stop: [], loss: ["the awake host was lost"], unclassified: [] }, { recover: { complete: false, running: "s390-3", part_results_pulled: false } });
+    expect(partProblems(dir)).toEqual({ caps: [], missing: [], unsettled: ["p3/host", "p3/s390-3"] });
+  });
+  test("recover that rebuilt a pulled part but missed sessions still leaves the host unsettled", () => {
+    const dir = scratch("weekly-fu-recover2-");
+    p3(dir, { launch_exit: null, pulled: true, cap_stop: [], loss: ["the awake host was lost"], unclassified: [] }, { recover: { complete: false, running: "s390-3", part_results_pulled: true, missing_sessions: ["s-1"] } });
+    expect(partProblems(dir)).toEqual({ caps: [], missing: [], unsettled: ["p3/host"] });
+  });
+  test("an ending L1 could not class leaves the part unsettled", () => {
+    const dir = scratch("weekly-fu-unclassified-");
+    p3(dir, { launch_exit: 0, vm_run_exit: "4", pulled: true, cap_stop: [], loss: [], unclassified: ["vm-run.sh exited 4, and the item's ledger was not read"] });
+    expect(partProblems(dir)).toEqual({ caps: [], missing: [], unsettled: ["p3/s390-3"] });
+  });
+  test("a part folder with no plan.json is unsettled, since its parts can't be listed", () => {
+    const dir = scratch("weekly-fu-noplan-");
+    p3(dir, { launch_exit: 0, pulled: true, cap_stop: [], loss: [], unclassified: [] }, { plan: false });
+    expect(partProblems(dir)).toEqual({ caps: [], missing: [], unsettled: ["p3"] });
+  });
+  test("a pulled part, a part where L1 shows no trial started, and a part with a cap stop are not flagged as unsettled", () => {
+    for (const r of [
+      { launch_exit: 0, pulled: true, cap_stop: [], loss: [], unclassified: [] },
+      { launch_exit: 1, pulled: false, cap_stop: [], loss: ["the part VM never reached running (VM did not reach running), and the item's ledger holds no session or judge row for this part, so no trial started"], unclassified: [] },
+    ]) {
+      const dir = scratch("weekly-fu-settled-");
+      p3(dir, r);
+      expect(partProblems(dir)).toEqual({ caps: [], missing: [], unsettled: [] });
+    }
+    const dir = scratch("weekly-fu-cap-");
+    p3(dir, { launch_exit: 7, pulled: false, cap_stop: ["the part's results were not pulled, and the item's ledger came within one session cap"], loss: [], unclassified: [] });
+    expect(partProblems(dir)).toEqual({ caps: ["p3/s390-3: the part's results were not pulled, and the item's ledger came within one session cap"], missing: [], unsettled: [] });
+  });
+  test("a full report with a salvage that pulled nothing is INCOMPLETE", async () => {
+    const full = workDir(week({ look: { stop: null, at: "2026-11-29T00:00:00Z", rows: "look-rows.jsonl", rows_sha256: "0".repeat(64) } }), RUN.flatMap((t) => [...[1, 1, 1].map(() => row(t, "candidate", true)), ...[1, 1, 1].map(() => row(t, "stable", true)), row(t, "none", true)]));
+    p3(full.dir, { launch_exit: 7, pulled: false, cap_stop: [], loss: [], unclassified: [], salvage: { by: "attach", pulled: false, vm_down: true } });
+    expect((await run(["report", full.table, full.dir, "--out", full.out])).code).toBe(0);
+    expect(full.record().verdict).toBe("INCOMPLETE");
+    expect(full.record().incomplete_reason).toContain("a cap stop can't be ruled out");
+    expect(readFileSync(join(full.out, "report.txt"), "utf8")).toContain("  not settled: p3/s390-3");
+  });
+  test("an attempt-2 row whose session never started does not settle an owed rerun", () => {
+    const rows = lookRows(), i = rows.findIndex((r) => r.task === RUN[0] && r.arm === "candidate");
+    rows[i] = { ...rows[i]!, outcome: "infra", reason: NO_RESPONSE, pass: false };
+    const queued = row(RUN[0]!, "candidate", false, { part: "s390-1-a2", outcome: "infra", reason: "no result.json", opened_at: null, started: false });
+    expect(look([...rows, queued], RUN, []).open).toEqual([RUN[0] + " candidate: 1 attempt 2 owed, 0 ran"]);
+    expect(look([...rows, { ...queued, started: true }], RUN, []).ready).toBe(true);
+  });
+  test("a job given by a relative path still takes its part from L1's folder layout", () => {
+    const root = scratch("weekly-fu-rel-"), t = RUN[0]!, job = join(root, "s390-1-a2", "pulled", "jobs", "s390-1-a2"), name = t + "__relpath";
+    mkdirSync(join(job, name, "evaluator"), { recursive: true });
+    writeFileSync(join(job, name, "config.json"), JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm: "stable", upstream_model: MODEL.id } }, task: { path: "tasks/" + t } }));
+    writeFileSync(join(job, name, "result.json"), JSON.stringify({ trial_name: name, verifier_result: { rewards: { reward: 1 } } }));
+    const cwd = process.cwd();
+    try {
+      process.chdir(job);
+      expect(buildWeeklyTable({ jobs: [{ dir: "." }], sessions: [] }).map((r) => r.part)).toEqual(["s390-1-a2"]);
+    } finally { process.chdir(cwd); }
+  });
+});
+
