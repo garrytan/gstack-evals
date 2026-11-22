@@ -113,7 +113,7 @@ export function approve(path: string, item: string, capUsd: number, by: string) 
   if (!by.trim()) usage("weekly approve: --approved-by names who recorded the cap");
   if (toMicros(capUsd) !== toMicros(capOf(item))) usage("refused: " + item + "'s recorded cap is $" + capOf(item) + ", not $" + capUsd);
   if (readRows(path).length) usage("refused: " + path + " already holds rows; an item's ledger starts with its approval row");
-  new Ledger(path, item).approve(capUsd, { approved_by: by, source: item === PILOT.item ? "weekly stable number: the one-time pilot's $14 cap" : "weekly stable number: part " + partOf(item) + "'s share of the week's $" + (WEEK_CAPS.model + WEEK_CAPS.ubicloud) + " paid cap" });
+  new Ledger(path, item).approve(capUsd, { approved_by: by, source: item === PILOT.item ? "weekly stable number: the one-time pilot's $" + PILOT.capUsd + " cap (pre-run change 3)" : "weekly stable number: part " + partOf(item) + "'s share of the week's $" + (WEEK_CAPS.model + WEEK_CAPS.ubicloud) + " paid cap" });
   itemCheck(readRows(path), item, capOf(item));
 }
 const VM_ID = /(^|\/)vm(-\d+)?$|^host-\d+$/;
@@ -135,13 +135,16 @@ export function markDone(path: string, item: string) {
   appendRow(path, { ts: new Date().toISOString(), item, kind: "note", id: "done", usd_micros: 0 });
 }
 /** One item's projection: its spend so far plus its unfinished parts at planned spend, the open-session reserve and the VM
- *  and host shares (the pilot: its spend so far plus the most it can hold reserved at once, two sessions, one VM block and the
- *  host's reserve). counted is what the item adds to the week's all-in sum. */
+ *  and host shares. The pilot's is its last pair's peak (pre-run change 3): its spend so far, the sessions before the last
+ *  pair settled at expected cost, the last pair reserved at the allowance, one VM block and the host's reserve. counted is
+ *  what the item adds to the week's all-in sum. */
 function itemProjection(item: string, rows: Row[], plan: { parts: PartPlan[]; finished: string[] }, relaunching?: string) {
   const t = totals(rows, item), left = relaunching ? [] : plan.parts.filter((p) => !plan.finished.includes(p.name)), proj = left.map(partProjection);
   const host = !t.hostOpen && left.length ? toMicros(hostTtlHours(left.length) * L1.host.usdPerHour) : 0;
+  const sessions = proj.reduce((x, p) => x + p.sessions, 0), pair = Math.min(concurrentOf(item), sessions);
+  const lastPair = sessions ? Math.round((proj.reduce((x, p) => x + p.model, 0) * (sessions - pair)) / sessions) + toMicros(pair * MODEL.allowanceUsd) : 0;
   const total = item === PILOT.item
-    ? t.settled + t.open + (left.length ? toMicros(parallelUsd(item, left) + blockUsd) + host : 0)
+    ? t.settled + t.open + (left.length ? lastPair + toMicros(blockUsd) + host : 0)
     : t.settled - t.vmSettled + t.open - t.vmOpen + proj.reduce((x, p) => x + p.model, 0) + toMicros(left.length ? parallelUsd(item, left) : 0) + t.vmSettled + t.vmOpen + host + proj.reduce((x, p) => x + p.vm, 0);
   return { item, ...t, total, left: left.length, counted: t.done ? t.settled : Math.max(t.settled + t.open, total) };
 }

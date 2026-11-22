@@ -4,7 +4,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contaminationSearch, formsOf, scanText, treeProblems } from "../../lanes/weekly-stable/arms.ts";
+import { createHash } from "node:crypto";
+import { contaminationSearch, formsOf, noneArchiveProblem, scanText, treeProblems } from "../../lanes/weekly-stable/arms.ts";
 
 const FIX = join(import.meta.dir, "fixtures"), roots: string[] = [];
 afterAll(() => { for (const d of roots) rmSync(d, { recursive: true, force: true }); });
@@ -55,5 +56,19 @@ describe("a built tree's checks", () => {
     writeFileSync(join(t.g, ".git/FETCH_HEAD"), "");
     const p = treeProblems(t.d, t.sha, { telemetry: "community" });
     expect(p.map((x) => x.split(" ").slice(0, 5).join(" "))).toEqual(["the gstack checkout is at", "the gstack checkout holds 2", "the gstack checkout has a", "the gstack checkout keeps a", "gstack-config reads telemetry \"community\", not"]);
+  });
+});
+
+describe("the no-gstack archive itself", () => {
+  test("the none tar or tar.gz the run stages must hash to the pinned tar; a missing or different archive is a problem", () => {
+    const d = scratch(), bytes = Buffer.from("none arm bytes"), want = createHash("sha256").update(bytes).digest("hex");
+    expect(noneArchiveProblem(d, want)).toMatch(/no none.tar.gz or none.tar/);
+    writeFileSync(join(d, "none.tar"), bytes);
+    expect(noneArchiveProblem(d, want)).toBeNull();
+    expect(noneArchiveProblem(d, "0".repeat(64))).toMatch(/none.tar has sha256 /);
+    spawnSync("sh", ["-c", 'gzip -c "$1" > "$2"', "sh", join(d, "none.tar"), join(d, "none.tar.gz")]);
+    expect(noneArchiveProblem(d, want)).toBeNull();
+    writeFileSync(join(d, "none.tar.gz"), "not gzip");
+    expect(noneArchiveProblem(d, want)).toMatch(/none.tar.gz unpacks to sha256/);
   });
 });

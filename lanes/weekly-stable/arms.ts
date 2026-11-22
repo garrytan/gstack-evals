@@ -66,13 +66,23 @@ export function writeManifests(out: string, shas: Record<GstackArm, string>): st
   });
 }
 
-/** none's manifest B1's byte for byte at B1's tar digest; each gstack arm's tar.gz unpacking to its manifest's tar, at the
- *  week's sha, with its tree's checks passing. */
+/** The no-gstack archive the run stages (prepare-run.ts: none.tar.gz unpacked, else none.tar) against the pinned tar. */
+export function noneArchiveProblem(dir: string, want: string = NONE_TAR_SHA256): string | null {
+  const gz = join(dir, "none.tar.gz"), tar = join(dir, "none.tar");
+  if (existsSync(gz)) { const got = spawnSync("sh", ["-c", 'gzip -dc "$1" 2>/dev/null | sha256sum', "sh", gz], { encoding: "utf8" }).stdout.split(" ")[0]; return got === want ? null : gz + " unpacks to sha256 " + got + ", not the pinned " + want; }
+  if (existsSync(tar)) { const got = sha256(readFileSync(tar)); return got === want ? null : tar + " has sha256 " + got + ", not the pinned " + want; }
+  return "no none.tar.gz or none.tar in " + dir + " for the no-gstack arm";
+}
+/** none's manifest B1's byte for byte at B1's tar digest, and its archive at that digest; each gstack arm's tar.gz unpacking
+ *  to its manifest's tar, at the week's sha, with its tree's checks passing. */
 export function armsCheck(out: string, shas: Record<GstackArm, string>): { pass: boolean; lines: string[] } {
   const lines: string[] = [], problems: string[] = [], m = (a: string) => join(manifestDir(), a + ".json");
   if (!existsSync(m("none")) || !readFileSync(m("none")).equals(readFileSync(B1_NONE()))) problems.push(WEEKLY.armManifests + "/none.json is not arms/manifests/b1/none.json byte for byte");
   else if (JSON.parse(readFileSync(m("none"), "utf8")).tar?.sha256 !== NONE_TAR_SHA256) problems.push("none's manifest does not pin B1's tar " + NONE_TAR_SHA256);
   else lines.push("none: B1's manifest byte for byte, tar " + NONE_TAR_SHA256);
+  const none = noneArchiveProblem(out);
+  if (none) problems.push("none: " + none);
+  else lines.push("none: the archive the run stages unpacks to tar " + NONE_TAR_SHA256);
   for (const a of GSTACK_ARMS) {
     if (!existsSync(m(a))) { problems.push("no manifest " + m(a)); continue; }
     const want = JSON.parse(readFileSync(m(a), "utf8")), gz = join(out, a + ".tar.gz");

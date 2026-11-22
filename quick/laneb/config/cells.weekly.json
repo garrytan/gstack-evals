@@ -1,0 +1,13 @@
+{
+  "note": "Cells for the weekly stable number (lanes/weekly-stable; preregistration 2026-11-22-geva-573-weekly-stable-prereg, model table): Opus 5.5 at the frozen $3 session allowance, reserved in the item's ledger before each session and enforced by the metering proxy, and 100 turns (the agent's sdk_max_turns). pins.ts MODEL.allowanceUsd must equal session_cap_usd here; tests/weekly-stable/plan.test.ts checks it.",
+  "models": [
+    {
+      "id": "claude-opus-5-5",
+      "harbor_model": "anthropic/claude-opus-5-5",
+      "session_cap_usd": 3
+    }
+  ],
+  "max_output_tokens": 32000,
+  "verifier_timeout_multiplier": 2,
+  "sdk_max_turns": 100
+}

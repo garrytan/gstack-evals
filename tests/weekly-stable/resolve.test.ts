@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { latestHold, main, recordInput, type GhRun, type WeekFile } from "../../lanes/weekly-stable/cli.ts";
@@ -71,6 +71,8 @@ describe("a re-measure keeps the week it re-measures", () => {
       expect(await main(["resolve", dir, "--week", "2026-11-28"])).toBe(2);
       expect(await main(["resolve", dir, "--remeasure", "1", "--week", "2026-12-05", "--now", "2026-11-30T12:00:00Z"])).toBe(2);
       for (const bad of ["2026-02-30", "2026-11-31", "2026-13-01"]) expect(await main(["resolve", dir, "--remeasure", "1", "--week", bad, "--now", "2026-11-30T12:00:00Z"])).toBe(2);
+      writeFileSync(join(dir, "week.json"), "{}");
+      expect(await main(["resolve", dir])).toBe(2);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
@@ -106,6 +108,10 @@ describe("the HOLD lookup through gh, ordered by run start (gh's list and failur
     const r = latestHold(fake(recs, table));
     expect("error" in r && r.error.startsWith("gh release list did not return JSON: gstack v1.102.2.0")).toBe(true);
     expect(latestHold(fake({ ...recs, "weekly-2026-w50": { ...rec("2026-W50", "NO_CHANGE", "x"), window: { end: "2026-12-12T10:00:00.000Z" } } }))).toEqual({ error: "weekly-2026-w50's window.start is not a time" });
+  });
+  test("a record whose verdict is missing or unknown is an error, never a record that clears a HOLD", () => {
+    const recs = { "weekly-2026-w48": rec("2026-W48", "HOLD", "2026-11-28T10:00:00.000Z"), "weekly-2026-w49": rec("2026-W49", "MAYBE", "2026-12-05T10:00:00.000Z", B) };
+    expect(latestHold(fake(recs))).toEqual({ error: "weekly-2026-w49's verdict MAYBE is not HOLD, GAIN, NO_CHANGE or INCOMPLETE" });
   });
   test("no weekly record is no HOLD", () => expect(latestHold(fake({}))).toEqual({ held: null }));
 });
