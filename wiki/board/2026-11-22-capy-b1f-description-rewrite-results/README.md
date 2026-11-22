@@ -116,7 +116,7 @@ On the 160 counted bug-fix sessions the hook named prove-it on the opening reque
 
 ## Why null? (R48)
 
-The long rewrite is a null against both the hook and its own baseline.
+The long rewrite is a clear loss against the hook (-44.6 to -29.3), and a null only against own.
 
 - Exposure. The description reached the model: each long session's skill listing carried prove-it with the rewritten text (checked in the pilot transcripts and by `b1f arms check`). Opus loaded the skill in 2 of 160.
 - Task fit. These are bug fixes, the tasks prove-it is for; the hook named it on the opening request of 143 of 160.
