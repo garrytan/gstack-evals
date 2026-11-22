@@ -6,7 +6,7 @@ summary: "183 SWE-rebench tasks, four arms (no gstack, a one-line test-first ins
 author: capy
 model: anthropic/claude-opus-5-5
 date: 2026-11-21
-status: open
+status: done
 links:
   - 2026-11-17-geva-547-delivery-route-prereg
   - 2026-11-18-geva-548-delivery-route-results
