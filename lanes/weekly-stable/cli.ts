@@ -102,20 +102,24 @@ export function partCapStops(work: string): string[] {
 }
 /** Each part's cap stops, each part with no result file (every part in p1..p3's plan, and every attempt 2 or relaunch
  *  prepared for one), and what can't be settled (pre-run change 4 section 6): a part folder with no plan.json, a lost host
- *  that recover could not fully rebuild (host/recover.json complete:false), and a part result with no cap stop that
+ *  that recover could not fully rebuild (host/recover.json not complete, unreadable, or missing after a recorded loss), and
+ *  a part result with no cap stop that
  *  launch.sh kept at exit 7 with no salvage, whose records (or its salvage's) were never pulled (unless L1 shows no trial started) or whose
  *  ending L1 could not class. */
 export function partProblems(work: string): { caps: string[]; missing: string[]; unsettled: string[] } {
   const missing: string[] = [], unsettled: string[] = [];
   for (const p of ["p1", "p2", "p3"].filter((x) => existsSync(join(work, x)))) {
     if (!existsSync(join(work, p, "plan.json"))) { unsettled.push(p); continue; }
-    if (existsSync(join(work, p, "host", "recover.json")) && readJson(join(work, p, "host", "recover.json")).complete !== true) unsettled.push(p + "/host");
+    const rec = join(work, p, "host", "recover.json"), hosts = join(work, p, "host", "hosts.jsonl");
+    const recovered = existsSync(rec) ? (() => { try { return readJson(rec).complete === true; } catch { return false; } })() : null;
+    const lost = existsSync(hosts) && readFileSync(hosts, "utf8").split("\n").some((l) => { try { return JSON.parse(l).event === "lost"; } catch { return l.trim() !== ""; } });
+    if (recovered === false || (recovered === null && lost)) unsettled.push(p + "/host");
     const s = partState(join(work, p));
     for (const x of s.parts.map((y) => y.name)) {
       if (!s.finished.includes(x)) { missing.push(p + "/" + x); continue; }
       const r = readJson(join(work, p, x + ".result.json"));
       if (r.cap_stop?.length) continue;
-      const noTrial = (r.loss ?? []).some((l: string) => l.endsWith("so no trial started"));
+      const noTrial = (r.loss ?? []).some((l: string) => l.endsWith("so no trial started")) || (r.launch_exit === 1 && existsSync(join(work, p, x, "vm-never-running")));
       if (r.unclassified?.length || (r.launch_exit === 7 && !r.salvage) || ((r.pulled !== true || r.salvage?.pulled === false) && !noTrial)) unsettled.push(p + "/" + x);
     }
   }

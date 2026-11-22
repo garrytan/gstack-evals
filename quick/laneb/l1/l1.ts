@@ -1214,7 +1214,7 @@ function recover(work: string) {
   // The running part's rows after the last mirror live only in its records. A kept part's rows were all on the mirror before
   // its launch.sh exited, so it ends the item only when its VM is unknown; otherwise it is a salvage like the host's.
   const complete = parts.every((p) => (p === run ? p.pulled && !p.missing.length : !!p.vm));
-  writeJson(join(work, "host/recover.json"), { host: host.name, down_confirmed_at: goneAt, mirror_sha256: mirrorSha, running: running?.part.name ?? null,
+  writeJsonAtomic(join(work, "host/recover.json"), { host: host.name, down_confirmed_at: goneAt, mirror_sha256: mirrorSha, running: running?.part.name ?? null,
     ...(run ? { part_vm: run.vm, part_vm_gone: run.how === "RECOVER_GONE", part_results_pulled: run.pulled, missing_sessions: run.missing } : {}),
     kept: parts.filter((p) => p !== run).map((p) => ({ part: p.name, vm: p.vm, vm_gone: p.how === "RECOVER_GONE", results_pulled: p.pulled, missing_sessions: p.missing })), rows_added: add.length, complete });
   if (!complete) {

@@ -470,3 +470,49 @@ describe("follow-up: a part whose records were never pulled, or whose ending can
   });
 });
 
+
+describe("follow-up review: cap-stopped reruns, interrupted recovery and reruns whose VM never ran", () => {
+  const item3 = () => partItems("ws-2026-11-28")[2];
+  const pulled = { launch_exit: 0, pulled: true, cap_stop: [], loss: [], unclassified: [] };
+  const part3 = (dir: string) => {
+    mkdirSync(join(dir, "p3", "host"), { recursive: true });
+    writeFileSync(join(dir, "p3", "plan.json"), JSON.stringify({ item: item3(), parts: [{ name: "s390-3" }] }));
+    writeFileSync(join(dir, "p3", "s390-3.result.json"), JSON.stringify(pulled));
+  };
+  test("an attempt-2 cap-stop row settles its slot even with no start evidence", () => {
+    const rows = lookRows(), i = rows.findIndex((r) => r.task === RUN[0] && r.arm === "candidate");
+    rows[i] = { ...rows[i]!, outcome: "infra", reason: NO_RESPONSE, pass: false };
+    const cap = row(RUN[0]!, "candidate", false, { part: "s390-1-a2", outcome: "cap_stop", reason: "cap stop", opened_at: null, started: false });
+    expect(look([...rows, cap], RUN, []).ready).toBe(true);
+  });
+  test("an unreadable recover.json, or a recorded host loss with no recover.json, leaves the host unsettled", () => {
+    const a = scratch("weekly-fr-torn-");
+    part3(a);
+    writeFileSync(join(a, "p3", "host", "recover.json"), "{");
+    expect(partProblems(a).unsettled).toEqual(["p3/host"]);
+    const b = scratch("weekly-fr-nomarker-");
+    part3(b);
+    writeFileSync(join(b, "p3", "host", "hosts.jsonl"), JSON.stringify({ event: "up", n: 1 }) + "\n" + JSON.stringify({ event: "lost", n: 1 }) + "\n");
+    expect(partProblems(b).unsettled).toEqual(["p3/host"]);
+    writeFileSync(join(b, "p3", "host", "recover.json"), JSON.stringify({ complete: true }));
+    expect(partProblems(b).unsettled).toEqual([]);
+  });
+  test("a full report with a torn recover.json still writes an INCOMPLETE record", async () => {
+    const full = workDir(week({ look: { stop: null, at: "2026-11-29T00:00:00Z", rows: "look-rows.jsonl", rows_sha256: "0".repeat(64) } }), RUN.flatMap((t) => [...[1, 1, 1].map(() => row(t, "candidate", true)), ...[1, 1, 1].map(() => row(t, "stable", true)), row(t, "none", true)]));
+    part3(full.dir);
+    writeFileSync(join(full.dir, "p3", "host", "recover.json"), "{");
+    expect((await run(["report", full.table, full.dir, "--out", full.out])).code).toBe(0);
+    expect(full.record().verdict).toBe("INCOMPLETE");
+    expect(readFileSync(join(full.out, "report.txt"), "utf8")).toContain("  not settled: p3/host");
+  });
+  test("an attempt 2 whose VM never reached running started no trial, so it is settled", () => {
+    const dir = scratch("weekly-fr-a2boot-");
+    part3(dir);
+    mkdirSync(join(dir, "p3", "s390-3-a2"), { recursive: true });
+    writeFileSync(join(dir, "p3", "s390-3-a2", "l1-part.json"), JSON.stringify({ name: "s390-3-a2", attempt_of: "s390-3" }));
+    writeFileSync(join(dir, "p3", "s390-3-a2", "vm-never-running"), "VM did not reach running in 600 s\n");
+    writeFileSync(join(dir, "p3", "s390-3-a2.result.json"), JSON.stringify({ launch_exit: 1, pulled: false, cap_stop: [], loss: [], unclassified: [] }));
+    expect(partProblems(dir)).toEqual({ caps: [], missing: [], unsettled: [] });
+  });
+});
+
