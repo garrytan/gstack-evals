@@ -37,7 +37,7 @@ Both gstack arms are fetched at depth 1 by sha and installed by gstack's own ./s
 
 When the candidate equals stable (nothing new passed the release gate), the week runs nothing, the record says "no candidate" and the spend is $0.
 
-The preregistration's first-week rule for "last" and its rule that each week records its "this" no longer apply, because no arm depends on an earlier week. The same-release repeat (section 10 of the preregistration) becomes: this week's stable arm against the candidate arm of the week whose candidate became this stable, when there is one.
+The preregistration's first-week rule for "last" (the newest v-tag at or before run start minus 7 days) and its rule that each week records its "this" no longer apply, because no arm depends on an earlier week. That also settles the review note that the rule's "tag date" was undefined: no rule here reads a tag date. Stable is read from refs/heads/stable at Saturday 06:00 UTC and peeled to the v-tag that points at it; when no v-tag points at it, the week is INCOMPLETE and the gstack-evals Captain hears why. The same-release repeat (section 10 of the preregistration) becomes: this week's stable arm against the candidate arm of the week whose candidate became this stable, when there is one.
 
 ## 2. Timing (replaces the schedule in section 13)
 
