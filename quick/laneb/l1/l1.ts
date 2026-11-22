@@ -216,6 +216,7 @@ export type Profile = {
   /** A lane's own prepare step, run in place of runner/prepare-run.ts with the same arguments and env (the Codex hooks eval's
    * part R wraps it to swap in its Codex agent and proxy route). L1_PREPARE_RUN still wins. L1 declares none. */
   prepareRun?: string;
+  salvageOnAttach?: boolean;
   /** The proxy config whose route for the item's model names the key host-up ships, in place of config/proxy.json (part R's
    * OpenAI Responses route). L1 declares none. */
   proxyConfig?: string;
@@ -584,7 +585,7 @@ function hostSalvage(root: string, part: string, prefix: string) {
   const ledger = new Ledger(env.LEDGER!, env.ITEM!);
   if (pulled) record.reconcile = reconcile(ledger, readRows(join(dir, "pulled/out/proxy-sessions.jsonl")) as any[], prefix);
   if (vm) record.vm_down = ubi(["down", vm]).code === 0;
-  if (vm && !record.vm_down) refuse("VM " + vm + " could not be destroyed; its blocks stay open. Run relaunch again to salvage again");
+  if (vm && !record.vm_down) refuse("VM " + vm + " could not be destroyed; its blocks stay open. Salvage it again: attach does after a STOP, relaunch does otherwise");
   const hours = (nowSec() - Number(st.started_at)) / 3600;
   const block = Number(env.VM_USD_PER_HOUR) * Number(env.VM_RESERVE_HOURS);
   const shares = blockShares(ledger.status().openIds, prefix + "vm", block, Number(env.VM_USD_PER_HOUR) * hours);
@@ -954,9 +955,9 @@ function finishPart(work: string, host: any, st: any, name: string, plan: Plan) 
 function attach(work: string) {
   const plan = readPlan(work);
   const host = currentHost(work);
-  if (!host) { console.log("NEXT: " + nextWithoutHost(work, plan)); return; }
+  if (!host) { console.log("NEXT: " + (P.salvageOnAttach ? "none: no host is up" : nextWithoutHost(work, plan))); return; }
   if (cleanupPending(work, host)) { console.log("NEXT: host-down (cleanup of a failed host-up is pending)"); return; }
-  const st = status(host);
+  let st = status(host);
   const unreachable = join(work, "host/unreachable.jsonl");
   if (!st) {
     if (ubi(["ssh", host.name, "true"]).code === 0) refuse("host " + host.name + " answers ssh but host-status failed on it, so it is not lost and no miss is counted; check ~/" + H + " on it");
@@ -980,8 +981,11 @@ function attach(work: string) {
       if (want.vm !== l.vm || want.controller_started_at !== l.controller_started_at) writeJson(lp, want);
     }
     if (h.alive) { lines.push(s.part.name + ": running (controller pid " + h.pid + ", VM " + (h.vm ?? "not up yet") + ")"); continue; }
-    if (s.result) continue;
-    if (h.launch_exit === null && !h.salvage) { lines.push(s.part.name + ": CONTROLLER_LOST (no exit recorded). NEXT: relaunch --part " + s.part.name + " (it salvages first)"); continue; }
+    if (P.salvageOnAttach && !h.salvage && (h.launch_exit === null || h.launch_exit === 7)) {
+      st = salvageOnHost(host, s.part.name, s.part.prefix, h, "attach");
+      mirror(work, host);
+    } else if (s.result) continue;
+    else if (h.launch_exit === null && !h.salvage) { lines.push(s.part.name + ": CONTROLLER_LOST (no exit recorded). NEXT: relaunch --part " + s.part.name + " (it salvages first)"); continue; }
     const r = finishPart(work, host, st, s.part.name, plan);
     lines.push(s.part.name + ": finished, launch exit " + r.launch_exit + (r.cap_stop.length ? "; CAP STOP: " + r.cap_stop.join("; ") : "") + (r.loss.length ? "; LOSS: " + r.loss.join("; ") : "") + (r.unclassified.length ? "; UNCLASSIFIED: " + r.unclassified.join("; ") : ""));
   }
@@ -989,7 +993,7 @@ function attach(work: string) {
   const t = totals(readRows(mirrorPath(work)));
   lines.push(plan.item + " ledger (mirror): settled $" + fromMicros(t.settledMicros).toFixed(2) + ", open reserves $" + fromMicros(t.openReservedMicros).toFixed(2) + " in " + t.openIds.length + ", cap $" + fromMicros(t.capMicros));
   lines.push("host " + host.name + ": " + ((host.up_at + host.ttl_hours * 3600 - nowSec()) / 3600).toFixed(1) + " h of TTL left");
-  lines.push("NEXT: " + next(work, plan));
+  lines.push("NEXT: " + (P.salvageOnAttach ? (Object.values(st.parts).some((s: any) => s.alive) ? "attach again (a controller is running)" : "host-down") : next(work, plan)));
   console.log(lines.join("\n"));
 }
 
@@ -1210,7 +1214,7 @@ function recover(work: string) {
   // The running part's rows after the last mirror live only in its records. A kept part's rows were all on the mirror before
   // its launch.sh exited, so it ends the item only when its VM is unknown; otherwise it is a salvage like the host's.
   const complete = parts.every((p) => (p === run ? p.pulled && !p.missing.length : !!p.vm));
-  writeJson(join(work, "host/recover.json"), { host: host.name, down_confirmed_at: goneAt, mirror_sha256: mirrorSha, running: running?.part.name ?? null,
+  writeJsonAtomic(join(work, "host/recover.json"), { host: host.name, down_confirmed_at: goneAt, mirror_sha256: mirrorSha, running: running?.part.name ?? null,
     ...(run ? { part_vm: run.vm, part_vm_gone: run.how === "RECOVER_GONE", part_results_pulled: run.pulled, missing_sessions: run.missing } : {}),
     kept: parts.filter((p) => p !== run).map((p) => ({ part: p.name, vm: p.vm, vm_gone: p.how === "RECOVER_GONE", results_pulled: p.pulled, missing_sessions: p.missing })), rows_added: add.length, complete });
   if (!complete) {

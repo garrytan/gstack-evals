@@ -66,10 +66,16 @@ export function writeManifests(out: string, shas: Record<GstackArm, string>): st
   });
 }
 
+/** An archive's unpacked sha256, with an error unless gzip exited 0 (pre-run change 4 section 9): a digest that matches after
+ *  gzip reported a fault does not pass. */
+export function gunzipSha(gz: string): { sha256: string; error: string | null } {
+  const r = spawnSync("bash", ["-c", 'gzip -dc "$1" 2>/dev/null | sha256sum; exit "${PIPESTATUS[0]}"', "bash", gz], { encoding: "utf8" });
+  return { sha256: (r.stdout ?? "").split(" ")[0] ?? "", error: r.status === 0 ? null : "gzip exited " + r.status + " unpacking it" };
+}
 /** The no-gstack archive the run stages (prepare-run.ts: none.tar.gz unpacked, else none.tar) against the pinned tar. */
 export function noneArchiveProblem(dir: string, want: string = NONE_TAR_SHA256): string | null {
   const gz = join(dir, "none.tar.gz"), tar = join(dir, "none.tar");
-  if (existsSync(gz)) { const got = spawnSync("sh", ["-c", 'gzip -dc "$1" 2>/dev/null | sha256sum', "sh", gz], { encoding: "utf8" }).stdout.split(" ")[0]; return got === want ? null : gz + " unpacks to sha256 " + got + ", not the pinned " + want; }
+  if (existsSync(gz)) { const g = gunzipSha(gz); return g.sha256 !== want ? gz + " unpacks to sha256 " + g.sha256 + ", not the pinned " + want : g.error ? gz + ": " + g.error : null; }
   if (existsSync(tar)) { const got = sha256(readFileSync(tar)); return got === want ? null : tar + " has sha256 " + got + ", not the pinned " + want; }
   return "no none.tar.gz or none.tar in " + dir + " for the no-gstack arm";
 }
@@ -88,8 +94,9 @@ export function armsCheck(out: string, shas: Record<GstackArm, string>): { pass:
     const want = JSON.parse(readFileSync(m(a), "utf8")), gz = join(out, a + ".tar.gz");
     if (want.spec !== WEEKLY_ARMS[a].spec) problems.push(a + ": the manifest's spec is not " + WEEKLY_ARMS[a].spec);
     if (want.gstack?.sha !== shas[a]) problems.push(a + ": the manifest pins gstack " + want.gstack?.sha + ", not this week's " + shas[a]);
-    const got = existsSync(gz) ? spawnSync("sh", ["-c", 'gzip -dc "$1" | sha256sum', "sh", gz], { encoding: "utf8" }).stdout.split(" ")[0] : "missing";
+    const g = existsSync(gz) ? gunzipSha(gz) : null, got = g?.sha256 ?? "missing";
     if (got !== want.tar?.sha256) problems.push(a + ": " + gz + " unpacks to sha256 " + got + ", not the manifest's " + want.tar?.sha256);
+    else if (g?.error) problems.push(a + ": " + gz + ": " + g.error);
     else if (sha256(readFileSync(gz)) !== want.tar_gz_sha256) problems.push(a + ": the tar.gz is not the manifest's tar_gz_sha256");
     else lines.push(a + ": tar.gz " + want.tar_gz_sha256 + " unpacks to the manifest's tar " + want.tar.sha256);
     const tree = join(out, "trees", a);

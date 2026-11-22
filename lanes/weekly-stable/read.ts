@@ -5,7 +5,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readSessionRows, rng, sessionsByTrial } from "../../quick/laneb/analysis/analyze.ts";
-import { relaunchRects } from "../../quick/laneb/l1/l1.ts";
+import { relaunchRects, trialName } from "../../quick/laneb/l1/l1.ts";
 import { parseLog, type Rec } from "../../quick/laneb/l1/probes.ts";
 import { newcombe } from "../delivery-route/analyze.ts";
 import { namedOf } from "../delivery-route/b1d.ts";
@@ -23,6 +23,8 @@ export type WeeklyRow = Omit<B1Row, "arm"> & {
   hook_events: number | null; routed: string[] | null;
   /** Skill tool calls by name, and reads of a SKILL.md under ~/.claude/skills. */
   skill_calls: string[]; skill_reads: number;
+  /** L1's start evidence (startedCells): a proxy session row, or a ledger reserve for the trial in the part's ledger mirror. */
+  started?: boolean;
 };
 const blocks = (recs: Rec[]) => recs.filter((r) => r.type === "AssistantMessage").flatMap((r) => (Array.isArray(r.content) ? r.content : [])) as any[];
 function armEvent(dir: string): string | null {
@@ -46,28 +48,62 @@ export function weeklyRow(dir: string, ctx: Parameters<typeof b1Row>[1]): Weekly
     skill_reads: b.filter((x) => x?.name === "Read" && x.input && /\/\.claude\/skills\/.+\/SKILL\.md$/.test(String(x.input?.file_path ?? ""))).length,
   };
 }
+/** A job's L1 part id from L1's folder layout, <part>/pulled/jobs/<job>; null outside that layout. */
+const layoutPart = (dir: string) => /([^/]+)\/pulled\/jobs\/[^/]+\/?$/.exec(dir)?.[1] ?? null;
+/** The trials with a ledger reserve in the part work dir's ledger mirror (<work>/host/ledger.jsonl), the evidence L1's
+ *  relaunch reads besides proxy rows: the proxy writes a session's row only when it closes. */
+function reservedTrials(jobDir: string): Set<string> {
+  const mirror = join(jobDir, "../../../../host/ledger.jsonl"), out = new Set<string>();
+  for (const l of existsSync(mirror) ? readFileSync(mirror, "utf8").split("\n") : []) { try { const r = JSON.parse(l); if (r?.kind === "reserve" && r.trial) out.add(trialName(String(r.trial))); } catch { continue; } }
+  return out;
+}
 /** Every trial folder under the config's jobs, each job folder read once; one trial found in two folders is refused, so no
- *  session counts twice. */
+ *  session counts twice. Each row's part is L1's part id from the folder layout, else the config's label (pre-run change 4
+ *  section 2), so a Harbor job suffix never hides an attempt 2; a job with neither is refused. */
 export function buildWeeklyTable(cfg: B1TableConfig): WeeklyRow[] {
   const sessions = sessionsByTrial(readSessionRows(cfg.sessions)), out: WeeklyRow[] = [], jobs = new Set<string>(), trials = new Map<string, string>();
   for (const job of cfg.jobs) {
     if (jobs.has(realpathSync(job.dir))) continue;
-    jobs.add(realpathSync(job.dir));
+    const real = realpathSync(job.dir);
+    jobs.add(real);
+    const part = layoutPart(real) ?? job.part ?? null;
+    if (!part) throw new Error("E_USAGE job " + job.dir + " names no L1 part: its path is not <part>/pulled/jobs/<job> and the config gives none");
+    const reserved = layoutPart(real) ? reservedTrials(real) : new Set<string>();
     for (const name of readdirSync(job.dir).sort()) {
       const d = join(job.dir, name);
       if (!statSync(d).isDirectory()) continue;
-      const row = weeklyRow(d, { part: job.part ?? null, sessions, home: cfg.home ?? "/root" });
+      const row = weeklyRow(d, { part, sessions, home: cfg.home ?? "/root" });
       if (!row) continue;
       if (trials.has(row.trial)) throw new Error("E_USAGE trial " + row.trial + " appears twice, in " + trials.get(row.trial) + " and " + d + "; a session is read once");
       trials.set(row.trial, d);
-      out.push(row);
+      out.push({ ...row, started: row.opened_at !== null || reserved.has(row.trial) });
     }
   }
   return out;
 }
-/** An infrastructure session (no model response) reruns once, in a part of its own after its part ends. */
+/** Refuses a trial that appears twice in a table, from any source (pre-run change 4 section 7). */
+export function uniqueTrials<T extends { trial: string }>(rows: T[], source: string): T[] {
+  const seen = new Set<string>();
+  for (const r of rows) { if (seen.has(r.trial)) throw new Error("E_USAGE trial " + r.trial + " appears twice in " + source + "; a session is read once"); seen.add(r.trial); }
+  return rows;
+}
+/** Sessions a relaunch replaced (pre-run change 4 section 2): in part P, rows L1 counts as never started (no proxy row and no
+ *  ledger reserve), for a task and arm that P-relaunch ran, up to the number of rows P-relaunch holds there. L1's relaunch
+ *  starts one session for each session that never started, so these are neither first attempts nor owed an attempt 2. */
+export function replacedTrials(rows: WeeklyRow[]): Set<string> {
+  const key = (p: string, t: string, a: string) => p + "\t" + t + "\t" + a, left = new Map<string, number>(), out = new Set<string>();
+  for (const r of rows) if (/-relaunch$/.test(r.part ?? "")) { const k = key(r.part!.slice(0, -"-relaunch".length), r.task, r.arm); left.set(k, (left.get(k) ?? 0) + 1); }
+  for (const r of [...rows].sort((a, b) => a.trial.localeCompare(b.trial))) {
+    const k = key(r.part ?? "", r.task, r.arm), n = left.get(k) ?? 0;
+    if (n > 0 && !(r.started ?? r.opened_at !== null) && r.outcome !== "graded") { out.add(r.trial); left.set(k, n - 1); }
+  }
+  return out;
+}
+/** An infrastructure session (no model response) reruns once, in a part of its own after its part ends. The pulls of a part
+ *  and its relaunch are one table, so one session pulled twice never owes two reruns, and a session the relaunch replaced owes
+ *  none. */
 export function owed(runs: { part: string; dir: string }[]) {
-  const rows = runs.flatMap((r) => { const c = pulledInputs(r.dir, r.part); return c.jobs.length ? buildWeeklyTable(c) : []; }), owe = rows.filter((r) => needsRerun(r as unknown as B1Row));
+  const rows = uniqueTrials(runs.flatMap((r) => { const c = pulledInputs(r.dir, r.part); return c.jobs.length ? buildWeeklyTable(c) : []; }), "the attempt-2 planner's pulls of " + runs.map((r) => r.part).join(", ")), gone = replacedTrials(rows), owe = rows.filter((r) => needsRerun(r as unknown as B1Row) && !gone.has(r.trial));
   const n = new Map<string, number>();
   for (const r of owe) n.set(r.task + "\t" + r.arm, (n.get(r.task + "\t" + r.arm) ?? 0) + 1);
   return { owed: owe.map((r) => ({ task: r.task, arm: r.arm, reason: r.reason })), rects: relaunchRects([...n].map(([k, replicates]) => ({ task: k.split("\t")[0]!, arm: k.split("\t")[1]!, replicates }))) };
@@ -97,6 +133,11 @@ export function clusterStat(pairs: Pair[], bound: number): Stat {
   const rho = iid > 0 && m > 1 ? (V / iid - 1) / (m - 1) : null;
   return { n: N, tasks: G, d: D, se, z: se > 0 ? D / se : se === 0 && D !== 0 ? Math.sign(D) * Infinity : 0, lo: D - bound * se, hi: D + bound * se, bound, disagree: N ? pairs.filter((p) => p.c !== p.s).length / N : 0, rho, mdd: (S390.zEnd + S390.zPower) * se };
 }
+/** A stop or a verdict (pre-run change 4 section 1): HOLD when the interval at bound SE lies wholly below 0, GAIN when it
+ *  lies wholly above. Both tests are strict, so a z of exactly the bound is neither, as gstack's HOLD check (hi below 0) reads it. */
+export function beyond(d: number, se: number, bound: number): "HOLD" | "GAIN" | null {
+  return d + bound * se < 0 ? "HOLD" : d - bound * se > 0 ? "GAIN" : null;
+}
 /** Candidate minus none: each task's first graded candidate session against its none session, Newcombe's 95% interval. */
 export function vsNone(rows: WeeklyRow[], tasks: string[]) {
   let a = 0, b = 0, c = 0, d = 0;
@@ -115,15 +156,27 @@ export function costRatio(rows: WeeklyRow[], tasks: string[], seed: number, resa
   return { tasks: logs.length, ratio: Math.exp(logs.reduce((x, y) => x + y, 0) / logs.length), lo: Math.exp(means[Math.floor(0.025 * resamples)]!), hi: Math.exp(means[Math.ceil(0.975 * resamples) - 1]!) };
 }
 
-// ---- The interim look (pre-run change 1 section 5): the first 65 tasks in run order, once each of their three candidate
-// and three stable sessions has a row (a session that later reruns is not waited for). It prints STOP or CONTINUE and no
-// estimate.
+// ---- The interim look (pre-run change 1 section 5, change 4 sections 1 and 2): the first 65 tasks in run order, once every
+// arm of each has settled. It prints STOP or CONTINUE and no estimate.
+const attempt2 = (r: WeeklyRow) => /-a2$/.test(r.part ?? "");
+/** Each arm of these tasks that has not settled: fewer first-attempt sessions than planned, or a session with no response
+ *  whose attempt-2 session has not started (an attempt-2 row with no proxy row or ledger reserve has not run, unless it
+ *  ended at a cap stop). A first-attempt cap stop owes no rerun, so it settles its arm; a session a relaunch
+ *  replaced is not counted, and the relaunch's row stands in its place. */
+export function openCells(rows: WeeklyRow[], tasks: string[]): string[] {
+  const gone = replacedTrials(rows);
+  return tasks.flatMap((t) => WEEKLY_ARM_NAMES.flatMap((a) => {
+    const mine = rows.filter((r) => r.task === t && r.arm === a && !gone.has(r.trial)), first = mine.filter((r) => !attempt2(r)), owe = first.filter((r) => needsRerun(r as unknown as B1Row)).length;
+    const ran = mine.filter((r) => attempt2(r) && ((r.started ?? r.opened_at !== null) || r.outcome === "cap_stop")).length;
+    if (first.length < WEEKLY_ARMS[a].sessions) return [t + " " + a + ": " + first.length + " of " + WEEKLY_ARMS[a].sessions + " sessions"];
+    return ran < owe ? [t + " " + a + ": " + owe + " attempt 2 owed, " + ran + " ran"] : [];
+  }));
+}
 export function look(rows: WeeklyRow[], run: string[], dropped: string[]) {
-  const tasks = run.slice(0, S390.look.tasks).filter((t) => !dropped.includes(t));
-  const settled = tasks.every((t) => GSTACK_ARMS.every((a) => rows.filter((r) => r.task === t && r.arm === a).length >= WEEKLY_ARMS[a].sessions));
-  if (!settled) return { ready: false as const, stop: null, stat: null, tasks };
+  const tasks = run.slice(0, S390.look.tasks).filter((t) => !dropped.includes(t)), open = openCells(rows, tasks);
+  if (open.length) return { ready: false as const, stop: null, stat: null, tasks, open };
   const stat = clusterStat(pairsOf(rows, tasks), S390.look.z);
-  return { ready: true as const, stop: Math.abs(stat.z) >= S390.look.z ? (stat.z < 0 ? "HOLD" as const : "GAIN" as const) : null, stat, tasks };
+  return { ready: true as const, stop: beyond(stat.d, stat.se, S390.look.z), stat, tasks, open };
 }
 
 // ---- The week's verdict and record.
@@ -154,7 +207,7 @@ export function reading(w: WeekInput) {
   const stat = clusterStat(pairsOf(rows, kept), early ? S390.look.z : S390.zEnd);
   const none = vsNone(rows, kept), cost = costRatio(rows, kept, w.seed);
   const safety = Object.fromEntries(WEEKLY_ARM_NAMES.map((a) => [a, rows.filter((r) => r.arm === a && r.safety_stop).length])) as Record<WeeklyArm, number>;
-  let verdict: Verdict = why.length ? "INCOMPLETE" : stat.hi < 0 ? "HOLD" : stat.lo > 0 ? "GAIN" : "NO_CHANGE";
+  let verdict: Verdict = why.length ? "INCOMPLETE" : beyond(stat.d, stat.se, stat.bound) ?? "NO_CHANGE";
   if (!why.length && early && verdict !== w.stoppedAt) why.push("the look stopped for " + w.stoppedAt + " but the rows read " + verdict), verdict = "INCOMPLETE";
   if (verdict !== "INCOMPLETE") {
     if (stat.d <= -S390.mddPoints / 100 && stat.lo < 0 && stat.hi > 0) flags.push("candidate minus stable is " + f1(pts(stat.d)) + " points, at or below minus the planned MDD of " + S390.mddPoints + ", while its interval crosses 0");
