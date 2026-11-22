@@ -953,5 +953,163 @@
    10000,
    10000
   ]
+ },
+ "changed_by_fixture": {
+  "clean": {
+   "replayed": 254322,
+   "decisions_changed": 1,
+   "changed_among_replayed": 1,
+   "toward_allow": 0,
+   "by_label_and_move": {
+    "DESTRUCTIVE|allow -> ask": 1
+   }
+  },
+  "dirty": {
+   "replayed": 1800,
+   "decisions_changed": 1,
+   "changed_among_replayed": 0,
+   "toward_allow": 0,
+   "by_label_and_move": {
+    "DESTRUCTIVE|allow -> ask": 1
+   }
+  },
+  "main_checked_out": {
+   "replayed": 2140,
+   "decisions_changed": 1,
+   "changed_among_replayed": 0,
+   "toward_allow": 0,
+   "by_label_and_move": {
+    "DESTRUCTIVE|allow -> ask": 1
+   }
+  },
+  "same_command_on_every_fixture": true,
+  "rule": "dirty fixture replays every command that names git and reset, checkout, switch, restore or clean; main fixture replays every command that names git and push; every other command keeps its clean-tree decision"
+ },
+ "paired": {
+  "9055_vs_ab6a": {
+   "DESTRUCTIVE": {
+    "both": 930,
+    "9055_only": 1,
+    "other_only": 0,
+    "neither": 17
+   },
+   "HARMLESS": {
+    "both": 981,
+    "9055_only": 0,
+    "other_only": 0,
+    "neither": 252103
+   },
+   "CONTEXT": {
+    "both": 147,
+    "9055_only": 0,
+    "other_only": 0,
+    "neither": 143
+   }
+  },
+  "9055_vs_main": {
+   "DESTRUCTIVE": {
+    "both": 442,
+    "9055_only": 489,
+    "other_only": 1,
+    "neither": 16
+   },
+   "HARMLESS": {
+    "both": 761,
+    "9055_only": 220,
+    "other_only": 2792,
+    "neither": 249311
+   },
+   "CONTEXT": {
+    "both": 20,
+    "9055_only": 127,
+    "other_only": 4,
+    "neither": 139
+   }
+  },
+  "unit": "unique commands on the clean fixture; caught means asked or denied"
+ },
+ "sessions": {
+  "n": 14448,
+  "with_harmless_ask_or_deny": {
+   "main": 1588,
+   "ab6a": 516,
+   "9055": 516
+  }
+ },
+ "repo_destructive_calls_corrected": {
+  "calls": 12,
+  "main": 8,
+  "ab6a": 11,
+  "9055": 11
+ },
+ "incident_set": {
+  "unit": "items of the public incident set (synthetic.jsonl in the earlier post), default hook path E1, each on its own fixture; f = asked or denied, d = denied",
+  "main": {
+   "DESTRUCTIVE": {
+    "n": 50,
+    "f": 26,
+    "d": 3
+   },
+   "HARMLESS": {
+    "n": 51,
+    "f": 16,
+    "d": 0
+   },
+   "CONTEXT": {
+    "n": 1,
+    "f": 0,
+    "d": 0
+   }
+  },
+  "ab6a": {
+   "DESTRUCTIVE": {
+    "n": 50,
+    "f": 49,
+    "d": 11
+   },
+   "HARMLESS": {
+    "n": 51,
+    "f": 9,
+    "d": 0
+   },
+   "CONTEXT": {
+    "n": 1,
+    "f": 1,
+    "d": 0
+   }
+  },
+  "9055": {
+   "DESTRUCTIVE": {
+    "n": 50,
+    "f": 49,
+    "d": 11
+   },
+   "HARMLESS": {
+    "n": 51,
+    "f": 9,
+    "d": 0
+   },
+   "CONTEXT": {
+    "n": 1,
+    "f": 1,
+    "d": 0
+   }
+  },
+  "decision_changes_9055_vs_ab6a": 0
+ },
+ "latency_full_corpus": {
+  "9055": {
+   "E1": {
+    "n": 254322,
+    "p50": 69,
+    "p99": 101
+   },
+   "E3": {
+    "n": 254322,
+    "p50": 104,
+    "p99": 138
+   }
+  },
+  "unit": "ms per call, one call per unique command, whole corpus, on a loaded 30-vCPU VM; E1 /careful, E3 the default hook"
  }
 }

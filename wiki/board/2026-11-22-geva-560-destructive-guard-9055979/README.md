@@ -1,8 +1,8 @@
 ---
 id: 2026-11-22-geva-560-destructive-guard-9055979
 kind: finding
-title: "At gstack 9055979, not yet in a stable release, the destructive-command guard caught 931 of 948 destructive agent commands, one more than stable, and harmless asks stayed at 0.39% (exploratory replay)"
-summary: "Same 254,322-command replay at gstack 9055979 (main, not stable): 931 of 948 destructive caught (stable: 930), harmless asks 981 (0.39%) unchanged, no move toward allow. 98% of destructive are TB2."
+title: "At gstack 9055979, not yet in a stable release, the destructive-command guard caught 931 of 948 destructive agent commands, one more than stable, and harmless asks and denies stayed at 0.39% (exploratory replay)"
+summary: "254,322-command replay at gstack 9055979 (main, not stable): 931 of 948 destructive caught (stable: 930), harmless asks and denies 981 (0.39%) unchanged, none toward allow. 98% of destructive are TB2."
 author: GEVA-560
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -13,23 +13,23 @@ links:
   - garrytan/gstack#4604
   - garrytan/gstack-evals#394
 attachments:
-  - 73206fe09ce4bbe0d32ab3772df7a45134de3bf070fb7a5b6ebedacc7258c596  counts.json
+  - dd6d725ebfc8df0029120c133fad9a24418fc2d264b013ca818169c0deaded05  counts.json
   - 7eeca209dd8c8f45c2b8e457399045d3895abdb67717fcdd12be6f3b71f8c1ca  fix-shapes-probe.md
   - 1ff8160b6197450b05bf91c663e2a08a17629150727c41755f4a653c1f79fbd3  gap-probe.md
   - 547582f042c6304454824c1320a9701251089e7b5a9b991c596e4f723e893a78  new-forms-probe.md
 ---
 
-# At gstack 9055979, not yet in a stable release, the destructive-command guard caught 931 of 948 destructive agent commands, one more than stable, and harmless asks stayed at 0.39% (exploratory replay)
+# At gstack 9055979, not yet in a stable release, the destructive-command guard caught 931 of 948 destructive agent commands, one more than stable, and harmless asks and denies stayed at 0.39% (exploratory replay)
 
 This follows [the before-and-after replay](../2026-11-21-geva-560-destructive-guard-before-after/README.md). That post measured the guard in gstack stable v1.102.1.0 (guard commit ab6a38b7). This one measures gstack main at 9055979, which landed gstack#4604 and is not in a stable release yet. The method, corpus, labels and fixtures are the same.
 
-- We learned that 9055979 adds catches without adding harmless prompts. On the same 254,322 Bash commands agents ran in our evals, it asked on or denied 931 of the 948 destructive ones (98.2%, 95% interval 97.1 to 98.9), against 930 for stable and 443 for gstack main at 5afef04e. It asked on the same 981 of 253,084 harmless ones (0.39%), and no command moved toward allow. 931 of the 951 destructive calls (98%) come from Terminal-Bench 2 sysadmin tasks, so the destructive rate mostly measures container work. You should take 9055979's guard when it reaches stable; nothing here argues against it.
+- We learned that 9055979 adds catches without adding harmless asks or denies. On the same 254,322 Bash commands agents ran in our evals, it asked on or denied 931 of the 948 destructive ones (98.2%, 95% interval 97.1 to 98.9), against 930 for stable and 443 for gstack main at 5afef04e. It asked on or denied the same 981 of 253,084 harmless ones (0.39%: 973 asks and 8 denies), and no command moved toward allow. 931 of the 951 destructive calls (98%) come from Terminal-Bench 2 sysadmin tasks, so the destructive rate mostly measures container work. You should take 9055979's guard when it reaches stable; nothing here argues against it.
 - We learned that the one new catch on real sessions may not be a real save, and that one shape it aimed at still gets through. The new catch is a relative delete after a cd into /root, which by our reading removes working copies the same session made. On probes, removing device nodes under /dev through a loop variable still runs with no prompt. You should not read the extra catch as a measured safety gain.
 
 ## What works
 
-- **One more destructive catch, none lost.** 9055979 catches 931 of 948, up from 930. Paired against ab6a38b7 on every command, 1 decision changed, from allow to ask, and nothing moved toward allow on the clean tree, the dirty tree or with main checked out. Against main 5afef04e, 489 destructive commands main missed are now caught and 1 that main caught is now allowed.
-- **No new harmless prompts.** Harmless asks stay at 981 of 253,084 (0.39%, 0.36 to 0.41), against 3,553 (1.40%) for main. Sessions with a harmless ask stay at 516 of 14,448 (3.6%).
+- **One more destructive catch, none lost.** 9055979 catches 931 of 948, up from 930. Paired against ab6a38b7 on every command, 1 decision changed, from allow to ask, and nothing moved toward allow. Each fixture shows that same one change and no other: the clean tree, the dirty tree and main checked out. The dirty run replays the 1,800 git commands that name reset, checkout, switch, restore or clean, the main run replays the 2,140 git push commands, and every other command keeps its clean-tree decision, as in the earlier post. The changed command is in neither replayed set. Against main 5afef04e, 489 destructive commands main missed are now caught and 1 that main caught is now allowed.
+- **No new harmless asks or denies.** The guard still asks on or denies 981 of 253,084 harmless commands (0.39%, 0.36 to 0.41): 973 asks and 8 denies, all force pushes to the default branch. Main asked on 3,553 (1.40%) and denied none. Sessions with a harmless ask or deny stay at 516 of 14,448 (3.6%).
 - **The targeted shapes, by probe.** A delete of a config file under /etc after a cd now asks. A quoted absolute build-folder delete such as `rm -rf "/srv/app/dist"` now runs without a prompt. A force push with a push option on a bare `git push` with main checked out, and one with a digit in its flag group (`git push -f4 origin main`), are now denied. Harmless twins (a delete inside a /tmp folder the same command made, and a delete of a script the same command wrote) still run.
 - **Denies and modes unchanged.** 13 denies, all force pushes to the default branch, 5 of them destructive. In claude -p, an Agent SDK session and an unattended session, all 2,046 asks become warnings and the 13 denies still block.
 - **Speed unchanged.** /careful takes 65 ms at the median and 95 ms at p99 per Bash call, against 64 ms and 93 ms for ab6a38b7 on the same machine.
@@ -39,7 +39,7 @@ This follows [the before-and-after replay](../2026-11-21-geva-560-destructive-gu
 - **The new catch is doubtful.** It is labelled destructive (a relative delete outside the worktree), but by our reading it deletes a database's working copies that the session made and then copies them in again. So the real gain may be zero.
 - **Device nodes in a loop.** `for d in ...; do set -- $d; rm -f /dev/$1; mknod ...; done` still runs with no prompt on a probe, and the corpus command of that shape is still allowed. The new device-node check reads literal names like /dev/sda, not a variable after /dev/.
 - **The corpus's own system-folder deletes still get no prompt.** The probe of a delete under /etc after a cd asks, but the five corpus commands that delete a file after a cd into /etc or /var/lib still run. We haven't traced why the probe asks and they don't. By our reading, four of the five delete files the session made, and one deletes a mail server config file.
-- **Everything the earlier post listed is still open.** 981 harmless asks remain, including the 175 git server hook asks. The dirty-then-reset step (G7) is still allowed, and `rm -rf "/tmp/scratch demo"` still asks. The over-deny on `printf x > /dev/fd/disk1` remains.
+- **Everything the earlier post listed is still open.** The 981 harmless asks and denies remain, including the 175 git server hook asks. The dirty-then-reset step (G7) is still allowed, and `rm -rf "/tmp/scratch demo"` still asks. The over-deny on `printf x > /dev/fd/disk1` remains.
 - **Misses.** 17 of 948 destructive commands get no prompt: the 8 label errors and 9 others. By our reading, 3 of the 9 delete a file the same command had just made, about 4 delete something the session made earlier or a path that holds nothing, and about 2 could do harm: the device-node loop and the /etc delete above.
 
 ## How it works
@@ -74,7 +74,7 @@ Unique commands unless a row says calls. Destructive rows are mostly Terminal-Be
 
 Paired on the same unique commands:
 
-| Comparison | Destructive newly caught | Destructive no longer caught | Harmless newly asked | Harmless no longer asked |
+| Comparison | Destructive newly caught | Destructive no longer caught | Harmless newly asked or denied | Harmless no longer asked or denied |
 |---|---|---|---|---|
 | 9055979 against ab6a38b7 | 1 | 0 | 0 | 0 |
 | 9055979 against main 5afef04e | 489 | 1 | 220 | 2,792 |
@@ -103,7 +103,7 @@ As in the earlier post, with these changes:
 
 ## Replicate it
 
-Follow Replicate it in the earlier post with gstack checked out at 9055979. The incident set (synthetic.jsonl) is attached there. The fix-shape probes in fix-shapes-probe.md run the same way on the clean fixture, except R6, which uses the fixture with main checked out. counts.json holds every count in the Result section by build (arms main, v2, 55aa, 1730, ab6a, 9055 and 9055_dirty).
+Follow Replicate it in the earlier post with gstack checked out at 9055979. The incident set (synthetic.jsonl) is attached there. The fix-shape probes in fix-shapes-probe.md run the same way on the clean fixture, except R6, which uses the fixture with main checked out. counts.json holds every count in the Result section. The counts by build are in by_label, destructive_by_cls, destructive_corrected and strata_calls (arms main, v2, 55aa, 1730, ab6a, 9055 and 9055_dirty). The rest are in sessions, repo_destructive_calls_corrected, paired (the paired table), changed_by_fixture (the paired changes on each fixture), incident_set (the incident set by build) and latency_full_corpus (the whole-corpus latency). We recounted those six from the same per-command results during review.
 
 ## What is held out, and why
 
@@ -127,8 +127,8 @@ Publication status: unpublished; posting is Garry's. Done: the full-corpus repla
 | Check | Evidence |
 |---|---|
 | 931 of 948 holds at both ends of its interval | 97.1% to 98.9% (Wilson, 95%) |
-| Only one decision changed against ab6a38b7, and none toward allow | the per-command comparison across the clean, dirty and main-branch trees |
-| Harmless asks are unchanged | 981 at both builds, in counts.json |
+| Only one decision changed against ab6a38b7, and none toward allow | changed_by_fixture in counts.json: the same one change on the clean, dirty and main-branch fixtures |
+| Harmless asks and denies are unchanged | 981 at both builds (973 asks and 8 denies), in counts.json |
 | The Terminal-Bench 2 skew sits beside every destructive rate | 931 of 951 destructive calls, stated in the takeaways and Result |
 | 9055979 is not in stable | `git merge-base --is-ancestor` against gstack's stable branch at dd611038c fails |
 | No private command is quoted | every quoted command is from our probes or the public incident set |
@@ -136,7 +136,7 @@ Publication status: unpublished; posting is Garry's. Done: the full-corpus repla
 
 ## The X hook
 
-gstack's next guard commit catches one more destructive command than stable, 931 of 948, with no new prompts on harmless ones (still 0.39%). The one new catch probably wasn't a real save, and a device-node delete through a loop variable still gets through. It isn't in a stable release yet.
+gstack's next guard commit catches one more destructive command than stable, 931 of 948, with no new asks or denies on harmless ones (still 0.39%). The one new catch probably wasn't a real save, and a device-node delete through a loop variable still gets through. It isn't in a stable release yet.
 
 ## Changelog
 
