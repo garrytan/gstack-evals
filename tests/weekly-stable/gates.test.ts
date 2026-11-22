@@ -53,11 +53,13 @@ describe("the report reads only this week's sessions", () => {
   });
   test("--stopped must match the recorded look, and a recorded STOP needs --stopped", () => {
     const rows = [row(run[0]!, "candidate")];
-    const stopped = week({ look: { stop: "HOLD", at: "2026-11-29T00:00:00Z" } });
+    const stopped = week({ look: { stop: "HOLD", at: "2026-11-29T00:00:00Z", trials: [rows[0]!.trial] } });
     expect(reportGate(stopped, rows, "HOLD")).toEqual([]);
     expect(reportGate(stopped, rows, undefined)[0]).toMatch(/look stopped for HOLD/);
     expect(reportGate(stopped, rows, "GAIN")[0]).toMatch(/look stopped for HOLD/);
     expect(reportGate(week(), rows, "HOLD")[0]).toMatch(/no look recorded a stop/);
+    expect(reportGate(week({ look: { stop: "HOLD", at: "2026-11-29T00:00:00Z" } }), rows, "HOLD")[0]).toMatch(/no recorded trials/);
+    expect(reportGate(stopped, [], "HOLD")[0]).toMatch(/missing.*recorded trial/);
   });
   test("the counted rows and results.md leave out the smoke's sessions and dropped tasks", () => {
     const rows = [row(run[0]!, "candidate"), row(run[1]!, "candidate"), row(pilot[0]!, "candidate")];
@@ -70,11 +72,14 @@ describe("the report reads only this week's sessions", () => {
 describe("the look runs once and is recorded", () => {
   test("a ready look is written to week.json; a second is refused; a look that is not ready records nothing", () => {
     const w = week();
-    expect(recordLook(w, { ready: false, stop: null }, "2026-11-29T00:00:00Z")).toBe(false);
+    expect(recordLook(w, { ready: false, stop: null }, "2026-11-29T00:00:00Z", ["trial-a"])).toBe(false);
     expect(w.look).toBeNull();
-    expect(recordLook(w, { ready: true, stop: "GAIN" }, "2026-11-29T00:00:00Z")).toBe(true);
-    expect(w.look).toEqual({ stop: "GAIN", at: "2026-11-29T00:00:00Z" });
-    expect(() => recordLook(w, { ready: true, stop: null }, "2026-11-29T01:00:00Z")).toThrow(/look already ran/);
+    expect(recordLook(w, { ready: true, stop: "GAIN" }, "2026-11-29T00:00:00Z", ["trial-a"])).toBe(true);
+    expect(w.look).toEqual({ stop: "GAIN", at: "2026-11-29T00:00:00Z", trials: ["trial-a"] });
+    expect(() => recordLook(w, { ready: true, stop: null }, "2026-11-29T01:00:00Z", ["trial-b"])).toThrow(/look already ran/);
+    const continued = week();
+    expect(recordLook(continued, { ready: true, stop: null }, "2026-11-29T01:00:00Z", ["trial-b"])).toBe(true);
+    expect(continued.look).toEqual({ stop: null, at: "2026-11-29T01:00:00Z" });
   });
   test("a look on a table with another week's tar is refused and records nothing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "weekly-look-"));
@@ -126,7 +131,7 @@ describe("report cap stops", () => {
       mkdirSync(join(dir, "p3"), { recursive: true });
       writeFileSync(join(dir, "p3", "s390-3.result.json"), JSON.stringify({ cap_stop: [detail] }));
     }
-    writeFileSync(join(dir, "week.json"), JSON.stringify(week(stopped ? { look: { stop: "HOLD", at: "2026-11-28T08:00:00Z" } } : {})));
+    writeFileSync(join(dir, "week.json"), JSON.stringify(week(stopped ? { look: { stop: "HOLD", at: "2026-11-28T08:00:00Z", trials: rows.map((r) => r.trial) } } : {})));
     writeFileSync(table, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
     expect(await main(["report", table, dir, "--out", out, ...(stopped ? ["--stopped", "HOLD"] : [])])).toBe(0);
     const record = JSON.parse(readFileSync(join(out, "weekly.json"), "utf8"));
@@ -140,6 +145,29 @@ describe("report cap stops", () => {
       expect(record.incomplete_reason).toBeNull();
     }
   });
+});
+
+test.each(["cap_stop", "graded"] as const)("a late %s rerun on a look task is not read by a stopped report", async (outcome) => {
+  const dir = mkdtempSync(join(tmpdir(), "weekly-look-report-")), out = join(dir, "out"), table = join(dir, "table.jsonl");
+  roots.push(dir);
+  mkdirSync(join(dir, "gstack-clone", "bin"), { recursive: true });
+  writeFileSync(join(dir, "gstack-clone", "bin", "gstack-eval-plan"), "process.exit(0);\n");
+  const run = taskLists().run, rows = run.slice(0, 65).flatMap((t) => [
+    ...Array.from({ length: 3 }, () => ({ ...row(t, "candidate"), pass: false })),
+    ...Array.from({ length: 3 }, () => row(t, "stable")),
+    row(t, "none"),
+  ]);
+  const weekPath = join(dir, "week.json");
+  writeFileSync(weekPath, JSON.stringify(week()));
+  writeFileSync(table, [...rows, row(run[65]!, "candidate")].map((r) => JSON.stringify(r)).join("\n") + "\n");
+  expect(await main(["look", table, dir])).toBe(0);
+  const recorded = JSON.parse(readFileSync(weekPath, "utf8")).look;
+  const late = { ...row(run[0]!, "candidate"), trial: "late-rerun", outcome, pass: outcome === "graded" };
+  writeFileSync(table, [...rows, late].map((r) => JSON.stringify(r)).join("\n") + "\n");
+  expect(await main(["report", table, dir, "--out", out, "--stopped", "HOLD"])).toBe(0);
+  expect(JSON.parse(readFileSync(join(out, "weekly.json"), "utf8")).verdict).toBe("HOLD");
+  expect(readFileSync(join(out, "results.md"), "utf8")).toMatch(/#candidate` \| 195 of 195 \| 0 of 195 \|/);
+  expect(recorded.trials).toEqual(rows.map((r) => r.trial));
 });
 
 describe("publish", () => {

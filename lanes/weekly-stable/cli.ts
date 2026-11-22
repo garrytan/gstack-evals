@@ -26,7 +26,7 @@ export type WeekFile = WeekState & {
   /** The arms check that passed for this week, with each arm's tar digest; the report reads only sessions on these tars. */
   arms?: { pass: true; tars: Record<WeeklyArm, string> } | null;
   /** The look, recorded the one time it ran. */
-  look?: { stop: "HOLD" | "GAIN" | null; at: string } | null;
+  look?: { stop: "HOLD" | "GAIN" | null; at: string; trials?: string[] } | null;
 };
 const weekFile = (work: string) => join(work, "week.json");
 export const readWeek = (work: string): WeekFile => (existsSync(weekFile(work)) ? readJson(weekFile(work)) : usage(work + " has no week.json; run weekly resolve first"));
@@ -68,13 +68,21 @@ export function reportGate(w: WeekFile, rows: WeeklyRow[], stopped: "HOLD" | "GA
   const why = tableGate(w, rows);
   if (w.look?.stop && stopped !== w.look.stop) why.push("the look stopped for " + w.look.stop + " at " + w.look.at + "; report with --stopped " + w.look.stop);
   else if (stopped && !w.look?.stop) why.push("--stopped " + stopped + " but no look recorded a stop");
+  else if (stopped) {
+    if (!Array.isArray(w.look?.trials) || !w.look.trials.length) why.push("the stopped look has no recorded trials");
+    else {
+      const seen = new Set(rows.map((r) => r.trial));
+      if (w.look.trials.some((t) => !seen.has(t))) why.push("the table is missing a recorded trial from the stopped look");
+      if (seen.size !== rows.length) why.push("the stopped table contains a duplicate trial");
+    }
+  }
   return why;
 }
 /** Records the look's one reading; a look that is not ready records nothing. */
-export function recordLook(w: WeekFile, l: { ready: boolean; stop: "HOLD" | "GAIN" | null }, at: string): boolean {
+export function recordLook(w: WeekFile, l: { ready: boolean; stop: "HOLD" | "GAIN" | null }, at: string, trials: string[]): boolean {
   if (w.look) return usage("the look already ran at " + w.look.at + " (" + (w.look.stop ?? "CONTINUE") + "); it runs once");
   if (!l.ready) return false;
-  w.look = { stop: l.stop, at };
+  w.look = { stop: l.stop, at, ...(l.stop ? { trials } : {}) };
   return true;
 }
 /** Cap stops in any part's result files (W/p1..p3/<part>.result.json). */
@@ -289,7 +297,8 @@ async function run(argv: string[]): Promise<number> {
     const gate = tableGate(w, rows);
     if (gate.length) return usage("refused: " + gate.join("; "));
     const l = look(rows, taskLists().run, w.dropped);
-    if (recordLook(w, l, new Date().toISOString())) writeJson(weekFile(work), w);
+    const tasks = new Set(l.tasks), trials = l.stop ? rows.filter((r) => tasks.has(r.task)).map((r) => r.trial) : [];
+    if (recordLook(w, l, new Date().toISOString(), trials)) writeJson(weekFile(work), w);
     console.log(!l.ready ? "WEEKLY LOOK NOT READY: the first " + l.tasks.length + " tasks' candidate and stable sessions have not all settled" : l.stop ? "WEEKLY LOOK STOP " + l.stop : "WEEKLY LOOK CONTINUE");
     return 0;
   }
@@ -310,8 +319,10 @@ async function run(argv: string[]): Promise<number> {
       rec = weekRecord(null, recordInput(w, "not run: no session ran").input, "INCOMPLETE", why);
       lines = ["WEEKLY RECORD INCOMPLETE " + w.base + ": " + why];
     } else {
-      const rows = rowsOf(rest[0] ?? usage(USAGE)), stopped = opt("stopped") as "HOLD" | "GAIN" | undefined;
+      const stopped = opt("stopped") as "HOLD" | "GAIN" | undefined;
       if (stopped && stopped !== "HOLD" && stopped !== "GAIN") return usage("--stopped is HOLD or GAIN");
+      const trials = stopped && Array.isArray(w.look?.trials) ? new Set(w.look.trials) : null;
+      const rows = rowsOf(rest[0] ?? usage(USAGE)).filter((r) => trials === null || trials.has(r.trial));
       const gate = reportGate(w, rows, stopped);
       if (gate.length) return usage("refused: " + gate.join("; "));
       const l = taskLists(), counted = reportRows(w, rows, stopped), caps = stopped ? [] : partCapStops(work);
