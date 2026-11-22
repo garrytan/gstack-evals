@@ -3,7 +3,7 @@
 // prepare, host-up, launch, attach, relaunch, rerun, recover and host-down run on L1's host and part machinery under the
 // week's profile (plan.ts profileFor), with L1's exit codes; host-up, launch and relaunch pass the launch guard first.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { L1, l1Main, type PartPlan } from "../../quick/laneb/l1/l1.ts";
 import { readRows, type Row } from "../../quick/laneb/runner/ledger.ts";
@@ -21,10 +21,91 @@ const writeJson = (p: string, v: unknown) => writeFileSync(p, JSON.stringify(v, 
 export type GhRun = (args: string[]) => { status: number | null; stdout: string; stderr: string };
 const gh: GhRun = (args) => spawnSync("gh", args, { encoding: "utf8", maxBuffer: 64 << 20 });
 
-export type WeekFile = WeekState & { week_of?: string | null; start: string; decision: Decision; held: Held | null; setup_failed: GstackArm[]; contamination: Record<string, string[]> | null; smoke: { rig: string[]; flag: string | null; detail: string[] } | null };
+export type WeekFile = WeekState & {
+  week_of?: string | null; start: string; decision: Decision; held: Held | null; setup_failed: GstackArm[]; contamination: Record<string, string[]> | null; smoke: { rig: string[]; flag: string | null; detail: string[] } | null;
+  /** The arms check that passed for this week, with each arm's tar digest; the report reads only sessions on these tars. */
+  arms?: { pass: true; tars: Record<WeeklyArm, string> } | null;
+  /** The look, recorded the one time it ran. */
+  look?: { stop: "HOLD" | "GAIN" | null; at: string; trials?: string[] } | null;
+};
 const weekFile = (work: string) => join(work, "week.json");
 export const readWeek = (work: string): WeekFile => (existsSync(weekFile(work)) ? readJson(weekFile(work)) : usage(work + " has no week.json; run weekly resolve first"));
 const shasOf = (w: WeekFile): Record<GstackArm, string> => ({ candidate: w.candidate, stable: w.stable });
+const VERDICTS = ["HOLD", "GAIN", "NO_CHANGE", "INCOMPLETE"];
+
+/** What a counted launch needs first (pre-run change 3): the arms check and the contamination search for the smoke; for any
+ *  other part, also a smoke with no rig failure. */
+export function launchGate(w: WeekFile, part: string): string[] {
+  const why: string[] = [];
+  if (!w.arms?.pass) why.push("the arms check has not passed for this week; run weekly arms check");
+  if (w.contamination === null) why.push("the contamination search has not run; run weekly contamination");
+  if (!part.startsWith("smoke") && (!w.smoke || w.smoke.rig.length)) why.push(w.smoke ? "the smoke failed for a rig reason, so no counted part runs" : "the smoke has not been read; run weekly smoke first");
+  return why;
+}
+/** The weekly thread's meter: {as_of, usd}, read no more than an hour after as_of. */
+export function meterReading(file: string, now: number): number {
+  const m = readJson(file), at = Date.parse(m?.as_of);
+  if (!Number.isFinite(at)) return usage("weekly launch guard: the meter file needs as_of, the ISO time cost.dollars was read");
+  if (at > now + 5 * 60_000) return usage("weekly launch guard: the meter's as_of " + m.as_of + " is in the future");
+  if (now - at > WEEKLY.meterMaxAgeMinutes * 60_000) return usage("weekly launch guard: the meter reading from " + m.as_of + " is older than " + WEEKLY.meterMaxAgeMinutes + " minutes; rewrite it from cost.dollars");
+  if (typeof m.usd !== "number" || !(m.usd >= 0)) return usage("weekly launch guard: the meter file needs usd, a number of at least 0");
+  return m.usd;
+}
+/** The tasks a report counts and their rows: the run's tasks less those dropped, only the look's after a stop; the smoke's
+ *  sessions and dropped tasks never count. */
+export function reportRows(w: WeekFile, rows: WeeklyRow[], stopped: "HOLD" | "GAIN" | undefined) {
+  const run = taskLists().run, kept = run.slice(0, stopped ? S390.look.tasks : run.length).filter((t) => !w.dropped.includes(t));
+  return { kept, rows: rows.filter((r) => kept.includes(r.task)) };
+}
+export function tableGate(w: WeekFile, rows: WeeklyRow[]): string[] {
+  const why: string[] = [];
+  if (w.contamination === null) why.push("the contamination search has not run for this week");
+  if (!w.arms?.pass) why.push("the arms check has not passed for this week");
+  else { const off = rows.filter((r) => r.outcome === "graded" && r.tar_sha256 !== w.arms!.tars[r.arm]); if (off.length) why.push(off.length + " graded session" + (off.length === 1 ? "" : "s") + " ran a tar that is not this week's " + off[0]!.arm + " arm; the table is not this week's"); }
+  return why;
+}
+export function reportGate(w: WeekFile, rows: WeeklyRow[], stopped: "HOLD" | "GAIN" | undefined): string[] {
+  const why = tableGate(w, rows);
+  if (w.look?.stop && stopped !== w.look.stop) why.push("the look stopped for " + w.look.stop + " at " + w.look.at + "; report with --stopped " + w.look.stop);
+  else if (stopped && !w.look?.stop) why.push("--stopped " + stopped + " but no look recorded a stop");
+  else if (stopped) {
+    if (!Array.isArray(w.look?.trials) || !w.look.trials.length) why.push("the stopped look has no recorded trials");
+    else {
+      const seen = new Set(rows.map((r) => r.trial));
+      if (w.look.trials.some((t) => !seen.has(t))) why.push("the table is missing a recorded trial from the stopped look");
+      if (seen.size !== rows.length) why.push("the stopped table contains a duplicate trial");
+    }
+  }
+  return why;
+}
+/** Records the look's one reading; a look that is not ready records nothing. */
+export function recordLook(w: WeekFile, l: { ready: boolean; stop: "HOLD" | "GAIN" | null }, at: string, trials: string[]): boolean {
+  if (w.look) return usage("the look already ran at " + w.look.at + " (" + (w.look.stop ?? "CONTINUE") + "); it runs once");
+  if (!l.ready) return false;
+  w.look = { stop: l.stop, at, ...(l.stop ? { trials } : {}) };
+  return true;
+}
+/** Cap stops in any part's result files (W/p1..p3/<part>.result.json). */
+export function partCapStops(work: string): string[] {
+  return ["p1", "p2", "p3"].flatMap((p) => (existsSync(join(work, p)) ? readdirSync(join(work, p)).filter((f) => f.endsWith(".result.json")).sort() : []).flatMap((f) => {
+    const cap = readJson(join(work, p, f)).cap_stop;
+    return Array.isArray(cap) ? cap.map((c: string) => p + "/" + f.slice(0, -".result.json".length) + ": " + c) : [p + "/" + f + " has no cap_stop list, so a cap stop can't be ruled out"];
+  }));
+}
+export function capStopReason(caps: string[]): string[] {
+  return caps.length ? ["a part ended at a cap stop (" + caps.length + " cap-stop line" + (caps.length === 1 ? "" : "s") + " across parts; detail in the private report)"] : [];
+}
+/** The release create command, with GitHub's latest pointer only on the newest week; a release list that fails or isn't JSON
+ *  is an error, never an empty list. */
+export function publishArgs(p: { tag: string; week: string; verdict: string }, rec: { candidate: { sha: string }; stable: { tag: string } }, out: string, run: GhRun = gh): { args: string[] } | { error: string } {
+  const list = run(["release", "list", "--repo", RECORD.repo, "--limit", "200", "--json", "tagName"]);
+  if (list.status !== 0) return { error: "gh release list failed: " + (list.stderr ?? "").trim().slice(0, 200) };
+  let tags: string[];
+  try { tags = (JSON.parse(list.stdout) as { tagName: string }[]).map((x) => x.tagName).filter((t) => /^weekly-\d{4}-w\d{2}/.test(t)); } catch { return { error: "gh release list did not return JSON" }; }
+  if (tags.includes(p.tag)) return { error: "release " + p.tag + " exists; a published record is never edited, so a correction takes the next -r<k> tag" };
+  const latest = !tags.some((t) => t.slice(0, 15) > p.tag.slice(0, 15));
+  return { args: ["release", "create", p.tag, join(out, RECORD.asset), "--repo", RECORD.repo, "--title", "gstack weekly benchmark " + p.week + ": " + p.verdict, "--notes", "gstack's release candidate " + rec.candidate.sha.slice(0, 12) + " against stable " + rec.stable.tag + ", Claude Opus 5.5 in Claude Code: " + p.verdict + ". The record is weekly.json, schema 1.", "--latest=" + latest] };
+}
 
 /** The HOLD that stands, read from every published weekly record ordered by run start (window.start), newest first, ties
  *  by tag, past any INCOMPLETE ones. A read error, or a record whose run start is not a time, returns error, so the week is
@@ -40,6 +121,7 @@ export function latestHold(run: GhRun = gh): { held: Held | null } | { error: st
     if (d.status !== 0) return { error: "gh release download " + tag + " failed: " + (d.stderr ?? "").trim().slice(0, 200) };
     let rec;
     try { rec = JSON.parse(d.stdout); } catch { return { error: tag + "'s " + RECORD.asset + " is not JSON" }; }
+    if (!VERDICTS.includes(rec?.verdict)) return { error: tag + "'s verdict " + rec?.verdict + " is not HOLD, GAIN, NO_CHANGE or INCOMPLETE" };
     const start = Date.parse(rec?.window?.start);
     if (!Number.isFinite(start)) return { error: tag + "'s window.start is not a time" };
     recs.push({ tag, start, rec });
@@ -68,8 +150,7 @@ function guardWork(work: string, relaunching?: string) {
   if (me.item !== PILOT.item) {
     const w = readWeek(dirname(work)), l = taskLists(), meterFile = process.env.WEEKLY_METER ?? "";
     if (!meterFile || !existsSync(meterFile)) usage("weekly launch guard: set WEEKLY_METER to a file {as_of, usd} written from this thread's cost.dollars");
-    meter = readJson(meterFile).usd;
-    if (typeof meter !== "number" || !(meter >= 0)) usage("weekly launch guard: the meter file needs usd, a number of at least 0");
+    meter = meterReading(meterFile, Date.now());
     partItems(baseOf(me.item)).forEach((item, i) => {
       if (item === me.item) return;
       const dir = join(dirname(work), "p" + (i + 1));
@@ -94,7 +175,7 @@ export function recordInput(w: WeekFile, check: string) {
   const tag = wk.tag + suffix, stable = w.decision.stable ?? { tag: "none", sha: w.stable || "0".repeat(40) };
   return { tag, input: { week: wk.label, candidate: w.candidate || stable.sha, stable, window: { start: w.start, end: new Date().toISOString() }, results_check: check, results: "https://github.com/" + RECORD.repo + "/releases/tag/" + tag, run: "https://github.com/" + RECORD.repo + "/tree/" + head + "/lanes/weekly-stable", supersedes: suffix ? (suffix === "-r1" ? wk.tag : wk.tag + "-r" + (Number(suffix.slice(2)) - 1)) : null } };
 }
-const pageRow = (w: WeekFile, rec: ReturnType<typeof weekRecord>) => { const m = Object.values(rec.models)[0]; return "| " + rec.week + " | " + w.decision.stable?.tag + " " + w.stable.slice(0, 12) + " | " + (w.candidate ? w.candidate.slice(0, 12) : "-") + " | " + rec.verdict + (rec.stopped_early ? " (stopped at the look)" : "") + " | " + (m ? m.d.toFixed(1) + " [" + m.lo.toFixed(1) + ", " + m.hi.toFixed(1) + "] on " + m.n + " pairs; vs none " + m.vs_none.d.toFixed(1) + " [" + m.vs_none.lo.toFixed(1) + ", " + m.vs_none.hi.toFixed(1) + "]" : rec.incomplete_reason ?? "-") + " | " + rec.flags.length + " flags |"; };
+const pageRow = (w: WeekFile, rec: ReturnType<typeof weekRecord>) => { const m = Object.values(rec.models)[0]; return "| " + rec.week + " | " + (w.stable_tag || "-") + " " + (w.stable ? w.stable.slice(0, 12) : "-") + " | " + (w.candidate ? w.candidate.slice(0, 12) : "-") + " | " + rec.verdict + (rec.stopped_early ? " (stopped at the look)" : "") + " | " + (m ? m.d.toFixed(1) + " [" + m.lo.toFixed(1) + ", " + m.hi.toFixed(1) + "] on " + m.n + " pairs; vs none " + m.vs_none.d.toFixed(1) + " [" + m.vs_none.lo.toFixed(1) + ", " + m.vs_none.hi.toFixed(1) + "]" : rec.incomplete_reason ?? "-") + " | " + rec.flags.length + " flags |"; };
 
 export async function main(argv: string[]): Promise<number> {
   try { return await run(argv); } catch (e) {
@@ -109,6 +190,7 @@ async function run(argv: string[]): Promise<number> {
   if (cmd === "resolve") {
     const work = resolve(rest[0] ?? usage(USAGE)), now = opt("now") ? Date.parse(opt("now")!) : Date.now();
     if (!Number.isFinite(now)) return usage("--now is an ISO time");
+    if (existsSync(weekFile(work))) return usage(work + " already holds a week.json; a week resolves once, so start a new work folder");
     mkdirSync(work, { recursive: true });
     const remeasure = Number(opt("remeasure") ?? 0);
     if (!Number.isInteger(remeasure) || remeasure < 0) return usage("--remeasure is a whole number");
@@ -121,7 +203,7 @@ async function run(argv: string[]): Promise<number> {
     const prior = latestHold(), held = "held" in prior ? prior.held : null, shim = resolveWeek(join(work, "gstack-clone"), now);
     const d = "error" in prior ? { kind: "incomplete" as const, reason: "the latest published record could not be read (" + prior.error + "), so a HOLD cannot be ruled out", candidate: shim.candidate ? { sha: shim.candidate.sha } : null, stable: null, hold: shim.hold ?? null } : decide(shim, held);
     writeJson(join(work, "resolve.json"), shim);
-    const w: WeekFile = { date, week_of: weekOf, base: weekBase(date, remeasure), seed: weekSeed(date), start: new Date(now).toISOString(), decision: d, held, candidate: d.candidate?.sha ?? "", stable: d.stable?.sha ?? "", stable_tag: d.stable?.tag ?? "", dropped: [], setup_failed: [], contamination: null, smoke: null };
+    const w: WeekFile = { date, week_of: weekOf, base: weekBase(date, remeasure), seed: weekSeed(date), start: new Date(now).toISOString(), decision: d, held, candidate: d.candidate?.sha ?? "", stable: d.stable?.sha ?? "", stable_tag: d.stable?.tag ?? "", dropped: [], setup_failed: [], contamination: null, smoke: null, arms: null, look: null };
     writeJson(weekFile(work), w);
     console.log("WEEK " + (d.kind === "run" ? "RUN" : d.kind.toUpperCase()) + " " + w.base + ": " + (d.kind === "run" ? "candidate " + d.candidate.sha + " (" + d.candidate.version + ", gated by " + d.candidate.via + ", " + d.commits + " first-parent commits after stable) against stable " + d.stable.tag + " " + d.stable.sha : d.reason) + (d.hold ? "; gstack's release gate holds: " + d.hold : ""));
     return 0;
@@ -141,7 +223,14 @@ async function run(argv: string[]): Promise<number> {
   if (cmd === "arms") {
     const work = resolve(rest[1] ?? usage(USAGE)), w = readWeek(work);
     if (rest[0] === "manifest") { for (const l of writeManifests(ARMS_DIR(), shasOf(w))) console.log(l); return 0; }
-    if (rest[0] === "check") { const r = armsCheck(ARMS_DIR(), shasOf(w)); for (const l of r.lines) console.log(l); console.log("WEEKLY ARMS " + (r.pass ? "PASS" : "FAIL")); return r.pass ? 0 : 1; }
+    if (rest[0] === "check") {
+      const r = armsCheck(ARMS_DIR(), shasOf(w));
+      w.arms = r.pass ? { pass: true, tars: tarShas() } : null;
+      writeJson(weekFile(work), w);
+      for (const l of r.lines) console.log(l);
+      console.log("WEEKLY ARMS " + (r.pass ? "PASS" : "FAIL"));
+      return r.pass ? 0 : 1;
+    }
     return usage(USAGE);
   }
   if (cmd === "contamination") {
@@ -183,6 +272,7 @@ async function run(argv: string[]): Promise<number> {
     if (week && week.decision.kind !== "run") return usage("the week runs nothing: " + (week.decision as { reason: string }).reason);
     if (week && !partItems(week.base).includes(item)) return usage(item + " is not a part of this week, " + week.base);
     if (week && basename(work) !== "p" + item.slice(-1)) return usage("part " + item.slice(-1) + "'s work dir is " + join(dirname(work), "p" + item.slice(-1)) + ", beside week.json");
+    if (week && ["launch", "relaunch", "rerun"].includes(cmd)) { const gate = launchGate(week, opt("part") ?? usage(USAGE)); if (gate.length) return usage("refused: " + gate.join("; ")); }
     if (GUARDED.includes(cmd)) { if (cmd === "relaunch" && !opt("part")) return usage(USAGE); guardWork(work, cmd === "relaunch" ? opt("part") : undefined); }
     (L1.vm as { ttlHours: number }).ttlHours = WEEKLY.vmTtlHours;
     l1Main(argv, profileFor(item, week));
@@ -203,7 +293,12 @@ async function run(argv: string[]): Promise<number> {
     return s.rig.length ? 1 : 0;
   }
   if (cmd === "look") {
-    const rows = rowsOf(rest[0] ?? usage(USAGE)), w = readWeek(resolve(rest[1] ?? usage(USAGE))), l = look(rows, taskLists().run, w.dropped);
+    const work = resolve(rest[1] ?? usage(USAGE)), rows = rowsOf(rest[0] ?? usage(USAGE)), w = readWeek(work);
+    const gate = tableGate(w, rows);
+    if (gate.length) return usage("refused: " + gate.join("; "));
+    const l = look(rows, taskLists().run, w.dropped);
+    const tasks = new Set(l.tasks), trials = l.stop ? rows.filter((r) => tasks.has(r.task)).map((r) => r.trial) : [];
+    if (recordLook(w, l, new Date().toISOString(), trials)) writeJson(weekFile(work), w);
     console.log(!l.ready ? "WEEKLY LOOK NOT READY: the first " + l.tasks.length + " tasks' candidate and stable sessions have not all settled" : l.stop ? "WEEKLY LOOK STOP " + l.stop : "WEEKLY LOOK CONTINUE");
     return 0;
   }
@@ -224,11 +319,15 @@ async function run(argv: string[]): Promise<number> {
       rec = weekRecord(null, recordInput(w, "not run: no session ran").input, "INCOMPLETE", why);
       lines = ["WEEKLY RECORD INCOMPLETE " + w.base + ": " + why];
     } else {
-      const rows = rowsOf(rest[0] ?? usage(USAGE)), stopped = opt("stopped") as "HOLD" | "GAIN" | undefined;
+      const stopped = opt("stopped") as "HOLD" | "GAIN" | undefined;
       if (stopped && stopped !== "HOLD" && stopped !== "GAIN") return usage("--stopped is HOLD or GAIN");
-      const l = taskLists(), kept = l.run.slice(0, stopped ? S390.look.tasks : l.run.length).filter((t) => !w.dropped.includes(t));
-      writeFileSync(join(out, "results.md"), resultsMarkdown(stopped ? rows.filter((r) => kept.includes(r.task)) : rows, kept, "gstack weekly benchmark " + isoWeek(w.week_of ?? w.date).label));
-      const check = resultsCheck(work, out), incomplete = [...opts("incomplete"), ...(w.smoke?.rig.length ? ["the weekly smoke failed for a rig reason in " + w.smoke.rig.length + " of its checks"] : []), ...(check === "pass" ? [] : ["gstack's results check: " + check])];
+      const trials = stopped && Array.isArray(w.look?.trials) ? new Set(w.look.trials) : null;
+      const rows = rowsOf(rest[0] ?? usage(USAGE)).filter((r) => trials === null || trials.has(r.trial));
+      const gate = reportGate(w, rows, stopped);
+      if (gate.length) return usage("refused: " + gate.join("; "));
+      const l = taskLists(), counted = reportRows(w, rows, stopped), caps = stopped ? [] : partCapStops(work);
+      writeFileSync(join(out, "results.md"), resultsMarkdown(counted.rows, counted.kept, "gstack weekly benchmark " + isoWeek(w.week_of ?? w.date).label));
+      const check = resultsCheck(work, out), incomplete = [...opts("incomplete"), ...capStopReason(caps), ...(w.smoke?.rig.length ? ["the weekly smoke failed for a rig reason in " + w.smoke.rig.length + " of its checks"] : []), ...(check === "pass" ? [] : ["gstack's results check: " + check])];
       const r = reading({ rows, run: l.run, dropped: w.dropped, seed: w.seed, incomplete, flags: [...(w.smoke?.flag ? [w.smoke.flag] : []), ...opts("flag")], stoppedAt: stopped ?? null });
       rec = weekRecord(r, recordInput(w, check).input);
       const s = r.stat, p = (x: number) => (100 * x).toFixed(1);
@@ -237,7 +336,7 @@ async function run(argv: string[]): Promise<number> {
         "  candidate minus none (descriptive): " + p(r.none.diff) + " points [" + p(r.none.lo) + ", " + p(r.none.hi) + "] on " + r.none.pairs + " pairs",
         "  cost ratio, candidate over stable: " + (r.cost ? r.cost.ratio.toFixed(3) + " [" + r.cost.lo.toFixed(3) + ", " + r.cost.hi.toFixed(3) + "] on " + r.cost.tasks + " tasks" : "n/a"),
         "  ungraded sessions: " + WEEKLY_ARM_NAMES.map((a) => a + " " + r.ungraded[a]).join(", ") + "; safety stops: " + WEEKLY_ARM_NAMES.map((a) => a + " " + r.safety[a]).join(", ") + "; dropped " + w.dropped.length,
-        ...rec.flags.map((f) => "  FLAG " + f), ...(w.smoke ? [...w.smoke.rig, ...w.smoke.detail].map((x) => "  smoke: " + x) : []), "  results check: " + check];
+        ...rec.flags.map((f) => "  FLAG " + f), ...caps.map((c) => "  cap stop: " + c), ...(w.smoke ? [...w.smoke.rig, ...w.smoke.detail].map((x) => "  smoke: " + x) : []), "  results check: " + check];
     }
     writeJson(join(out, RECORD.asset), rec);
     writeFileSync(join(out, "report.txt"), lines.join("\n") + "\n");
@@ -248,10 +347,9 @@ async function run(argv: string[]): Promise<number> {
   }
   if (cmd === "publish") {
     const out = resolve(rest[0] ?? usage(USAGE)), p = readJson(join(out, "publish.json")), rec = readJson(join(out, RECORD.asset));
-    const list = gh(["release", "list", "--repo", RECORD.repo, "--limit", "200", "--json", "tagName"]), tags = list.status === 0 ? (JSON.parse(list.stdout) as { tagName: string }[]).map((x) => x.tagName).filter((t) => /^weekly-\d{4}-w\d{2}/.test(t)) : [];
-    if (tags.includes(p.tag)) return usage("refused: release " + p.tag + " exists; a published record is never edited, so a correction takes the next -r<k> tag");
-    const latest = !tags.some((t) => t.slice(0, 15) > p.tag.slice(0, 15));
-    const args = ["release", "create", p.tag, join(out, RECORD.asset), "--repo", RECORD.repo, "--title", "gstack weekly benchmark " + p.week + ": " + p.verdict, "--notes", "gstack's release candidate " + rec.candidate.sha.slice(0, 12) + " against stable " + rec.stable.tag + ", Claude Opus 5.5 in Claude Code: " + p.verdict + ". The record is weekly.json, schema 1.", "--latest=" + latest];
+    const planned = publishArgs(p, rec, out);
+    if ("error" in planned) return usage("refused: " + planned.error);
+    const args = planned.args;
     console.log("gh " + args.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(" "));
     if (rest.includes("--dry-run")) return 0;
     const r = gh(args);

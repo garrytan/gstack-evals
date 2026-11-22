@@ -1,12 +1,12 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { plannedCells } from "../../quick/laneb/l1/l1.ts";
-import { toMicros, type Row } from "../../quick/laneb/runner/ledger.ts";
+import { fromMicros, toMicros, type Row } from "../../quick/laneb/runner/ledger.ts";
 import { approve, guard, isoWeek, partItems, partTasks, projection, taskLists, totals, weekBase, weekPlan, weekSeed } from "../../lanes/weekly-stable/plan.ts";
-import { PART_CAPS, PILOT, WEEK_PAID, WEEK_STOP } from "../../lanes/weekly-stable/pins.ts";
+import { MODEL, PART_CAPS, PILOT, REPO, WEEK_PAID, WEEK_STOP } from "../../lanes/weekly-stable/pins.ts";
 
 const L = taskLists(), ITEMS = partItems(weekBase("2026-11-28")), SEED = weekSeed("2026-11-28");
 describe("tasks, seeds and weeks", () => {
@@ -54,7 +54,12 @@ describe("the week's plan", () => {
     expect([p.reduce((x, y) => x + y.sessions, 0), Math.round(p.reduce((x, y) => x + y.expected, 0)), p.reduce((x, y) => x + y.parallel, 0), p.reduce((x, y) => x + y.cap, 0)]).toEqual([913, 416, 54, WEEK_PAID]);
     for (const x of p) expect(x.expected + x.parallel + x.vm).toBeLessThan(x.cap);
     const pilot = projection(PILOT.item, weekPlan(PILOT.item, L.run, L.pilot, [], SEED));
-    expect([pilot.sessions, pilot.expected, pilot.parallel, pilot.cap]).toEqual([9, 3.81, 6, 14]);
+    expect([pilot.sessions, pilot.expected, pilot.parallel, pilot.cap]).toEqual([9, 3.81, 6, 20]);
+  });
+  test("the cells file every session runs under caps a session at exactly the pinned allowance", () => {
+    const cells = JSON.parse(readFileSync(join(REPO, "quick/laneb/config", MODEL.cells), "utf8"));
+    const cell = cells.models.find((m: { id: string }) => m.id === MODEL.id);
+    expect([cell?.session_cap_usd, MODEL.cells]).toEqual([MODEL.allowanceUsd, "cells.weekly.json"]);
   });
 });
 describe("money", () => {
@@ -71,11 +76,18 @@ describe("money", () => {
     const elsewhere = guard(ITEMS[0]!, ledgers([{ ts: "t", item: ITEMS[2]!, kind: "settle", id: "x", usd_micros: toMicros(150) } as Row]), plans, 0);
     expect(elsewhere.lines.some((l) => l.includes("ws-2026-11-28-3: settled $150.00"))).toBe(true);
   });
-  test("the pilot's peak reservation, two sessions, a VM block and the host's reserve, is $13.20 of its $14", () => {
-    const g = guard(PILOT.item, { [PILOT.item]: [approval(PILOT.item, 14)] }, pilotPlans, 0);
-    expect([g.ok, g.total]).toEqual([true, toMicros(13.2)]);
-    const spent = guard(PILOT.item, { [PILOT.item]: [approval(PILOT.item, 14), { ts: "t", item: PILOT.item, kind: "settle", id: "s1", usd_micros: toMicros(1) } as Row] }, pilotPlans, 0);
-    expect(spent.ok).toBe(false);
+  test("the pilot's guard projects its last pair's peak: 7 sessions settled at expected cost, 2 open at $3, a VM block and the host's reserve, $16.16 of its $20", () => {
+    const g = guard(PILOT.item, { [PILOT.item]: [approval(PILOT.item, 20)] }, pilotPlans, 0);
+    expect([g.ok, fromMicros(g.total)]).toEqual([true, expect.closeTo(16.16, 2)]);
+    const settle = (usd: number) => ({ ts: "t", item: PILOT.item, kind: "settle", id: "s1", usd_micros: toMicros(usd) } as Row);
+    expect(guard(PILOT.item, { [PILOT.item]: [approval(PILOT.item, 20), settle(3.5)] }, pilotPlans, 0).ok).toBe(true);
+    expect(guard(PILOT.item, { [PILOT.item]: [approval(PILOT.item, 20), settle(4)] }, pilotPlans, 0).ok).toBe(false);
+  });
+  test("the ledger lets the pilot's last pair open: the host's reserve and a VM block open, 7 sessions settled at expected cost, then two $3 reservations", () => {
+    const rows: Row[] = [approval(PILOT.item, 20), { ts: "t", item: PILOT.item, kind: "reserve", id: "host-1", usd_micros: toMicros(4.8) } as Row, { ts: "t", item: PILOT.item, kind: "reserve", id: "vm-block-1", usd_micros: toMicros(2.4) } as Row];
+    for (let k = 1; k <= 7; k++) rows.push({ ts: "t", item: PILOT.item, kind: "reserve", id: "s" + k, usd_micros: toMicros(3) } as Row, { ts: "t", item: PILOT.item, kind: "settle", id: "s" + k, usd_micros: toMicros(3.81 / 9) } as Row);
+    const t = totals(rows, PILOT.item);
+    expect(t.settled + t.open + 2 * toMicros(MODEL.allowanceUsd)).toBeLessThanOrEqual(t.cap);
   });
   test("a relaunch overshoot is reported, never refused; a done item never launches", () => {
     const rows = ledgers([{ ts: "t", item: ITEMS[0]!, kind: "settle", id: "x", usd_micros: toMicros(300) } as Row]);

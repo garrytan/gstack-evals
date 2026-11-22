@@ -2,7 +2,7 @@
 // Step 6 of a week (lanes/weekly-stable/README.md): the session rows, the paired reading, the verdict and FLAG lines, the
 // interim look, the public record (weekly.json), the results table gstack's results check reads, and the pilot's and the
 // smoke's checks on their own outputs.
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readSessionRows, rng, sessionsByTrial } from "../../quick/laneb/analysis/analyze.ts";
 import { relaunchRects } from "../../quick/laneb/l1/l1.ts";
@@ -46,13 +46,22 @@ export function weeklyRow(dir: string, ctx: Parameters<typeof b1Row>[1]): Weekly
     skill_reads: b.filter((x) => x?.name === "Read" && x.input && /\/\.claude\/skills\/.+\/SKILL\.md$/.test(String(x.input?.file_path ?? ""))).length,
   };
 }
+/** Every trial folder under the config's jobs, each job folder read once; one trial found in two folders is refused, so no
+ *  session counts twice. */
 export function buildWeeklyTable(cfg: B1TableConfig): WeeklyRow[] {
-  const sessions = sessionsByTrial(readSessionRows(cfg.sessions)), out: WeeklyRow[] = [];
-  for (const job of cfg.jobs) for (const name of readdirSync(job.dir).sort()) {
-    const d = join(job.dir, name);
-    if (!statSync(d).isDirectory()) continue;
-    const row = weeklyRow(d, { part: job.part ?? null, sessions, home: cfg.home ?? "/root" });
-    if (row) out.push(row);
+  const sessions = sessionsByTrial(readSessionRows(cfg.sessions)), out: WeeklyRow[] = [], jobs = new Set<string>(), trials = new Map<string, string>();
+  for (const job of cfg.jobs) {
+    if (jobs.has(realpathSync(job.dir))) continue;
+    jobs.add(realpathSync(job.dir));
+    for (const name of readdirSync(job.dir).sort()) {
+      const d = join(job.dir, name);
+      if (!statSync(d).isDirectory()) continue;
+      const row = weeklyRow(d, { part: job.part ?? null, sessions, home: cfg.home ?? "/root" });
+      if (!row) continue;
+      if (trials.has(row.trial)) throw new Error("E_USAGE trial " + row.trial + " appears twice, in " + trials.get(row.trial) + " and " + d + "; a session is read once");
+      trials.set(row.trial, d);
+      out.push(row);
+    }
   }
   return out;
 }
@@ -86,7 +95,7 @@ export function clusterStat(pairs: Pair[], bound: number): Stat {
   const V = G > 1 ? (G / (G - 1)) * [...by.values()].reduce((x, g) => x + (g.s - g.n * D) ** 2, 0) / (N * N) : NaN, se = Math.sqrt(V);
   const iid = N > 1 ? pairs.reduce((x, p) => x + (p.c - p.s - D) ** 2, 0) / (N - 1) / N : NaN, m = N / G;
   const rho = iid > 0 && m > 1 ? (V / iid - 1) / (m - 1) : null;
-  return { n: N, tasks: G, d: D, se, z: se > 0 ? D / se : 0, lo: D - bound * se, hi: D + bound * se, bound, disagree: N ? pairs.filter((p) => p.c !== p.s).length / N : 0, rho, mdd: (S390.zEnd + S390.zPower) * se };
+  return { n: N, tasks: G, d: D, se, z: se > 0 ? D / se : se === 0 && D !== 0 ? Math.sign(D) * Infinity : 0, lo: D - bound * se, hi: D + bound * se, bound, disagree: N ? pairs.filter((p) => p.c !== p.s).length / N : 0, rho, mdd: (S390.zEnd + S390.zPower) * se };
 }
 /** Candidate minus none: each task's first graded candidate session against its none session, Newcombe's 95% interval. */
 export function vsNone(rows: WeeklyRow[], tasks: string[]) {

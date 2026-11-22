@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,6 +23,12 @@ describe("the paired reading", () => {
   // Three tasks, three pairs each, worked by hand: D = 1/9, V = 3/2 x ((5/3)^2 + (4/3)^2 + (1/3)^2) / 81 = 7/81, the iid
   // variance (44/9)/8/9 = 11/162, so the design effect is 14/11 and rho (14/11 - 1)/(3 - 1) = 3/22.
   const P: Pair[] = [[1, 0], [1, 0], [0, 0], [0, 1], [0, 0], [1, 1], [1, 0], [0, 0], [0, 1]].map(([c, s], i) => ({ task: "ABC"[Math.floor(i / 3)]!, k: (i % 3) + 1, c: c!, s: s! }));
+  test("a difference with no spread is a stop at the look, not a z of 0", () => {
+    const pairs: Pair[] = Array.from({ length: 65 }, (_, i) => [1, 2, 3].map((k) => ({ task: "t" + i, k, c: 0, s: 1 }))).flat();
+    const s = clusterStat(pairs, S390.look.z);
+    expect([s.se, s.z]).toEqual([0, -Infinity]);
+    expect(clusterStat(pairs.map((p) => ({ ...p, c: 1 })), S390.look.z).z).toBe(0);
+  });
   test("the cluster-robust interval matches the hand-worked table", () => {
     const s = clusterStat(P, 1.977);
     expect([s.n, s.tasks]).toEqual([9, 3]);
@@ -150,6 +157,16 @@ describe("rows from trial folders, on sessions Claude Code really ran (B1f's cap
     const p = pilotCheck(rows, TARS, PILOT);
     expect(p.failed).toEqual([]);
     expect(smokeCheck(rows, TARS, PILOT)).toEqual({ rig: [], flag: null, detail: [] });
+  });
+  test("a job listed twice in the table config is read once; one trial in two folders is refused", () => {
+    const t = rig();
+    for (const task of PILOT) t.trial("candidate", task, "hook-load", { hook: "ts=1 event=routed skill=prove-it\n" });
+    const rows = t.table(), root = roots.at(-1)!, cfg = pulledInputs(root, "pilot");
+    expect(buildWeeklyTable({ ...cfg, jobs: [...cfg.jobs, ...cfg.jobs] }).length).toBe(rows.length);
+    const copy = join(root, "jobs", "job2");
+    mkdirSync(copy, { recursive: true });
+    spawnSync("cp", ["-r", join(root, "jobs", "job1", rows[0]!.trial), copy]);
+    expect(() => buildWeeklyTable({ ...cfg, jobs: [...cfg.jobs, { ...cfg.jobs[0]!, dir: copy }] })).toThrow(/twice/);
   });
   test("a candidate whose hook logged nothing is the release's own change (a smoke FLAG) and fails the pilot; a wrong tar is a rig failure", () => {
     const t = rig();
