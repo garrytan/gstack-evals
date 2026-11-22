@@ -1,5 +1,7 @@
 # Weekly stable number
 
+Not ready to run. Until the follow-up fix merges, nothing paid runs from this lane and the weekly automation stays disabled. Sessions currently reserve the $5 cap from cells.l1.json instead of the frozen $3 allowance, and the pilot's launch guard does not yet count settled spend.
+
 Each Saturday at 06:00 UTC, this lane measures gstack's release candidate (the newest commit on gstack's main branch that gstack's release gate reads as green) against gstack's current stable release and against no gstack, on 130 frozen SWE-rebench Python bug fixes with Claude Opus 5.5 in Claude Code. The result is a public record, weekly.json, that gstack's Monday release cut reads: HOLD, GAIN, NO CHANGE or INCOMPLETE, with FLAG lines.
 
 The plan: the preregistration [wiki/plans/2026-11-22-geva-573-weekly-stable-prereg](../../wiki/plans/2026-11-22-geva-573-weekly-stable-prereg/README.md), [pre-run change 1](../../wiki/plans/2026-11-22-geva-573-weekly-stable-pre-run-change-1/README.md) and [pre-run change 2](../../wiki/plans/2026-11-22-geva-573-weekly-stable-pre-run-change-2/README.md). Where this page and the plan disagree, the plan wins.
