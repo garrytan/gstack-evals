@@ -1,0 +1,324 @@
+
+======== 1. SHA256SUMS ========
+OK  opus.csv b22f22a3e0455fec616a6241f574fa9c54d1104fe4793dba53c0fd57bbb37400
+OK  sol.csv aee08f5b449064037f9e4ef1438dcd1f58c8ecb9e52b3efb552381f4307b22a6
+OK  particle.csv 95833255c75605e43c897b3ec6fd6abadadf4784c9c0c642c45c372f40e63ed2
+OK  rebuild.py 4309d80766c09dccfc76ecd9a29e2f2bcce570921c1303bc791c55277b179ae2
+OK  table.py 8181fb27bce599e8c1cedabd3da87c376b00957fac617f8e1f561bcd4a8d40df
+all checksums match
+
+======== 2. rows and cluster mappings ========
+graded rows 2066 tasks 280
+scored.txt 280 subset.txt 100 tasks in CSVs not in scored.txt 0
+CSV repository column differs from the pool file repo field on 0 tasks
+bootstrap_cluster differs from owner/name parsed from task_id (case kept) on 0 tasks []
+draw rule (case-folded pool repo) over scored.txt: 185 repositories; draw.txt says 185
+mapping 186: 186 clusters over all 280, 186 over the 279 paired tasks, largest cluster 4 tasks
+mapping 185: 185 clusters over all 280, 185 over the 279 paired tasks, largest cluster 4 tasks
+mapping 184: 184 clusters over all 280, 184 over the 279 paired tasks, largest cluster 4 tasks
+repository column as written (no case-fold): 185 groups over 280
+
+======== 5. where 186 and 185 differ (claimed: MontePy alone) ========
+draw group idaholab/montepy holds 2 scorer clusters ['idaholab/MontePy', 'idaholab/montepy']: ['idaholab__MontePy-850', 'idaholab__montepy-882', 'idaholab__montepy-933_interface']
+pyfakefs tasks: {'jmcgeheeiv__pyfakefs-1286': ('jmcgeheeiv/pyfakefs', 'jmcgeheeiv/pyfakefs'), 'pytest-dev__pyfakefs-1269': ('pytest-dev/pyfakefs', 'pytest-dev/pyfakefs')}
+scorer clusters minus draw groups: 1
+
+parsed printed rows: 31
+
+======== 3. point estimates against the printed rows (every field at printed precision) ========
+cached opus R vs N                                         s6.txt cached  n 279, all fields equal
+cached opus R vs P                                         s6.txt cached  n 279, all fields equal
+cached opus P vs N                                         s6.txt cached  n 279, all fields equal
+cached sol R vs N                                          s6.txt cached  n 279, all fields equal
+cached sol R vs P                                          s6.txt cached  n 279, all fields equal
+cached sol P vs N                                          s6.txt cached  n 279, all fields equal
+cached opus F vs N (subset)                                s6.txt cached  n 99, all fields equal
+cached opus R vs F (subset)                                s6.txt cached  n 99, all fields equal
+cached opus R vs J (subset)                                s6.txt cached  n 99, all fields equal
+cached sol R vs J (subset)                                 s6.txt cached  n 99, all fields equal
+cached opus J vs F (subset)                                s6.txt cached  n 99, all fields equal
+cached W vs opus N (subset)                                s6.txt cached  n 95, all fields equal
+cached W vs opus R (subset)                                s6.txt cached  n 95, all fields equal
+cached W vs opus P (subset)                                s6.txt cached  n 95, all fields equal
+cached W vs sol N (subset)                                 s6.txt cached  n 95, all fields equal
+cached W vs sol R (subset)                                 s6.txt cached  n 95, all fields equal
+cached W vs sol P (subset)                                 s6.txt cached  n 95, all fields equal
+S1 opus F vs N (restructuring)                             contrasts.txt  n 99, all fields equal
+S1 opus R vs F (decider swap)                              contrasts.txt  n 99, all fields equal
+S1 opus R vs N on the subset (sum of the two steps)        contrasts.txt  n 99, all fields equal
+S2 opus R vs J (particle-1 as the middle layer)            contrasts.txt  n 99, all fields equal
+S2 sol R vs J (particle-1 as the middle layer)             contrasts.txt  n 99, all fields equal
+S2 opus J vs F (Jev at a fixed threshold vs the typed frontier) contrasts.txt  n 99, all fields equal
+S2 opus J vs N (context)                                   contrasts.txt  n 99, all fields equal
+S2 sol J vs N (context)                                    contrasts.txt  n 99, all fields equal
+S8 W vs opus N                                             contrasts.txt  n 95, all fields equal
+S8 W vs opus R                                             contrasts.txt  n 95, all fields equal
+S8 W vs opus P                                             contrasts.txt  n 95, all fields equal
+S8 W vs sol N                                              contrasts.txt  n 95, all fields equal
+S8 W vs sol R                                              contrasts.txt  n 95, all fields equal
+S8 W vs sol P                                              contrasts.txt  n 95, all fields equal
+fields that differ: 0
+s6 cell opus N: graded 279 (printed 279), mean bill $0.1938 (printed $0.1938)
+s6 cell opus R: graded 279 (printed 279), mean bill $0.2515 (printed $0.2515)
+s6 cell opus P: graded 279 (printed 279), mean bill $0.2603 (printed $0.2603)
+s6 cell opus F: graded 99 (printed 99), mean bill $0.7287 (printed $0.7287)
+s6 cell opus J: graded 99 (printed 99), mean bill $0.3468 (printed $0.3468)
+s6 cell sol N: graded 279 (printed 279), mean bill $0.0884 (printed $0.0884)
+s6 cell sol R: graded 279 (printed 279), mean bill $0.1050 (printed $0.1050)
+s6 cell sol P: graded 279 (printed 279), mean bill $0.1059 (printed $0.1059)
+s6 cell sol J: graded 99 (printed 99), mean bill $0.1437 (printed $0.1437)
+s6 cell particle W: graded 95 (printed 95), mean bill $0.0132 (printed $0.0132)
+
+======== 4. what agreement to expect (computed from the printed intervals, before any comparison) ========
+Monte Carlo SD of a 2.5% or 97.5% percentile bound from 10000 draws, if the bootstrap distribution is near normal with SD s: 0.0267 x s
+Two independent streams then differ by SD 0.0378 x s; 95% of differences fall within 0.074 x s. Add printed rounding (half a unit in the last place).
+cached opus R vs N       expect |ours - scorer| within: success 0.123 points, bill ratio 0.0039, time ratio 0.0080 (95%, before rounding)
+cached opus R vs P       expect |ours - scorer| within: success 0.110 points, bill ratio 0.0030, time ratio 0.0029 (95%, before rounding)
+cached opus P vs N       expect |ours - scorer| within: success 0.093 points, bill ratio 0.0043, time ratio 0.0103 (95%, before rounding)
+cached sol R vs N        expect |ours - scorer| within: success 0.083 points, bill ratio 0.0037, time ratio 0.0060 (95%, before rounding)
+cached sol R vs P        expect |ours - scorer| within: success 0.094 points, bill ratio 0.0028, time ratio 0.0026 (95%, before rounding)
+cached sol P vs N        expect |ours - scorer| within: success 0.096 points, bill ratio 0.0042, time ratio 0.0059 (95%, before rounding)
+Success bounds also move in lumps: one task flipping is 100/279 = 0.36 points, so a percentile can sit on a plateau and jump by a lump.
+
+======== 6. intervals: scorer (printed) against ours under 186, 185 and 184 clusters, seed 20261111 and a second seed 20261112 ========
+
+cached opus R vs N (s6.txt cached), 279 pairs, scorer printed 186 repos
+  succ   scorer (-2.2, 4.3)   186/a K=186 (-2.2, 4.2)   186/b K=186 (-2.2, 4.2)   185/a K=185 (-2.1, 4.2)   185/b K=185 (-2.1, 4.2)   184/a K=184 (-2.2, 4.3)   184/b K=184 (-2.1, 4.2)   | 186a minus scorer: 0.0, -0.1 (expected within 0.1228 plus rounding)
+  ratio  scorer (1.198, 1.404)   186/a K=186 (1.199, 1.404)   186/b K=186 (1.199, 1.404)   185/a K=185 (1.201, 1.404)   185/b K=185 (1.201, 1.404)   184/a K=184 (1.200, 1.408)   184/b K=184 (1.201, 1.406)   | 186a minus scorer: 0.001, 0.000 (expected within 0.0039 plus rounding)
+  time   scorer (1.629, 2.053)   186/a K=186 (1.630, 2.053)   186/b K=186 (1.626, 2.058)   185/a K=185 (1.631, 2.060)   185/b K=185 (1.626, 2.058)   184/a K=184 (1.630, 2.059)   184/b K=184 (1.628, 2.055)   | 186a minus scorer: 0.001, -0.000 (expected within 0.0080 plus rounding)
+
+cached opus R vs P (s6.txt cached), 279 pairs, scorer printed 186 repos
+  succ   scorer (-2.5, 3.3)   186/a K=186 (-2.6, 3.3)   186/b K=186 (-2.6, 3.2)   185/a K=185 (-2.5, 3.2)   185/b K=185 (-2.5, 3.2)   184/a K=184 (-2.6, 3.3)   184/b K=184 (-2.5, 3.2)   | 186a minus scorer: -0.1, -0.0 (expected within 0.1096 plus rounding)
+  ratio  scorer (0.885, 1.046)   186/a K=186 (0.888, 1.047)   186/b K=186 (0.889, 1.045)   185/a K=185 (0.887, 1.046)   185/b K=185 (0.886, 1.047)   184/a K=184 (0.887, 1.047)   184/b K=184 (0.887, 1.048)   | 186a minus scorer: 0.003, 0.001 (expected within 0.0030 plus rounding)
+  time   scorer (0.829, 0.981)   186/a K=186 (0.828, 0.982)   186/b K=186 (0.827, 0.979)   185/a K=185 (0.829, 0.980)   185/b K=185 (0.828, 0.982)   184/a K=184 (0.829, 0.979)   184/b K=184 (0.828, 0.983)   | 186a minus scorer: -0.001, 0.001 (expected within 0.0029 plus rounding)
+
+cached opus P vs N (s6.txt cached), 279 pairs, scorer printed 186 repos
+  succ   scorer (-1.7, 3.2)   186/a K=186 (-1.7, 3.2)   186/b K=186 (-1.7, 3.2)   185/a K=185 (-1.7, 3.2)   185/b K=185 (-1.7, 3.2)   184/a K=184 (-1.7, 3.2)   184/b K=184 (-1.7, 3.2)   | 186a minus scorer: -0.0, -0.0 (expected within 0.0926 plus rounding)
+  ratio  scorer (1.231, 1.460)   186/a K=186 (1.231, 1.461)   186/b K=186 (1.235, 1.462)   185/a K=185 (1.235, 1.463)   185/b K=185 (1.233, 1.461)   184/a K=184 (1.236, 1.462)   184/b K=184 (1.230, 1.462)   | 186a minus scorer: -0.000, 0.001 (expected within 0.0043 plus rounding)
+  time   scorer (1.762, 2.308)   186/a K=186 (1.767, 2.310)   186/b K=186 (1.773, 2.307)   185/a K=185 (1.769, 2.309)   185/b K=185 (1.767, 2.312)   184/a K=184 (1.767, 2.305)   184/b K=184 (1.761, 2.310)   | 186a minus scorer: 0.005, 0.002 (expected within 0.0103 plus rounding)
+
+cached sol R vs N (s6.txt cached), 279 pairs, scorer printed 186 repos
+  succ   scorer (-1.1, 3.3)   186/a K=186 (-1.0, 3.3)   186/b K=186 (-1.1, 3.3)   185/a K=185 (-1.0, 3.2)   185/b K=185 (-1.0, 3.2)   184/a K=184 (-1.1, 3.3)   184/b K=184 (-1.0, 3.3)   | 186a minus scorer: 0.1, -0.0 (expected within 0.0831 plus rounding)
+  ratio  scorer (1.092, 1.289)   186/a K=186 (1.093, 1.286)   186/b K=186 (1.094, 1.288)   185/a K=185 (1.089, 1.288)   185/b K=185 (1.091, 1.286)   184/a K=184 (1.091, 1.289)   184/b K=184 (1.093, 1.288)   | 186a minus scorer: 0.001, -0.003 (expected within 0.0037 plus rounding)
+  time   scorer (1.887, 2.203)   186/a K=186 (1.887, 2.202)   186/b K=186 (1.887, 2.204)   185/a K=185 (1.881, 2.204)   185/b K=185 (1.883, 2.202)   184/a K=184 (1.888, 2.203)   184/b K=184 (1.888, 2.204)   | 186a minus scorer: 0.000, -0.001 (expected within 0.0060 plus rounding)
+
+cached sol R vs P (s6.txt cached), 279 pairs, scorer printed 186 repos
+  succ   scorer (-4.6, 0.4)   186/a K=186 (-4.6, 0.4)   186/b K=186 (-4.6, 0.4)   185/a K=185 (-4.6, 0.3)   185/b K=185 (-4.6, 0.4)   184/a K=184 (-4.6, 0.4)   184/b K=184 (-4.5, 0.4)   | 186a minus scorer: -0.0, -0.0 (expected within 0.0944 plus rounding)
+  ratio  scorer (0.919, 1.066)   186/a K=186 (0.920, 1.062)   186/b K=186 (0.919, 1.064)   185/a K=185 (0.917, 1.064)   185/b K=185 (0.917, 1.065)   184/a K=184 (0.919, 1.062)   184/b K=184 (0.918, 1.064)   | 186a minus scorer: 0.001, -0.004 (expected within 0.0028 plus rounding)
+  time   scorer (0.861, 0.997)   186/a K=186 (0.860, 0.996)   186/b K=186 (0.861, 0.996)   185/a K=185 (0.860, 0.996)   185/b K=185 (0.861, 0.996)   184/a K=184 (0.860, 0.995)   184/b K=184 (0.861, 0.995)   | 186a minus scorer: -0.001, -0.001 (expected within 0.0026 plus rounding)
+
+cached sol P vs N (s6.txt cached), 279 pairs, scorer printed 186 repos
+  succ   scorer (0.7, 5.8)   186/a K=186 (0.7, 5.9)   186/b K=186 (0.7, 5.9)   185/a K=185 (0.8, 5.8)   185/b K=185 (0.7, 5.9)   184/a K=184 (0.8, 5.8)   184/b K=184 (0.7, 5.8)   | 186a minus scorer: 0.0, 0.1 (expected within 0.0963 plus rounding)
+  ratio  scorer (1.090, 1.312)   186/a K=186 (1.088, 1.311)   186/b K=186 (1.087, 1.314)   185/a K=185 (1.087, 1.314)   185/b K=185 (1.088, 1.310)   184/a K=184 (1.089, 1.312)   184/b K=184 (1.089, 1.311)   | 186a minus scorer: -0.002, -0.001 (expected within 0.0042 plus rounding)
+  time   scorer (2.050, 2.360)   186/a K=186 (2.050, 2.359)   186/b K=186 (2.052, 2.362)   185/a K=185 (2.051, 2.361)   185/b K=185 (2.052, 2.360)   184/a K=184 (2.051, 2.357)   184/b K=184 (2.052, 2.362)   | 186a minus scorer: 0.000, -0.001 (expected within 0.0059 plus rounding)
+
+cached opus F vs N (subset) (s6.txt cached), 99 pairs, scorer printed 78 repos
+  succ   scorer (1.0, 11.5)   186/a K=78 (1.0, 11.5)   186/b K=78 (1.0, 11.5)   185/a K=78 (1.0, 11.5)   185/b K=78 (1.0, 11.5)   184/a K=78 (1.0, 11.5)   184/b K=78 (1.0, 11.5)   | 186a minus scorer: 0.0, -0.0 (expected within 0.1983 plus rounding)
+  ratio  scorer (3.575, 4.470)   186/a K=78 (3.571, 4.472)   186/b K=78 (3.574, 4.465)   185/a K=78 (3.573, 4.464)   185/b K=78 (3.572, 4.464)   184/a K=78 (3.574, 4.464)   184/b K=78 (3.576, 4.475)   | 186a minus scorer: -0.004, 0.002 (expected within 0.0169 plus rounding)
+  time   scorer (1.759, 2.242)   186/a K=78 (1.755, 2.236)   186/b K=78 (1.755, 2.242)   185/a K=78 (1.756, 2.236)   185/b K=78 (1.757, 2.244)   184/a K=78 (1.759, 2.238)   184/b K=78 (1.758, 2.238)   | 186a minus scorer: -0.004, -0.006 (expected within 0.0091 plus rounding)
+
+cached opus R vs F (subset) (s6.txt cached), 99 pairs, scorer printed 78 repos
+  succ   scorer (-7.9, 1.1)   186/a K=78 (-7.7, 1.0)   186/b K=78 (-7.9, 1.0)   185/a K=78 (-7.8, 1.0)   185/b K=78 (-7.8, 1.0)   184/a K=78 (-7.8, 1.0)   184/b K=78 (-7.8, 1.0)   | 186a minus scorer: 0.2, -0.1 (expected within 0.1700 plus rounding)
+  ratio  scorer (0.279, 0.356)   186/a K=78 (0.279, 0.356)   186/b K=78 (0.279, 0.355)   185/a K=78 (0.279, 0.356)   185/b K=78 (0.278, 0.356)   184/a K=78 (0.278, 0.356)   184/b K=78 (0.279, 0.356)   | 186a minus scorer: -0.000, -0.000 (expected within 0.0015 plus rounding)
+  time   scorer (0.826, 1.114)   186/a K=78 (0.828, 1.117)   186/b K=78 (0.826, 1.116)   185/a K=78 (0.828, 1.116)   185/b K=78 (0.829, 1.118)   184/a K=78 (0.827, 1.119)   184/b K=78 (0.828, 1.114)   | 186a minus scorer: 0.002, 0.003 (expected within 0.0054 plus rounding)
+
+cached opus R vs J (subset) (s6.txt cached), 99 pairs, scorer printed 78 repos
+  succ   scorer (-3.3, 5.6)   186/a K=78 (-3.2, 5.7)   186/b K=78 (-3.3, 5.6)   185/a K=78 (-3.2, 5.5)   185/b K=78 (-3.3, 5.5)   184/a K=78 (-3.3, 5.6)   184/b K=78 (-3.2, 5.5)   | 186a minus scorer: 0.1, 0.1 (expected within 0.1681 plus rounding)
+  ratio  scorer (0.587, 0.743)   186/a K=78 (0.588, 0.745)   186/b K=78 (0.588, 0.744)   185/a K=78 (0.588, 0.747)   185/b K=78 (0.587, 0.744)   184/a K=78 (0.586, 0.745)   184/b K=78 (0.586, 0.744)   | 186a minus scorer: 0.001, 0.002 (expected within 0.0029 plus rounding)
+  time   scorer (1.058, 1.437)   186/a K=78 (1.057, 1.440)   186/b K=78 (1.057, 1.444)   185/a K=78 (1.060, 1.445)   185/b K=78 (1.061, 1.442)   184/a K=78 (1.057, 1.449)   184/b K=78 (1.056, 1.446)   | 186a minus scorer: -0.001, 0.003 (expected within 0.0072 plus rounding)
+
+cached sol R vs J (subset) (s6.txt cached), 99 pairs, scorer printed 78 repos
+  succ   scorer (-3.2, 5.7)   186/a K=78 (-3.2, 5.7)   186/b K=78 (-3.2, 5.7)   185/a K=78 (-3.2, 5.5)   185/b K=78 (-3.2, 5.7)   184/a K=78 (-3.2, 5.6)   184/b K=78 (-3.2, 5.6)   | 186a minus scorer: 0.0, -0.0 (expected within 0.1681 plus rounding)
+  ratio  scorer (0.642, 0.819)   186/a K=78 (0.639, 0.820)   186/b K=78 (0.640, 0.818)   185/a K=78 (0.639, 0.821)   185/b K=78 (0.639, 0.822)   184/a K=78 (0.641, 0.822)   184/b K=78 (0.639, 0.820)   | 186a minus scorer: -0.003, 0.001 (expected within 0.0033 plus rounding)
+  time   scorer (1.228, 1.554)   186/a K=78 (1.227, 1.551)   186/b K=78 (1.227, 1.548)   185/a K=78 (1.227, 1.557)   185/b K=78 (1.226, 1.558)   184/a K=78 (1.226, 1.559)   184/b K=78 (1.229, 1.556)   | 186a minus scorer: -0.001, -0.003 (expected within 0.0062 plus rounding)
+
+cached opus J vs F (subset) (s6.txt cached), 99 pairs, scorer printed 78 repos
+  succ   scorer (-9.2, 0.0)   186/a K=78 (-9.2, 0.0)   186/b K=78 (-9.0, 0.0)   185/a K=78 (-9.2, 0.0)   185/b K=78 (-9.3, 0.0)   184/a K=78 (-9.0, 0.0)   184/b K=78 (-9.2, 0.9)   | 186a minus scorer: 0.0, 0.0 (expected within 0.1738 plus rounding)
+  ratio  scorer (0.431, 0.528)   186/a K=78 (0.431, 0.528)   186/b K=78 (0.432, 0.528)   185/a K=78 (0.431, 0.528)   185/b K=78 (0.431, 0.529)   184/a K=78 (0.432, 0.527)   184/b K=78 (0.431, 0.527)   | 186a minus scorer: -0.000, 0.000 (expected within 0.0018 plus rounding)
+  time   scorer (0.708, 0.862)   186/a K=78 (0.705, 0.861)   186/b K=78 (0.704, 0.863)   185/a K=78 (0.706, 0.861)   185/b K=78 (0.704, 0.863)   184/a K=78 (0.705, 0.861)   184/b K=78 (0.705, 0.863)   | 186a minus scorer: -0.003, -0.001 (expected within 0.0029 plus rounding)
+
+cached W vs opus N (subset) (s6.txt cached), 95 pairs, scorer printed 75 repos
+  succ   scorer (-7.3, 2.9)   186/a K=75 (-7.3, 2.9)   186/b K=75 (-7.1, 3.0)   185/a K=75 (-7.4, 2.9)   185/b K=75 (-7.4, 2.9)   184/a K=75 (-7.2, 2.8)   184/b K=75 (-7.5, 2.9)   | 186a minus scorer: -0.0, -0.0 (expected within 0.1927 plus rounding)
+  ratio  scorer (0.062, 0.082)   186/a K=75 (0.062, 0.082)   186/b K=75 (0.062, 0.082)   185/a K=75 (0.062, 0.082)   185/b K=75 (0.062, 0.082)   184/a K=75 (0.063, 0.082)   184/b K=75 (0.062, 0.082)   | 186a minus scorer: 0.000, -0.000 (expected within 0.0004 plus rounding)
+  time   scorer (1.213, 1.810)   186/a K=75 (1.210, 1.808)   186/b K=75 (1.210, 1.810)   185/a K=75 (1.218, 1.810)   185/b K=75 (1.215, 1.816)   184/a K=75 (1.218, 1.814)   184/b K=75 (1.216, 1.815)   | 186a minus scorer: -0.003, -0.002 (expected within 0.0113 plus rounding)
+
+cached W vs opus R (subset) (s6.txt cached), 95 pairs, scorer printed 75 repos
+  succ   scorer (-12.4, 2.1)   186/a K=75 (-12.4, 2.1)   186/b K=75 (-12.5, 2.2)   185/a K=75 (-12.6, 2.1)   185/b K=75 (-12.5, 2.2)   184/a K=75 (-12.5, 2.1)   184/b K=75 (-12.5, 2.1)   | 186a minus scorer: 0.0, 0.0 (expected within 0.2739 plus rounding)
+  ratio  scorer (0.049, 0.066)   186/a K=75 (0.049, 0.066)   186/b K=75 (0.049, 0.066)   185/a K=75 (0.049, 0.066)   185/b K=75 (0.049, 0.066)   184/a K=75 (0.049, 0.066)   184/b K=75 (0.048, 0.066)   | 186a minus scorer: -0.000, 0.000 (expected within 0.0003 plus rounding)
+  time   scorer (0.660, 0.943)   186/a K=75 (0.660, 0.942)   186/b K=75 (0.659, 0.942)   185/a K=75 (0.661, 0.942)   185/b K=75 (0.658, 0.943)   184/a K=75 (0.659, 0.943)   184/b K=75 (0.657, 0.940)   | 186a minus scorer: 0.000, -0.001 (expected within 0.0053 plus rounding)
+
+cached W vs opus P (subset) (s6.txt cached), 95 pairs, scorer printed 75 repos
+  succ   scorer (-10.6, 2.1)   186/a K=75 (-10.7, 2.1)   186/b K=75 (-10.7, 2.2)   185/a K=75 (-10.8, 2.1)   185/b K=75 (-10.8, 2.1)   184/a K=75 (-10.7, 2.1)   184/b K=75 (-10.8, 2.1)   | 186a minus scorer: -0.1, 0.0 (expected within 0.2399 plus rounding)
+  ratio  scorer (0.050, 0.066)   186/a K=75 (0.050, 0.066)   186/b K=75 (0.050, 0.066)   185/a K=75 (0.050, 0.066)   185/b K=75 (0.050, 0.066)   184/a K=75 (0.050, 0.066)   184/b K=75 (0.049, 0.066)   | 186a minus scorer: -0.000, 0.000 (expected within 0.0003 plus rounding)
+  time   scorer (0.584, 0.823)   186/a K=75 (0.587, 0.822)   186/b K=75 (0.584, 0.820)   185/a K=75 (0.583, 0.825)   185/b K=75 (0.583, 0.825)   184/a K=75 (0.584, 0.825)   184/b K=75 (0.583, 0.825)   | 186a minus scorer: 0.003, -0.001 (expected within 0.0045 plus rounding)
+
+cached W vs sol N (subset) (s6.txt cached), 95 pairs, scorer printed 75 repos
+  succ   scorer (-2.1, 8.8)   186/a K=75 (-2.1, 8.8)   186/b K=75 (-2.1, 9.0)   185/a K=75 (-2.1, 8.9)   185/b K=75 (-2.1, 8.8)   184/a K=75 (-2.1, 8.9)   184/b K=75 (-2.1, 8.8)   | 186a minus scorer: -0.0, 0.0 (expected within 0.2059 plus rounding)
+  ratio  scorer (0.120, 0.173)   186/a K=75 (0.120, 0.173)   186/b K=75 (0.120, 0.174)   185/a K=75 (0.119, 0.173)   185/b K=75 (0.119, 0.173)   184/a K=75 (0.120, 0.174)   184/b K=75 (0.120, 0.173)   | 186a minus scorer: -0.000, -0.000 (expected within 0.0010 plus rounding)
+  time   scorer (1.409, 2.033)   186/a K=75 (1.410, 2.031)   186/b K=75 (1.411, 2.040)   185/a K=75 (1.412, 2.044)   185/b K=75 (1.412, 2.040)   184/a K=75 (1.417, 2.037)   184/b K=75 (1.413, 2.028)   | 186a minus scorer: 0.001, -0.002 (expected within 0.0118 plus rounding)
+
+cached W vs sol R (subset) (s6.txt cached), 95 pairs, scorer printed 75 repos
+  succ   scorer (-4.4, 6.5)   186/a K=75 (-4.4, 6.7)   186/b K=75 (-4.3, 6.7)   185/a K=75 (-4.3, 6.6)   185/b K=75 (-4.3, 6.7)   184/a K=75 (-4.3, 6.6)   184/b K=75 (-4.3, 6.7)   | 186a minus scorer: -0.0, 0.2 (expected within 0.2059 plus rounding)
+  ratio  scorer (0.111, 0.143)   186/a K=75 (0.111, 0.143)   186/b K=75 (0.111, 0.144)   185/a K=75 (0.111, 0.143)   185/b K=75 (0.111, 0.143)   184/a K=75 (0.111, 0.143)   184/b K=75 (0.111, 0.144)   | 186a minus scorer: -0.000, 0.000 (expected within 0.0006 plus rounding)
+  time   scorer (0.710, 1.010)   186/a K=75 (0.711, 1.010)   186/b K=75 (0.711, 1.014)   185/a K=75 (0.712, 1.012)   185/b K=75 (0.714, 1.013)   184/a K=75 (0.710, 1.013)   184/b K=75 (0.712, 1.018)   | 186a minus scorer: 0.001, 0.000 (expected within 0.0057 plus rounding)
+
+cached W vs sol P (subset) (s6.txt cached), 95 pairs, scorer printed 75 repos
+  succ   scorer (-5.7, 3.3)   186/a K=75 (-5.7, 3.3)   186/b K=75 (-5.8, 3.4)   185/a K=75 (-5.7, 3.3)   185/b K=75 (-5.7, 3.4)   184/a K=75 (-5.7, 3.3)   184/b K=75 (-5.7, 3.4)   | 186a minus scorer: -0.0, 0.0 (expected within 0.1700 plus rounding)
+  ratio  scorer (0.106, 0.148)   186/a K=75 (0.105, 0.149)   186/b K=75 (0.105, 0.149)   185/a K=75 (0.106, 0.148)   185/b K=75 (0.105, 0.148)   184/a K=75 (0.106, 0.148)   184/b K=75 (0.106, 0.149)   | 186a minus scorer: -0.001, 0.001 (expected within 0.0008 plus rounding)
+  time   scorer (0.696, 0.983)   186/a K=75 (0.691, 0.989)   186/b K=75 (0.694, 0.990)   185/a K=75 (0.692, 0.990)   185/b K=75 (0.695, 0.992)   184/a K=75 (0.694, 0.994)   184/b K=75 (0.694, 0.991)   | 186a minus scorer: -0.005, 0.006 (expected within 0.0054 plus rounding)
+
+S1 opus F vs N (restructuring) (contrasts.txt), 99 pairs, scorer printed 78 repos
+  succ   scorer (1.0, 11.5)   186/a K=78 (1.0, 11.5)   186/b K=78 (1.0, 11.5)   185/a K=78 (1.0, 11.5)   185/b K=78 (1.0, 11.5)   184/a K=78 (1.0, 11.5)   184/b K=78 (1.0, 11.5)   | 186a minus scorer: 0.0, -0.0 (expected within 0.1983 plus rounding)
+  ratio  scorer (3.575, 4.470)   186/a K=78 (3.571, 4.472)   186/b K=78 (3.574, 4.465)   185/a K=78 (3.573, 4.464)   185/b K=78 (3.572, 4.464)   184/a K=78 (3.574, 4.464)   184/b K=78 (3.576, 4.475)   | 186a minus scorer: -0.004, 0.002 (expected within 0.0169 plus rounding)
+  time   scorer (1.759, 2.242)   186/a K=78 (1.755, 2.236)   186/b K=78 (1.755, 2.242)   185/a K=78 (1.756, 2.236)   185/b K=78 (1.757, 2.244)   184/a K=78 (1.759, 2.238)   184/b K=78 (1.758, 2.238)   | 186a minus scorer: -0.004, -0.006 (expected within 0.0091 plus rounding)
+
+S1 opus R vs F (decider swap) (contrasts.txt), 99 pairs, scorer printed 78 repos
+  succ   scorer (-7.9, 1.1)   186/a K=78 (-7.7, 1.0)   186/b K=78 (-7.9, 1.0)   185/a K=78 (-7.8, 1.0)   185/b K=78 (-7.8, 1.0)   184/a K=78 (-7.8, 1.0)   184/b K=78 (-7.8, 1.0)   | 186a minus scorer: 0.2, -0.1 (expected within 0.1700 plus rounding)
+  ratio  scorer (0.279, 0.356)   186/a K=78 (0.279, 0.356)   186/b K=78 (0.279, 0.355)   185/a K=78 (0.279, 0.356)   185/b K=78 (0.278, 0.356)   184/a K=78 (0.278, 0.356)   184/b K=78 (0.279, 0.356)   | 186a minus scorer: -0.000, -0.000 (expected within 0.0015 plus rounding)
+  time   scorer (0.826, 1.114)   186/a K=78 (0.828, 1.117)   186/b K=78 (0.826, 1.116)   185/a K=78 (0.828, 1.116)   185/b K=78 (0.829, 1.118)   184/a K=78 (0.827, 1.119)   184/b K=78 (0.828, 1.114)   | 186a minus scorer: 0.002, 0.003 (expected within 0.0054 plus rounding)
+
+S1 opus R vs N on the subset (sum of the two steps) (contrasts.txt), 99 pairs, scorer printed 78 repos
+  succ   scorer (-3.1, 8.8)   186/a K=78 (-3.1, 8.9)   186/b K=78 (-3.1, 8.8)   185/a K=78 (-3.0, 8.8)   185/b K=78 (-3.0, 8.7)   184/a K=78 (-3.0, 8.9)   184/b K=78 (-3.0, 8.7)   | 186a minus scorer: -0.0, 0.1 (expected within 0.2248 plus rounding)
+  ratio  scorer (1.119, 1.414)   186/a K=78 (1.117, 1.408)   186/b K=78 (1.119, 1.413)   185/a K=78 (1.120, 1.414)   185/b K=78 (1.118, 1.410)   184/a K=78 (1.117, 1.414)   184/b K=78 (1.118, 1.415)   | 186a minus scorer: -0.002, -0.006 (expected within 0.0056 plus rounding)
+  time   scorer (1.642, 2.209)   186/a K=78 (1.642, 2.219)   186/b K=78 (1.641, 2.213)   185/a K=78 (1.638, 2.214)   185/b K=78 (1.642, 2.206)   184/a K=78 (1.639, 2.216)   184/b K=78 (1.643, 2.210)   | 186a minus scorer: 0.000, 0.010 (expected within 0.0107 plus rounding)
+
+S2 opus R vs J (particle-1 as the middle layer) (contrasts.txt), 99 pairs, scorer printed 78 repos
+  succ   scorer (-3.3, 5.6)   186/a K=78 (-3.2, 5.7)   186/b K=78 (-3.3, 5.6)   185/a K=78 (-3.2, 5.5)   185/b K=78 (-3.3, 5.5)   184/a K=78 (-3.3, 5.6)   184/b K=78 (-3.2, 5.5)   | 186a minus scorer: 0.1, 0.1 (expected within 0.1681 plus rounding)
+  ratio  scorer (0.587, 0.743)   186/a K=78 (0.588, 0.745)   186/b K=78 (0.588, 0.744)   185/a K=78 (0.588, 0.747)   185/b K=78 (0.587, 0.744)   184/a K=78 (0.586, 0.745)   184/b K=78 (0.586, 0.744)   | 186a minus scorer: 0.001, 0.002 (expected within 0.0029 plus rounding)
+  time   scorer (1.058, 1.437)   186/a K=78 (1.057, 1.440)   186/b K=78 (1.057, 1.444)   185/a K=78 (1.060, 1.445)   185/b K=78 (1.061, 1.442)   184/a K=78 (1.057, 1.449)   184/b K=78 (1.056, 1.446)   | 186a minus scorer: -0.001, 0.003 (expected within 0.0072 plus rounding)
+
+S2 sol R vs J (particle-1 as the middle layer) (contrasts.txt), 99 pairs, scorer printed 78 repos
+  succ   scorer (-3.2, 5.7)   186/a K=78 (-3.2, 5.7)   186/b K=78 (-3.2, 5.7)   185/a K=78 (-3.2, 5.5)   185/b K=78 (-3.2, 5.7)   184/a K=78 (-3.2, 5.6)   184/b K=78 (-3.2, 5.6)   | 186a minus scorer: 0.0, -0.0 (expected within 0.1681 plus rounding)
+  ratio  scorer (0.642, 0.819)   186/a K=78 (0.639, 0.820)   186/b K=78 (0.640, 0.818)   185/a K=78 (0.639, 0.821)   185/b K=78 (0.639, 0.822)   184/a K=78 (0.641, 0.822)   184/b K=78 (0.639, 0.820)   | 186a minus scorer: -0.003, 0.001 (expected within 0.0033 plus rounding)
+  time   scorer (1.228, 1.554)   186/a K=78 (1.227, 1.551)   186/b K=78 (1.227, 1.548)   185/a K=78 (1.227, 1.557)   185/b K=78 (1.226, 1.558)   184/a K=78 (1.226, 1.559)   184/b K=78 (1.229, 1.556)   | 186a minus scorer: -0.001, -0.003 (expected within 0.0062 plus rounding)
+
+S2 opus J vs F (Jev at a fixed threshold vs the typed frontier) (contrasts.txt), 99 pairs, scorer printed 78 repos
+  succ   scorer (-9.2, 0.0)   186/a K=78 (-9.2, 0.0)   186/b K=78 (-9.0, 0.0)   185/a K=78 (-9.2, 0.0)   185/b K=78 (-9.3, 0.0)   184/a K=78 (-9.0, 0.0)   184/b K=78 (-9.2, 0.9)   | 186a minus scorer: 0.0, 0.0 (expected within 0.1738 plus rounding)
+  ratio  scorer (0.431, 0.528)   186/a K=78 (0.431, 0.528)   186/b K=78 (0.432, 0.528)   185/a K=78 (0.431, 0.528)   185/b K=78 (0.431, 0.529)   184/a K=78 (0.432, 0.527)   184/b K=78 (0.431, 0.527)   | 186a minus scorer: -0.000, 0.000 (expected within 0.0018 plus rounding)
+  time   scorer (0.708, 0.862)   186/a K=78 (0.705, 0.861)   186/b K=78 (0.704, 0.863)   185/a K=78 (0.706, 0.861)   185/b K=78 (0.704, 0.863)   184/a K=78 (0.705, 0.861)   184/b K=78 (0.705, 0.863)   | 186a minus scorer: -0.003, -0.001 (expected within 0.0029 plus rounding)
+
+S2 opus J vs N (context) (contrasts.txt), 99 pairs, scorer printed 78 repos
+  succ   scorer (-2.0, 5.9)   186/a K=78 (-2.0, 5.9)   186/b K=78 (-2.0, 6.0)   185/a K=78 (-2.0, 6.0)   185/b K=78 (-2.0, 5.9)   184/a K=78 (-2.0, 6.0)   184/b K=78 (-2.0, 5.9)   | 186a minus scorer: -0.0, -0.0 (expected within 0.1492 plus rounding)
+  ratio  scorer (1.703, 2.129)   186/a K=78 (1.701, 2.124)   186/b K=78 (1.704, 2.130)   185/a K=78 (1.705, 2.129)   185/b K=78 (1.706, 2.125)   184/a K=78 (1.700, 2.126)   184/b K=78 (1.703, 2.126)   | 186a minus scorer: -0.002, -0.005 (expected within 0.0080 plus rounding)
+  time   scorer (1.366, 1.754)   186/a K=78 (1.363, 1.749)   186/b K=78 (1.365, 1.750)   185/a K=78 (1.369, 1.743)   185/b K=78 (1.368, 1.744)   184/a K=78 (1.363, 1.745)   184/b K=78 (1.367, 1.748)   | 186a minus scorer: -0.003, -0.005 (expected within 0.0073 plus rounding)
+
+S2 sol J vs N (context) (contrasts.txt), 99 pairs, scorer printed 78 repos
+  succ   scorer (-3.3, 5.4)   186/a K=78 (-3.3, 5.5)   186/b K=78 (-3.3, 5.6)   185/a K=78 (-3.3, 5.6)   185/b K=78 (-3.3, 5.5)   184/a K=78 (-3.2, 5.5)   184/b K=78 (-3.3, 5.4)   | 186a minus scorer: 0.0, 0.1 (expected within 0.1643 plus rounding)
+  ratio  scorer (1.246, 2.002)   186/a K=78 (1.239, 2.000)   186/b K=78 (1.246, 2.003)   185/a K=78 (1.244, 2.001)   185/b K=78 (1.240, 1.999)   184/a K=78 (1.247, 2.007)   184/b K=78 (1.237, 1.999)   | 186a minus scorer: -0.007, -0.002 (expected within 0.0143 plus rounding)
+  time   scorer (1.200, 1.785)   186/a K=78 (1.196, 1.781)   186/b K=78 (1.204, 1.782)   185/a K=78 (1.200, 1.785)   185/b K=78 (1.194, 1.778)   184/a K=78 (1.202, 1.785)   184/b K=78 (1.193, 1.776)   | 186a minus scorer: -0.004, -0.004 (expected within 0.0111 plus rounding)
+
+S8 W vs opus N (contrasts.txt), 95 pairs, scorer printed 75 repos
+  succ   scorer (-7.3, 2.9)   186/a K=75 (-7.3, 2.9)   186/b K=75 (-7.1, 3.0)   185/a K=75 (-7.4, 2.9)   185/b K=75 (-7.4, 2.9)   184/a K=75 (-7.2, 2.8)   184/b K=75 (-7.5, 2.9)   | 186a minus scorer: -0.0, -0.0 (expected within 0.1927 plus rounding)
+  ratio  scorer (0.062, 0.082)   186/a K=75 (0.062, 0.082)   186/b K=75 (0.062, 0.082)   185/a K=75 (0.062, 0.082)   185/b K=75 (0.062, 0.082)   184/a K=75 (0.063, 0.082)   184/b K=75 (0.062, 0.082)   | 186a minus scorer: 0.000, -0.000 (expected within 0.0004 plus rounding)
+  time   scorer (1.213, 1.810)   186/a K=75 (1.210, 1.808)   186/b K=75 (1.210, 1.810)   185/a K=75 (1.218, 1.810)   185/b K=75 (1.215, 1.816)   184/a K=75 (1.218, 1.814)   184/b K=75 (1.216, 1.815)   | 186a minus scorer: -0.003, -0.002 (expected within 0.0113 plus rounding)
+
+S8 W vs opus R (contrasts.txt), 95 pairs, scorer printed 75 repos
+  succ   scorer (-12.4, 2.1)   186/a K=75 (-12.4, 2.1)   186/b K=75 (-12.5, 2.2)   185/a K=75 (-12.6, 2.1)   185/b K=75 (-12.5, 2.2)   184/a K=75 (-12.5, 2.1)   184/b K=75 (-12.5, 2.1)   | 186a minus scorer: 0.0, 0.0 (expected within 0.2739 plus rounding)
+  ratio  scorer (0.049, 0.066)   186/a K=75 (0.049, 0.066)   186/b K=75 (0.049, 0.066)   185/a K=75 (0.049, 0.066)   185/b K=75 (0.049, 0.066)   184/a K=75 (0.049, 0.066)   184/b K=75 (0.048, 0.066)   | 186a minus scorer: -0.000, 0.000 (expected within 0.0003 plus rounding)
+  time   scorer (0.660, 0.943)   186/a K=75 (0.660, 0.942)   186/b K=75 (0.659, 0.942)   185/a K=75 (0.661, 0.942)   185/b K=75 (0.658, 0.943)   184/a K=75 (0.659, 0.943)   184/b K=75 (0.657, 0.940)   | 186a minus scorer: 0.000, -0.001 (expected within 0.0053 plus rounding)
+
+S8 W vs opus P (contrasts.txt), 95 pairs, scorer printed 75 repos
+  succ   scorer (-10.6, 2.1)   186/a K=75 (-10.7, 2.1)   186/b K=75 (-10.7, 2.2)   185/a K=75 (-10.8, 2.1)   185/b K=75 (-10.8, 2.1)   184/a K=75 (-10.7, 2.1)   184/b K=75 (-10.8, 2.1)   | 186a minus scorer: -0.1, 0.0 (expected within 0.2399 plus rounding)
+  ratio  scorer (0.050, 0.066)   186/a K=75 (0.050, 0.066)   186/b K=75 (0.050, 0.066)   185/a K=75 (0.050, 0.066)   185/b K=75 (0.050, 0.066)   184/a K=75 (0.050, 0.066)   184/b K=75 (0.049, 0.066)   | 186a minus scorer: -0.000, 0.000 (expected within 0.0003 plus rounding)
+  time   scorer (0.584, 0.823)   186/a K=75 (0.587, 0.822)   186/b K=75 (0.584, 0.820)   185/a K=75 (0.583, 0.825)   185/b K=75 (0.583, 0.825)   184/a K=75 (0.584, 0.825)   184/b K=75 (0.583, 0.825)   | 186a minus scorer: 0.003, -0.001 (expected within 0.0045 plus rounding)
+
+S8 W vs sol N (contrasts.txt), 95 pairs, scorer printed 75 repos
+  succ   scorer (-2.1, 8.8)   186/a K=75 (-2.1, 8.8)   186/b K=75 (-2.1, 9.0)   185/a K=75 (-2.1, 8.9)   185/b K=75 (-2.1, 8.8)   184/a K=75 (-2.1, 8.9)   184/b K=75 (-2.1, 8.8)   | 186a minus scorer: -0.0, 0.0 (expected within 0.2059 plus rounding)
+  ratio  scorer (0.120, 0.173)   186/a K=75 (0.120, 0.173)   186/b K=75 (0.120, 0.174)   185/a K=75 (0.119, 0.173)   185/b K=75 (0.119, 0.173)   184/a K=75 (0.120, 0.174)   184/b K=75 (0.120, 0.173)   | 186a minus scorer: -0.000, -0.000 (expected within 0.0010 plus rounding)
+  time   scorer (1.409, 2.033)   186/a K=75 (1.410, 2.031)   186/b K=75 (1.411, 2.040)   185/a K=75 (1.412, 2.044)   185/b K=75 (1.412, 2.040)   184/a K=75 (1.417, 2.037)   184/b K=75 (1.413, 2.028)   | 186a minus scorer: 0.001, -0.002 (expected within 0.0118 plus rounding)
+
+S8 W vs sol R (contrasts.txt), 95 pairs, scorer printed 75 repos
+  succ   scorer (-4.4, 6.5)   186/a K=75 (-4.4, 6.7)   186/b K=75 (-4.3, 6.7)   185/a K=75 (-4.3, 6.6)   185/b K=75 (-4.3, 6.7)   184/a K=75 (-4.3, 6.6)   184/b K=75 (-4.3, 6.7)   | 186a minus scorer: -0.0, 0.2 (expected within 0.2059 plus rounding)
+  ratio  scorer (0.111, 0.143)   186/a K=75 (0.111, 0.143)   186/b K=75 (0.111, 0.144)   185/a K=75 (0.111, 0.143)   185/b K=75 (0.111, 0.143)   184/a K=75 (0.111, 0.143)   184/b K=75 (0.111, 0.144)   | 186a minus scorer: -0.000, 0.000 (expected within 0.0006 plus rounding)
+  time   scorer (0.710, 1.010)   186/a K=75 (0.711, 1.010)   186/b K=75 (0.711, 1.014)   185/a K=75 (0.712, 1.012)   185/b K=75 (0.714, 1.013)   184/a K=75 (0.710, 1.013)   184/b K=75 (0.712, 1.018)   | 186a minus scorer: 0.001, 0.000 (expected within 0.0057 plus rounding)
+
+S8 W vs sol P (contrasts.txt), 95 pairs, scorer printed 75 repos
+  succ   scorer (-5.7, 3.3)   186/a K=75 (-5.7, 3.3)   186/b K=75 (-5.8, 3.4)   185/a K=75 (-5.7, 3.3)   185/b K=75 (-5.7, 3.4)   184/a K=75 (-5.7, 3.3)   184/b K=75 (-5.7, 3.4)   | 186a minus scorer: -0.0, 0.0 (expected within 0.1700 plus rounding)
+  ratio  scorer (0.106, 0.148)   186/a K=75 (0.105, 0.149)   186/b K=75 (0.105, 0.149)   185/a K=75 (0.106, 0.148)   185/b K=75 (0.105, 0.148)   184/a K=75 (0.106, 0.148)   184/b K=75 (0.106, 0.149)   | 186a minus scorer: -0.001, 0.001 (expected within 0.0008 plus rounding)
+  time   scorer (0.696, 0.983)   186/a K=75 (0.691, 0.989)   186/b K=75 (0.694, 0.990)   185/a K=75 (0.692, 0.990)   185/b K=75 (0.695, 0.992)   184/a K=75 (0.694, 0.994)   184/b K=75 (0.694, 0.991)   | 186a minus scorer: -0.005, 0.006 (expected within 0.0054 plus rounding)
+
+======== 7. our own Monte Carlo spread over 20 further seeds (primary contrasts), SD of each bound ========
+cached opus R vs N: succ/186 lo 0.0260 hi 0.0496; succ/185 lo 0.0264 hi 0.0506; succ/184 lo 0.0239 hi 0.0462; ratio/186 lo 0.0012 hi 0.0018; ratio/185 lo 0.0013 hi 0.0019; ratio/184 lo 0.0011 hi 0.0018; time/186 lo 0.0023 hi 0.0031; time/185 lo 0.0021 hi 0.0034; time/184 lo 0.0018 hi 0.0037
+cached opus R vs P: succ/186 lo 0.0284 hi 0.0463; succ/185 lo 0.0446 hi 0.0464; succ/184 lo 0.0314 hi 0.0417; ratio/186 lo 0.0011 hi 0.0009; ratio/185 lo 0.0012 hi 0.0007; ratio/184 lo 0.0009 hi 0.0011; time/186 lo 0.0010 hi 0.0012; time/185 lo 0.0005 hi 0.0012; time/184 lo 0.0010 hi 0.0011
+cached opus P vs N: succ/186 lo 0.0363 hi 0.0401; succ/185 lo 0.0196 hi 0.0295; succ/184 lo 0.0223 hi 0.0356; ratio/186 lo 0.0012 hi 0.0019; ratio/185 lo 0.0015 hi 0.0018; ratio/184 lo 0.0014 hi 0.0021; time/186 lo 0.0030 hi 0.0033; time/185 lo 0.0039 hi 0.0025; time/184 lo 0.0039 hi 0.0033
+cached sol R vs N: succ/186 lo 0.0210 hi 0.0250; succ/185 lo 0.0125 hi 0.0189; succ/184 lo 0.0096 hi 0.0227; ratio/186 lo 0.0010 hi 0.0015; ratio/185 lo 0.0014 hi 0.0014; ratio/184 lo 0.0012 hi 0.0013; time/186 lo 0.0018 hi 0.0024; time/185 lo 0.0024 hi 0.0023; time/184 lo 0.0019 hi 0.0025
+cached sol R vs P: succ/186 lo 0.0460 hi 0.0043; succ/185 lo 0.0371 hi 0.0042; succ/184 lo 0.0355 hi 0.0050; ratio/186 lo 0.0008 hi 0.0009; ratio/185 lo 0.0010 hi 0.0010; ratio/184 lo 0.0006 hi 0.0006; time/186 lo 0.0007 hi 0.0012; time/185 lo 0.0009 hi 0.0012; time/184 lo 0.0010 hi 0.0010
+cached sol P vs N: succ/186 lo 0.0544 hi 0.0437; succ/185 lo 0.0540 hi 0.0354; succ/184 lo 0.0531 hi 0.0384; ratio/186 lo 0.0016 hi 0.0016; ratio/185 lo 0.0014 hi 0.0015; ratio/184 lo 0.0019 hi 0.0012; time/186 lo 0.0024 hi 0.0022; time/185 lo 0.0023 hi 0.0022; time/184 lo 0.0022 hi 0.0022
+
+======== 8. verdict-deciding bounds under every mapping and seed ========
+cached opus R vs N   186 seed 20261111: cut lower bound -40.4% (zero is the line), success (-2.17, 4.23) -> NO SAVING
+cached opus R vs N   186 seed 20261112: cut lower bound -40.4% (zero is the line), success (-2.19, 4.24) -> NO SAVING
+cached opus R vs N   186 20 seeds: cut lower bound ranges -40.8% to -40.1%
+cached opus R vs N   185 seed 20261111: cut lower bound -40.4% (zero is the line), success (-2.14, 4.24) -> NO SAVING
+cached opus R vs N   185 seed 20261112: cut lower bound -40.4% (zero is the line), success (-2.11, 4.24) -> NO SAVING
+cached opus R vs N   185 20 seeds: cut lower bound ranges -40.8% to -40.0%
+cached opus R vs N   184 seed 20261111: cut lower bound -40.8% (zero is the line), success (-2.17, 4.32) -> NO SAVING
+cached opus R vs N   184 seed 20261112: cut lower bound -40.6% (zero is the line), success (-2.05, 4.25) -> NO SAVING
+cached opus R vs N   184 20 seeds: cut lower bound ranges -40.7% to -40.1%
+cached opus R vs P   186 seed 20261111: success (-2.59, 3.26), bill upper 1.047, time upper 0.982 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached opus R vs P   186 seed 20261112: success (-2.58, 3.25), bill upper 1.045, time upper 0.979 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached opus R vs P   186 20 seeds: success upper 3.15 to 3.33, bill upper 1.044 to 1.048, time upper 0.978 to 0.983, verdicts ['PARTICLE-1 ALONE IS ENOUGH']
+cached opus R vs P   185 seed 20261111: success (-2.54, 3.25), bill upper 1.046, time upper 0.980 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached opus R vs P   185 seed 20261112: success (-2.51, 3.25), bill upper 1.047, time upper 0.982 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached opus R vs P   185 20 seeds: success upper 3.18 to 3.33, bill upper 1.045 to 1.048, time upper 0.978 to 0.982, verdicts ['PARTICLE-1 ALONE IS ENOUGH']
+cached opus R vs P   184 seed 20261111: success (-2.55, 3.28), bill upper 1.047, time upper 0.979 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached opus R vs P   184 seed 20261112: success (-2.51, 3.24), bill upper 1.048, time upper 0.983 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached opus R vs P   184 20 seeds: success upper 3.18 to 3.31, bill upper 1.044 to 1.049, time upper 0.977 to 0.981, verdicts ['PARTICLE-1 ALONE IS ENOUGH']
+cached sol R vs N    186 seed 20261111: cut lower bound -28.6% (zero is the line), success (-1.03, 3.26) -> NO SAVING
+cached sol R vs N    186 seed 20261112: cut lower bound -28.8% (zero is the line), success (-1.06, 3.27) -> NO SAVING
+cached sol R vs N    186 20 seeds: cut lower bound ranges -29.0% to -28.4%
+cached sol R vs N    185 seed 20261111: cut lower bound -28.8% (zero is the line), success (-1.05, 3.24) -> NO SAVING
+cached sol R vs N    185 seed 20261112: cut lower bound -28.6% (zero is the line), success (-1.03, 3.23) -> NO SAVING
+cached sol R vs N    185 20 seeds: cut lower bound ranges -29.0% to -28.5%
+cached sol R vs N    184 seed 20261111: cut lower bound -28.9% (zero is the line), success (-1.06, 3.26) -> NO SAVING
+cached sol R vs N    184 seed 20261112: cut lower bound -28.8% (zero is the line), success (-1.04, 3.30) -> NO SAVING
+cached sol R vs N    184 20 seeds: cut lower bound ranges -29.2% to -28.7%
+cached sol R vs P    186 seed 20261111: success (-4.64, 0.36), bill upper 1.062, time upper 0.996 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached sol R vs P    186 seed 20261112: success (-4.56, 0.35), bill upper 1.064, time upper 0.996 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached sol R vs P    186 20 seeds: success upper 0.34 to 0.36, bill upper 1.062 to 1.065, time upper 0.993 to 0.998, verdicts ['PARTICLE-1 ALONE IS ENOUGH']
+cached sol R vs P    185 seed 20261111: success (-4.59, 0.35), bill upper 1.064, time upper 0.996 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached sol R vs P    185 seed 20261112: success (-4.64, 0.35), bill upper 1.065, time upper 0.996 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached sol R vs P    185 20 seeds: success upper 0.34 to 0.36, bill upper 1.062 to 1.066, time upper 0.994 to 0.998, verdicts ['PARTICLE-1 ALONE IS ENOUGH']
+cached sol R vs P    184 seed 20261111: success (-4.59, 0.35), bill upper 1.062, time upper 0.995 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached sol R vs P    184 seed 20261112: success (-4.51, 0.36), bill upper 1.064, time upper 0.995 (0.90 is the line) -> PARTICLE-1 ALONE IS ENOUGH
+cached sol R vs P    184 20 seeds: success upper 0.34 to 0.36, bill upper 1.062 to 1.064, time upper 0.993 to 0.997, verdicts ['PARTICLE-1 ALONE IS ENOUGH']
+
+======== 9. no-cache repricing ========
+CSV columns: ['task_id', 'repository', 'bootstrap_cluster', 'model', 'cell', 'status', 'success', 'bill_micros', 'wall_time_s', 'batch', 'sessions_in_cell', 'missing_reason']
+The rows carry one bill per session at the cached (as billed) prices and no token counts by kind, so the bill with caching priced away cannot be computed from them. Not rebuilt.
+
+======== 10. scorer against our seed-to-seed distribution, 50 seeds, 186 clusters (every printed contrast) ========
+succ  40 bounds: mean z -0.16, SD of z 1.08, |z| > 2: 2, |z| > 3: 0 (pure Monte Carlo predicts mean 0, SD 1, about 1.8 above 2 and 0.1 above 3)
+ratio 40 bounds: mean z 0.12, SD of z 0.97, |z| > 2: 1, |z| > 3: 0 (pure Monte Carlo predicts mean 0, SD 1, about 1.8 above 2 and 0.1 above 3)
+time  40 bounds: mean z -0.08, SD of z 0.99, |z| > 2: 2, |z| > 3: 1 (pure Monte Carlo predicts mean 0, SD 1, about 1.8 above 2 and 0.1 above 3)
+unique contrasts: 20
+bounds with |z| > 2:
+  cached sol R vs P ratio upper: scorer 1.066, ours mean 1.0632 sd 0.0010 (range 1.0604 to 1.0655), z 2.6, seeds rounding to the scorer value 1 of 50
+  cached opus R vs F (subset) succ upper: scorer 1.1, ours mean 1.0379 sd 0.0092 (range 1.0204 to 1.0638), z 2.1, seeds rounding to the scorer value 7 of 50
+  cached opus J vs F (subset) time lower: scorer 0.708, ours mean 0.7059 sd 0.0009 (range 0.7040 to 0.7079), z 2.3, seeds rounding to the scorer value 1 of 50
+  cached W vs sol R (subset) succ upper: scorer 6.5, ours mean 6.6539 sd 0.0634 (range 6.5421 to 6.8182), z -2.2, seeds rounding to the scorer value 1 of 50
+  cached W vs sol P (subset) time upper: scorer 0.983, ours mean 0.9907 sd 0.0021 (range 0.9863 to 0.9945), z -3.6, seeds rounding to the scorer value 0 of 50
+
+======== 11. Sol, router against particle-1 alone: how close the success upper bound is to zero ========
+discordant tasks: better (R passed, P failed) ['sqlfluff__sqlfluff-7617', 'sqlfluff__sqlfluff-7615'] worse 8
+mapping 186 seed 20261111: draws at or above zero 5.81%, strictly above zero 3.41% (the upper bound drops below zero only when under 2.5% are at or above it); the 97.5th-percentile draw is 0.360
+mapping 186 seed 20261112: draws at or above zero 5.40%, strictly above zero 3.10% (the upper bound drops below zero only when under 2.5% are at or above it); the 97.5th-percentile draw is 0.351
+mapping 185 seed 20261111: draws at or above zero 5.16%, strictly above zero 2.92% (the upper bound drops below zero only when under 2.5% are at or above it); the 97.5th-percentile draw is 0.348
+mapping 185 seed 20261112: draws at or above zero 5.62%, strictly above zero 3.11% (the upper bound drops below zero only when under 2.5% are at or above it); the 97.5th-percentile draw is 0.352
+mapping 184 seed 20261111: draws at or above zero 5.51%, strictly above zero 2.93% (the upper bound drops below zero only when under 2.5% are at or above it); the 97.5th-percentile draw is 0.351
+mapping 184 seed 20261112: draws at or above zero 5.84%, strictly above zero 3.24% (the upper bound drops below zero only when under 2.5% are at or above it); the 97.5th-percentile draw is 0.356
+Sensitivity, not a claim about the data: if one of the 2 better tasks had been a tie (better 1, worse 8):
+  tie on sqlfluff__sqlfluff-7617, mapping 186: success -2.51 (-4.74, -0.38) -> upper below zero: PARTICLE-1 ALONE IS BETTER
+  tie on sqlfluff__sqlfluff-7617, mapping 185: success -2.51 (-4.73, -0.68) -> upper below zero: PARTICLE-1 ALONE IS BETTER
+  tie on sqlfluff__sqlfluff-7617, mapping 184: success -2.51 (-4.74, -0.66) -> upper below zero: PARTICLE-1 ALONE IS BETTER
+  tie on sqlfluff__sqlfluff-7615, mapping 186: success -2.51 (-4.74, -0.38) -> upper below zero: PARTICLE-1 ALONE IS BETTER
+  tie on sqlfluff__sqlfluff-7615, mapping 185: success -2.51 (-4.73, -0.68) -> upper below zero: PARTICLE-1 ALONE IS BETTER
+  tie on sqlfluff__sqlfluff-7615, mapping 184: success -2.51 (-4.74, -0.66) -> upper below zero: PARTICLE-1 ALONE IS BETTER
+
+======== 12. mapping effect: mean bound over 22 seeds (20261111, 20261112 and 1 to 20) under each mapping, primary contrasts ========
+cached opus R vs N: succ 186 (-2.16, 4.27), 185 (-2.16, 4.27), 184 (-2.15, 4.28) | ratio 186 (1.1994, 1.4041), 185 (1.1995, 1.4034), 184 (1.1997, 1.4041) | time 186 (1.6282, 2.0568), 185 (1.6281, 2.0566), 184 (1.6281, 2.0568)
+cached opus R vs P: succ 186 (-2.55, 3.25), 185 (-2.55, 3.25), 184 (-2.55, 3.26) | ratio 186 (0.8869, 1.0462), 185 (0.8870, 1.0461), 184 (0.8870, 1.0462) | time 186 (0.8291, 0.9800), 185 (0.8289, 0.9800), 184 (0.8288, 0.9800)
+cached opus P vs N: succ 186 (-1.74, 3.16), 185 (-1.74, 3.16), 184 (-1.75, 3.16) | ratio 186 (1.2323, 1.4611), 185 (1.2327, 1.4608), 184 (1.2326, 1.4606) | time 186 (1.7679, 2.3077), 185 (1.7669, 2.3073), 184 (1.7671, 2.3081)
+cached sol R vs N: succ 186 (-1.04, 3.23), 185 (-1.05, 3.22), 184 (-1.05, 3.23) | ratio 186 (1.0921, 1.2870), 185 (1.0922, 1.2874), 184 (1.0920, 1.2879) | time 186 (1.8854, 2.2025), 185 (1.8849, 2.2024), 184 (1.8853, 2.2023)
+cached sol R vs P: succ 186 (-4.59, 0.35), 185 (-4.59, 0.35), 184 (-4.58, 0.35) | ratio 186 (0.9191, 1.0633), 185 (0.9186, 1.0637), 184 (0.9187, 1.0633) | time 186 (0.8612, 0.9951), 185 (0.8611, 0.9954), 184 (0.8609, 0.9953)
+cached sol P vs N: succ 186 (0.75, 5.83), 185 (0.76, 5.83), 184 (0.76, 5.83) | ratio 186 (1.0877, 1.3119), 185 (1.0885, 1.3114), 184 (1.0889, 1.3113) | time 186 (2.0502, 2.3615), 185 (2.0510, 2.3617), 184 (2.0517, 2.3612)
