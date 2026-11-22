@@ -19,10 +19,12 @@ import { dirname, join } from "node:path";
 // tarballs, quick/laneb/arms/manifests/codex-hooks-r/*.files.tsv) and its recorded Codex rollouts, hook logs and states
 // (tests/codex-hooks/**/fixtures/**) are excluded too: about 4.8 MB that took #400's reviewer diff past the ceiling. gstack
 // keeps the fixtures READMEs in review as prose. B2's arm manifests (quick/laneb/arms/manifests/b2/*.files.tsv) and its
-// results post's session table (wiki/board/2026-11-22-capy-b2-test-first-results/sessions.jsonl) are excluded too: about
+// results post's session table (sessions.jsonl in the B2 results folder, B2_RESULTS below) are excluded too: about
 // 12.5 MB that took #426's reviewer diff past the ceiling.
 const ROOT = join(import.meta.dir, "..", "..");
 const POLICY = JSON.parse(readFileSync(join(ROOT, ".gstack", "ship-policy.json"), "utf8")) as { review_exclude_paths: string[]; review_content_patterns: string[] };
+const B2 = "quick/laneb/arms/manifests/b2";
+const B2_RESULTS = "wiki/board/2026-11-22-capy-b2-test-first-results";
 const DATA = "wiki/board/2026-11-19-geva-540-skill-pack-h2h-session-data";
 const PATTERNS = [
   "wiki/plans/*/*-frame.json",
@@ -36,7 +38,7 @@ const PATTERNS = [
   "quick/laneb/arms/manifests/codex-hooks-r/*.files.tsv",
   "tests/codex-hooks/**/fixtures/**",
   "quick/laneb/arms/manifests/b2/*.files.tsv",
-  "wiki/board/2026-11-22-capy-b2-test-first-results/sessions.jsonl",
+  B2_RESULTS + "/sessions.jsonl",
 ];
 const CONTENT = [DATA + "/diffs/*.patch", DATA + "/licences/**", DATA + "/MANIFEST.sha256"];
 
@@ -59,7 +61,7 @@ const inSessionData = (p: string) => p.startsWith(DATA + "/") && /^(diffs\/|lice
 /** The Codex hooks eval's arm file lists, and anything inside a fixtures folder under tests/codex-hooks. */
 const inCodexHooksData = (p: string) => /^quick\/laneb\/arms\/manifests\/codex-hooks-r\/[^/]+\.files\.tsv$/.test(p) || /^tests\/codex-hooks\/(.+\/)?fixtures\//.test(p);
 /** B2's arm file lists, and its results post's session table. */
-const inB2Data = (p: string) => /^quick\/laneb\/arms\/manifests\/b2\/[^/]+\.files\.tsv$/.test(p) || p === "wiki/board/2026-11-22-capy-b2-test-first-results/sessions.jsonl";
+const inB2Data = (p: string) => /^quick\/laneb\/arms\/manifests\/b2\/[^/]+\.files\.tsv$/.test(p) || p === B2_RESULTS + "/sessions.jsonl";
 /** The files review_content_patterns may declare: the session data's .patch files, licence texts and manifest. */
 const declarable = (p: string) => p.startsWith(DATA + "/") && /^(diffs\/[^/]+\.patch$|licences\/|MANIFEST\.sha256$)/.test(p.slice(DATA.length + 1));
 
@@ -100,8 +102,6 @@ const CODEX_HOOKS_MISSES = [
   "lanes/codex-hooks/c/fixtures/a.json",
 ];
 
-const B2 = "quick/laneb/arms/manifests/b2";
-const B2_RESULTS = "wiki/board/2026-11-22-capy-b2-test-first-results";
 const B2_HITS = [B2 + "/b2-gstack.files.tsv", B2 + "/b2-none.files.tsv", B2_RESULTS + "/sessions.jsonl"];
 const B2_MISSES = [
   B2 + "/x.json",
