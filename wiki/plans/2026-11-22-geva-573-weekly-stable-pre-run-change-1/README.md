@@ -13,6 +13,8 @@ links:
 attachments:
   - 22d13f3186d3ae7f9a22b652d24d2bf1b9df440d7010d4cb67845aae374e17a8  power.py
   - 37919411023ad8f5e829b13b264156a980a32082a5749a5a7fe3e75eedf6c29e  power.txt
+  - a616eb9dc5151db4a1e674f6d23ea5cc4e2d749f8ec3dca05c934d70311a9dfb  s390.py
+  - 09e92ddec3ac05c92414cc66b8bf88271e9f820ab55db811b17ceeeeb4abd79e  s390-tasks.txt
 ---
 
 # Pre-run change 1 to the weekly stable number
@@ -75,7 +77,12 @@ The release side asks for 80% power at a 5-point drop per model and says a drop 
 
 **S80** is the preregistration as written: 80 tasks, one session per task in each arm, no interim look. MDD about 12 points (9.9 to 14.0 at 10% to 20% of pairs disagreeing).
 
-**S390** uses all 130 eligible tasks of the preregistration's pool, three sessions per task in the candidate and stable arms and one in none. The run order is the preregistration's seeded shuffle of the sorted 130, so its first 80 are S80's tasks in the same order. The primary pairs session k of the candidate with session k of stable on each task, 390 pairs, with a cluster-robust interval by task (the preregistration's block formula, applied within the week). MDD about 5.5 points (4.5 to 6.3). GStack Minder's guide, gstack-evals#352's gstack-against-none interval (about 100 pairs, ±6.6 points), implies about 11% of pairs disagreeing, which would put S390 near 4.7 points; version-against-version pairs should disagree less. The candidate-minus-none FLAG pairs each task's first candidate session with its none session, 130 pairs.
+**S390** uses all 130 eligible tasks of the preregistration's pool, three sessions per task in the candidate and stable arms and one in none. The run order is the preregistration's seeded shuffle of the sorted 130, so its first 80 are S80's tasks in the same order; s390.py prints all 130 in that order (s390-tasks.txt) and checks its first 80 against the preregistration's tasks.txt. The primary pairs session k of the candidate with session k of stable on each task, 390 pairs, with a cluster-robust interval by task (the preregistration's block formula, applied within the week). MDD about 5.5 points (4.5 to 6.3). GStack Minder's guide, gstack-evals#352's gstack-against-none interval (about 100 pairs, ±6.6 points), implies about 11% of pairs disagreeing, which would put S390 near 4.7 points; version-against-version pairs should disagree less. The candidate-minus-none FLAG pairs each task's first candidate session with its none session, 130 pairs.
+
+At S390 the preregistration's per-week rules apply to all 130 tasks and the three pilot tasks:
+
+- The contamination check (section 6, step 3) searches every one of those 133 ids in its four forms, and a hit drops that task from the week's pairs in every arm.
+- INCOMPLETE scales with the size, at more than 10%: more than 13 of the 130 tasks dropped by the contamination check, or more than 39 of an arm's 390 sessions ungraded (13 of none's 130). Pairs use the session pairs graded in both arms.
 
 S390's paid spend at caps passes $500, so it takes one interim look (R113):
 
