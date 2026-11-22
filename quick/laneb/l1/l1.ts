@@ -663,7 +663,7 @@ function usableHost(work: string, missing: string) {
 }
 const recordHost = (work: string, row: Record<string, unknown>) => { mkdirSync(join(work, "host"), { recursive: true }); appendFileSync(hostsFile(work), JSON.stringify({ ...row, ts: new Date().toISOString() }) + "\n"); };
 // Why a host loss in a work dir is not settled, or null (weekly pre-run change 5): host/hosts.jsonl can't be read or has a
-// torn line, a host was lost with no host/recover.json, or host/recover.json is unreadable, not complete, or does not name
+// torn line, a part result names a lost_host that no lost row records yet (a recover cut short), a host was lost with no host/recover.json, or host/recover.json is unreadable, not complete, or does not name
 // the newest lost host and the time ubi-runner confirmed it gone. A recovery of an earlier host never settles a later loss.
 export function unsettledHostLoss(work: string): string | null {
   const rows: any[] = [];
@@ -674,6 +674,11 @@ export function unsettledHostLoss(work: string): string | null {
     try { r = JSON.parse(l); } catch { r = null; }
     if (!r || typeof r !== "object") return "host/hosts.jsonl has a torn line, so a host loss can't be ruled out";
     rows.push(r);
+  }
+  for (const f of readdirSync(work).filter((x) => x.endsWith(".result.json"))) {
+    let h: unknown;
+    try { h = readJson(join(work, f))?.lost_host; } catch { continue; }
+    if (typeof h === "string" && !rows.some((r) => r.event === "lost" && r.name === h)) return f + " was written by a recover of host " + h + " that has not finished (no lost row yet); run recover again";
   }
   const lost = rows.filter((r) => r.event === "lost").at(-1), file = join(work, "host/recover.json");
   if (!existsSync(file)) return lost ? "host " + lost.name + " was lost and no host/recover.json records its recovery" : null;

@@ -49,6 +49,7 @@ Each part folder keeps L1's host log, `host/hosts.jsonl`, and the record of its 
 - a host was lost and `host/recover.json` is missing, unreadable or not complete;
 - `host/recover.json` names another host than the newest loss, or there is no loss for it to settle;
 - a non-empty line of `host/hosts.jsonl` is torn or can't be parsed;
+- a part result names the host a recover was rebuilding (`lost_host`), and no `lost` row records that host yet, because that recover stopped before it finished;
 - or `host/hosts.jsonl` can't be read at all. The full report then still writes an INCOMPLETE record instead of failing.
 
 L1 uses the same check: an item whose host loss is not settled has ended, so `host-up`, `launch` and `relaunch` refuse it and it goes to the Captain. L1 never closes an item on a stale recovery.

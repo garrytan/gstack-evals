@@ -560,6 +560,16 @@ describe("pre-run change 5: a host loss settles only through the recovery of tha
     part3(dir, up(1, "host-a") + lost(1, "host-a", 100) + up(2, "host-b") + '{"event":"lo\n', { complete: true, host: "host-a", down_confirmed_at: 100 });
     expect(partProblems(dir).unsettled).toEqual(["p3/host"]);
   });
+  test("a part result a cut-short recover wrote (lost_host, with no lost row yet) leaves the host unsettled until recover finishes", () => {
+    const dir = scratch("weekly-c5-cutshort-");
+    part3(dir, up(1, "host-a"), null);
+    writeFileSync(join(dir, "p3", "s390-3.result.json"), JSON.stringify({ launch_exit: null, pulled: true, cap_stop: [], loss: ["the awake host was lost"], unclassified: [], lost_host: "host-a" }));
+    expect(partProblems(dir).unsettled).toEqual(["p3/host"]);
+    writeFileSync(join(dir, "p3", "host", "recover.json"), JSON.stringify({ complete: true, host: "host-a", down_confirmed_at: 100 }));
+    expect(partProblems(dir).unsettled).toEqual(["p3/host"]);
+    writeFileSync(join(dir, "p3", "host", "hosts.jsonl"), up(1, "host-a") + lost(1, "host-a", 100));
+    expect(partProblems(dir).unsettled).toEqual([]);
+  });
   test("an unreadable hosts.jsonl leaves the host unsettled, and the full report still writes an INCOMPLETE record", async () => {
     const dir = scratch("weekly-c5-unreadable-");
     part3(dir, null, null);
