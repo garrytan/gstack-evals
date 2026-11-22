@@ -409,6 +409,11 @@ describe("follow-up: a part whose records were never pulled, or whose ending can
     p3(dir, { launch_exit: null, pulled: true, cap_stop: [], loss: ["the awake host was lost"], unclassified: [] }, { recover: { complete: false, running: "s390-3", part_results_pulled: true, missing_sessions: ["s-1"] } });
     expect(partProblems(dir)).toEqual({ caps: [], missing: [], unsettled: ["p3/host"] });
   });
+  test("a salvage whose own pull failed stays unsettled even when a partial transfer left the folders", () => {
+    const dir = scratch("weekly-fu-salvage-partial-");
+    p3(dir, { launch_exit: 7, pulled: true, cap_stop: [], loss: ["the part's results could not be pulled"], unclassified: [], salvage: { by: "attach", pulled: false, vm_down: true } });
+    expect(partProblems(dir)).toEqual({ caps: [], missing: [], unsettled: ["p3/s390-3"] });
+  });
   test("a part kept at exit 7 and never salvaged stays unsettled even when a partial pull left its folders", () => {
     const dir = scratch("weekly-fu-partial-");
     p3(dir, { launch_exit: 7, pulled: true, cap_stop: [], loss: ["the part's results could not be pulled"], unclassified: [] });
