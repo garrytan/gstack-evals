@@ -1,0 +1,282 @@
+{
+ "schema": "cso-rerun-prereg.v1",
+ "post": "2026-11-23-geva-583-cso-rerun-prereg",
+ "parent": "2026-11-19-geva-561-cso-advisories-prereg",
+ "parent_prereg_json_sha256": "323947121e536a388f6560547939b2d177cb414da322efafbd2d36b04bf2c7b9",
+ "minted_at": "2026-11-23T14:26:23.263Z",
+ "mint_rule": "gold_seed minted once from crypto random bytes before any unit build, session or label call of this rerun. Never re-minted. Every other seed is the parent's.",
+ "gold_seed": 2599129872,
+ "seeds_from_parent": {
+  "bootstrap_seed": 3802804501,
+  "order_seed": 2307533522,
+  "check_seed": 2800729426
+ },
+ "pins": {
+  "gstack": {
+   "repo": "garrytan/gstack",
+   "sha": "a3ecfd530df3c78c2d60e92b6488586a75e0ff91",
+   "version": "1.103.0.0",
+   "cso_skill_version": "3.0.0",
+   "helper": "gstack-cso 3.0.0 (helper ABI 3)",
+   "files_sha256": {
+    "cso/SKILL.md": "30eba2d3073b081089a9acf1feb00d2d359f4b313aada00c9a594ddbd3afddce",
+    "cso/sections/audit-phases.md": "c27ade6296c71f0e8434c45759bc5c5ef007018048247007ed4adcd73e036ac9",
+    "cso/sections/manifest.json": "39e6d84534657be2345cfbf6ed8821393480a208b7e784c655b017aa5b3081ee",
+    "lib/cso/cli.ts": "6b0e75cf0541e7f4622d8e9f412ed644902db4dd1c7d2ae2f999a1b33bdb155c",
+    "lib/cso/snapshot.ts": "46eed96ba39de837d83f3c4d1b0c08b747cf2e573daaab09ebf86a274ad6d179",
+    "lib/cso/state.ts": "0fb7a30aac946806c64c306e0628f9c76787401f92f73eedf633cd68057a3b6c",
+    "lib/cso/search-worker.ts": "3baf92ab62b5490dff37207426c11411983f46824a71a867b974cf8e7a0864aa"
+   },
+   "cso_changes_since_parent_pin": [
+    "#4567",
+    "#4571",
+    "#4592",
+    "#4688",
+    "#4692",
+    "#4739",
+    "#4742"
+   ],
+   "commits_since_parent_pin": 164
+  },
+  "old_cso_arm": {
+   "sha": "5afef04e31de1cb30c727c7f827bdd729d04713e",
+   "version": "1.101.0.0"
+  },
+  "harness_from_parent": {
+   "claude_code": "2.1.325",
+   "agent_sdk": "0.2.174",
+   "harbor": "f3a5a923"
+  }
+ },
+ "arms": {
+  "new": [
+   {
+    "arm": "cso",
+    "model": "opus",
+    "gstack": "a3ecfd53",
+    "first_turn": "\"/cso \" followed by the parent's task text"
+   },
+   {
+    "arm": "cso",
+    "model": "particle",
+    "gstack": "a3ecfd53",
+    "first_turn": "\"/cso \" followed by the parent's task text"
+   }
+  ],
+  "reused": [
+   {
+    "arm": "none",
+    "model": "opus",
+    "from": "parent stage 2",
+    "sessions": 52,
+    "judge_gaps": 1
+   },
+   {
+    "arm": "none",
+    "model": "particle",
+    "from": "parent stage 2",
+    "sessions": 52,
+    "judge_gaps": 0
+   },
+   {
+    "arm": "cso",
+    "model": "opus",
+    "from": "parent stage 2 at 5afef04e",
+    "sessions": 52,
+    "judge_gaps": 0
+   },
+   {
+    "arm": "cso",
+    "model": "particle",
+    "from": "parent stage 2 at 5afef04e",
+    "sessions": 52,
+    "judge_gaps": 0
+   }
+  ],
+  "not_run": {
+   "untold": "descriptive in the parent's stage 0 and 1 only",
+   "sol": "a separate call after this result"
+  }
+ },
+ "limits": {
+  "allowance_usd": {
+   "opus": 16,
+   "particle": 3
+  },
+  "wall_sec": 2700,
+  "max_turns": 200,
+  "continuation_cap": 3,
+  "doubling": "none: the reused arms ran at these limits, so they stay fixed"
+ },
+ "units": {
+  "counted": "the parent's 52 stage 2 units (results post stage2-draw.json, role stage2), in its frozen session order (stage2-draw.json order) restricted to cso cells",
+  "pilot": {
+   "size": 5,
+   "rule": "the parent's 2 stage 0 units, then its stage 1 units in position order until there are 5; if none of the 5 holds a tracked symlink in its session tree, the last stage 1 pick is replaced by the first stage 1 unit in position order that does",
+   "stage0": [
+    "capricorn86__happy-dom-ghsa-834v-8h66-3h79",
+    "patriksimek__vm2-ghsa-x6m4-chr9-cg97"
+   ],
+   "stage1_in_order": [
+    "getkin__kin-openapi-ghsa-p6wj-qrr4-pgh5",
+    "qax-os__excelize-ghsa-c85p-xxjj-2r75",
+    "follow-redirects__follow-redirects-ghsa-8r9p-f939-6h3c",
+    "containerd__containerd-ghsa-pg57-6jwg-q645",
+    "semaphoreui__semaphore-ghsa-cxvf-gvfq-36w2",
+    "rclone__rclone-ghsa-66hp-wgxq-6f5q",
+    "oras-project__oras-go-ghsa-fxhp-mv3v-67qp",
+    "payloadcms__payload-ghsa-pj5h-5q6c-3pfx",
+    "backstage__backstage-ghsa-hmp2-4m7g-22cv",
+    "yawkat__lz4-java-ghsa-gm45-99xc-r7wv",
+    "mcollina__msgpack5-ghsa-24ch-f2g6-9hhh",
+    "mcollina__msgpack5-ghsa-8hq7-ggx2-cc6m"
+   ]
+  },
+  "rebuild": "every unit's session tree is rebuilt from its public parent commit and must match its tree_sha256 in unit-build.json before its session",
+  "containment": "the parent's gates (a) and (c) run again against the arm's install at a3ecfd53; a unit they hit leaves every contrast of this rerun, and is reported by name"
+ },
+ "exposure": {
+  "rule": "the parent's section 8, as written: a helper start call through gstack-cso-launcher returned a run id, at least one inspect or read call used that run, and a finish call ran",
+  "threshold": 0.8,
+  "detector_fixes": [
+   "start: a run id is that start's when the start printed it, or when the helper's run record saved from the session holds it, or when a later call prints or passes a run id whose 13-digit creation time falls between the start call and its result",
+   "used: an inspect or read call names the run by its id, or by a shell variable or command substitution, when the session holds exactly one accepted start",
+   "finish: a finish call on the run counts when its own output holds the helper's finish object or it exited 0 with no helper refusal, even when a later command in the same Bash call failed; or the saved run record shows the run finished"
+  ],
+  "regression": "replayed over the parent's 104 stage 2 cso transcripts, the fixed detector gives 40/52 on Opus and 52/52 on particle-1, the counts the correction post (#444) published, and finds every run the frozen detector found",
+  "also_printed": [
+   "the parent's frozen detector as run",
+   "a reading that also counts search and history as using the run"
+  ]
+ },
+ "yield": {
+  "primary": "findings per cso session: every finding pass A extracts from the scored text, not only the first 10",
+  "also": [
+   "share of cso sessions with no finding",
+   "findings per session where the procedure ran",
+   "findings the helper recorded per run, from the saved run record"
+  ],
+  "contrasts": [
+   "new cso minus none",
+   "new cso minus old cso"
+  ],
+  "interval": "paired, 95% repository-clustered bootstrap, 10,000 resamples, bootstrap_seed"
+ },
+ "analysis": {
+  "primary_family": {
+   "contrasts": [
+    "new cso minus none, Opus",
+    "new cso minus none, particle-1"
+   ],
+   "adjust": "Holm at 0.05"
+  },
+  "second_family": {
+   "contrasts": [
+    "new cso minus old cso, Opus",
+    "new cso minus old cso, particle-1"
+   ],
+   "adjust": "Holm at 0.05",
+   "decides": "what we tell gstack's maintainer about the fix; not the verdict"
+  },
+  "test": "McNemar with Obuchowski's clustered variance, two-sided; exact McNemar beside",
+  "verdicts": "the parent's section 10, steps 1 to 5, in order, on the new cso arm against the reused none arm",
+  "headroom": "admitted by the parent (plain Opus named 12/51 in stage 2)",
+  "gap_bounds": "the parent's section 9",
+  "mdd_points_at_52": {
+   "0.2": [
+    null,
+    19
+   ],
+   "0.25": [
+    23,
+    22
+   ],
+   "0.3": [
+    25,
+    24
+   ],
+   "0.35": [
+    28,
+    26
+   ]
+  },
+  "mdd_note": "[alpha 0.025, alpha 0.05]; null means no difference up to the discordant share reaches 80% power; from lanes/outcome-skills/h2h/analysis/power.ts mdd()"
+ },
+ "judge": {
+  "route": "fallback-opus-particle: openai/gpt-6.2-astra judges; gold by anthropic:claude-opus-5-5 and google/gemini-4-argon",
+  "settings": "the parent's deviation (d): medium effort, 65,536 output cap; gold at high effort and 32,000",
+  "prompts": "unchanged from the parent's harness at the results merge",
+  "labelled_outputs": {
+   "parent_gold_reports": 85,
+   "pilot_cso_reports": 10,
+   "counted_cso_sample": 16,
+   "total": 111
+  },
+  "counted_sample_rule": "8 new cso reports per model, drawn with gold_seed from the counted sessions before any judged number of the counted run is read",
+  "gates": [
+   "kappa on named at least 0.6 on all 111 gold reports and on non-anchor gold reports alone",
+   "on gold reports, the judge's disagreement rate on named in new cso reports and in none reports differs by at most 10 points",
+   "validity kappa at least 0.6 on pooled gold findings",
+   "refusals and over-cap gold drops at most 5% of gold reports",
+   "the parent's format-variant gates stand as passed on this route"
+  ],
+  "pilot_gate": "on the 10 pilot cso reports: no refusal, no judge gap, and gold disagrees with the judge on named in at most 2",
+  "on_failure": "no counted number counts; the rows read judge not validated (FIX-METHOD) and the Captain decides"
+ },
+ "items": {
+  "cso2-pilot": {
+   "central": 24,
+   "cap": 40,
+   "parts": {
+    "opus": {
+     "central": 20,
+     "cap": 34
+    },
+    "particle": {
+     "central": 4,
+     "cap": 6
+    }
+   },
+   "runs": "one session at a time"
+  },
+  "cso2-main": {
+   "central": 250,
+   "cap": 401,
+   "rule": "1.35 times central plus 4 parallel sessions at Opus's $16 allowance"
+  },
+  "cso2-judge": {
+   "central": 50,
+   "cap": 74,
+   "pilot_part_central": 9,
+   "rule": "1.35 times central plus 4 calls at Astra's largest, about $1.60"
+  },
+  "cso2-vm": {
+   "central": 36,
+   "cap": 49,
+   "rule": "1.35 times central"
+  },
+  "cso2-reserve": {
+   "cap": 40,
+   "rule": "moves only on the Captain's word for a named repair"
+  }
+ },
+ "interim_look": {
+  "planned_paid_spend_usd": 291,
+  "look": "none at this size; if the pilot's re-pricing plans the counted run above $500 paid, one look at 26 of 52 units in the frozen order, with the parent's CV5 bounds"
+ },
+ "planning_prices": {
+  "per_session_usd": {
+   "opus_cso": 4,
+   "particle_cso": 0.8
+  },
+  "judging_per_session_usd": 0.3,
+  "gold_per_report_usd": 0.6,
+  "vm_per_day_usd": 12,
+  "basis": "parent stage 2 measured: Opus cso $0.58, particle-1 cso $0.18, Opus none $4.11, particle-1 none $1.51, Astra judging $0.17 a session, Opus and Argon gold about $0.40 a report; the fixed /cso reads more code, so its sessions are priced near the plain arm's"
+ },
+ "totals": {
+  "central": 360,
+  "caps": 564,
+  "reserve": 40
+ }
+}
