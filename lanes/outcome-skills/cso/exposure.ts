@@ -114,9 +114,60 @@ export function startScope(args: readonly string[], out: Rec | null): string {
   return (args.includes("--comprehensive") ? "comprehensive" : "daily") + "/" + (named ? "domain:" + named : (SCOPE_FLAGS.find((f) => args.includes(f))?.slice(2) ?? "default"));
 }
 
-/** Section 8's exposure and the helper records from one session's events (both transcripts, read in order). A handle
+/** Section 8's exposure and the helper records from one session's SDK transcript events, read in order. A handle
  *  the helper printed is recorded under the tree path whose id it carries; one that names no path in tree stays unrecorded. */
-export function csoExposure(records: readonly Rec[], tree: readonly string[] = []): { exposure: Exposure; helper: HelperRecords } {
+/** The rerun's detector fixes (GEVA-583 prereg section 4) read one run: the start that made it, its id, which calls are on
+ *  it, the finish that counts, and the saved run record for it. */
+interface RunRead { start?: HelperCall; run: string | null; on: (c: HelperCall) => boolean; finish?: HelperCall; recordFinished: boolean; record?: Rec }
+const FINISHED = /"status"\s*:\s*"finished"|'status': 'finished'|\bexit[=:]\s*0\b/i;
+const VIA_SHELL = /^[$`]/;
+
+/** Fix 1: a start the helper didn't refuse names its run when its output prints an id; else, when the saved record holds as
+ *  many runs as the session has unrefused starts, the k-th start takes the k-th run by the creation time in its id; else
+ *  the first id a later call passes or prints before any other start. Fix 2: a call is on the run when it names the id, or
+ *  a shell variable or substitution while the session holds exactly one accepted start. Fix 3: a finish counts when it
+ *  printed the helper's finish or exited 0 with no refusal, though a later step of its command failed; or the record shows
+ *  the run finished. Of several runs, the first that was used and finished is read, else the first with an id. */
+function fixedRun(evs: readonly Ev[], calls: readonly HelperCall[], runOf: (c: HelperCall) => string | null, runRecords: readonly Rec[]): RunRead {
+  const refused = (c: HelperCall) => HELPER_REFUSAL.test(c.out) && calls.filter((d) => d.at === c.at).length === 1;
+  const later = (a: HelperCall, b: HelperCall) => b.at > a.at || (b.at === a.at && calls.indexOf(b) > calls.indexOf(a));
+  const starts = calls.filter((c) => c.op === "start");
+  const accepted = starts.filter((c) => !refused(c));
+  const recorded = runRecords.map((r) => String(r?.runId ?? "")).filter((v) => RUN_ID.test(v)).sort();
+  const byOrder = recorded.length === accepted.length;
+  const idFor = (c: HelperCall, k: number): string | null => {
+    const printed = runOf(c) ?? RUN_ID.exec(c.out)?.[0];
+    if (printed) return printed;
+    if (byOrder) return recorded[k]!;
+    const next = starts.find((s) => later(c, s));
+    for (const d of calls) {
+      if (!later(c, d) || d.at !== c.at) continue;
+      if (d.op === "start") return null;
+      const m = RUN_ID.exec(d.args.join(" "));
+      if (m) return m[0];
+    }
+    for (const e of evs) {
+      if (e.at <= c.at || (next && e.at >= next.at) || (e.kind !== "tool_use" && e.kind !== "tool_result")) continue;
+      const m = RUN_ID.exec(e.text);
+      if (m) return m[0];
+    }
+    return null;
+  };
+  const reads = accepted.map((start, k) => {
+    const run = idFor(start, k);
+    const on = (c: HelperCall) => run !== null && later(start, c) && (c.args[0] === run || (VIA_SHELL.test(c.args[0] ?? "") && accepted.length === 1));
+    const finish = calls.filter((c) => on(c) && c.op === "finish" && !refused(c) && (!c.error || (FINISHED.test(c.out) && !c.out.includes("<tool_use_error>")))).at(-1);
+    const record = runRecords.find((r) => r?.runId === run);
+    return { start, run, on, finish, record, recordFinished: record?.status === "finished", used: calls.some((c) => on(c) && (c.op === "inspect" || c.op === "read")) };
+  }).filter((r) => r.run !== null);
+  return reads.find((r) => r.used && (r.finish !== undefined || r.recordFinished)) ?? reads[0] ?? { run: null, on: () => false, recordFinished: false };
+}
+
+/** csoExposure's options: fixed reads exposure with the rerun's detector fixes, over runRecords, the helper's run records
+ *  (report.json) saved from the session container. Without fixed, the frozen GEVA-561 detector runs unchanged. */
+export interface ExposureOptions { fixed?: boolean; runRecords?: readonly Rec[] }
+
+export function csoExposure(records: readonly Rec[], tree: readonly string[] = [], opts: ExposureOptions = {}): { exposure: Exposure; helper: HelperRecords } {
   const evs = events(records as Rec[]);
   const calls = helperCalls(evs);
   const runOf = (c: HelperCall): string | null => {
@@ -124,11 +175,15 @@ export function csoExposure(records: readonly Rec[], tree: readonly string[] = [
     const v = j ? String(j.runId ?? "") : (START_RUN_ID.exec(c.out)?.[1] ?? "");
     return RUN_ID.test(v) ? v : null;
   };
-  const start = calls.find((c) => c.op === "start" && !c.error && runOf(c) !== null);
-  const run = start ? runOf(start) : null;
-  const after = (c: HelperCall) => start !== undefined && c.at > start.at && c.args[0] === run;
+  const read: RunRead = opts.fixed ? fixedRun(evs, calls, runOf, opts.runRecords ?? []) : (() => {
+    const start = calls.find((c) => c.op === "start" && !c.error && runOf(c) !== null);
+    const run = start ? runOf(start) : null;
+    const on = (c: HelperCall) => start !== undefined && c.at > start.at && c.args[0] === run;
+    return { start, run, on, finish: calls.filter((c) => on(c) && c.op === "finish" && !c.error).at(-1), recordFinished: false };
+  })();
+  const { start, run, finish } = read;
+  const after = read.on;
   const used = calls.some((c) => after(c) && (c.op === "inspect" || c.op === "read"));
-  const finish = calls.filter((c) => after(c) && c.op === "finish" && !c.error).at(-1);
   const fin = finish ? helperJson(finish.out) : null;
   const submits = calls.filter((c) => after(c) && c.op === "submit" && !c.error).map((c) => helperObjects(c.out).filter((j) => typeof j.findings === "number").at(-1)).filter((j): j is Rec => j !== undefined);
   const helper: HelperRecords = { snapshot_root: null, handles: {} };
@@ -145,9 +200,9 @@ export function csoExposure(records: readonly Rec[], tree: readonly string[] = [
   const hostReads = start ? evs.filter((e) => e.at > start.at && e.kind === "tool_use" && (HOST_READ_TOOLS.has(e.name!) || (e.name === "Bash" && typeof e.input?.command === "string" && !LAUNCHER.test(expandCommand(e.input.command)) && SHELL_READ.test(e.input.command)))).length : 0;
   const exposure: Exposure = {
     loaded: loaded(evs),
-    procedure_ran: start !== undefined && used && finish !== undefined,
+    procedure_ran: start !== undefined && used && (finish !== undefined || read.recordFinished),
     run_id: run,
-    completeness: fin && typeof fin.completeness === "string" ? (COMPLETENESS[fin.completeness] ?? null) : null,
+    completeness: fin && typeof fin.completeness === "string" ? (COMPLETENESS[fin.completeness] ?? null) : typeof read.record?.completeness === "string" ? (COMPLETENESS[read.record.completeness] ?? null) : null,
     findings_submitted: submits.length ? Number(submits.at(-1)!.findings) : start ? 0 : null,
     tooling_errors: calls.filter((c) => c.error && !HELPER_REFUSAL.test(c.out)).length,
     host_reads_after_start: hostReads,
