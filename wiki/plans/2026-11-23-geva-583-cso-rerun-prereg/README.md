@@ -19,7 +19,7 @@ links:
   - lanes/outcome-skills/cso/
 attachments:
   - 9c8add95a639cd8cac415961481f565619715f26fd22d7a11b1f8ad986b915e4  power.txt
-  - 5e214b61678584f726d661dce6874315adfaa749700f19f768a5e79218a0c296  rerun.json
+  - ba47fea3859d716083c0ceced331dd841d309eba49255f201505fc9ef17fbc6f  rerun.json
 ---
 
 # Preregistration: /cso before and after gstack's fixes, on the same 52 real advisories
@@ -82,7 +82,7 @@ The rule is the parent's section 8, as written: a helper `start` call through gs
 
 The correction post (#444) found two gaps between that rule and the detector that ran: the detector needed the run id in what the model saw of start's output, which `tail` cut; and it ignored a finish whose Bash call failed later in the same command. The fixed /cso also saves start's output to a file and reads the run id with jq, so the id may never print. The detector is fixed to match the rule, in three places:
 
-1. **Start returned a run id** when the start printed it; or when the helper's own run record, saved from the session container at its end, holds the run that start made, matched by order (the session's k-th unrefused start takes the record's k-th run, ordered by the creation time in its id); or when the helper didn't refuse that start and a later call, before any other start call, prints or passes a run id, its own output included, in which case the first such id is the start's. The transcripts carry only seconds since the session began, not clock times, so the match goes by order.
+1. **Start returned a run id** when the start printed it; or when the helper's own run record, saved from the session container at its end, holds the run that start made, matched by order (the session's k-th unrefused start takes the record's k-th run, ordered by the creation time in its id), used only when the session's unrefused starts and the record's runs are equal in number; or when the helper didn't refuse that start and a later call, before any other start call, prints or passes a run id, its own output included, in which case the first such id is the start's. The detector reads the SDK transcript (sdk-messages.jsonl), whose events carry only seconds since the session began; Claude Code's own transcript has clock times, but the rule keeps to the one transcript and matches by order, and a count mismatch drops the record from matching rather than guessing.
 2. **A call used that run** when an inspect or read names it by its id, or by a shell variable or command substitution (such as `$(jq -r .runId start.json)`), and the session holds exactly one accepted start.
 3. **A finish ran** when a finish call on that run printed the helper's finish object or exited 0 with no helper refusal, even when a later command in the same Bash call failed; or when the saved run record shows the run finished.
 
@@ -177,7 +177,7 @@ Caps follow the crew's rule: 1.35 times central, plus parallel sessions at the p
 
 Built on the results branch, test-first, landed with the results (R77), and reviewed at gate class because they touch scoring:
 
-1. A rerun overlay: rerun.json read beside the parent's prereg.json, with the new pin, the pilot and counted units, the new item names and stage names, and no other change to what the parent froze.
+1. A rerun overlay: rerun.json read beside the parent's prereg.json, with the new pin, the pilot and counted units, the new item names and stage names, and the pooled judge check's rules from section 7 (a floor of 100 gold reports where the parent's was 40, and no oracle or stock anchor fill, so a shortfall draws only the counted extension; the parent's 85 gold reports enter as sealed, their anchors included, and its other judge settings stand). Nothing else the parent froze changes.
 2. The three exposure detector fixes of section 4, with fixture tests for each case and the regression check on the export.
 3. Saving the helper's run records out of the session container (an opt-in step in the session agent, as the hook-log copy already does elsewhere in this repo).
 4. The yield fields and the second contrast family in `cso analyze`, reading the reused arms from the results post's stage2-scores.jsonl and stage2-sessions.tsv.

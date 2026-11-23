@@ -139,7 +139,7 @@
   "rule": "the parent's section 8, as written: a helper start call through gstack-cso-launcher returned a run id, at least one inspect or read call used that run, and a finish call ran",
   "threshold": 0.8,
   "detector_fixes": [
-   "start: a run id is that start's when the start printed it, or when the helper's run record saved from the session holds it, matched by order (the session's k-th unrefused start takes the record's k-th run, ordered by the creation time in its id), or, when the helper didn't refuse that start, the first run id a later call prints or passes (its own output included) before any other start call; transcripts carry only seconds since session start, so matching is by order, not clock time",
+   "start: a run id is that start's when the start printed it; or when the helper's run record saved from the session holds it, matched by order (the session's k-th unrefused start takes the record's k-th run, ordered by the creation time in its id), only when the unrefused starts and the record's runs are equal in number, else the record is not used for matching; or, when the helper didn't refuse that start, the first run id a later call prints or passes (its own output included) before any other start call. The detector reads sdk-messages.jsonl, whose events carry only seconds since session start, so matching is by order",
    "used: an inspect or read call names the run by its id, or by a shell variable or command substitution, when the session holds exactly one accepted start",
    "finish: a finish call on the run counts when its own output holds the helper's finish object or it exited 0 with no helper refusal, even when a later command in the same Bash call failed; or the saved run record shows the run finished"
   ],
@@ -222,7 +222,14 @@
   ],
   "pilot_gate": "on the 10 pilot cso reports: no refusal, no judge gap, and gold disagrees with the judge on named in at most 2",
   "on_failure": "no counted number counts; the rows read judge not validated (FIX-METHOD) and the Captain decides",
-  "gold_floor": "at least 100 gold reports (both labellers agree); if fewer, the draw continues down the same list in the same way, up to 20 more reports (about $12 inside cso2-judge's cap); if 100 still aren't gold, the check fails on its floor"
+  "gold_floor": "at least 100 gold reports (both labellers agree); if fewer, the draw continues down the same list in the same way, up to 20 more reports (about $12 inside cso2-judge's cap); if 100 still aren't gold, the check fails on its floor",
+  "check_rules": {
+   "check_reports_min": 100,
+   "parent_check_reports_min": 40,
+   "anchor_fill": "none: no oracle or stock anchor is added; a shortfall draws only the counted extension",
+   "parent_gold": "the parent's 85 gold reports enter as sealed, anchors included",
+   "unchanged": "every other parent judge setting (class_min 10, anchor_share_max 0.3, kappa minimums, validity finding minimum and its finding fill, format variants)"
+  }
  },
  "items": {
   "cso2-pilot": {
