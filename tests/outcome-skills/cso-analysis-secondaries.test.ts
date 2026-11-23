@@ -70,3 +70,13 @@ describe("section 10: the miss anatomy's input, from the sessions, the judged ro
     expect(particle!.miss).toEqual({ none: {}, cso: {} });
   });
 });
+
+test("a model whose validity check failed leaves its validity numbers out with the note; named still prints", () => {
+  const scores = units.flatMap((u, k) => (["opus", "particle"] as CsoModel[]).flatMap((m) => [sc(u, "none", m, false), sc(u, "cso", m, k < 4)]));
+  const [opus, particle] = secondaries({ units, scores, sessions: [], judge: { opus: { named: true, validity: false }, particle: { named: true, validity: true }, sol: { named: false, validity: false } } }, p);
+  for (const k of ["supported", "unsupported", "cant_tell"] as const) expect(opus!.diffs[k]).toEqual({ n: 0, none: null, cso: null, delta: null, ci95: null, note: "judge not validated" });
+  expect(opus!.diffs.named.delta).toBe(0.5);
+  expect(particle!.diffs.unsupported.delta).toBe(-2);
+  expect(particle!.diffs.unsupported.note).toBeUndefined();
+});
+

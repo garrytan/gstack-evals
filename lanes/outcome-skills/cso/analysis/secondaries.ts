@@ -16,7 +16,10 @@ import { Data, PRIMARY_MODELS, type AnalysisInput } from "./verdicts.ts";
 export const STRICT_FROM = "2026-10-01";
 type Key = "named" | "named_final" | "file_level" | "supported" | "unsupported" | "cant_tell" | "findings_total" | "phantoms" | "cost_usd";
 const KEYS: Key[] = ["named", "named_final", "file_level", "supported", "unsupported", "cant_tell", "findings_total", "phantoms", "cost_usd"];
-export interface Diff { n: number; none: number | null; cso: number | null; delta: number | null; ci95: [number, number] | null }
+export interface Diff { n: number; none: number | null; cso: number | null; delta: number | null; ci95: [number, number] | null; note?: typeof NOT_VALIDATED }
+/** Section 7: when a model's validity label fails its check, its validity numbers are left out and carry this note. */
+export const NOT_VALIDATED = "judge not validated";
+const VALIDITY_KEYS: readonly Key[] = ["supported", "unsupported", "cant_tell"];
 
 const val = (s: CsoScore, k: Key): number | null => {
   if (k === "phantoms") return s.phantoms.paths + s.phantoms.lines;
@@ -94,7 +97,7 @@ export function secondaries(i: AnalysisInput, p: CsoPrereg, misses: Record<strin
     };
     return {
       model: m,
-      diffs: Object.fromEntries(KEYS.map((k) => [k, diff(d, i.units, m, k, p.bootstrap_seed)])) as Record<Key, Diff>,
+      diffs: Object.fromEntries(KEYS.map((k) => [k, VALIDITY_KEYS.includes(k) && !i.judge[m]?.validity ? { n: 0, none: null, cso: null, delta: null, ci95: null, note: NOT_VALIDATED } : diff(d, i.units, m, k, p.bootstrap_seed)])) as Record<Key, Diff>,
       precision: { none: prec("none"), cso: prec("cso") },
       outcomes: { none: ends("none"), cso: ends("cso") },
       strata: Object.fromEntries(Object.entries(strata).map(([k, f]) => [k, diff(d, i.units.filter(f), m, "named", p.bootstrap_seed)])),

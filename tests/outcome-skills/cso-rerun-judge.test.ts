@@ -92,3 +92,15 @@ test("judge --pilot-gate judges each pilot session once with its route, writes t
     else process.env.CSO_PLAN = before;
   }
 });
+
+test("judged rows carry their route, and a resume on another route into the same out dir is refused", async () => {
+  const out = join(dir, "routes");
+  const argv = (route: string) => ["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--out", out, "--run", "t", "--route", route];
+  expect((await quiet(() => judgeCmd(argv("fallback-opus-particle"), { transport: fake }))).code).toBe(0);
+  const rows = readFileSync(join(out, "judged.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  expect(rows.length).toBe(10);
+  expect(new Set(rows.map((x) => x.route))).toEqual(new Set(["fallback-opus-particle"]));
+  await expect(judgeCmd(argv("production"), { transport: fake })).rejects.toThrow(/^E_USAGE .*10 rows judged on route fallback-opus-particle, not production/);
+  expect((await quiet(() => judgeCmd(argv("fallback-opus-particle"), { transport: fake }))).out).toContain("judged 0 sessions");
+});
+

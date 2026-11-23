@@ -178,7 +178,10 @@ async function pilotGateRun(w: Work, sessions: SessionRecord[], clients: ReturnT
 }
 
 async function judgeAll(w: Work, sessions: SessionRecord[], judge: ReturnType<typeof routeClients>["judge"], file: string, cells: readonly CsoModel[], k: Buffer | null, p: CsoPrereg, route: string): Promise<number> {
-  const done = new Set(existsSync(file) ? readRows<{ unit: string; arm: string; model: string; stage: string }>(file, k).map(key) : []);
+  const prior = existsSync(file) ? readRows<{ unit: string; arm: string; model: string; stage: string; route?: string }>(file, k) : [];
+  const other = prior.filter((r) => r.route !== undefined && r.route !== route);
+  if (other.length) csoFail("E_USAGE", file + " holds " + other.length + " rows judged on route " + other[0]!.route + ", not " + route + "; judge each route into its own --out");
+  const done = new Set(prior.map(key));
   let n = 0;
   for (const s of sessions) {
     if (done.has(key(s)) || s.end === "gap" || !cells.includes(s.model)) continue;
