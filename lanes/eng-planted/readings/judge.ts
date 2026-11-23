@@ -20,6 +20,10 @@ import { at, lvl } from "./stats.ts";
 
 export const QUOTES_PROMPT = join(import.meta.dir, "prompts/judge-quotes.md");
 export const NAMED_PROMPT = join(import.meta.dir, "prompts/judge-named.md");
+/** Section 5's one rubric revision of call 2 (Captain ruling A, 2026-11-23), written after the stock control credited a
+ * plan sentence on udbd167e5cbd0 that the plan's own reading had not matched. Call 1 is unchanged. Frozen from its first
+ * call. */
+export const NAMED_PROMPT_R1 = join(import.meta.dir, "prompts/judge-named-r1.md");
 export const GENERIC_DIR = join(import.meta.dir, "generic");
 
 export type JudgeRole = "judge" | "gold-opus" | "gold-gemini";

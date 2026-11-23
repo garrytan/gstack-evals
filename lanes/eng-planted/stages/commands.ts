@@ -26,7 +26,7 @@ import { EpError, fail, notBuilt } from "../errors.ts";
 import { FROZEN, SIZE } from "../frozen.ts";
 import type { Command, PlantedGrader, ReviewArm } from "../types.ts";
 import { armCheckoutProblems, EB_ARM, plainArmProblems, plantedArmSpec, SKILL_ARMS, skillPin } from "./arms.ts";
-import { judgeAll, ROLE_EFFORT, ROLE_MODEL, type JudgeCall, type JudgeRole } from "../readings/judge.ts";
+import { judgeAll, loadPrompts, NAMED_PROMPT, NAMED_PROMPT_R1, ROLE_EFFORT, ROLE_MODEL, type JudgeCall, type JudgeRole } from "../readings/judge.ts";
 import type { AuthorCall } from "./author.ts";
 import { buildKey, ebSession, type MountTable, type PlantedSession } from "./build.ts";
 import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, settleThrown, type AllIn, type Kind } from "./ledger.ts";
@@ -376,13 +376,15 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     const run = runDir(a);
     const role = need(a, "--role") as JudgeRole;
     if (!(role in ROLE_MODEL)) fail("E_USAGE", "--role is " + Object.keys(ROLE_MODEL).join(", "));
+    const revision = a.flags.get("--revision") ?? "0";
+    if (revision !== "0" && revision !== "1") fail("E_USAGE", "--revision is 0 or 1: section 5 allows one rubric revision");
     const r = runRecords(run, source(a));
     const picked = a.flags.has("--bundles") ? (JSON.parse(readFileSync(a.flags.get("--bundles")!, "utf8")) as BundleRef[]) : bundleSet(r.units.filter((u) => u.set === "comparison"), r.reviews);
     const inputs = picked.map((b) => bundleInput(run, b));
     const p = plantedPaid("judge", a, run);
     const gate = itemGate(p, run);
-    const results = await paidStage(p, seams.judge({ out: join(run, "judge", "meter"), cacheDir: need(a, "--cache"), roles: [role] }), (call) => judgeAll(inputs, gatedJudge(gate, call), role));
-    const out = join(run, "judge", role + ".json");
+    const results = await paidStage(p, seams.judge({ out: join(run, "judge", "meter"), cacheDir: need(a, "--cache"), roles: [role] }), (call) => judgeAll(inputs, gatedJudge(gate, call), role, loadPrompts(revision === "1" ? NAMED_PROMPT_R1 : NAMED_PROMPT)));
+    const out = join(run, "judge", role + (revision === "1" ? "-r1" : "") + ".json");
     mkdirSync(join(run, "judge"), { recursive: true });
     writeFileSync(out, JSON.stringify(results, null, 1) + "\n");
     io.out("judge " + role + ": " + results.length + " bundles, " + results.filter((x) => x.named).length + " name the planted condition, " + results.filter((x) => x.error).length + " with an error; " + out);
@@ -412,7 +414,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     reviews: { run: ep(reviews), bools: [], usage: RUN + " --phase pilot|comparison [--gstack <checkout at the pin>] [--parallel n] [--policy <file>] " + PAID, summary: "the pilot's plain reviews or the comparison reviews, with the interim exposure stop (paid: ep-comparison)" },
     builds: { run: ep(builds), bools: [], usage: RUN + " --phase pilot|comparison|stock " + BUILD + " [--parallel n] " + PAID, summary: "the reviewed builds of a phase, or the stock control's (paid: ep-comparison, ep-stock)" },
     records: { run: ep(records), bools: [], usage: RUN + " --out <json>", summary: "every unit, review and build record of the run, in run order, as the readings read them" },
-    judge: { run: ep(judge), bools: [], usage: RUN + " --role judge|gold-opus|gold-gemini [--bundles <json of {unit, source, rep, smoke?}>] --cache <dir> " + PAID, summary: "the judged secondary's calls over the bundle set, or over the gold set given (paid: ep-judge)" },
+    judge: { run: ep(judge), bools: [], usage: RUN + " --role judge|gold-opus|gold-gemini [--bundles <json of {unit, source, rep, smoke?}>] [--revision 0|1] --cache <dir> " + PAID, summary: "the judged secondary's calls over the bundle set, or over the gold set given; --revision 1 reads section 5's revised call-2 rubric and writes <role>-r1.json (paid: ep-judge)" },
     gold: { run: ep(gold), bools: [], usage: RUN + " --out <json>", summary: "section 8's gold set over the run, with no model call: the bundles ep judge --bundles reads for the judge check" },
     owed: { run: ep(owed), bools: [], usage: "--run <dir>", summary: "set aside each build cell recorded as a gap whose retry never opened (refused, or never reaching the driver), read from the driver's log; the step's next run retries it" },
     lost: { run: ep(lost), bools: [], usage: "--run <dir> --unit <id> --reason <text>", summary: "record a comparison unit lost to infrastructure; the next reserve unit in seeded order replaces it" },

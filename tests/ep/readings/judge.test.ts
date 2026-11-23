@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fxReview, fxUnit } from "../../../lanes/eng-planted/readings/fixtures.ts";
-import { bundleSet, bundleText, genericList, genericRate, goldOf, judgeAll, judgeCheck, kappaOf, keywordHit, NAMED_PROMPT, parseNamed, parseQuotes, QUOTES_PROMPT, ROLE_EFFORT, ROLE_MODEL, sectionOf, stripNames, type GoldRow, type JudgeCall } from "../../../lanes/eng-planted/readings/judge.ts";
+import { bundleSet, bundleText, genericList, genericRate, goldOf, judgeAll, judgeCheck, kappaOf, keywordHit, loadPrompts, NAMED_PROMPT, NAMED_PROMPT_R1, parseNamed, parseQuotes, QUOTES_PROMPT, ROLE_EFFORT, ROLE_MODEL, sectionOf, stripNames, type GoldRow, type JudgeCall } from "../../../lanes/eng-planted/readings/judge.ts";
 
 describe("the judge's reading", () => {
   test("strips arm and package names", () => {
@@ -52,6 +52,21 @@ describe("the judge's reading", () => {
     expect([none.named, none.matched, none.error]).toEqual([false, null, null]);
     const hit = await read("MATCH 1");
     expect([hit.named, hit.matched, hit.error]).toEqual([true, 0, null]);
+  });
+  test("the one rubric revision changes call 2 only, keeps its slots and answer line, and reaches call 2 (section 5, 2026-11-23)", async () => {
+    const r0 = loadPrompts();
+    const r1 = loadPrompts(NAMED_PROMPT_R1);
+    expect(r1.quotes).toBe(r0.quotes);
+    expect(r1.named).not.toBe(r0.named);
+    for (const s of ["{{HINT}}", "{{QUOTES}}", "MATCH followed by the number of the first quote", "or NONE."]) expect(r1.named).toContain(s);
+    const seen: string[] = [];
+    await judgeAll([{ unit: "u1", source: "plain", files: [{ path: "plan.md", text: "Return zero on empty input." }], hint: "h" }], async (_role, prompt) => {
+      seen.push(prompt);
+      return prompt.includes("Hint:") ? "NONE" : JSON.stringify(["Return zero on empty input."]);
+    }, "judge", r1);
+    expect(seen).toHaveLength(2);
+    expect(seen[1]).toContain("states both parts of the hint");
+    expect(seen[0]).not.toContain("states both parts of the hint");
   });
   test("the Carbon labeller runs at its default effort; the judge and the Opus labeller stay at high", () => {
     expect(ROLE_EFFORT).toEqual({ judge: "high", "gold-opus": "high", "gold-gemini": null });

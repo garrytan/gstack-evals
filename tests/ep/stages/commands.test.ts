@@ -59,6 +59,10 @@ describe("routes", () => {
 
 describe("commands", () => {
   const t = stagesCommands();
+  test("ep judge takes revision 0 or 1 only, before it reads the run: section 5 allows one rubric revision", async () => {
+    const e = await Promise.resolve(t.judge!.run(args({ "--run": join(tmpdir(), "ep-no-run"), "--role": "judge", "--revision": "2" }), io().io)).then(() => null, (x: { code?: string; message?: string }) => x);
+    expect([e?.code, e?.message?.includes("--revision is 0 or 1")]).toEqual(["E_USAGE", true]);
+  });
   test("ledger prints the program, one init line per item and the reserve, hosts and crew notes", async () => {
     const o = io();
     expect(await t.ledger!.run(args({}), o.io)).toBe(0);
