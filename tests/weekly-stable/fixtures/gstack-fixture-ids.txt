@@ -1,0 +1,13 @@
+# The first 12 id lines of gstack dd611038 (v1.102.2.0) test/fixtures/skill-route-b1-in-sample.json, as grep -o printed them on 2026-11-22.
+"id": "con__nwb2bids-347_interface"
+"id": "optuna__optuna-6428"
+"id": "tobymao__sqlglot-7187"
+"id": "AbsaOSS__generate-release-notes-207"
+"id": "aws__bedrock-agentcore-sdk-python-279_interface"
+"id": "facelessuser__pymdown-extensions-2807"
+"id": "pandas-dev__pandas-63945"
+"id": "deepset-ai__haystack-10547"
+"id": "marimo-team__marimo-8401"
+"id": "pipecat-ai__pipecat-4283"
+"id": "bluesky__ophyd-async-1164"
+"id": "Cambridge-ICCS__TCTrack-118"

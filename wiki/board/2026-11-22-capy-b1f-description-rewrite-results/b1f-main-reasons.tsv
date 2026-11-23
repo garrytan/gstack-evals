@@ -1,0 +1,764 @@
+set	arm	task	trial	outcome	reason	loaded	followed	named	first_text
+nonfit	hook	adrn__gala-495	adrn__gala-495__qSxQ9AG	counted	graded	false	false		Most places funnel through `UnitSystem(...)`. Best to handle strings in `UnitSystem.__new__`/`__init__`.
+nonfit	hook	alibaba__opensandbox-426	alibaba__opensandbox-426__V8koSXQ	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll start there.
+nonfit	hook	astronomy-commons__hats-648	astronomy-commons__hats-648__wxmGGht	counted	graded	false	false	verify	Add the function to `skymap.py`:
+nonfit	hook	astronomy-commons__lsdb-1349	astronomy-commons__lsdb-1349__kQyBfGM	counted	graded	false	false		Hats' metadata tooling already reads pixel directories, so all the work is in lsdb's write path. Implementing now.
+nonfit	hook	basicmachines-co__basic-memory-334	basicmachines-co__basic-memory-3__g5uCMLG	counted	graded	false	false	prove-it	Core change is in place. Now updating the tests to use `BASIC_MEMORY_PROJECT_ROOT`.
+nonfit	hook	BerriAI__litellm-16526	BerriAI__litellm-16526__DapYTTk	counted	graded	false	false		The Gemini (AI Studio) route now handles all `gemini*` image models. Next I'll add the Vertex AI path.
+nonfit	hook	bluesky__ophyd-async-1165	bluesky__ophyd-async-1165__VPjxFq8	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll write a failing test first, then implement.
+nonfit	hook	celestoai__smolvm-172	celestoai__smolvm-172__9wDwJ2R	counted	graded	false	false	prove-it	I'll skip the suggested /prove-it routing: this is a feature request, not a bug fix. Starting with the code.
+nonfit	hook	conan-io__conan-19393	conan-io__conan-19393__JVuLpq6	counted	graded	false	false		I'll thread a `root_profile_name` (basename of the top-level profile file) through recursion.
+nonfit	hook	getmoto__moto-9356	getmoto__moto-9356__PqQ3AHz	counted	graded	false	false		Now implement. AWS always includes the service's own region in `SupportedRegions`, so I'll do the same.
+nonfit	hook	getmoto__moto-9440	getmoto__moto-9440__TSUkrEX	counted	graded	false	false		Plan: add a `ReservedInstancesBackend` that builds offerings from the instance types available in each region, then wire it into the response using `ActionResult`.
+nonfit	hook	ImperialCollegeLondon__proCAT-503	ImperialCollegeLondon__proCAT-50__WremkmX	counted	graded	false	false		`object` is available in the UpdateView context. Now add tests and run them.
+nonfit	hook	joke2k__django-environ-592	joke2k__django-environ-592__VLavRLK	counted	graded	false	false		Now implement `extra_options` in both `db_url` and `db_url_config`.
+nonfit	hook	koxudaxi__datamodel-code-generator-3071	koxudaxi__datamodel-code-generat__U5iJ5bf	counted	graded	false	false	prove-it	Works end to end; the option name appears twice in the error output, so I'll remove my own prefix since argparse already adds it.
+nonfit	hook	line__line-bot-sdk-python-981_interface	line__line-bot-sdk-python-981_in__bR6smwG	counted	graded	false	false		The wrappers are in place in both files; flake8 only reports the generated code's existing style warnings. Next I'm testing what the wrappers actually send.
+nonfit	hook	meltano__meltano-9929	meltano__meltano-9929__uxs5RtM	counted	graded	false	false	prove-it	Now adding the `_sort_key` and `_print_setting` helpers (the per-setting printing logic moved out of the loop unchanged).
+nonfit	hook	meltano__meltano-9950	meltano__meltano-9950__mBuvukA	counted	graded	false	false	prove-it	Added a grouping mixin to the base command class. Now tagging options in params.py and run/el/elt.
+nonfit	hook	newton-physics__newton-1653	newton-physics__newton-1653__TfFUPvj	counted	graded	false	false		Let me implement geom_margin ← `shape_contact_margin` and see how existing tests react.
+nonfit	hook	packit__packit-2684	packit__packit-2684__cVn39Jg	counted	graded	false	false		Now add the method after `untag_build`.
+nonfit	hook	pyinfra-dev__pyinfra-1630	pyinfra-dev__pyinfra-1630__oPxyRyx	counted	graded	true	false	prove-it	Now the edits to client.py.
+nonfit	hook	scientific-python__docstub-123	scientific-python__docstub-123__YGBdt27	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll write a failing test first.
+nonfit	hook	stanfordnlp__dspy-9478_interface	stanfordnlp__dspy-9478_interface__rAVq2zX	counted	graded	false	false		Now implement.
+nonfit	hook	strands-agents__sdk-python-1734	strands-agents__sdk-python-1734__U6a4yiG	counted	graded	false	false	prove-it	The gstack hook suggested /prove-it, but this is a feature request rather than a bug fix, so I'm implementing it directly.
+nonfit	hook	tobymao__sqlglot-7479	tobymao__sqlglot-7479__PryAf9c	counted	graded	true	false	prove-it	I've traced how BigQuery already handles `AI.FORECAST`: it builds a `Dot(AI, AIForecast)`. Next I'll check whether any similar classes already exist.
+nonfit	hook	unit8co__darts-2985	unit8co__darts-2985__4m276Y2	counted	graded	false	false		Plotly isn't installed. Let me read the existing plot method.
+nonfit	hook	vprusso__toqito-1484_interface	vprusso__toqito-1484_interface__9FDiueD	counted	graded	false	false	prove-it	Coverage plugin conflicts with numpy import here; retry with a different approach.
+nonfit	hook	vprusso__toqito-1538	vprusso__toqito-1538__6ZHYkSZ	counted	graded	false	false	prove-it	The routing hook suggested /prove-it, but this is a feature addition rather than a bug fix, so I'm going straight to implementation.
+nonfit	long	adrn__gala-495	adrn__gala-495__cUtSwQM	counted	graded	false	false	-	Allowing strings in the plotting helper and in `replace_units` too.
+nonfit	long	alibaba__opensandbox-426	alibaba__opensandbox-426__2rfZeYU	counted	graded	false	false	-	Core changes are in; checking the IP-extraction function and running tests.
+nonfit	long	astronomy-commons__hats-648	astronomy-commons__hats-648__qEsfEWz	counted	graded	false	false	-	Also add a convenience method on the dataset class and tests.
+nonfit	long	astronomy-commons__lsdb-1349	astronomy-commons__lsdb-1349__q7wjnuc	counted	graded	false	false	-	First, a quick test that the core write works, before I wire the params through the public APIs.
+nonfit	long	basicmachines-co__basic-memory-334	basicmachines-co__basic-memory-3__fZnayba	counted	graded	false	false	-	I'll add a `project_root` config field (env var takes priority over a value saved in the config file), then switch `add_project` over to it.
+nonfit	long	BerriAI__litellm-16526	BerriAI__litellm-16526__4Jb9FS8	counted	graded	false	false	-	Now the Vertex AI handler:
+nonfit	long	bluesky__ophyd-async-1165	bluesky__ophyd-async-1165__LAwb9m7	counted	graded	false	false	-	Now the tests, mocking the PVI structure returned by `pvget_with_timeout`:
+nonfit	long	celestoai__smolvm-172	celestoai__smolvm-172__jQqsaTB	counted	graded	false	false	-	Now `system-setup.sh`:
+nonfit	long	conan-io__conan-19393	conan-io__conan-19393__hSCfye2	counted	graded	false	false	-	Implement with an optional root name threaded through.
+nonfit	long	getmoto__moto-9356	getmoto__moto-9356__bgwkoJr	counted	graded	false	false	-	Now a test.
+nonfit	long	getmoto__moto-9440	getmoto__moto-9440__Pbf7F45	counted	graded	false	false	-	Now I'll write the model.
+nonfit	long	ImperialCollegeLondon__proCAT-503	ImperialCollegeLondon__proCAT-50__oCReQ86	counted	graded	false	false	-	Now implement.
+nonfit	long	joke2k__django-environ-592	joke2k__django-environ-592__qrmj3LU	counted	graded	false	false	-	Implementing `extra_options` in both `db_url` and `db_url_config`, merged into `OPTIONS` (overriding URL query values).
+nonfit	long	koxudaxi__datamodel-code-generator-3071	koxudaxi__datamodel-code-generat__gwjiycn	counted	graded	false	false	-	Works end-to-end; file and inline output are identical, and bad inputs exit with code 2. One small fix: the "no file exists" hint shouldn't appear when the input clearly looks like inline JSON.
+nonfit	long	line__line-bot-sdk-python-981_interface	line__line-bot-sdk-python-981_in__TbjpoUN	counted	graded	false	false	-	Now apply it to the current generated files and test both sync and async against a mock.
+nonfit	long	meltano__meltano-9929	meltano__meltano-9929__52M6sGi	counted	graded	false	false	-	I'll refactor the per-setting printing into a helper and group the regular settings.
+nonfit	long	meltano__meltano-9950	meltano__meltano-9950__bkQQkPe	counted	graded	false	false	-	Now implement the core infrastructure in `utils.py`.
+nonfit	long	newton-physics__newton-1653	newton-physics__newton-1653__ruVG43p	counted	graded	false	false	-	Neither MuJoCo nor mujoco_warp is installed here, so I'll implement from source reading. Checking how #1101 touched the MuJoCo solver:
+nonfit	long	packit__packit-2684	packit__packit-2684__nkjga9L	counted	graded	false	false	-	Now tests:
+nonfit	long	pyinfra-dev__pyinfra-1630	pyinfra-dev__pyinfra-1630__vQ5ikka	counted	graded	false	false	-	Paramiko already strips quotes from config values. Now the implementation:
+nonfit	long	scientific-python__docstub-123	scientific-python__docstub-123__EaeURZX	counted	graded	false	false	-	The grammar has no rule for a bracketed parameter list (or a leading `...`) inside a subscription, so I'll add a dedicated `callable` rule.
+nonfit	long	stanfordnlp__dspy-9478_interface	stanfordnlp__dspy-9478_interface__PypHsTo	counted	graded	false	false	-	Now implement.
+nonfit	long	strands-agents__sdk-python-1734	strands-agents__sdk-python-1734__GTqtx34	counted	graded	false	false	-	Plugin lives in `strands.plugins`, not `strands.hooks`.
+nonfit	long	tobymao__sqlglot-7479	tobymao__sqlglot-7479__WpQLSpo	counted	graded	false	false	-	Next, the parser. I'm converting in `_parse_column_ops`, after the existing AI/ML re-parse.
+nonfit	long	unit8co__darts-2985	unit8co__darts-2985__GD7RL7z	counted	graded	false	false	-	Plotly isn't installed and the network is blocked, so I'll import it lazily and write the code against plotly's standard API.
+nonfit	long	vprusso__toqito-1484_interface	vprusso__toqito-1484_interface__wEXeVvm	counted	graded	false	false	-	Coverage plugin conflicts with numpy here; run without `--cov` first, then with a different approach.
+nonfit	long	vprusso__toqito-1538	vprusso__toqito-1538__N9HrKTa	counted	graded	false	false	-	Now I'll implement the uparrow variant.
+nonfit	own	adrn__gala-495	adrn__gala-495__SouA45g	counted	graded	false	false	-	Core change is in place (`UnitSystem("galactic")` and string handling in potentials' `_validate_units`). Now checking the plot `units` path and composite/special potentials, then testing.
+nonfit	own	alibaba__opensandbox-426	alibaba__opensandbox-426__UGR9EqC	counted	graded	false	false	-	The config and validation changes are in. Next I'll clean up the endpoint resolution block properly and fix the internal IP lookup.
+nonfit	own	astronomy-commons__hats-648	astronomy-commons__hats-648__DainkDM	counted	graded	false	false	-	I'll add `skymap_coverage` (and a `read_skymap` helper wrapper) to `hats.io.skymap`, plus a `HealpixDataset` method.
+nonfit	own	astronomy-commons__lsdb-1349	astronomy-commons__lsdb-1349__popBKXu	counted	graded	false	false	-	Now I'll implement. First, `perform_write` / `write_partitions` / `to_hats` in `src/lsdb/io/to_hats.py`.
+nonfit	own	basicmachines-co__basic-memory-334	basicmachines-co__basic-memory-3__7v7k6X7	counted	graded	false	false	-	I've swapped the cloud-mode check in `add_project()` for a `BASIC_MEMORY_PROJECT_ROOT` check and added the `project_root` config field. Next I'll update the tests and docs.
+nonfit	own	BerriAI__litellm-16526	BerriAI__litellm-16526__3hwqyRL	counted	graded	false	false	-	Now the Vertex handler:
+nonfit	own	bluesky__ophyd-async-1165	bluesky__ophyd-async-1165__Kr4NDCt	counted	graded	false	false	-	Implementation is in place: optional children get tracked, set to `None` at connect if missing, and restored if they show up on a reconnect. Next I'll look at the existing PVI tests and add new ones.
+nonfit	own	celestoai__smolvm-172	celestoai__smolvm-172__oLDUoyR	counted	no verifier reward, verifier infrastructure error (RuntimeError)	false	false	-	Doctor already covers KVM. Now implementing: Python options/command builder first.
+nonfit	own	conan-io__conan-19393	conan-io__conan-19393__tdWTeJE	counted	graded	false	false	-	Works. Now add a test and a docs note if available.
+nonfit	own	getmoto__moto-9356	getmoto__moto-9356__nah6iJk	counted	graded	false	false	-	Now I'll add a test to the existing test file.
+nonfit	own	getmoto__moto-9440	getmoto__moto-9440__xoFhj8p	counted	graded	false	false	-	Writing the model now.
+nonfit	own	ImperialCollegeLondon__proCAT-503	ImperialCollegeLondon__proCAT-50__wAZVXm9	counted	graded	false	false	-	Now implement.
+nonfit	own	joke2k__django-environ-592	joke2k__django-environ-592__kJEd98v	counted	graded	false	false	-	Now add tests and a docs note.
+nonfit	own	koxudaxi__datamodel-code-generator-3071	koxudaxi__datamodel-code-generat__KDeYgtB	counted	graded	false	false	-	Meanwhile, finding where existing tests for these options live:
+nonfit	own	line__line-bot-sdk-python-981_interface	line__line-bot-sdk-python-981_in__46X8UHh	counted	graded	false	false	-	Let me see the async file's method layout.
+nonfit	own	meltano__meltano-9929	meltano__meltano-9929__QfxatHv	counted	graded	false	false	-	I'll anchor the helper insertion on `@_use_meltano_env\n@config.command(\n cls=PartialInstrumentedCmd,\n name="list",` instead.
+nonfit	own	meltano__meltano-9950	meltano__meltano-9950__5gW6keM	counted	graded	false	false	-	Now implement the core in `utils.py`.
+nonfit	own	newton-physics__newton-1653	newton-physics__newton-1653__CDecGqH	counted	graded	false	false	-	Now parse the MJCF `margin` attribute into `contact_margin`, then add a test.
+nonfit	own	packit__packit-2684	packit__packit-2684__oB5pN6p	counted	graded	false	false	-	Now the tests:
+nonfit	own	pyinfra-dev__pyinfra-1630	pyinfra-dev__pyinfra-1630__Kni6q2Z	counted	graded	false	false	-	Now implementing: parse `IdentityAgent`, a socket-path agent, and use it for auth and forwarding.
+nonfit	own	scientific-python__docstub-123	scientific-python__docstub-123__VSZr27z	counted	graded	false	false	-	Earley parser. I'll add a dedicated `callable` rule.
+nonfit	own	stanfordnlp__dspy-9478_interface	stanfordnlp__dspy-9478_interface__9X2q7jo	counted	graded	false	false	-	Now implement.
+nonfit	own	strands-agents__sdk-python-1734	strands-agents__sdk-python-1734__jhPPfWu	counted	graded	false	false	-	Plugin lives in `strands.plugins`. Check for circular import.
+nonfit	own	tobymao__sqlglot-7479	tobymao__sqlglot-7479__8DHK9pg	counted	graded	false	false	-	Now the parser: convert the anonymous `AI.EMBED/SIMILARITY/GENERATE` calls into typed nodes, falling back to the generic form when the arguments don't match the documented signature.
+nonfit	own	unit8co__darts-2985	unit8co__darts-2985__eM9jmnX	counted	graded	false	false	-	Plotly isn't installed. Let me read the plot method.
+nonfit	own	vprusso__toqito-1484_interface	vprusso__toqito-1484_interface__26dYzq8	counted	graded	false	false	-	Docs appear auto-generated. Writing the module and tests.
+nonfit	own	vprusso__toqito-1538	vprusso__toqito-1538__Lh8pfmg	counted	graded	false	false	-	Docs are autogenerated from docstrings. Now implementing.
+nonfit	required	adrn__gala-495	adrn__gala-495__JCcY2PK	counted	graded	true	false	-	Added string lookup in `UnitSystem`. Now updating call sites so a string maps to the real instance (keeps `dimensionless` as a `DimensionlessUnitSystem`).
+nonfit	required	alibaba__opensandbox-426	alibaba__opensandbox-426__z7NQ7VD	counted	graded	true	false	-	Now implementing. Config first:
+nonfit	required	astronomy-commons__hats-648	astronomy-commons__hats-648__ySShDDv	counted	graded	true	true	-	Writing the test first.
+nonfit	required	astronomy-commons__lsdb-1349	astronomy-commons__lsdb-1349__2Diaeif	counted	graded	true	true	-	Writing a failing test first.
+nonfit	required	basicmachines-co__basic-memory-334	basicmachines-co__basic-memory-3__q35oipr	counted	graded	true	true	-	Plan: add a `project_root` config field (env `BASIC_MEMORY_PROJECT_ROOT`), switch `add_project()` to check it instead of cloud mode, and update the tests. Tests first.
+nonfit	required	BerriAI__litellm-16526	BerriAI__litellm-16526__cXFnxQ9	counted	graded	true	false	-	Gemini AI Studio side is done. Now the Vertex AI handler.
+nonfit	required	bluesky__ophyd-async-1165	bluesky__ophyd-async-1165__xPDisDh	counted	graded	true	true	-	Writing the tests first.
+nonfit	required	celestoai__smolvm-172	celestoai__smolvm-172__fNttLu8	counted	graded	true	false	-	Setup option plumbing is in. Next: CLI flags in `main.py`.
+nonfit	required	conan-io__conan-19393	conan-io__conan-19393__e3EU3Jv	counted	graded	true	true	-	Test first:
+nonfit	required	getmoto__moto-9356	getmoto__moto-9356__MjiDKR6	counted	graded	true	true	-	Writing the failing tests first.
+nonfit	required	getmoto__moto-9440	getmoto__moto-9440__SGN69M8	counted	graded	true	true	-	Writing the failing test first.
+nonfit	required	ImperialCollegeLondon__proCAT-503	ImperialCollegeLondon__proCAT-50__FuPfHw5	counted	graded	true	true	-	Tests fail as expected. Now the implementation.
+nonfit	required	joke2k__django-environ-592	joke2k__django-environ-592__ZDEYU8H	counted	graded	true	true	-	Writing the test first.
+nonfit	required	koxudaxi__datamodel-code-generator-3071	koxudaxi__datamodel-code-generat__vAEwG5v	counted	graded	true	true	-	I'll write the failing tests first, then implement.
+nonfit	required	line__line-bot-sdk-python-981_interface	line__line-bot-sdk-python-981_in__VKcLsTm	counted	graded	false	false	-	Now I'll append the wrappers to both API files and test them against a mocked `call_api`:
+nonfit	required	meltano__meltano-9929	meltano__meltano-9929__oVpZDzL	counted	graded	true	false	-	I've grouped the output into Required / Configured / Optional sections. Next I'm adding a test for the ordering and running the suite.
+nonfit	required	meltano__meltano-9950	meltano__meltano-9950__oQf2DwW	counted	graded	true	true	-	Fails as expected (no `MeltanoOption`). Now the implementation in `utils.py`.
+nonfit	required	newton-physics__newton-1653	newton-physics__newton-1653__CHRfWNN	counted	graded	true	false	-	Now the solver: initial conversion, runtime update, and the Newton-contact conversion.
+nonfit	required	packit__packit-2684	packit__packit-2684__eYvYhH6	counted	graded	true	true	-	Tests fail as expected. Now the implementation:
+nonfit	required	pyinfra-dev__pyinfra-1630	pyinfra-dev__pyinfra-1630__HExUgUd	counted	graded	true	true	-	Plan: `parse_config` returns a 7th value `identity_agent` (expanded path, `None` when unset/`none`/`SSH_AUTH_SOCK`), and `connect` hands paramiko an `Agent` bound to that socket. Writing tests first.
+nonfit	required	scientific-python__docstub-123	scientific-python__docstub-123__ZeRdSCQ	counted	graded	true	true	-	Adding a failing test first.
+nonfit	required	stanfordnlp__dspy-9478_interface	stanfordnlp__dspy-9478_interface__n4KpifU	counted	graded	true	true	-	Writing the failing test first.
+nonfit	required	strands-agents__sdk-python-1734	strands-agents__sdk-python-1734__PTcp4Py	counted	graded	true	false	-	Upstream already has `_PluginRegistry.add_and_init` handling sync/async; I'll use it. First, failing tests.
+nonfit	required	tobymao__sqlglot-7479	tobymao__sqlglot-7479__yt79kY9	counted	graded	true	true	-	Test fails as expected. Now the expression classes:
+nonfit	required	unit8co__darts-2985	unit8co__darts-2985__Cg9RhXm	counted	graded	true	false	-	Plotly isn't installed. Let me read the plot method.
+nonfit	required	vprusso__toqito-1484_interface	vprusso__toqito-1484_interface__2YacibW	counted	graded	false	false	-	Matching the reference spec exactly (only the `num_vectors > dim` check), I'll drop the extra positivity validation.
+nonfit	required	vprusso__toqito-1538	vprusso__toqito-1538__dbq36xy	counted	graded	false	false	-	Docs are generated from docstrings. Now writing the implementation.
+primary	hook	a2aproject__a2a-python-576	a2aproject__a2a-python-576__YyDn8B8	counted	graded	true	false	prove-it	Fix passes the repro. Next: add the tests to the repo's test files and run the full suite, watching for the existing mocks of `aconnect_sse`.
+primary	hook	a2aproject__a2a-python-682_interface	a2aproject__a2a-python-682_inter__tqBHnaQ	counted	graded	false	false	prove-it	Python 3.10 support means `Self` must come from `typing_extensions`. Let me check that's available.
+primary	hook	ag2ai__faststream-2701	ag2ai__faststream-2701__kwnDgLY	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll write a failing test first.
+primary	hook	agentscope-ai__qwenpaw-3278	agentscope-ai__qwenpaw-3278__PB2ngup	counted	graded	true	false	prove-it	gstack routed this to /prove-it (test first, then fix).
+primary	hook	agronholm__anyio-1121	agronholm__anyio-1121__qF4VXKY	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm starting with that skill.
+primary	hook	agronholm__anyio-1134	agronholm__anyio-1134__ANoyQfH	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'm loading that skill first.
+primary	hook	alibaba__opensandbox-816	alibaba__opensandbox-816__TcjZEqk	counted	graded	true	true	prove-it	Add failing tests:
+primary	hook	All-Hands-AI__OpenHands-11914	All-Hands-AI__OpenHands-11914__9H3UUuH	counted	graded	true	true	prove-it	gstack routed this bug fix to /prove-it, so I'll start there.
+primary	hook	allenneuraldynamics__aind-data-schema-1677	allenneuraldynamics__aind-data-s__SHbafe7	counted	graded	true	false	prove-it	Gstack routed this request to /prove-it, so I'm running that first.
+primary	hook	ardupilot__methodicconfigurator-1201	ardupilot__methodicconfigurator__QoZc4fY	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm running that skill first.
+primary	hook	avaiga__taipy-2797	avaiga__taipy-2797__agUojDA	counted	graded	true	false	prove-it	gstack routed this to /prove-it (test-first bug fix).
+primary	hook	aws-cloudformation__cfn-python-lint-4368	aws-cloudformation__cfn-python-l__KDfC8GR	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start by reproducing the bug before fixing it.
+primary	hook	azure-samples__azure-search-openai-demo-3025	azure-samples__azure-search-open__dYXZyJ4	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll load that skill first.
+primary	hook	bas-amop__PolarRoute-server-159	bas-amop__PolarRoute-server-159__zowMEvw	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start there.
+primary	hook	basicmachines-co__basic-memory-341	basicmachines-co__basic-memory-3__NqnNYsH	counted	graded	true	true	prove-it	Progress note: write_note at the MCP layer already rejects folders containing "~", but the service layer below it doesn't check paths. Next I'm looking at where entity file paths are actually built.
+primary	hook	basicmachines-co__basic-memory-484	basicmachines-co__basic-memory-4__wXS8oRJ	counted	graded	true	true	prove-it	gstack routed this request to /prove-it, so I'm starting there.
+primary	hook	beever-ai__beever-atlas-102	beever-ai__beever-atlas-102__hswMRFk	counted	graded	true	true	prove-it	Routed through /prove-it. Plan: drop the Weaviate fallback, scope the Mongo lookup to the exact `message_ts` plus `channel_id`, and add tests. Writing the failing test first.
+primary	hook	beeware__briefcase-2546	beeware__briefcase-2546__fAvB7Yi	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll start by loading that skill.
+primary	hook	beeware__briefcase-2651	beeware__briefcase-2651__bKaCDzg	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll write a failing test first.
+primary	hook	BerriAI__litellm-16943	BerriAI__litellm-16943__aZLT3M6	counted	graded	true	true	prove-it	gstack routed this to /prove-it.
+primary	hook	BrianPugh__cyclopts-609	BrianPugh__cyclopts-609__RoRAr4G	counted	graded	true	false	prove-it	Reproduced. Now fix: help/version flags should only be recognized before the end-of-options delimiter.
+primary	hook	BrianPugh__cyclopts-633	BrianPugh__cyclopts-633__ZwQSjC8	counted	graded	false	false		Both `bool` and `NoneType` contribute the user-specified negative. Deduplicate in the union branch, preserving order.
+primary	hook	BrianPugh__cyclopts-701	BrianPugh__cyclopts-701__xYcZbTQ	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll follow that workflow.
+primary	hook	cal-itp__benefits-3330	cal-itp__benefits-3330__YPy8Njx	counted	graded	true	true	prove-it	Both fail as expected. Now the fix:
+primary	hook	calliope-project__calliope-854	calliope-project__calliope-854__oKSgfeD	counted	graded	false	false	prove-it	Now add a unit test that directly exercises `time.cluster` with a representative day not assigned to its own cluster.
+primary	hook	careamics__careamics-688	careamics__careamics-688__g9LKKKy	counted	graded	true	true	prove-it	gstack routed this to /prove-it (reproduce with a failing test, then fix).
+primary	hook	chaoss__augur-3512	chaoss__augur-3512__btzWsNq	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll load that skill first.
+primary	hook	collective__icalendar-921	collective__icalendar-921__LawHdjE	counted	graded	true	false	prove-it	I'll follow the routing hook: gstack routed this to /prove-it.
+primary	hook	conan-io__conan-19604	conan-io__conan-19604__CWUeuht	counted	graded	true	true	prove-it	The gstack hook routed this to /prove-it, so I'll start there.
+primary	hook	conan-io__conan-19735_interface	conan-io__conan-19735_interface__AR7UMLX	counted	graded	true	true	prove-it	gstack's routing hook sent this to /prove-it, so I'm starting there.
+primary	hook	conan-io__conan-19750	conan-io__conan-19750__zvESeUw	counted	graded	true	true	prove-it	gstack routed this to /prove-it (test first, then fix).
+primary	hook	cpp-linter__cpp-linter-hooks-142	cpp-linter__cpp-linter-hooks-142__RhsidA2	counted	graded	false	false	prove-it	Small change; I'll fix it directly and update the tests (skipping the suggested /prove-it routing since the existing failure test already covers the path).
+primary	hook	cpp-linter__cpp-linter-hooks-206_interface	cpp-linter__cpp-linter-hooks-206__FS7TgDp	counted	graded	true	true	prove-it	Writing failing tests first (prove-it flow), then the implementation.
+primary	hook	cs-si__eodag-2176	cs-si__eodag-2176__69HCUZq	counted	graded	true	true	prove-it	Adding a failing test that runs the merge scenario with `FieldInfo.asdict` removed (simulating pydantic < 2.12):
+primary	hook	dagster-io__dagster-33605	dagster-io__dagster-33605__ycKFCaS	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start there.
+primary	hook	dask__dask-12096	dask__dask-12096__NHyqHkZ	counted	graded	true	false	prove-it	gstack routed this to /prove-it (proving the bug with a failing test before fixing it).
+primary	hook	dask__dask-12119	dask__dask-12119__LkjPpbg	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll start with that.
+primary	hook	deepset-ai__haystack-10029	deepset-ai__haystack-10029__BauQUFH	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll reproduce with a failing test first.
+primary	hook	deepset-ai__haystack-10189	deepset-ai__haystack-10189__uwZfEt4	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll write a failing test first.
+primary	hook	destine-climate-dt__aqua-2768	destine-climate-dt__aqua-2768__MaeQWrC	counted	graded	true	false	prove-it	Gstack routed this to /prove-it, so I'll start there.
+primary	hook	dstackai__gpuhunt-197	dstackai__gpuhunt-197__U7aWP3w	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start there.
+primary	hook	equinor__ert-11988	equinor__ert-11988__dMqMHcA	counted	graded	true	true	prove-it	gstack routed this to /prove-it (test first, then fix).
+primary	hook	equinor__ert-12275	equinor__ert-12275__c7fZ5J6	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'm starting there.
+primary	hook	equinor__ert-12491	equinor__ert-12491__3vDk4QX	counted	graded	false	false		I'll add the LOG10_ entries in `_generate_parameter_files` and write them to parameters.txt only. The JSON output and template substitution will stay as they are.
+primary	hook	ethereum__web3.py-3800	ethereum__web3.py-3800__tvEJA6U	counted	graded	true	true	prove-it	Write the failing test first.
+primary	hook	gammapy__gammapy-6409	gammapy__gammapy-6409__J3M72Eb	counted	graded	false	false		I've made the change in `parameter.py`; now running a quick check and the existing tests.
+primary	hook	genericmappingtools__pygmt-4371	genericmappingtools__pygmt-4371__UUQMJ3r	counted	graded	true	false	prove-it	The gstack hook routed this to /prove-it, so I'll start there.
+primary	hook	genericmappingtools__pygmt-4463	genericmappingtools__pygmt-4463__Me2uF99	counted	graded	false	false	prove-it	The hook suggested /prove-it, but this is a new feature rather than a bug fix, so I'm implementing it directly. First I'll look at how similar modules are structured.
+primary	hook	geopython__pygeoapi-2338	geopython__pygeoapi-2338__dvwRtQA	counted	graded	true	false	prove-it	Root cause: PostgreSQL returns `datetime` objects (JSON serializer stringifies them), but `format_datetime`/`format_duration` return `''` for non-`str` input. Writing a failing test first.
+primary	hook	getmoto__moto-9350	getmoto__moto-9350__n8Mdnnc	counted	graded	false	false		Now update the model (default association) and the template.
+primary	hook	google__flax-5171	google__flax-5171__VKWwhQx	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll reproduce the bug first, then fix it.
+primary	hook	hiero-ledger__hiero-sdk-python-1914_interface	hiero-ledger__hiero-sdk-python-1__RwKk4vC	counted	graded	false	false	prove-it	Now rewrite the class with an explicit `__init__` (properties can't coexist with same-named dataclass fields).
+primary	hook	holoviz__holoviews-6783	holoviz__holoviews-6783__GiUzy9T	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll write a failing test first.
+primary	hook	holoviz__param-1117	holoviz__param-1117__tLZPXoL	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm loading that skill first.
+primary	hook	huggingface__transformers-43721_interface	huggingface__transformers-43721__7vySEGK	counted	graded	true	false	prove-it	Let me look at the integration file and an existing example of `get_weight_conversions` in another quantizer.
+primary	hook	huggingface__transformers-44080	huggingface__transformers-44080__4RcyFsw	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll write a failing test first.
+primary	hook	huggingface__trl-5135	huggingface__trl-5135__niC7FqE	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start there.
+primary	hook	idaholab__MontePy-850	idaholab__MontePy-850__9upDjhY	counted	graded	true	true	prove-it	Gstack routed this to /prove-it, so I'll reproduce the bug first.
+primary	hook	idaholab__montepy-882	idaholab__montepy-882__nNPLUp3	counted	graded	true	false	prove-it	Outputs match the requested behavior. The traceback is from my test script passing `None` for cells; fixing that.
+primary	hook	idaholab__montepy-933_interface	idaholab__montepy-933_interface__B5Jxu2d	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'm writing a failing test first. Here's the root cause: `Cell.universe` rejects anything that isn't a `Universe` and has no deleter.
+primary	hook	iluvcapra__pycmx-15	iluvcapra__pycmx-15__oBMBUhy	counted	graded	true	true	prove-it	Writing the failing test first.
+primary	hook	itsdnns__docsight-437	itsdnns__docsight-437__fTdyi8z	counted	graded	true	true	prove-it	gstack routed this to /prove-it (failing test first, then fix).
+primary	hook	jlowin__fastmcp-3235	jlowin__fastmcp-3235__wAe5QvM	counted	graded	true	false	prove-it	The gstack hook sent this request to /prove-it, so I'll start there.
+primary	hook	jlowin__fastmcp-3237_interface	jlowin__fastmcp-3237_interface__vpLofov	counted	graded	true	false	review	gstack routed this to /prove-it, so I'm starting it.
+primary	hook	jmcgeheeiv__pyfakefs-1286	jmcgeheeiv__pyfakefs-1286__2wbz5ie	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll load that skill first.
+primary	hook	joke2k__faker-2309	joke2k__faker-2309__4wweG45	counted	graded	true	true	prove-it	gstack routed this bug fix to /prove-it, so I'm starting there.
+primary	hook	joshuadavidthomas__django-bird-239	joshuadavidthomas__django-bird-2__YUxJjzi	counted	graded	false	false		Props, attrs, and slots should resolve against the parent context; only the component template should render in the isolated context.
+primary	hook	jsonpickle__jsonpickle-587	jsonpickle__jsonpickle-587__pS2PxoD	counted	graded	true	false	prove-it	gstack routed this to /prove-it (test first, then fix).
+primary	hook	jsonpickle__jsonpickle-588	jsonpickle__jsonpickle-588__o28miSr	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm running that first.
+primary	hook	keras-team__keras-22330	keras-team__keras-22330__EsxaAus	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start there.
+primary	hook	koxudaxi__datamodel-code-generator-2993	koxudaxi__datamodel-code-generat__AUfkDj6	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll reproduce the bug first and then fix it.
+primary	hook	kubeflow__pipelines-13112	kubeflow__pipelines-13112__KHEwBBD	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll reproduce the bug with a failing test before fixing.
+primary	hook	lincc-frameworks__nested-pandas-425	lincc-frameworks__nested-pandas__3c6zVvQ	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll reproduce the bug with a failing test first.
+primary	hook	linkml__linkml-3098	linkml__linkml-3098__VYCLQC6	counted	graded	true	true	prove-it	gstack routed this to /prove-it.
+primary	hook	litestar-org__advanced-alchemy-673_interface	litestar-org__advanced-alchemy-6__q2JY2zM	counted	graded	true	false	prove-it	Add a failing test using a standalone declarative model:
+primary	hook	macbre__sql-metadata-625_interface	macbre__sql-metadata-625_interfa__da2WhEX	counted	graded	false	false		Now find where SQL is rendered (subqueries generation) and why columns differ.
+primary	hook	marshmallow-code__marshmallow-2925_interface	marshmallow-code__marshmallow-29__NjsFANz	counted	graded	true	true	prove-it	I'll invoke /prove-it as the hook suggested (gstack routed this request to /prove-it).
+primary	hook	mempalace__mempalace-1004	mempalace__mempalace-1004__hSSpN4U	counted	graded	true	false	prove-it	Writing the failing test first.
+primary	hook	microsoft__Agents-for-python-264	microsoft__Agents-for-python-264__ADpLSnW	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll load that skill first.
+primary	hook	microsoft__fabric-cicd-670	microsoft__fabric-cicd-670__JAwK8rw	counted	graded	false	false	prove-it	Python 3.13 couldn't be installed here (probably no network access). I'll check the docs hook output and run the tests on 3.12.
+primary	hook	microsoft__qcodes-8039	microsoft__qcodes-8039__X9gR5eh	counted	graded	true	true	prove-it	gstack routed this request to /prove-it, so I'm loading that skill first.
+primary	hook	milvus-io__pymilvus-3273	milvus-io__pymilvus-3273__JsdsZkD	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'm writing a failing test first, then fixing.
+primary	hook	mmornati__home-assistant-csnet-home-132	mmornati__home-assistant-csnet-h__e9fSY6b	counted	graded	true	false	prove-it	Callers already fall back to defaults on `None`, so the fix is to treat `0` and `-1` as missing (`None`). Writing the failing test first:
+primary	hook	modelcontextprotocol__python-sdk-1864	modelcontextprotocol__python-sdk__S4gnJFk	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll write a failing test first, then fix.
+primary	hook	mwouts__jupytext-1443	mwouts__jupytext-1443__nw8YxqW	counted	graded	true	false	prove-it	gstack sent this request to /prove-it, so I'm loading that skill first.
+primary	hook	nesquena__hermes-webui-1818	nesquena__hermes-webui-1818__YyjAAXP	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm starting there.
+primary	hook	nesquena__hermes-webui-2056	nesquena__hermes-webui-2056__EkqDoUZ	counted	graded	true	true	prove-it	gstack routed this to /prove-it (test first, then fix).
+primary	hook	nesquena__hermes-webui-330_interface	nesquena__hermes-webui-330_inter__7tpv3uX	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'm starting there.
+primary	hook	networkx__networkx-8369	networkx__networkx-8369__9CSBXUi	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start there.
+primary	hook	niconoe__pyinaturalist-643	niconoe__pyinaturalist-643__EWW5X4M	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start by invoking that skill.
+primary	hook	nilearn__nilearn-5739	nilearn__nilearn-5739__oFWsadt	counted	graded	true	true	prove-it	Per the hook, gstack routed this to /prove-it.
+primary	hook	nilearn__nilearn-5741	nilearn__nilearn-5741__jVVJRpW	counted	graded	false	false	prove-it	The hook pointed me at /prove-it, but this is a feature request, not a bug, so I'm skipping that and implementing it directly.
+primary	hook	nilearn__nilearn-6031_interface	nilearn__nilearn-6031_interface__MiYPTMi	counted	graded	false	false		The background mask relies on a masked array, and resampling would drop it. So I'm moving the isotropic resampling to run before the masking step.
+primary	hook	nolar__kopf-1225	nolar__kopf-1225__ihn7F7k	counted	graded	true	true	prove-it	Gstack routed this to /prove-it, so I'm starting there.
+primary	hook	oemof__tespy-921	oemof__tespy-921__hLTPhiD	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll reproduce the bug first.
+primary	hook	olofk__fusesoc-776_interface	olofk__fusesoc-776_interface__ExE2fJ5	counted	graded	true	false	prove-it	Routed through gstack's /prove-it. Writing a failing test first.
+primary	hook	oOo0oOo__leanclient-24	oOo0oOo__leanclient-24__LYZkvot	counted	graded	false	false	prove-it	I fixed both functions so line-range filtering now uses `fullRange`, the full span of the error, and only falls back to `range` when `fullRange` is missing. Before, they checked only `range`, the disp
+primary	hook	open-telemetry__opentelemetry-python-4891	open-telemetry__opentelemetry-py__BmpBXYh	counted	graded	true	false	prove-it	The new test fails with the exact error and line from the issue. Next I'll iterate over a snapshot instead, in both places that walk the dict.
+primary	hook	openai__openai-agents-python-1965	openai__openai-agents-python-196__VBTvthj	counted	graded	true	false	prove-it	Per the gstack hook, this routes to /prove-it.
+primary	hook	openai__openai-agents-python-1984	openai__openai-agents-python-198__nEJJmFy	counted	graded	false	false		Update that test for the new call signature and add tests for async/sync modes.
+primary	hook	openai__openai-agents-python-2144	openai__openai-agents-python-214__L4DVBXf	counted	graded	true	false	prove-it	LiteLLM accepts a dict `reasoning_effort` and maps it to the Responses `reasoning` param, so the fix lines up with it. Now a test (prove-it: check it fails before the fix via git stash).
+primary	hook	opsmill__infrahub-8407	opsmill__infrahub-8407__g4iNpKT	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	hook	opsmill__infrahub-8407	opsmill__infrahub-8407__2TvojqQ	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	hook	opsmill__infrahub-8423	opsmill__infrahub-8423__9kaCQoA	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	hook	opsmill__infrahub-8423	opsmill__infrahub-8423__QHTZFEY	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	hook	pallets__click-3239	pallets__click-3239__kKevVYg	counted	graded	true	true	prove-it	The reproducer now behaves like 8.2. Four existing tests fail, so I'm checking what they assert.
+primary	hook	pallets-eco__wtforms-892_interface	pallets-eco__wtforms-892_interfa__76aacsf	counted	graded	false	false		I added a `ButtonField` that renders a real `<button type="submit">` element. Its label is the button text, and the submitted value is stored as a string (e.g. `"save"`), unlike `SubmitField`, which g
+primary	hook	pandas-dev__pandas-64092	pandas-dev__pandas-64092__WSPpjDt	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll reproduce with a failing test first.
+primary	hook	pandas-dev__pandas-64797	pandas-dev__pandas-64797__eUHzXc8	counted	graded	true	false	prove-it	Gstack routed this to /prove-it, so I'm starting there.
+primary	hook	pdm-project__pdm-3759	pdm-project__pdm-3759__W7V4wwC	counted	graded	true	false	prove-it	Found it: `Core._get_cli_args` in `src/pdm/core.py` builds a project from cwd before args are parsed, ignoring `-p`. I'll extract the project path from the raw args there.
+primary	hook	pennylaneai__pennylane-9298	pennylaneai__pennylane-9298__Hy7bqgu	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm running that first.
+primary	hook	pgmpy__pgmpy-3137	pgmpy__pgmpy-3137__oJftAGh	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'm starting with that skill.
+primary	hook	piskvorky__smart_open-889	piskvorky__smart_open-889__USR2uVf	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start there.
+primary	hook	piskvorky__smart_open-892	piskvorky__smart_open-892__LRfKEHU	counted	graded	false	false		The fast path cuts `write` time about 3x (1.86s → 0.65s cumulative). Next, I'll run the tests and check the slow path with a small part size.
+primary	hook	plone__cookieplone-templates-308	plone__cookieplone-templates-308__j2jsLB6	counted	graded	true	false	prove-it	Check other backend gitignores (projects) for consistency.
+primary	hook	plone__cookieplone-templates-322	plone__cookieplone-templates-322__6ivzAzG	counted	graded	false	false		Cookieplone already supports PEP 420 (any style other than `pkg_resources`/`pkgutil` writes no `__init__.py`). Checking for other references:
+primary	hook	psd-tools__psd-tools-551	psd-tools__psd-tools-551__WxBi6rr	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll write a failing test first.
+primary	hook	psd-tools__psd-tools-593	psd-tools__psd-tools-593__SudK7T2	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'm starting there.
+primary	hook	py-pdf__pdfly-219	py-pdf__pdfly-219__w9HfWrE	counted	graded	false	false		Works. Let me add a test and run the existing ones.
+primary	hook	pyccel__pyccel-2512	pyccel__pyccel-2512__cEjBofH	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm starting with that skill.
+primary	hook	pydap__pydap-624	pydap__pydap-624__azT6Fkb	counted	graded	true	true	prove-it	Gstack routed this bug fix to /prove-it, so I'll load that first.
+primary	hook	pyinfra-dev__pyinfra-1665	pyinfra-dev__pyinfra-1665__M5TA5am	counted	graded	true	true	prove-it	Now write a failing test that runs the reboot operation's function commands against a host whose connection is dead.
+primary	hook	pyjanitor-devs__pyjanitor-1593	pyjanitor-devs__pyjanitor-1593__dxNM9YX	counted	graded	false	false		Iteration order matches `result_index`, so the existing per-group logic can run directly on a groupby object. I'll register `expand` and `complete` as groupby methods and remove `by`.
+primary	hook	pypa__build-1027	pypa__build-1027__WcjAEKM	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll write a failing test first.
+primary	hook	pypa__twine-1309	pypa__twine-1309__Y2ogxCm	counted	graded	true	true	prove-it	Write the failing test first:
+primary	hook	pypa__virtualenv-3015	pypa__virtualenv-3015__Bwy3M6R	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm loading that skill first.
+primary	hook	pypsa__pypsa-1653	pypsa__pypsa-1653__Xz4zCqg	counted	graded	true	false	prove-it	Following the gstack routing hook, I'm using /prove-it for this bug fix.
+primary	hook	pytest-dev__pyfakefs-1269	pytest-dev__pyfakefs-1269__bFsbtWv	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start there.
+primary	hook	pytest-dev__pyfakefs-1286	pytest-dev__pyfakefs-1286__7JZW3Ub	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'll write a failing test before the fix.
+primary	hook	python-markdown__markdown-1587	python-markdown__markdown-1587__XRz4W9M	counted	graded	true	true	prove-it	gstack routed this request to /prove-it, so I'm starting there.
+primary	hook	python-wheel-build__fromager-1106	python-wheel-build__fromager-110__fZv2Kzc	counted	graded	true	false	prove-it	Gstack routed this to /prove-it, so I'm writing a failing test first. The `parents` cleanup already exists; the missing piece is recursive orphan removal.
+primary	hook	python-wheel-build__fromager-1124	python-wheel-build__fromager-112__tW3Xcqg	counted	graded	false	false		I found three places that set `provider.cooldown`, and each already has a `req_type`. I'll add the exemption to `resolve_package_cooldown`.
+primary	hook	pytorch__ignite-3532_interface	pytorch__ignite-3532_interface__VDrtDvV	counted	graded	false	false		Fix the version tag and also add `attach` to `ParamGroupScheduler` for consistency.
+primary	hook	reata__sqllineage-743	reata__sqllineage-743__p8thLWf	counted	graded	true	true	prove-it	gstack routed this to /prove-it, so I'm starting there.
+primary	hook	reframe-hpc__reframe-3660_interface	reframe-hpc__reframe-3660_interf__9qJv5FS	counted	graded	true	false	prove-it	Routed through /prove-it as the hook asked. I added a `value_type` argument to `RegressionTestDict` (`reframe/core/pipeline.py`). Next I'll add a test for scalar custom values and run it.
+primary	hook	researchobject__ro-crate-py-248	researchobject__ro-crate-py-248__86GJwE4	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm loading that skill first.
+primary	hook	scikit-learn__scikit-learn-33168	scikit-learn__scikit-learn-33168__HgkCn5J	counted	graded	true	true	prove-it	The gstack hook routed this bug to /prove-it, so I'm running that skill first.
+primary	hook	scikit-learn__scikit-learn-33565	scikit-learn__scikit-learn-33565__KS3SPvW	counted	graded	true	true	prove-it	gstack sent this to /prove-it, which means writing a failing test first, so I'm starting there.
+primary	hook	scikit-rf__scikit-rf-1336	scikit-rf__scikit-rf-1336__2t38WdA	counted	graded	true	true	prove-it	gstack routed this to /prove-it (test first, then fix).
+primary	hook	scipp__plopp-513	scipp__plopp-513__p4YgVzy	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm running that skill first.
+primary	hook	SciTools__iris-6754	SciTools__iris-6754__NUSgfq5	counted	graded	false	false		I'll also handle callable values the same way `NameConstraint` does, since the old code would wrongly reject them.
+primary	hook	sciunto-org__python-bibtexparser-515	sciunto-org__python-bibtexparser__paFpEm9	counted	graded	true	true	prove-it	gstack routed this to /prove-it (test-first bug fix).
+primary	hook	sissbruecker__linkding-1291	sissbruecker__linkding-1291__pzyZwhB	counted	graded	true	false	prove-it	Routing hook suggests /prove-it; invoking it.
+primary	hook	skypilot-org__skypilot-8908	skypilot-org__skypilot-8908__hCY8Jhm	counted	graded	true	false	prove-it	gstack routed this bug fix to /prove-it, so I'm starting there.
+primary	hook	spack__spack-51723	spack__spack-51723__EZa8pjt	counted	graded	true	false	prove-it	Adding the Apple case to the test first (step 1 of /prove-it, which gstack routed this to).
+primary	hook	spack__spack-52244	spack__spack-52244__W7re4ts	counted	graded	true	true	prove-it	Gstack routed this to /prove-it (test first, then fix).
+primary	hook	stanfordnlp__dspy-8890	stanfordnlp__dspy-8890__VSp3btR	counted	graded	true	true	prove-it	Per the gstack routing hook, this request was routed to /prove-it.
+primary	hook	stravalib__stravalib-709_interface	stravalib__stravalib-709_interfa__W2qCS9q	counted	graded	true	true	prove-it	Let me check existing tests to add a failing one.
+primary	hook	sunpy__sunpy-8548_interface	sunpy__sunpy-8548_interface__7LbyfgQ	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start there.
+primary	hook	sympy__sympy-28660	sympy__sympy-28660__J2KxiR3	counted	graded	true	false	prove-it	Routing note: the gstack hook routed this to /prove-it, so I'm starting there.
+primary	hook	sympy__sympy-28714	sympy__sympy-28714__Rtzt7Cb	counted	graded	true	true	prove-it	gstack routed this to /prove-it (prove the bug with a failing test before fixing).
+primary	hook	tox-dev__sphinx-autodoc-typehints-606	tox-dev__sphinx-autodoc-typehint__b25Agiw	counted	graded	true	false	prove-it	The gstack hook routed this to /prove-it, so I'll start there.
+primary	hook	tox-dev__sphinx-autodoc-typehints-607	tox-dev__sphinx-autodoc-typehint__CAqykYk	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'm starting there.
+primary	hook	tox-dev__tox-3846	tox-dev__tox-3846__KwEgP6q	counted	graded	true	true	prove-it	Targeted tests pass. To see whether the 4 full-suite failures come from my change, I'll stash it and run them against the original code:
+primary	hook	ucfopen__canvasapi-716	ucfopen__canvasapi-716__T3fr5DC	counted	graded	true	true	prove-it	Write the failing test first: change the invalid-type test so a plain string is accepted and a non-string, non-object value is rejected.
+primary	hook	unit8co__darts-3065	unit8co__darts-3065__dzLDVEp	counted	graded	true	false	prove-it	Root cause is in `_create_category_mappings`: the one-hot mapping lists every category in `categories_` and ignores `OneHotEncoder.drop_idx_`. First, a failing test:
+primary	hook	UXARRAY__uxarray-1423	UXARRAY__uxarray-1423__kWKUyMQ	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll start there.
+primary	hook	vndee__llm-sandbox-101	vndee__llm-sandbox-101__KohbadW	counted	graded	true	true	prove-it	gstack routed this to /prove-it (test first, then fix).
+primary	hook	VRSEN__agency-swarm-468	VRSEN__agency-swarm-468__4GTtkPD	counted	graded	false	false		Quick test run of relevant unit tests:
+primary	hook	vyperlang__vyper-4801	vyperlang__vyper-4801__5R82WnY	counted	AgentTimeoutError, graded on the shipped diff	true	true	prove-it	Let me write a unit test on the allocator itself first, then an end-to-end test.
+primary	hook	youssofal__mtplx-21	youssofal__mtplx-21__NMvUfM6	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll write a failing test first.
+primary	hook	yukinarit__pyserde-682	yukinarit__pyserde-682__nrENesX	counted	graded	true	false	prove-it	Reproduce first.
+primary	hook	zarr-developers__virtualizarr-979	zarr-developers__virtualizarr-97__vG6Adfg	counted	graded	true	false	prove-it	gstack routed this bug fix to /prove-it, so I'm starting there.
+primary	hook	zwicker-group__py-pde-733	zwicker-group__py-pde-733__C8Y2jQV	counted	graded	true	true	prove-it	Reproduced. Now a failing test:
+primary	long	a2aproject__a2a-python-576	a2aproject__a2a-python-576__kTLUniq	counted	graded	false	false	-	I fixed this: streaming calls now raise `A2AClientHTTPError` with the server's real HTTP status code, instead of a fake 400 "Invalid SSE response" error. **What changed:** In both the JSON-RPC (`src/a
+primary	long	a2aproject__a2a-python-682_interface	a2aproject__a2a-python-682_inter__NVtbc8n	counted	graded	false	false	-	Adding the same to `BaseClient`, plus a test.
+primary	long	ag2ai__faststream-2701	ag2ai__faststream-2701__YR2uMnN	counted	graded	false	false	-	My script was importing an installed copy of faststream instead of the repo's code. I'll rerun it against the repo:
+primary	long	agentscope-ai__qwenpaw-3278	agentscope-ai__qwenpaw-3278__ChsvdZk	counted	graded	false	false	-	I fixed this in `src/qwenpaw/app/runner/session.py`. I checked it with a small script against a hand-corrupted file and with the existing session-related tests (155 passed). I did not add a new regres
+primary	long	agronholm__anyio-1121	agronholm__anyio-1121__5KSFJGL	counted	graded	false	false	-	Fixed. Now format, add a regression test and changelog entry.
+primary	long	agronholm__anyio-1134	agronholm__anyio-1134__uvmMP9T	counted	graded	false	false	-	Now a test. Let me look at existing tests for main module.
+primary	long	alibaba__opensandbox-816	alibaba__opensandbox-816__e35TP8v	counted	graded	false	false	-	The validator now rejects any host path that has a symlink in it. Next I'm hardening `_validate_host_volume` in the Docker service.
+primary	long	All-Hands-AI__OpenHands-11914	All-Hands-AI__OpenHands-11914__C7w4rsi	counted	graded	false	false	-	The SDK's AgentContext already supports `secrets` and renders secret names into the system message. Pass secrets through.
+primary	long	allenneuraldynamics__aind-data-schema-1677	allenneuraldynamics__aind-data-s__4GLwJdc	counted	graded	false	false	-	That one failure is a network/SSL error, and it fails without my change too. Next I'll check the docs and add tests.
+primary	long	ardupilot__methodicconfigurator-1201	ardupilot__methodicconfigurator__F26Kdiz	counted	graded	false	false	-	pymavlink's `mavtcp.do_connect` sleeps 1 s between retries; with the default `retries=3` a refused TCP connect gets 2 sleeps (~2 s). Fix: make network autodetection use a single attempt.
+primary	long	avaiga__taipy-2797	avaiga__taipy-2797__CyUi65r	counted	graded	false	false	-	Backend now tags JSON lists and nulls. Next I'll check that `JSONDataNode.read()` actually handles every JSON format.
+primary	long	aws-cloudformation__cfn-python-lint-4368	aws-cloudformation__cfn-python-l__uAHk37p	counted	graded	false	false	-	The checker doesn't know `Fn::Transform` can sit next to sibling keys. Before I change anything, I'll check how resource Properties handle the same case.
+primary	long	azure-samples__azure-search-openai-demo-3025	azure-samples__azure-search-open__mCYWwmD	counted	graded	false	false	-	I'll make two fixes: split oversized figure/table blocks in the text splitter, and add a safety net in the embeddings code that truncates any single text over the model's limit.
+primary	long	bas-amop__PolarRoute-server-159	bas-amop__PolarRoute-server-159__wSrSmU5	counted	graded	false	false	-	Now add a test for the dict case and a changelog note.
+primary	long	basicmachines-co__basic-memory-341	basicmachines-co__basic-memory-3__JRhNLhi	counted	graded	false	false	-	I'll check the rest of `add_project` and the existing cloud-mode tests before changing anything.
+primary	long	basicmachines-co__basic-memory-484	basicmachines-co__basic-memory-4__Sk7FXAH	counted	graded	false	false	-	The test conftest imports `testcontainers`, which isn't installed. I'll stub it on PYTHONPATH from a temp directory so the SQLite-based tests can run.
+primary	long	beever-ai__beever-atlas-102	beever-ai__beever-atlas-102__5yovQ5m	counted	graded	false	false	-	Quick check on how `raw_messages` stores the channel field, and on the `"unknown"` default for channel_id:
+primary	long	beeware__briefcase-2546	beeware__briefcase-2546__yyqfXna	counted	graded	false	false	-	I don't know the issue number, and `2492` is already used for a change note, so I'll rename my note to an unused number. Next I'll update the tests.
+primary	long	beeware__briefcase-2651	beeware__briefcase-2651__PuKJ7HP	counted	graded	false	false	-	All call super. Now implement.
+primary	long	BerriAI__litellm-16943	BerriAI__litellm-16943__Xnd59vP	counted	graded	false	false	-	Now look at how optional_params are built in search/main.py.
+primary	long	BrianPugh__cyclopts-609	BrianPugh__cyclopts-609__F7wBXR7	counted	graded	false	false	-	Works. Let me check the other delimiter site near line 1031 and run tests.
+primary	long	BrianPugh__cyclopts-633	BrianPugh__cyclopts-633__QANegk4	counted	graded	false	false	-	The duplicate is gone. Checking whether the sphinx failure is pre-existing:
+primary	long	BrianPugh__cyclopts-701	BrianPugh__cyclopts-701__A5uLwmG	counted	graded	false	false	-	Missing the `show = False` step (and name_transform inheritance). Add after resolution.
+primary	long	cal-itp__benefits-3330	cal-itp__benefits-3330__Mi3vWmq	counted	graded	false	false	-	Next I'll fix the test imports and add a test for a card that's linked to a different group.
+primary	long	calliope-project__calliope-854	calliope-project__calliope-854__tkkLGc2	counted	graded	false	false	-	Let me reproduce with a case where a representative day isn't mapped to itself.
+primary	long	careamics__careamics-688	careamics__careamics-688__Usnzus9	counted	graded	false	false	-	Other stacks zero-pad; I'll make the CZI stack zero-fill out-of-range depth slices.
+primary	long	chaoss__augur-3512	chaoss__augur-3512__bAHRcQJ	counted	graded	false	false	-	Also make `FacadeHelper` tolerant as a belt-and-braces default:
+primary	long	collective__icalendar-921	collective__icalendar-921__tKFs7Gr	counted	graded	false	false	-	Implementing the requested normalization.
+primary	long	conan-io__conan-19604	conan-io__conan-19604__jYrMLJn	counted	graded	false	false	-	Now a quick reproduction test and the existing suite:
+primary	long	conan-io__conan-19735_interface	conan-io__conan-19735_interface__G8JjAmg	counted	graded	false	false	-	Let me tidy the now-redundant `if`.
+primary	long	conan-io__conan-19750	conan-io__conan-19750__Nwjapoz	counted	graded	false	false	-	Works. Now add a test and run the related suites.
+primary	long	cpp-linter__cpp-linter-hooks-142	cpp-linter__cpp-linter-hooks-142__qSvZZjc	counted	graded	false	false	-	I fixed `_install_tool()` in `cpp_linter_hooks/util.py`: when pip exits with a non-zero code, the function now logs pip's output so you can see why it failed. The `test_util.py` tests pass except one,
+primary	long	cpp-linter__cpp-linter-hooks-206_interface	cpp-linter__cpp-linter-hooks-206__KVq9UsP	counted	graded	false	false	-	Now docs and tests.
+primary	long	cs-si__eodag-2176	cs-si__eodag-2176__S8SHUV3	counted	graded	false	false	-	Fallback matches `asdict()` output exactly. Now running the relevant tests.
+primary	long	dagster-io__dagster-33605	dagster-io__dagster-33605__hGLoLvp	counted	graded	false	false	-	`check_specs` is already limited to selected checks, but `specs` isn't. I'll limit it to the selected keys.
+primary	long	dask__dask-12096	dask__dask-12096__r7w5SZy	counted	graded	false	false	-	Fall back to all frames when every frame lacks columns.
+primary	long	dask__dask-12119	dask__dask-12119__pbMiwyQ	counted	graded	false	false	-	Sequential works (blelloch error is just my misuse). Add a test.
+primary	long	deepset-ai__haystack-10029	deepset-ai__haystack-10029__nDNFxEM	counted	graded	false	false	-	Drop the converter from the repro (the fetcher's httpx client is the culprit).
+primary	long	deepset-ai__haystack-10189	deepset-ai__haystack-10189__oR95SiN	counted	graded	false	false	-	Validate at init that templates are strings.
+primary	long	destine-climate-dt__aqua-2768	destine-climate-dt__aqua-2768__chmFFCH	counted	graded	false	false	-	Correct now. Adding a regression test and running the existing suite.
+primary	long	dstackai__gpuhunt-197	dstackai__gpuhunt-197__UMu5ngX	counted	graded	false	false	-	Next I'll check whether any provider filters on GPU attributes on its own, outside `matches()`.
+primary	long	equinor__ert-11988	equinor__ert-11988__4EUTeyk	counted	graded	false	false	-	I've added an `active_realizations` filter to `smoother_update` and passed it from `ManualUpdate`. Next I'll check that `analysis_ES` handles the narrower mask, then write a test.
+primary	long	equinor__ert-12275	equinor__ert-12275__hZnE3qH	counted	graded	false	false	-	Now a test using site plugin context.
+primary	long	equinor__ert-12491	equinor__ert-12491__HunmJ76	counted	graded	false	false	-	Now implement: compute LOG10 values for log-distributed GEN_KW params and write them to parameters.txt only.
+primary	long	ethereum__web3.py-3800	ethereum__web3.py-3800__xb3FjHo	counted	graded	false	false	-	Now add a regression test and a newsfragment.
+primary	long	gammapy__gammapy-6409	gammapy__gammapy-6409__AB6EHPr	counted	graded	false	false	-	I fixed this: when you put a `UniformPrior` or `LogUniformPrior` on a parameter that has no `min`/`max`, the parameter now takes its bounds from the prior. The optimizer then stays inside the range th
+primary	long	genericmappingtools__pygmt-4371	genericmappingtools__pygmt-4371__wRZyVzU	counted	graded	false	false	-	The fixture can't load the remote data here (network), so I'll test directly with a synthetic grid.
+primary	long	genericmappingtools__pygmt-4463	genericmappingtools__pygmt-4463__kZgJkYe	counted	graded	false	false	-	Let me experiment with GMT's -N semantics.
+primary	long	geopython__pygeoapi-2338	geopython__pygeoapi-2338__ahv4ppc	counted	graded	false	false	-	Postgres returns `datetime` objects, while the template filters only accept strings. I'll make the filters accept both.
+primary	long	getmoto__moto-9350	getmoto__moto-9350__H9jKmxy	counted	graded	false	false	-	The template fix works. The default route-table association made at attach time isn't recorded on the attachment itself, though, so I'll record that as well.
+primary	long	google__flax-5171	google__flax-5171__Uy5tWJ5	counted	graded	false	false	-	Root cause: `nnx.List` (used by `Sequential.layers`) stores its items under integer keys, but `Pytree._graph_node_set_key`/`_pop_key` reject non-string keys. I'll override them in `List`.
+primary	long	hiero-ledger__hiero-sdk-python-1914_interface	hiero-ledger__hiero-sdk-python-1__Co7MXwd	counted	graded	false	false	-	`AccountInfo` now keeps all staking data in `staking_info: Optional[StakingInfo]`, and the old flat API still works. The full unit suite passes, including two new tests in `tests/unit/account_info_tes
+primary	long	holoviz__holoviews-6783	holoviz__holoviews-6783__SKg6ao3	counted	graded	false	false	-	The pandas nullable array (`IntegerArray`) reaches `np.empty(dtype=...)`. I'll convert masked pandas arrays to numpy in `_process_layer`.
+primary	long	holoviz__param-1117	holoviz__param-1117__oAGgbgq	counted	graded	false	false	-	The fix works: 1 call instead of 4. Running the full suite and adding a regression test.
+primary	long	huggingface__transformers-43721_interface	huggingface__transformers-43721__RHUqC9x	counted	graded	false	false	-	Let me look at how an existing Deserialize op is implemented (e.g. fp_quant).
+primary	long	huggingface__transformers-44080	huggingface__transformers-44080__WcHktyP	counted	graded	false	false	-	Now add a regression test.
+primary	long	huggingface__trl-5135	huggingface__trl-5135__jmXmZiT	counted	graded	false	false	-	The fix is in place; `re` still needs importing, then I'll test with a field whose help contains a bare `%`.
+primary	long	idaholab__MontePy-850	idaholab__MontePy-850__DrfLcnT	counted	graded	false	false	-	Comma-separated values now parse. Next I'll make sure particle designators like `imp:n,p` still work and run the test suite.
+primary	long	idaholab__montepy-882	idaholab__montepy-882__PPK2KTK	counted	graded	false	false	-	Good, the setter links geometry. Now rewrite the in-place operators.
+primary	long	idaholab__montepy-933_interface	idaholab__montepy-933_interface__hRTygn3	counted	graded	false	false	-	Let me check UniverseInput's universe property and how universe 0 is handled in a problem.
+primary	long	iluvcapra__pycmx-15	iluvcapra__pycmx-15__YbUaMHa	counted	graded	false	false	-	Parsing works now. I'll add a regression test.
+primary	long	itsdnns__docsight-437	itsdnns__docsight-437__GhTkcmr	counted	graded	false	false	-	Let me see how the backend reports errors, and how other surfaces handle unsupported errors.
+primary	long	jlowin__fastmcp-3235	jlowin__fastmcp-3235__fNkFvxR	counted	graded	false	false	-	Let me see how add_tool converts decorated functions.
+primary	long	jlowin__fastmcp-3237_interface	jlowin__fastmcp-3237_interface__njJfJQr	counted	graded	false	false	-	The fix works for the mounted case. `uv run` couldn't reach the network, so I'll run the tests directly with pytest.
+primary	long	jmcgeheeiv__pyfakefs-1286	jmcgeheeiv__pyfakefs-1286__kz5bfw6	counted	graded	false	false	-	Remove the now-unused imports, and make `FakePathlibModule` keep a strong reference too:
+primary	long	joke2k__faker-2309	joke2k__faker-2309__sSRxiXu	counted	graded	false	false	-	I fixed it: `faker -i <module> <fake>` now works. The cause was that `-i` was set up to accept any number of values, so it also swallowed the fake name that came after it and tried to import it as a m
+primary	long	joshuadavidthomas__django-bird-239	joshuadavidthomas__django-bird-2__CA4nxgj	counted	graded	false	false	-	The one failing test, "Only flag with named slots", expects slot content to render in the isolated context. I'll keep that behaviour and resolve only props and attrs against the parent context.
+primary	long	jsonpickle__jsonpickle-587	jsonpickle__jsonpickle-587__8W2V4ZA	counted	graded	false	false	-	Apply the exclude in the slots path.
+primary	long	jsonpickle__jsonpickle-588	jsonpickle__jsonpickle-588__D4fmadz	counted	graded	false	false	-	Now add the helper method and the import.
+primary	long	keras-team__keras-22330	keras-team__keras-22330__NNUkKYd	counted	graded	false	false	-	Let me reproduce first.
+primary	long	koxudaxi__datamodel-code-generator-2993	koxudaxi__datamodel-code-generat__sLuCvyh	counted	graded	false	false	-	Works here; maybe markdownDescription triggers it. Try with the full schema.
+primary	long	kubeflow__pipelines-13112	kubeflow__pipelines-13112__efTHLGd	counted	graded	false	false	-	Reproduced the setup; the `str`-output ParallelFor is a separate newer validation, so I'll make `list_to_json` return `list` in my repro.
+primary	long	lincc-frameworks__nested-pandas-425	lincc-frameworks__nested-pandas__dyMFYzW	counted	graded	false	false	-	This is nested-pandas. Let's see `__getitem__`.
+primary	long	linkml__linkml-3098	linkml__linkml-3098__J3XXTWm	counted	graded	false	false	-	I'll handle `default_range` in the base processor by returning no default (the issue says no active behaviour is needed), so all generators stop raising.
+primary	long	litestar-org__advanced-alchemy-673_interface	litestar-org__advanced-alchemy-6__MQ6FtRm	counted	graded	false	false	-	Those failures exist before the change too. Let me see why.
+primary	long	macbre__sql-metadata-625_interface	macbre__sql-metadata-625_interfa__eNJphv2	counted	graded	false	false	-	That check against the old code was invalid because stashing also removed the new test. I'll redo it with only the source change reverted.
+primary	long	marshmallow-code__marshmallow-2925_interface	marshmallow-code__marshmallow-29__T2wkuzt	counted	graded	false	false	-	Add a test and a changelog entry.
+primary	long	mempalace__mempalace-1004	mempalace__mempalace-1004__m2Hprz8	counted	graded	false	false	-	Repro now routes correctly. Adding a regression test and running the suite.
+primary	long	microsoft__Agents-for-python-264	microsoft__Agents-for-python-264__Xg3PoJs	counted	graded	false	false	-	Serialize the activity to a JSON dict on write and validate it back on read (accepting either a dict or an Activity for robustness, e.g. MemoryStorage).
+primary	long	microsoft__fabric-cicd-670	microsoft__fabric-cicd-670__hb9cbrs	counted	graded	false	false	-	No network for `uv lock`, so I'll edit the lockfile's `requires-python` line by hand, then check that the docs hook and tests still work.
+primary	long	microsoft__qcodes-8039	microsoft__qcodes-8039__VCN2WPR	counted	graded	false	false	-	Now the error names `bar`, and the traceback goes through the `foo` getter. Adding a regression test:
+primary	long	milvus-io__pymilvus-3273	milvus-io__pymilvus-3273__DMv7XAZ	counted	graded	false	false	-	`sys` is no longer used; check the import.
+primary	long	mmornati__home-assistant-csnet-home-132	mmornati__home-assistant-csnet-h__uZN25Rd	counted	graded	false	false	-	I fixed `get_temperature_limits` in `custom_components/csnet_home/api.py`. A limit of `0` or `-1` now counts as "not configured", the same way missing values do, which matches what the CSNet app's `va
+primary	long	modelcontextprotocol__python-sdk-1864	modelcontextprotocol__python-sdk__SyGKTtz	counted	graded	false	false	-	The one failure, `test_permission_error`, has nothing to do with this change: it happens because the container runs as root, so file permissions aren't enforced. Next I'll add a regression test.
+primary	long	mwouts__jupytext-1443	mwouts__jupytext-1443__rt3Y2CK	counted	graded	false	false	-	Now a regression test, and run the suite.
+primary	long	nesquena__hermes-webui-1818	nesquena__hermes-webui-1818__p2sXsCY	counted	graded	false	false	-	Now add the helper and wire it into `resolve_model_provider`.
+primary	long	nesquena__hermes-webui-2056	nesquena__hermes-webui-2056__eqw7DwE	counted	graded	false	false	-	Now implement: tolerant host:port detection plus an exact-match check against configured custom provider slugs.
+primary	long	nesquena__hermes-webui-330_interface	nesquena__hermes-webui-330_inter__CQHjZDb	counted	graded	false	false	-	I made the two changes in `api/onboarding.py` and `static/onboarding.js`. The full test suite passes (726 passed, 42 skipped), but I didn't run the wizard in a browser or test against a live preconfig
+primary	long	networkx__networkx-8369	networkx__networkx-8369__wSzSvEX	counted	graded	false	false	-	Now add a regression test and run the relevant suites.
+primary	long	niconoe__pyinaturalist-643	niconoe__pyinaturalist-643__D3SHmWB	counted	graded	false	false	-	I'll read the response into a `BytesIO`, and also handle non-seekable file-like objects generally.
+primary	long	nilearn__nilearn-5739	nilearn__nilearn-5739__hQmgRGw	counted	graded	false	false	-	I'll drop the transpose I added, since it changes behavior beyond the fix.
+primary	long	nilearn__nilearn-5741	nilearn__nilearn-5741__8WKEUUc	counted	graded	false	false	-	Fix version tag to 0.13.0, add changelog, and add tests.
+primary	long	nilearn__nilearn-6031_interface	nilearn__nilearn-6031_interface__yg693Zp	counted	graded	false	false	-	I've added the isotropic resampling to `load_bg_img`. Next I'll check that it works and run the existing tests.
+primary	long	nolar__kopf-1225	nolar__kopf-1225__Xv82sKc	counted	graded	false	false	-	I fixed it: kopf now keeps watching a namespace while it is being deleted, and only stops when the namespace is actually gone. The namespace and reactor tests pass (263); I didn't try it on a real clu
+primary	long	oemof__tespy-921	oemof__tespy-921__hjS8skc	counted	graded	false	false	-	Let me reproduce first.
+primary	long	olofk__fusesoc-776_interface	olofk__fusesoc-776_interface__YV3FoJt	counted	graded	false	false	-	The fix works on a repro. The parse error is now listed again right after the "not found" error. I'll strip the leading newline from the message and wait for the test suite.
+primary	long	oOo0oOo__leanclient-24	oOo0oOo__leanclient-24__FXQFph9	counted	graded	false	false	-	I fixed line-range filtering in both affected functions. They now check a diagnostic's `fullRange`, which is the real span of the error, and only use `range` when `fullRange` is missing: - `FileState.
+primary	long	open-telemetry__opentelemetry-python-4891	open-telemetry__opentelemetry-py__yugJatM	counted	graded	false	false	-	Let me add a regression test.
+primary	long	openai__openai-agents-python-1965	openai__openai-agents-python-196__nvchedX	counted	graded	false	false	-	Confirmed: any arbitrary dict (e.g. `{'foo': 'bar'}`) validates as `ToolOutputImage` since `type` has a default.
+primary	long	openai__openai-agents-python-1984	openai__openai-agents-python-198__f2ZFGae	counted	graded	false	false	-	Now implement: config option `async_tool_calls` (default True), tracked tasks, cleanup.
+primary	long	openai__openai-agents-python-2144	openai__openai-agents-python-214__m3NXh23	counted	graded	false	false	-	Next I'll check the response side: does `reasoning_content` from LiteLLM turn into a ReasoningItem?
+primary	long	opsmill__infrahub-8407	opsmill__infrahub-8407__yRiBP98	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	long	opsmill__infrahub-8407	opsmill__infrahub-8407__KJemLMX	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	long	opsmill__infrahub-8423	opsmill__infrahub-8423__7qotcS4	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	long	opsmill__infrahub-8423	opsmill__infrahub-8423__UnioKp2	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	long	pallets__click-3239	pallets__click-3239__DHZwXcX	counted	graded	false	false	-	Fine. Apply the fix: only treat `default=True` as "activate the flag" for non-boolean flags.
+primary	long	pallets-eco__wtforms-892_interface	pallets-eco__wtforms-892_interfa__G2Xge7F	counted	graded	false	false	-	I've added a `ButtonField` that renders a real `<button type="submit">` element and keeps the submitted value as a string. The full test suite passes (384 tests), including a new `tests/fields/test_bu
+primary	long	pandas-dev__pandas-64092	pandas-dev__pandas-64092__BhuVXSS	counted	graded	false	false	-	The main case is fixed (V and T now come out as float64 NaN, with 91.0 in the new row). A second test raised an error, so I'm checking whether my change caused it or the behavior was already there.
+primary	long	pandas-dev__pandas-64797	pandas-dev__pandas-64797__PT5sjKJ	counted	graded	false	false	-	Let me empirically compare the libjoin fastpath against the fallback paths for monotonic inputs.
+primary	long	pdm-project__pdm-3759	pdm-project__pdm-3759__885avdR	counted	graded	false	false	-	I'll also fall back to `PDM_PROJECT` like the option default does, then test.
+primary	long	pennylaneai__pennylane-9298	pennylaneai__pennylane-9298__BatMfar	counted	graded	false	false	-	Use the same filter as the warning (ignore `IGNORED_UNSOLVED_OPS`) when checking whether the search solved everything:
+primary	long	pgmpy__pgmpy-3137	pgmpy__pgmpy-3137__XQ7toMU	counted	graded	false	false	-	Fixed. Now add a regression test and run the suite.
+primary	long	piskvorky__smart_open-889	piskvorky__smart_open-889__MCFXkAf	counted	graded	false	false	-	I'll wait for the background notification.
+primary	long	piskvorky__smart_open-892	piskvorky__smart_open-892__VaFHBhw	counted	graded	false	false	-	Let me measure how many S3 GET requests zipfile reading triggers with the current Reader.
+primary	long	plone__cookieplone-templates-308	plone__cookieplone-templates-308__EjAJy9f	counted	graded	false	false	-	Check other backend templates (sub-templates for projects) too.
+primary	long	plone__cookieplone-templates-322	plone__cookieplone-templates-322__b2KuD8K	counted	graded	false	false	-	Plan: the hooks currently create `pkgutil`-style namespace `__init__.py` files. I'll switch them to PEP 420 native namespaces (no `__init__.py`) and check the tests.
+primary	long	psd-tools__psd-tools-551	psd-tools__psd-tools-551__qbXtF8x	counted	graded	false	false	-	Now add tests and run the suite.
+primary	long	psd-tools__psd-tools-593	psd-tools__psd-tools-593__ZiNbazz	counted	graded	false	false	-	Move the import to the top-level import line, then wire it into `composite()` and `composite_pil`.
+primary	long	py-pdf__pdfly-219	py-pdf__pdfly-219__4XhH7hr	counted	graded	false	false	-	I'll keep the last page on the left side of a double-width page so all output pages stay the same size.
+primary	long	pyccel__pyccel-2512	pyccel__pyccel-2512__MPufCnT	counted	graded	false	false	-	I'll make both lookups handle the case where `funcdef` is already the function definition (dotted call path).
+primary	long	pydap__pydap-624	pydap__pydap-624__nd6vTh8	counted	graded	false	false	-	Fix works on the reproduction. Now adding a regression test and running the suite.
+primary	long	pyinfra-dev__pyinfra-1665	pyinfra-dev__pyinfra-1665__k2aDMVD	counted	graded	false	false	-	Let me add a regression test for the disconnect path.
+primary	long	pyjanitor-devs__pyjanitor-1593	pyjanitor-devs__pyjanitor-1593__BZ9MG5y	counted	graded	false	false	-	I'm adding `expand` and `complete` as groupby methods. The `by` argument on DataFrames will keep working but will raise a deprecation warning.
+primary	long	pypa__build-1027	pypa__build-1027__VjJeuv3	counted	graded	false	false	-	Now implement.
+primary	long	pypa__twine-1309	pypa__twine-1309__b8YYPcZ	counted	graded	false	false	-	I fixed the crash: twine no longer fails with `ValueError` when the server returns a non-standard status code like 499. The new test and the existing ones in `tests/test_main.py` pass (4 tests); I did
+primary	long	pypa__virtualenv-3015	pypa__virtualenv-3015__ERjMnF7	counted	graded	false	false	-	I wrote that issue number from memory and can't check it, so I'm taking it out. Next I'll add a test and a changelog entry.
+primary	long	pypsa__pypsa-1653	pypsa__pypsa-1653__Eebw3mi	counted	graded	false	false	-	Let me reproduce first.
+primary	long	pytest-dev__pyfakefs-1269	pytest-dev__pyfakefs-1269__akDzVnh	counted	graded	false	false	-	The wrapper now gets created, but `readable()` and `writable()` still return True for every mode. I'll add proper implementations.
+primary	long	pytest-dev__pyfakefs-1286	pytest-dev__pyfakefs-1286__4h7H5dQ	counted	graded	false	false	-	Now the fcntl module, unused imports, and the pathlib module.
+primary	long	python-markdown__markdown-1587	python-markdown__markdown-1587__qGHWSJn	counted	graded	false	false	-	The output is correct now and all tests pass. Next I'll remove the issue number I made up in the docstring, add regression tests, and add a changelog entry.
+primary	long	python-wheel-build__fromager-1106	python-wheel-build__fromager-110__phmJ7Jj	counted	graded	false	false	-	The fix is in place in `src/fromager/dependency_graph.py`; now adding tests and running the suite.
+primary	long	python-wheel-build__fromager-1124	python-wheel-build__fromager-112__SjYfJuf	counted	graded	false	false	-	I'll add a `req_type` parameter to `resolve_package_cooldown` and exempt top-level `==` pins, then thread `req_type` through the three callers.
+primary	long	pytorch__ignite-3532_interface	pytorch__ignite-3532_interface__cZnb8jL	counted	graded	false	false	-	Now a test:
+primary	long	reata__sqllineage-743	reata__sqllineage-743__rSKeL5Z	counted	graded	true	false	-	Now the test (issue SQL, plus a dynamic partition case):
+primary	long	reframe-hpc__reframe-3660_interface	reframe-hpc__reframe-3660_interf__XRwfEmW	counted	graded	false	false	-	The 6 remaining failures are git/network-related. Adding a unit test for the new behavior:
+primary	long	researchobject__ro-crate-py-248	researchobject__ro-crate-py-248__dxXzhRC	counted	graded	false	false	-	Fix is in place. Now I'll add a regression test that reads a `1.2-DRAFT` crate.
+primary	long	scikit-learn__scikit-learn-33168	scikit-learn__scikit-learn-33168__2HFD3jk	counted	graded	false	false	-	Compute the normalization in log space so it can't underflow to 0/0.
+primary	long	scikit-learn__scikit-learn-33565	scikit-learn__scikit-learn-33565__uXFrvRy	counted	graded	true	true	-	Apply the issue's test patch plus a regression test.
+primary	long	scikit-rf__scikit-rf-1336	scikit-rf__scikit-rf-1336__xx97Czz	counted	graded	false	false	-	Need the numpy import; also simplify the helper.
+primary	long	scipp__plopp-513	scipp__plopp-513__JPJ6KH3	counted	graded	false	false	-	Now add a regression test.
+primary	long	SciTools__iris-6754	SciTools__iris-6754__aBQTSXm	counted	graded	false	false	-	The filter now accepts any number of NameConstraints. Next I'm making callable name matches behave the same as `NameConstraint` (a `None` target gives no match), then I'll update the tests.
+primary	long	sciunto-org__python-bibtexparser-515	sciunto-org__python-bibtexparser__mQy4eh5	counted	graded	false	false	-	Fix works and all tests pass. I'll add a regression test next.
+primary	long	sissbruecker__linkding-1291	sissbruecker__linkding-1291__2gqePDZ	counted	graded	false	false	-	Now add tests and run them.
+primary	long	skypilot-org__skypilot-8908	skypilot-org__skypilot-8908__dqx8pQq	counted	graded	false	false	-	Added the fallback; now quickly testing with a mocked client.
+primary	long	spack__spack-51723	spack__spack-51723__hv42EYy	counted	graded	false	false	-	Now add a test and run it.
+primary	long	spack__spack-52244	spack__spack-52244__9dGqnrM	counted	graded	false	false	-	Schema, manifest, and install changes are in. Next: `gc` and the default view.
+primary	long	stanfordnlp__dspy-8890	stanfordnlp__dspy-8890__C5gBa4C	counted	graded	false	false	-	The fix works on the repro and the existing streaming tests pass. Next I'm adding a regression test.
+primary	long	stravalib__stravalib-709_interface	stravalib__stravalib-709_interfa__wZ8QKSQ	counted	graded	false	false	-	I fixed `_get_wait_time` in `src/stravalib/util/limiter.py` so the wait time now follows whichever limit has fewer requests left per second: - **Low priority:** waits `max(short_wait, long_wait)`. Bef
+primary	long	sunpy__sunpy-8548_interface	sunpy__sunpy-8548_interface__aLYNR7A	counted	graded	false	false	-	Let me reproduce first.
+primary	long	sympy__sympy-28660	sympy__sympy-28660__AzymNtk	counted	graded	false	false	-	Meanwhile, test a smaller case directly.
+primary	long	sympy__sympy-28714	sympy__sympy-28714__YxVRkn8	counted	graded	false	false	-	Fix works. Adding a test and running the suite.
+primary	long	tox-dev__sphinx-autodoc-typehints-606	tox-dev__sphinx-autodoc-typehint__wCmoapP	counted	graded	false	false	-	Let me reproduce with a small Sphinx project.
+primary	long	tox-dev__sphinx-autodoc-typehints-607	tox-dev__sphinx-autodoc-typehint__EdVyeMN	counted	graded	false	false	-	Now a test reproducing the wrapper loop (a callable whose `__wrapped__` returns itself, as SQLAlchemy's mocked/proxied objects do).
+primary	long	tox-dev__tox-3846	tox-dev__tox-3846__7gY5Nec	counted	graded	false	false	-	Now rewrite `extract_base_python` to scan factors for dotted versions (with optional `cpython-`/`pypy-` prefix factor).
+primary	long	ucfopen__canvasapi-716	ucfopen__canvasapi-716__v4hbdCb	counted	graded	false	false	-	I updated `obj_or_str` in `canvasapi/util.py` so it works like `obj_or_id`. The full test suite passes (1113 tests). How it behaves now: - **A plain string** (for example a feature name) is returned u
+primary	long	unit8co__darts-3065	unit8co__darts-3065__uWnbdCK	counted	graded	false	false	-	I've updated how the categorical column map is built so it skips categories that `OneHotEncoder` drops. Now I'll check it against the reproduction case, including inverse transforms.
+primary	long	UXARRAY__uxarray-1423	UXARRAY__uxarray-1423__5EaoMgT	counted	graded	false	false	-	Reproducing with a regional subset (no faces at some latitudes):
+primary	long	vndee__llm-sandbox-101	vndee__llm-sandbox-101__QWRoWZe	counted	graded	false	false	-	Now check how base session's run handles timeout, and the language handlers.
+primary	long	VRSEN__agency-swarm-468	VRSEN__agency-swarm-468__XhBpjkm	counted	graded	false	false	-	Now a quick check of the fixed behavior with a mocked agent:
+primary	long	vyperlang__vyper-4801	vyperlang__vyper-4801__YjMSqEH	counted	graded	false	true	-	Now extend the test with callee scenarios (callee with local buffers not touching immutables, called while immutables are live).
+primary	long	youssofal__mtplx-21	youssofal__mtplx-21__C6U83HJ	counted	graded	false	false	-	Now let's check `_parse_generated_tool_calls` and the non-streaming path.
+primary	long	yukinarit__pyserde-682	yukinarit__pyserde-682__CDArbUV	counted	graded	false	false	-	Let me reproduce.
+primary	long	zarr-developers__virtualizarr-979	zarr-developers__virtualizarr-97__yLgFuwy	counted	graded	false	false	-	Now find where kerchunk reading raises.
+primary	long	zwicker-group__py-pde-733	zwicker-group__py-pde-733__XrE7oRW	counted	graded	false	false	-	Normalize using Parseval's theorem (RMS over the full spectrum, accounting for rfft's half-spectrum) rather than the mean of the scaling.
+primary	none	a2aproject__a2a-python-576	a2aproject__a2a-python-576__X2osSEn	counted	graded	false	false	-	Now a quick real-world check with a mock transport returning 401 JSON, plus the test suite.
+primary	none	ag2ai__faststream-2701	ag2ai__faststream-2701__KfsFh8S	counted	graded	false	false	-	Check other set_broker overrides.
+primary	none	agronholm__anyio-1121	agronholm__anyio-1121__TPKpuSh	counted	graded	false	false	-	Now let me reproduce with a real SIGINT.
+primary	none	agronholm__anyio-1134	agronholm__anyio-1134__HkJfPUn	counted	graded	false	false	-	Now test with an extensionless script.
+primary	none	All-Hands-AI__OpenHands-11914	All-Hands-AI__OpenHands-11914__rVfygJ6	counted	graded	false	false	-	The SDK's `AgentContext` already has a `secrets` field that puts secret names into the system prompt. I'll use that instead of building the suffix text by hand.
+primary	none	ardupilot__methodicconfigurator-1201	ardupilot__methodicconfigurator__3g2byph	counted	graded	false	false	-	The fix is in; now running the connection tests under a virtual display.
+primary	none	avaiga__taipy-2797	avaiga__taipy-2797__gmBvAvJ	counted	graded	false	false	-	Now a unit test. Let me find where adapter tests live.
+primary	none	azure-samples__azure-search-openai-demo-3025	azure-samples__azure-search-open__uNGBPdf	counted	graded	false	false	-	Now the embeddings safeguard:
+primary	none	bas-amop__PolarRoute-server-159	bas-amop__PolarRoute-server-159__74gaqHL	counted	graded	false	false	-	Handle both dict (already structured) and string info.
+primary	none	basicmachines-co__basic-memory-341	basicmachines-co__basic-memory-3__Si8NV38	counted	graded	false	false	-	Good. Now I'll update the existing tests to match the flat cloud layout.
+primary	none	basicmachines-co__basic-memory-484	basicmachines-co__basic-memory-4__WB3NdL3	counted	graded	false	false	-	`uv run` failed because it couldn't download dependencies, so I'm running the tests with the project's own Python instead.
+primary	none	beeware__briefcase-2546	beeware__briefcase-2546__9a7Y6fj	counted	graded	false	false	-	Implement a fallback: if the resolved name isn't `python3.X`, ask the interpreter itself.
+primary	none	calliope-project__calliope-854	calliope-project__calliope-854__52nmXjM	counted	graded	false	false	-	Now test with a case where a representative day doesn't map to itself.
+primary	none	careamics__careamics-688	careamics__careamics-688__4XyMusu	counted	graded	false	false	-	Neither Python environment has pytest or pylibCZIrw, so I'll check the change with a mocked reader instead.
+primary	none	chaoss__augur-3512	chaoss__augur-3512__LWzEoCv	counted	graded	false	false	-	Also make the facade helper defensive:
+primary	none	collective__icalendar-921	collective__icalendar-921__bJyNMPa	counted	graded	false	false	-	Lists now serialize as comma-separated strings. Let me add tests.
+primary	none	cpp-linter__cpp-linter-hooks-142	cpp-linter__cpp-linter-hooks-142__VXD2sgm	counted	graded	false	false	-	Now update the existing tests.
+primary	none	cpp-linter__cpp-linter-hooks-206_interface	cpp-linter__cpp-linter-hooks-206__LUmMdj9	counted	graded	false	false	-	The code and README changes are in; now adding tests and running the suite.
+primary	none	dagster-io__dagster-33605	dagster-io__dagster-33605__CogGfrX	counted	graded	false	false	-	The regression came from #20493: `entity_partitions_def` now iterates over all specs of the assets def rather than only the selected keys. I'll limit it to the selected ones.
+primary	none	dask__dask-12096	dask__dask-12096__PiEkQjZ	counted	graded	false	false	-	Fall back to all frames if the filter removes everything.
+primary	none	dask__dask-12119	dask__dask-12119__9BPJ2t6	counted	graded	false	false	-	Now add a regression test.
+primary	none	equinor__ert-11988	equinor__ert-11988__cFdJNuT	counted	graded	false	false	-	The fix is in: manual update now restricts the smoother's realization mask to the selected active realizations. Running the relevant tests now.
+primary	none	equinor__ert-12491	equinor__ert-12491__77WHV3K	counted	graded	false	false	-	Let me look at the referenced commit and where parameters.txt is written.
+primary	none	ethereum__web3.py-3800	ethereum__web3.py-3800__U53ST3p	counted	graded	false	false	-	Now add a test and run the suites.
+primary	none	gammapy__gammapy-6409	gammapy__gammapy-6409__qVQ8oP8	counted	graded	false	false	-	Now I'll add a test and a changelog entry if the project uses them.
+primary	none	genericmappingtools__pygmt-4463	genericmappingtools__pygmt-4463__HiyZn7t	counted	graded	false	false	-	Let me look at a similar module, e.g. grdlandmask.
+primary	none	google__flax-5171	google__flax-5171__Ydpqepm	counted	graded	false	false	-	The base `_graph_node_set_key` rejects non-string keys, but `List` stores items under int keys. I'll make set/pop accept int keys via `_setattr`.
+primary	none	holoviz__param-1117	holoviz__param-1117__aXvrMRB	counted	graded	false	false	-	Down to 1 call. Now I'll run the test suite.
+primary	none	huggingface__transformers-43721_interface	huggingface__transformers-43721__woD6DRM	counted	graded	false	false	-	Now a test: build a tiny BitNet model, save it with packed weights and an `autobitlinear`/`offline` quant config, then reload it.
+primary	none	huggingface__trl-5135	huggingface__trl-5135__QA69rnL	counted	graded	false	false	-	I fixed this in TRL, so `trl <command> --help` works even when the installed transformers doesn't escape its `%` signs. Your transformers PR fixes it upstream; this covers older versions. **Couldn't r
+primary	none	jlowin__fastmcp-3235	jlowin__fastmcp-3235__28WDYBo	counted	graded	false	false	-	Let me see how add_tool converts decorated functions.
+primary	none	joshuadavidthomas__django-bird-239	joshuadavidthomas__django-bird-2__hQEtBAv	counted	graded	false	false	-	Now I'll add regression tests to the `test_only_flag` cases.
+primary	none	jsonpickle__jsonpickle-587	jsonpickle__jsonpickle-587__5FnrAvx	counted	graded	false	false	-	Add exclude parameter to the slots path.
+primary	none	jsonpickle__jsonpickle-588	jsonpickle__jsonpickle-588__sZHYoru	counted	graded	false	false	-	Round-trips work for plain and subclassed defaultdicts, with type, lambda, and `keys=True` factories. Now I'll check whether the 3 pandas failures were there before my change:
+primary	none	kubeflow__pipelines-13112	kubeflow__pipelines-13112__bpXony3	counted	graded	false	false	-	Make `list_to_json` return `list` for my repro (newer SDK validates that).
+primary	none	lincc-frameworks__nested-pandas-425	lincc-frameworks__nested-pandas__zK3n5t9	counted	graded	false	false	-	The SettingWithCopyWarning was already there before my change, so I'm leaving it alone. Running the test suite now.
+primary	none	linkml__linkml-3098	linkml__linkml-3098__W2TZs6K	counted	graded	false	false	-	Plan: handle `default_range` generically in the base processor by returning `None` (no default), after subclass custom mappings. First, checking how shaclgen uses the result.
+primary	none	litestar-org__advanced-alchemy-673_interface	litestar-org__advanced-alchemy-6__52QDCi7	counted	graded	false	false	-	Check Python version support for `/` (3.8+), and add a test.
+primary	none	macbre__sql-metadata-625_interface	macbre__sql-metadata-625_interfa__KdKWuAg	counted	graded	false	false	-	Warning is gone. The two forms still give different columns, so I'm checking which dialect each one parses with.
+primary	none	mempalace__mempalace-1004	mempalace__mempalace-1004__kfqGhH4	counted	graded	false	false	-	Now adding a regression test and running the suite.
+primary	none	microsoft__fabric-cicd-670	microsoft__fabric-cicd-670__xNpJzjB	counted	graded	false	false	-	The docs already show the range, so the real fix is to add Python 3.13 support. I'll check which interpreters are available and whether the code runs on 3.13.
+primary	none	microsoft__qcodes-8039	microsoft__qcodes-8039__ABeCnt8	counted	graded	false	false	-	Fix works; let me add a regression test and run broader tests.
+primary	none	milvus-io__pymilvus-3273	milvus-io__pymilvus-3273__zqTqtkx	counted	graded	false	false	-	`sys` is now unused; remove the import and run tests.
+primary	none	networkx__networkx-8369	networkx__networkx-8369__EbBNfKF	counted	graded	false	false	-	Works. Let me add a test and run the class tests and dispatch tests.
+primary	none	niconoe__pyinaturalist-643	niconoe__pyinaturalist-643__kvt5GEZ	counted	graded	false	false	-	Fix: read the response content into a `BytesIO`, and also handle non-seekable file-like objects.
+primary	none	nilearn__nilearn-5739	nilearn__nilearn-5739__EsY4LAU	counted	graded	false	false	-	Now adding a regression test.
+primary	none	nilearn__nilearn-5741	nilearn__nilearn-5741__HSr2zjA	counted	graded	false	false	-	Now a test and changelog entry.
+primary	none	nolar__kopf-1225	nolar__kopf-1225__pat4PT8	counted	graded	false	false	-	I fixed it. Kopf now keeps watching a matching namespace while it is being deleted, and stops only when Kubernetes reports it as actually gone. That gives the resources inside it time to run their del
+primary	none	olofk__fusesoc-776_interface	olofk__fusesoc-776_interface__aAPivej	counted	graded	false	false	-	Now implement: track parse errors in CoreManager, expose via Fusesoc, and report them on "not found".
+primary	none	oOo0oOo__leanclient-24	oOo0oOo__leanclient-24__TpHYuex	counted	graded	false	false	-	Use `fullRange` when present, falling back to `range`.
+primary	none	open-telemetry__opentelemetry-python-4891	open-telemetry__opentelemetry-py__xrwf8ge	counted	graded	false	false	-	Also snapshot the per-view attribute dict and the conflict-check loop for safety.
+primary	none	openai__openai-agents-python-1965	openai__openai-agents-python-196__S5gNBde	counted	graded	false	false	-	Collection errors are from missing optional deps (litellm, numpy, etc.); run the rest.
+primary	none	openai__openai-agents-python-2144	openai__openai-agents-python-214__uwBuJoq	counted	graded	false	false	-	Now a test.
+primary	none	pallets__click-3239	pallets__click-3239__p3P2YNp	counted	graded	false	false	-	I'll restrict the `default=True` → `flag_value` alignment to non-boolean flags, where `True` can't be a meaningful value anyway.
+primary	none	pdm-project__pdm-3759	pdm-project__pdm-3759__J7BkKjo	counted	graded	false	false	-	The fix works: `pdm list -p /tmp/p1` run from p2 used p1's `--json`. I'll add a regression test and run the CLI tests.
+primary	none	plone__cookieplone-templates-308	plone__cookieplone-templates-308__r3CH7JE	counted	graded	false	false	-	The backend add-on template's `.gitignore` is the only one that needs this entry, so I'll add it there and include a news fragment.
+primary	none	psd-tools__psd-tools-551	psd-tools__psd-tools-551__CUF2iNV	counted	graded	false	false	-	Same 31 failures exist without my change (composite/environment-related). Adding a regression test.
+primary	none	py-pdf__pdfly-219	py-pdf__pdfly-219__LvD7PN7	counted	graded	false	false	-	I fixed it: `pdfly 2-up` now keeps the last page when the input has an odd number of pages. **Cause:** in `pdfly/up2.py`, the loop puts pages side by side two at a time and stops at `len(pages) - 1`. 
+primary	none	pyjanitor-devs__pyjanitor-1593	pyjanitor-devs__pyjanitor-1593__2yw6zrG	counted	graded	false	false	-	Iteration order lines up with `result_index`, so I'll go ahead and implement it.
+primary	none	pypa__build-1027	pypa__build-1027__aQUeTw4	counted	graded	false	false	-	I've added a PEP 610 check (`direct_url.json`) to `check_dependency`. Next I'll fix the typing import and add tests.
+primary	none	pypa__virtualenv-3015	pypa__virtualenv-3015__4fExcDM	counted	graded	false	false	-	The `venv`-based creator lets the cfg that `python -m venv` wrote win, so I'll apply the same short-path step there too.
+primary	none	python-wheel-build__fromager-1106	python-wheel-build__fromager-110__aUikRJ7	counted	graded	false	false	-	That failure also happens without my change. Now I'll add a test.
+primary	none	python-wheel-build__fromager-1124	python-wheel-build__fromager-112__aqCo63Y	counted	graded	false	false	-	Now let me check the bootstrap resolver passes req_type through to sources/wheels.
+primary	none	pytorch__ignite-3532_interface	pytorch__ignite-3532_interface__cjTrtBP	counted	graded	false	false	-	Fix version tag, then test.
+primary	none	scikit-learn__scikit-learn-33168	scikit-learn__scikit-learn-33168__GwvSWrS	counted	graded	false	false	-	Avoid calling decision_function twice; restructure.
+primary	none	scikit-rf__scikit-rf-1336	scikit-rf__scikit-rf-1336__j5uRhTc	counted	graded	false	false	-	Need numpy import; also simplify fmt.
+primary	none	SciTools__iris-6754	SciTools__iris-6754__yPSTmuS	counted	graded	false	false	-	Now rewriting the translator to support multiple constraints (OR-ed), plain string / `Constraint(name=...)` constraints, and to treat callable values conservatively.
+primary	none	sissbruecker__linkding-1291	sissbruecker__linkding-1291__kgCaS3r	counted	graded	false	false	-	I fixed it: after renaming a tag you now stay on the page you were on. The tag edit and tag index tests pass (26 tests), including one new test for this case. The cause was that saving a tag always se
+primary	none	skypilot-org__skypilot-8908	skypilot-org__skypilot-8908__QMinz7p	counted	graded	false	false	-	Now a quick test with a mocked runner.
+primary	none	spack__spack-52244	spack__spack-52244__q5C3REj	counted	graded	false	false	-	Core changes are in; now writing tests. Let me look at existing group tests to model them on.
+primary	none	stanfordnlp__dspy-8890	stanfordnlp__dspy-8890__ECEDAnH	counted	graded	false	false	-	Also finalize at the LM stream's finish chunk (when provided) so intermediate predictors flush promptly:
+primary	none	stravalib__stravalib-709_interface	stravalib__stravalib-709_interfa__SkQWW96	counted	graded	false	false	-	I fixed `_get_wait_time` in `src/stravalib/util/limiter.py`. It now works out a wait time for each limit: the seconds left in that period divided by the requests left in it. - **Low priority:** waits 
+primary	none	tox-dev__sphinx-autodoc-typehints-606	tox-dev__sphinx-autodoc-typehint__rFNGtDi	counted	graded	false	false	-	Let me reproduce.
+primary	none	tox-dev__sphinx-autodoc-typehints-607	tox-dev__sphinx-autodoc-typehint__dooBcGd	counted	graded	false	false	-	Now let me add a regression test and run the suite.
+primary	none	unit8co__darts-3065	unit8co__darts-3065__Pro8pb2	counted	graded	false	false	-	Works including inverse transform. Run existing tests and add a regression test.
+primary	none	vndee__llm-sandbox-101	vndee__llm-sandbox-101__fzGZZTn	counted	graded	false	false	-	Let's see how the base session's run handles timeout and how run_with_artifacts uses it.
+primary	none	VRSEN__agency-swarm-468	VRSEN__agency-swarm-468__wJY6xik	counted	graded	false	false	-	When a user passes in their own `FileSearchTool`, the file manager now respects the agent-level `include_search_results` flag. **The fix:** in `add_file_search_tool` in `src/agency_swarm/agent/file_ma
+primary	none	youssofal__mtplx-21	youssofal__mtplx-21__FqWArDz	counted	graded	false	false	-	Now check `_parse_generated_tool_calls` and non-streaming path.
+primary	none	yukinarit__pyserde-682	yukinarit__pyserde-682__FUaq4gK	counted	graded	false	false	-	Some support exists. Let me reproduce.
+primary	none	zarr-developers__virtualizarr-979	zarr-developers__virtualizarr-97__9CEnqCp	counted	graded	false	false	-	The reader raises on inlined chunks, and the kerchunk writer would also mishandle a ManifestArray holding inlined chunks. I'm fixing both.
+primary	none	zwicker-group__py-pde-733	zwicker-group__py-pde-733__qWGWU6Z	counted	graded	false	false	-	All of them now give unit variance. Next I'll update the docstring note and run the tests.
+primary	own	a2aproject__a2a-python-576	a2aproject__a2a-python-576__PvYWVD3	counted	graded	false	false	-	Apply the same pattern to all four streaming blocks with a Python edit script.
+primary	own	ag2ai__faststream-2701	ag2ai__faststream-2701__j79CA8b	counted	graded	false	false	-	Check the asgi override too.
+primary	own	agronholm__anyio-1121	agronholm__anyio-1121__845kURk	counted	graded	false	false	-	Fixed (stash confirms original behavior would print "second sleep"). Now run the test suite and add a regression test.
+primary	own	agronholm__anyio-1134	agronholm__anyio-1134__3mSpC89	counted	graded	false	false	-	Now reproduce with an extensionless entry-point-style script.
+primary	own	All-Hands-AI__OpenHands-11914	All-Hands-AI__OpenHands-11914__SdSUSBs	counted	graded	false	false	-	The SDK's `AgentContext` already supports a `secrets` field and lists the secret names in the system prompt. I'll pass the conversation's secrets into it.
+primary	own	ardupilot__methodicconfigurator-1201	ardupilot__methodicconfigurator__97gVMpL	counted	graded	false	false	-	I've made the change; now checking that startup is actually faster and that the existing tests still pass.
+primary	own	avaiga__taipy-2797	avaiga__taipy-2797__BCgnm6h	counted	graded	false	false	-	The frontend is patched. Now I'll add a backend regression test that runs the adapter on every JSON format.
+primary	own	azure-samples__azure-search-openai-demo-3025	azure-samples__azure-search-open__fcfCH7d	counted	graded	false	false	-	Now the defensive guard in embeddings:
+primary	own	bas-amop__PolarRoute-server-159	bas-amop__PolarRoute-server-159__QDNwHtX	counted	graded	false	false	-	Failed job responses no longer have the double `"error"` nesting. `info` now looks like `{"error": "Inaccessible. No routes found."}`. **Cause:** the code that builds a failed job's response (`get_inf
+primary	own	basicmachines-co__basic-memory-341	basicmachines-co__basic-memory-3__hyg3FmL	counted	graded	false	false	-	Now I'll update the two tests that assumed path-based layouts (case normalization and case collision) so they check the new name-based behavior, and add a regression test for the reported case.
+primary	own	basicmachines-co__basic-memory-484	basicmachines-co__basic-memory-4__qfo7TxV	counted	graded	false	false	-	The test suite won't start because `testcontainers` isn't installed. I'll put a stub module on the path just for this run.
+primary	own	beeware__briefcase-2546	beeware__briefcase-2546__BMccSNX	counted	graded	false	false	-	The resolved symlink name can't be parsed on Gentoo (`python-exec2c`). I'll keep the fast path, and fall back to asking `/usr/bin/python3` itself for its version.
+primary	own	calliope-project__calliope-854	calliope-project__calliope-854__kGkgbzz	counted	graded	false	false	-	The fix works on a synthetic case where the representative days aren't assigned to themselves. Now I'll run the existing time and clustering tests.
+primary	own	careamics__careamics-688	careamics__careamics-688__gNEjQWN	counted	graded	false	false	-	The fix is in. pytest isn't installed in either env, so I'll check whether pylibCZIrw is importable and write a quick manual test if it is.
+primary	own	chaoss__augur-3512	chaoss__augur-3512__Bpx6j4S	counted	graded	false	false	-	Quick check against existing tests:
+primary	own	collective__icalendar-921	collective__icalendar-921__7u4TayB	counted	graded	false	false	-	The fix round-trips correctly. Now I'll add tests.
+primary	own	cpp-linter__cpp-linter-hooks-142	cpp-linter__cpp-linter-hooks-142__THCrQC2	counted	graded	false	false	-	Now update the tests.
+primary	own	cpp-linter__cpp-linter-hooks-206_interface	cpp-linter__cpp-linter-hooks-206__dvMK64X	counted	graded	false	false	-	The fix flag now forces serial execution; adding tests and README docs.
+primary	own	dagster-io__dagster-33605	dagster-io__dagster-33605__tSqGUxu	counted	graded	false	false	-	Now a repro test:
+primary	own	dask__dask-12096	dask__dask-12096__3KmPAVu	counted	graded	false	false	-	Axis=0 works now. Axis=1 also breaks when every frame is filtered out; I'll handle that too.
+primary	own	dask__dask-12119	dask__dask-12119__NoNHsb7	counted	graded	false	false	-	Works (the cast warning comes from using `-np.inf` as the identity on an int array, and it isn't related to this fix). I'll add a regression test.
+primary	own	equinor__ert-11988	equinor__ert-11988__Q2dyxpd	counted	graded	false	false	-	Now implement: add an optional `active_realizations` mask to `smoother_update` and pass it from ManualUpdate.
+primary	own	equinor__ert-12491	equinor__ert-12491__fRV5Qhi	counted	graded	false	false	-	Now a quick end-to-end check plus the existing tests.
+primary	own	ethereum__web3.py-3800	ethereum__web3.py-3800__hTmzWdT	counted	graded	false	false	-	The manager now returns the explicit session first, so the old `if session:` caching call in `HTTPProvider.__init__` does nothing. I'm removing it and adding a regression test.
+primary	own	gammapy__gammapy-6409	gammapy__gammapy-6409__h3eiRvk	counted	graded	false	false	-	I've added logic so a prior with finite bounds fills in missing parameter min/max. Testing it now.
+primary	own	genericmappingtools__pygmt-4463	genericmappingtools__pygmt-4463__sVVAHTi	counted	graded	false	false	-	Let me look at a similar existing module.
+primary	own	google__flax-5171	google__flax-5171__SKNLQVd	counted	graded	false	false	-	Since `cls._graph_node_set_key` is looked up per subclass, I'll override it in `List` to accept int keys.
+primary	own	holoviz__param-1117	holoviz__param-1117__fCSpdPY	counted	graded	false	false	-	The suite passes (1309 passed, same as before the change). Next, the attribute-method path:
+primary	own	huggingface__transformers-43721_interface	huggingface__transformers-43721__kVHLEp4	counted	graded	false	false	-	Let me look at how other quantizers implement get_weight_conversions.
+primary	own	huggingface__trl-5135	huggingface__trl-5135__Ytani5t	counted	graded	false	false	-	Escaping works for bare `%`, already-escaped `%%`, and `%(default)s`. Next I'll add a regression test and run the CLI/parser tests.
+primary	own	jlowin__fastmcp-3235	jlowin__fastmcp-3235__mHquczZ	counted	graded	false	false	-	Let me see how add_tool handles decorated functions, and the start of from_tool body.
+primary	own	joshuadavidthomas__django-bird-239	joshuadavidthomas__django-bird-2__yxeBgPu	counted	graded	false	false	-	Existing tests expect slot content to stay isolated, so I'll resolve props/attrs against the parent context and render slots + template in the isolated one.
+primary	own	jsonpickle__jsonpickle-587	jsonpickle__jsonpickle-587__Pz32EX2	counted	graded	false	false	-	Pass the exclude set through to the slots flattener.
+primary	own	jsonpickle__jsonpickle-588	jsonpickle__jsonpickle-588__76vKmCE	counted	graded	false	false	-	Now the edits.
+primary	own	kubeflow__pipelines-13112	kubeflow__pipelines-13112__E8GFNS7	counted	graded	false	false	-	The repro script fails before it reaches the compiler: Python is importing a `kfp` package that has no `__version__`. I'll put the in-repo SDK first on the path and run it again.
+primary	own	lincc-frameworks__nested-pandas-425	lincc-frameworks__nested-pandas__nvfcoPS	counted	graded	false	false	-	So this is nested-pandas. Let's read io.py.
+primary	own	linkml__linkml-3098	linkml__linkml-3098__mBCbcRh	counted	graded	false	false	-	Now I'll add a regression test next to the existing ifabsent tests and run the related suites.
+primary	own	litestar-org__advanced-alchemy-673_interface	litestar-org__advanced-alchemy-6__e9Kghe2	counted	graded	false	false	-	Make `model` positional-only and update callers.
+primary	own	macbre__sql-metadata-625_interface	macbre__sql-metadata-625_interfa__m8E3pGt	counted	graded	false	false	-	Let me find where the warning comes from.
+primary	own	mempalace__mempalace-1004	mempalace__mempalace-1004__6hGAg7W	counted	graded	false	false	-	Now rewrite the matching logic with token-boundary matching.
+primary	own	microsoft__fabric-cicd-670	microsoft__fabric-cicd-670__TQEGphZ	counted	graded	false	false	-	Extend support to Python 3.13.
+primary	own	microsoft__qcodes-8039	microsoft__qcodes-8039__4Zw85VN	counted	graded	false	false	-	A hypothesis deadline failure (timing under load), likely unrelated; rerun that file alone.
+primary	own	milvus-io__pymilvus-3273	milvus-io__pymilvus-3273__grvPi5Q	counted	graded	false	false	-	`sys` is no longer used; check imports and remove it.
+primary	own	networkx__networkx-8369	networkx__networkx-8369__kUrGMk6	counted	graded	false	false	-	Works. Now add a test and run the class/dispatch tests.
+primary	own	niconoe__pyinaturalist-643	niconoe__pyinaturalist-643__8kkkkoQ	counted	graded	false	false	-	I fixed photo uploads from URLs. The fix passes the unit tests, but I haven't tried a real upload to iNaturalist or a real image URL. **Cause:** for URLs, `ensure_file_obj` in `pyinaturalist/converter
+primary	own	nilearn__nilearn-5739	nilearn__nilearn-5739__DQy3Xyb	counted	graded	false	false	-	Works. Add a test and run the suite.
+primary	own	nilearn__nilearn-5741	nilearn__nilearn-5741__ZGCywFL	counted	graded	false	false	-	Fix versionadded to 0.13.0 and add changelog + test.
+primary	own	nolar__kopf-1225	nolar__kopf-1225__TudX9eX	counted	graded	false	false	-	Update the tests that encoded the old behaviour.
+primary	own	olofk__fusesoc-776_interface	olofk__fusesoc-776_interface__N4gJxvZ	counted	graded	false	false	-	Quick end-to-end test, then the test suite.
+primary	own	oOo0oOo__leanclient-24	oOo0oOo__leanclient-24__aBH7hb3	counted	graded	false	false	-	Line-range filtering now goes by `fullRange` (the real span of the error), so errors are no longer dropped when Lean truncates `range` for display. If a diagnostic has no `fullRange`, it falls back to
+primary	own	open-telemetry__opentelemetry-python-4891	open-telemetry__opentelemetry-py__kQm5Ng4	counted	graded	false	false	-	Let me add a regression test that reproduces the same-thread re-entrance.
+primary	own	openai__openai-agents-python-1965	openai__openai-agents-python-196__muj3eV4	counted	graded	false	false	-	Next, dict conversion should require an explicit, matching `type` key:
+primary	own	openai__openai-agents-python-2144	openai__openai-agents-python-214__YojD2wB	counted	graded	false	false	-	Fix is in; existing LiteLLM tests pass. Adding a regression test now.
+primary	own	pallets__click-3239	pallets__click-3239__GrjpTeD	counted	graded	false	false	-	Fix works for the reproducer. The remaining failures are tests that hard-code the 8.3.0 special-case (`default=True, flag_value=False` → `False`), so I'm updating them to the corrected behaviour.
+primary	own	pdm-project__pdm-3759	pdm-project__pdm-3759__K3Nt5zV	counted	graded	false	false	-	Now add a test and run related tests.
+primary	own	plone__cookieplone-templates-308	plone__cookieplone-templates-308__3urbupm	counted	graded	false	false	-	Check other backend gitignores (e.g., projects' backend sub-templates).
+primary	own	psd-tools__psd-tools-551	psd-tools__psd-tools-551__oTrmqy8	counted	graded	false	false	-	Same 31 failures exist before and after (pre-existing composite issues). Adding a regression test.
+primary	own	py-pdf__pdfly-219	py-pdf__pdfly-219__YvWFarw	counted	graded	false	false	-	Works. Adding a test.
+primary	own	pyjanitor-devs__pyjanitor-1593	pyjanitor-devs__pyjanitor-1593__8hpEghb	counted	graded	false	false	-	I'm making `expand` and `complete` methods on pandas GroupBy objects. The old `by=` argument will keep working, but with a deprecation warning.
+primary	own	pypa__build-1027	pypa__build-1027__xFiWT8W	counted	graded	false	false	-	I've added a PEP 610 check: when a requirement has a URL, it's now compared against the installed distribution's `direct_url.json`. Next I'm adding tests.
+primary	own	pypa__virtualenv-3015	pypa__virtualenv-3015__gtMcJQK	counted	graded	false	false	-	Now I'll add a changelog entry and a unit test, then run the related tests.
+primary	own	python-wheel-build__fromager-1106	python-wheel-build__fromager-110__fYiiwLa	counted	graded	false	false	-	The new test fails because `ROOT` isn't imported in the test file, so I'm adding that import.
+primary	own	python-wheel-build__fromager-1124	python-wheel-build__fromager-112__6XFnf94	counted	graded	false	false	-	Now implement.
+primary	own	pytorch__ignite-3532_interface	pytorch__ignite-3532_interface__tmA2YGk	counted	graded	false	false	-	I added an `attach(engine, event=Events.ITERATION_STARTED)` method to `ParamScheduler` in `ignite/handlers/param_scheduler.py`. It just calls `engine.add_event_handler(event, self)`, so the old way of
+primary	own	scikit-learn__scikit-learn-33168	scikit-learn__scikit-learn-33168__fH4W7dT	counted	graded	false	false	-	Keep numpy. Compute in log space: log(expit(d)) = -logaddexp(0, -d), then normalize via a stable softmax.
+primary	own	scikit-rf__scikit-rf-1336	scikit-rf__scikit-rf-1336__KQ3RsGJ	counted	graded	false	false	-	Follow the `.2e` convention; for arrays, show first..last values.
+primary	own	SciTools__iris-6754	SciTools__iris-6754__63w5n3i	counted	graded	false	false	-	I'll generalise the translator to handle multiple constraints (NameConstraints and plain name/string constraints), keeping it conservative (never excluding a var that could match).
+primary	own	sissbruecker__linkding-1291	sissbruecker__linkding-1291__TpBHSVS	counted	graded	false	false	-	Now add a test and run the tag test suites.
+primary	own	skypilot-org__skypilot-8908	skypilot-org__skypilot-8908__GZ4GqwA	counted	graded	false	false	-	Fallback is in place. I'll also handle the case where older `squeue` exits with an error for jobs that have finished ("Invalid job id specified") instead of printing nothing.
+primary	own	spack__spack-52244	spack__spack-52244__QuxADvy	counted	graded	false	false	-	Now containerize:
+primary	own	stanfordnlp__dspy-8890	stanfordnlp__dspy-8890__mhcSsc9	counted	graded	false	false	-	The fix works: the whole answer now streams and the last chunk has `is_last_chunk=True`. I'll add a regression test.
+primary	own	stravalib__stravalib-709_interface	stravalib__stravalib-709_interfa__ShEqjsJ	counted	graded	false	false	-	I fixed `SleepingRateLimiter._get_wait_time` in `src/stravalib/util/limiter.py` so it no longer looks at just one limit: - **`low`** priority now waits for whichever is longer: the wait that keeps you
+primary	own	tox-dev__sphinx-autodoc-typehints-606	tox-dev__sphinx-autodoc-typehint__5Bg6B3A	counted	graded	false	false	-	Let me reproduce with a small Sphinx project.
+primary	own	tox-dev__sphinx-autodoc-typehints-607	tox-dev__sphinx-autodoc-typehint__3c4Ujqh	counted	graded	false	false	-	Handle the unwrap loop gracefully in both places: if `inspect.unwrap` raises `ValueError`, bail out.
+primary	own	unit8co__darts-3065	unit8co__darts-3065__4Y524Mx	counted	graded	false	false	-	Everything works. Adding a regression test.
+primary	own	vndee__llm-sandbox-101	vndee__llm-sandbox-101__nG9vnWG	counted	graded	false	false	-	Check how run_with_artifacts uses timeout.
+primary	own	VRSEN__agency-swarm-468	VRSEN__agency-swarm-468__jAbAxo2	counted	graded	false	false	-	The agent-level `include_search_results=True` flag now carries over to a `FileSearchTool` you pass in yourself. **What changed:** in `src/agency_swarm/agent/file_manager.py`, the branch of `add_file_s
+primary	own	youssofal__mtplx-21	youssofal__mtplx-21__QdAokzY	counted	graded	false	false	-	The bug is confirmed as the issue describes. Implementing the fix in the translator, then adjusting history and the non-stream path to keep the preamble text.
+primary	own	yukinarit__pyserde-682	yukinarit__pyserde-682__FYSE8G4	counted	graded	false	false	-	Let me reproduce.
+primary	own	zarr-developers__virtualizarr-979	zarr-developers__virtualizarr-97__euDx9LE	counted	graded	false	false	-	I'll make the kerchunk parser turn inlined refs into inlined `ChunkManifest` entries, and make the writer emit them back as base64.
+primary	own	zwicker-group__py-pde-733	zwicker-group__py-pde-733__VxHvkRr	counted	graded	false	false	-	Unit variance now holds for every correlation type, but an existing spectral-density test fails. Checking whether it actually depends on the old normalization.
+primary	required	a2aproject__a2a-python-576	a2aproject__a2a-python-576__4bgmEey	counted	graded	true	false	-	All 16 fail as expected. Applying the fix: check status via `event_source.response.raise_for_status()` before iterating, and map `HTTPStatusError` the same way `_send_request` does.
+primary	required	a2aproject__a2a-python-682_interface	a2aproject__a2a-python-682_inter__uP2fCPj	counted	graded	true	true	-	Telemetry already imports `typing_extensions.Self`, so I'll follow that. First, the failing test:
+primary	required	ag2ai__faststream-2701	ag2ai__faststream-2701__32Eh836	counted	graded	true	false	-	Test first. Let me find existing app tests.
+primary	required	agentscope-ai__qwenpaw-3278	agentscope-ai__qwenpaw-3278__cwxieD2	counted	graded	true	true	-	Now wrap the reads and the full read-modify-write in `update_session_state` under the lock.
+primary	required	agronholm__anyio-1121	agronholm__anyio-1121__Xq3zSvV	counted	graded	true	false	-	First, a failing test that reproduces the bug: an async fixture, plus a real SIGINT sent while the test is awaiting `sleep`.
+primary	required	agronholm__anyio-1134	agronholm__anyio-1134__d9iPbyH	counted	graded	true	true	-	Add a failing test: main module path without `.py` extension (like an entry point script).
+primary	required	alibaba__opensandbox-816	alibaba__opensandbox-816__c598Cr7	counted	graded	true	true	-	Found the gap: `ensure_valid_host_path` (validators.py:391) only checks the path's text, and `_validate_host_volume` (docker.py:1464) never resolves symlinks. Writing a failing test first.
+primary	required	All-Hands-AI__OpenHands-11914	All-Hands-AI__OpenHands-11914__fAuvKts	counted	graded	true	true	-	The SDK's `AgentContext` already supports `secrets` and renders secret names. So pass secrets through.
+primary	required	allenneuraldynamics__aind-data-schema-1677	allenneuraldynamics__aind-data-s__uYshTsR	counted	graded	true	false	-	Now add the tests (Monitor defaults, plus legacy GenericModel imports).
+primary	required	ardupilot__methodicconfigurator-1201	ardupilot__methodicconfigurator__WJeW3SR	counted	graded	true	true	-	Adding the test after line 745:
+primary	required	avaiga__taipy-2797	avaiga__taipy-2797__hnQtdhW	counted	graded	true	false	-	Now the adapter.
+primary	required	aws-cloudformation__cfn-python-lint-4368	aws-cloudformation__cfn-python-l__P9kX5Tn	counted	graded	true	true	-	Context functions include `Fn::Transform`, so the cfn-aware `additionalProperties` should skip it. Checking which validator CfnInit actually uses.
+primary	required	azure-samples__azure-search-openai-demo-3025	azure-samples__azure-search-open__GAAGLTs	counted	graded	true	false	-	Writing failing tests first (per prove-it), then the fix.
+primary	required	bas-amop__PolarRoute-server-159	bas-amop__PolarRoute-server-159__hMFLhTb	counted	graded	true	false	-	Write a failing test first (route.info as dict, as tasks.py stores it).
+primary	required	basicmachines-co__basic-memory-341	basicmachines-co__basic-memory-3__B2CecHy	counted	graded	true	true	-	Fails as expected. Now the fix:
+primary	required	basicmachines-co__basic-memory-484	basicmachines-co__basic-memory-4__biTz55E	counted	graded	true	true	-	Root cause confirmed in `RelationResponse`. Writing a failing test first, then the fix (fallback to `file_path`, matching `Relation.permalink` in the model).
+primary	required	beever-ai__beever-atlas-102	beever-ai__beever-atlas-102__hq27KFz	counted	graded	true	true	-	Writing the failing test first (per the project's prove-it rule).
+primary	required	beeware__briefcase-2546	beeware__briefcase-2546__xYFLWi4	counted	graded	true	false	-	Three new tests fail as expected. Now the fix: if the resolved name doesn't show the version, ask the interpreter.
+primary	required	beeware__briefcase-2651	beeware__briefcase-2651__hWHh8Vu	counted	graded	true	true	-	Write failing tests first.
+primary	required	BerriAI__litellm-16943	BerriAI__litellm-16943__px3eJY6	counted	graded	true	false	-	Now look at how `asearch` builds optional_params.
+primary	required	BrianPugh__cyclopts-609	BrianPugh__cyclopts-609__WL2Y5c8	counted	graded	true	true	-	Write the failing test first.
+primary	required	BrianPugh__cyclopts-633	BrianPugh__cyclopts-633__gJJNxh4	counted	graded	true	false	-	Both `bool` and `NoneType` in the union produce the user-supplied negative. First, a failing test:
+primary	required	BrianPugh__cyclopts-701	BrianPugh__cyclopts-701__f9EoD3v	counted	graded	true	false	-	Adding a failing test for both lazy App and lazy function subcommands.
+primary	required	cal-itp__benefits-3330	cal-itp__benefits-3330__vCL6ggt	counted	graded	true	true	-	Both tests fail as expected. Now the fix:
+primary	required	calliope-project__calliope-854	calliope-project__calliope-854__BLBxvBU	counted	graded	true	false	-	Let me reproduce directly against `cluster()`.
+primary	required	careamics__careamics-688	careamics__careamics-688__ww5jUfP	counted	graded	true	true	-	Adding a failing test first: a patch that extends past the Z (and T) extent, plus YX, should come back zero-padded.
+primary	required	chaoss__augur-3512	chaoss__augur-3512__jho9tzt	counted	graded	true	true	-	The test fails as expected (KeyError path reproduced). Now the fix: merge config sources section by section.
+primary	required	collective__icalendar-921	collective__icalendar-921__NnhJ33c	counted	graded	true	false	-	Write the failing test first.
+primary	required	conan-io__conan-19604	conan-io__conan-19604__ZhguAZq	counted	graded	true	true	-	Writing the failing test first.
+primary	required	conan-io__conan-19735_interface	conan-io__conan-19735_interface__SUuzBWR	counted	graded	true	true	-	Writing a failing test first.
+primary	required	conan-io__conan-19750	conan-io__conan-19750__xDWsG6J	counted	graded	true	true	-	Now the test first. Let me find existing platform_requires tests.
+primary	required	cpp-linter__cpp-linter-hooks-142	cpp-linter__cpp-linter-hooks-142__DwQujwP	counted	graded	true	false	-	Write the failing tests first, updating the existing ones to the new `subprocess.run` contract.
+primary	required	cpp-linter__cpp-linter-hooks-206_interface	cpp-linter__cpp-linter-hooks-206__Ni5UhWs	counted	graded	true	true	-	Writing failing tests first.
+primary	required	cs-si__eodag-2176	cs-si__eodag-2176__PiY7AjM	counted	graded	true	true	-	I'll add a test that runs the same merge with `FieldInfo.asdict` removed, simulating pydantic < 2.12.
+primary	required	dagster-io__dagster-33605	dagster-io__dagster-33605__p24sEJz	counted	graded	true	false	-	Now find the error source.
+primary	required	dask__dask-12096	dask__dask-12096__yVgUYub	counted	graded	true	false	-	Fix: fall back to all frames when every frame is column-less.
+primary	required	dask__dask-12119	dask__dask-12119__vmRJjkD	counted	graded	true	true	-	Writing the failing test first.
+primary	required	deepset-ai__haystack-10029	deepset-ai__haystack-10029__5z7MNNm	counted	graded	true	false	-	Write a failing test first.
+primary	required	deepset-ai__haystack-10189	deepset-ai__haystack-10189__XjocmEP	counted	graded	true	true	-	Adding the failing tests first.
+primary	required	destine-climate-dt__aqua-2768	destine-climate-dt__aqua-2768__6XUkQmJ	counted	graded	true	true	-	The cause is in `check_coordinates`: it always maps longitudes onto 0..360 (`DEFAULT_COORDS`), so data on a -180..180 grid only matches 0..180. Next I'll check the lon helpers and the callers.
+primary	required	dstackai__gpuhunt-197	dstackai__gpuhunt-197__FTx2VYv	counted	graded	true	false	-	This is gpuhunt. Let me look at the matching logic.
+primary	required	equinor__ert-11988	equinor__ert-11988__JQUQckt	counted	graded	true	false	-	The bug: `smoother_update` picks realizations purely from `prior.get_realization_mask_with_responses()`, and `ManualUpdate` never passes its `active_realizations`. Writing a failing test first.
+primary	required	equinor__ert-12275	equinor__ert-12275__uAdaet6	counted	graded	true	true	-	Adding the test, placed after the existing ambiguity test:
+primary	required	equinor__ert-12491	equinor__ert-12491__RtXDaaJ	counted	graded	true	true	-	The code structure changed since then. Let me see where parameters.txt is written now.
+primary	required	ethereum__web3.py-3800	ethereum__web3.py-3800__tU4iudb	counted	graded	true	true	-	Write the failing test first.
+primary	required	gammapy__gammapy-6409	gammapy__gammapy-6409__66ciBTw	counted	graded	true	true	-	Test fails as expected. Now the fix:
+primary	required	genericmappingtools__pygmt-4371	genericmappingtools__pygmt-4371__f3ur6wi	counted	graded	true	false	-	Check for existing mutual-exclusion patterns and the test file.
+primary	required	genericmappingtools__pygmt-4463	genericmappingtools__pygmt-4463__FA3BT7p	counted	graded	false	false	-	Now writing the module.
+primary	required	geopython__pygeoapi-2338	geopython__pygeoapi-2338__cibPgrR	counted	graded	true	false	-	Both tests fail as expected. Now the fix in `pygeoapi/util.py`:
+primary	required	getmoto__moto-9350	getmoto__moto-9350__BbBUbuK	counted	graded	true	false	-	Now let's see how associations are stored in models.
+primary	required	google__flax-5171	google__flax-5171__U2gqFuW	counted	graded	true	true	-	Let's look at `List` in nnx.
+primary	required	hiero-ledger__hiero-sdk-python-1914_interface	hiero-ledger__hiero-sdk-python-1__s9xmJRh	counted	graded	true	false	-	Pre-existing limitation unrelated to my change (empty key); I'll give the test a key.
+primary	required	holoviz__holoviews-6783	holoviz__holoviews-6783__XdEsuEu	counted	graded	true	true	-	Partially handled already. Let me reproduce.
+primary	required	holoviz__param-1117	holoviz__param-1117__BEGb5QX	counted	graded	true	false	-	First reproduce with param alone.
+primary	required	huggingface__transformers-43721_interface	huggingface__transformers-43721__km6Ft6U	counted	graded	true	false	-	Following the pattern used by other quantizers. Checking how converter outputs are keyed.
+primary	required	huggingface__transformers-44080	huggingface__transformers-44080__S2FNeAu	counted	graded	true	true	-	Repro is fixed. Running broader tests for regressions.
+primary	required	huggingface__trl-5135	huggingface__trl-5135__r2oo8Pa	counted	graded	true	false	-	Let me reproduce first.
+primary	required	idaholab__MontePy-850	idaholab__MontePy-850__B353yQN	counted	graded	true	true	-	First, a failing test. Let me find where fmesh/data parsing tests live.
+primary	required	idaholab__montepy-882	idaholab__montepy-882__nczgJRt	counted	graded	true	true	-	Fixed. The example from the issue now prints `'10 0 (1 : 2) -3 '`. **Cause:** `HalfSpace.__iand__` and `__ior__` in `montepy/surfaces/half_space.py` always added the new halfspace inside the existing 
+primary	required	idaholab__montepy-933_interface	idaholab__montepy-933_interface__HVz87bE	counted	graded	true	true	-	Write the failing test first.
+primary	required	iluvcapra__pycmx-15	iluvcapra__pycmx-15__6nJRenz	counted	graded	true	true	-	Writing the failing test first.
+primary	required	itsdnns__docsight-437	itsdnns__docsight-437__nMkiZ5d	counted	graded	true	true	-	Let me see how other surfaces handle this, and the existing E2E tests.
+primary	required	jlowin__fastmcp-3235	jlowin__fastmcp-3235__RPMqEwJ	counted	graded	true	false	-	How does add_tool handle decorated functions?
+primary	required	jlowin__fastmcp-3237_interface	jlowin__fastmcp-3237_interface__5nHAnWb	counted	graded	true	false	-	Added `get_meta` overrides. Now making the mount wrapper keep the wrapped resource's computed meta, then adding a test.
+primary	required	jmcgeheeiv__pyfakefs-1286	jmcgeheeiv__pyfakefs-1286__xvPSPLT	counted	graded	true	true	-	Fails as expected (and badly). Running via unittest to see each case:
+primary	required	joke2k__faker-2309	joke2k__faker-2309__ZvgfabG	counted	graded	true	true	-	Writing the failing test first:
+primary	required	joshuadavidthomas__django-bird-239	joshuadavidthomas__django-bird-2__FWV6oar	counted	graded	true	true	-	I found the cause: in `BirdNode.render`, `only` hands `context.new()` to `BoundComponent.render`, so props and attrs get resolved against an empty context. Writing the failing test first.
+primary	required	jsonpickle__jsonpickle-587	jsonpickle__jsonpickle-587__ieoWHf9	counted	graded	true	true	-	Writing the failing test first.
+primary	required	jsonpickle__jsonpickle-588	jsonpickle__jsonpickle-588__ZJRrLDa	counted	graded	true	false	-	Tests fail as expected. Now the fix: pull the factory flattening into a helper and add a reduce path for the collision case.
+primary	required	keras-team__keras-22330	keras-team__keras-22330__K5qx7hx	counted	graded	true	true	-	Reproduced. Now the fix:
+primary	required	koxudaxi__datamodel-code-generator-2993	koxudaxi__datamodel-code-generat__c6XPBVP	counted	graded	true	true	-	Reproduce first.
+primary	required	kubeflow__pipelines-13112	kubeflow__pipelines-13112__j96VNyE	counted	graded	true	false	-	Reproducing first, per the test-first workflow.
+primary	required	lincc-frameworks__nested-pandas-425	lincc-frameworks__nested-pandas__cA8XSZS	counted	graded	true	false	-	I'll use `.venv` with `PYTHONPATH=src` to reproduce.
+primary	required	linkml__linkml-3098	linkml__linkml-3098__T9eVGMk	counted	graded	true	true	-	Python's processor already treats `default_range` as unimplemented; SHACL's doesn't. I'll handle it in the shared base so every generator skips it. Writing the failing test first.
+primary	required	litestar-org__advanced-alchemy-673_interface	litestar-org__advanced-alchemy-6__pPiC2h2	counted	graded	true	false	-	Write the failing test first, using an inline model with a `model` column.
+primary	required	macbre__sql-metadata-625_interface	macbre__sql-metadata-625_interfa__N4VGPna	counted	graded	true	true	-	Reproduced: the bracketed query prints `Unsupported query option.` and loses `A.id`/`A.x`, and the alias `c` comes out wrong. Next I'll find where each problem comes from.
+primary	required	marshmallow-code__marshmallow-2925_interface	marshmallow-code__marshmallow-29__nGB9dNH	counted	graded	true	true	-	Test first:
+primary	required	mempalace__mempalace-1004	mempalace__mempalace-1004__q4gCge3	counted	graded	true	false	-	Writing the failing test first, then the fix.
+primary	required	microsoft__Agents-for-python-264	microsoft__Agents-for-python-264__eXFqhLp	counted	graded	true	true	-	Step 1: failing test.
+primary	required	microsoft__fabric-cicd-670	microsoft__fabric-cicd-670__aUtisHk	counted	graded	false	false	-	The docs already show the version range, so the real fix is to add Python 3.13 support. I'll check which interpreters are available and look at the lock file.
+primary	required	microsoft__qcodes-8039	microsoft__qcodes-8039__ud7L3px	counted	graded	true	false	-	Test fails before the fix and passes after. Now the issue's repro plus a broader regression run.
+primary	required	milvus-io__pymilvus-3273	milvus-io__pymilvus-3273__tzLKHqw	counted	graded	true	false	-	No existing tests. Writing the failing test first.
+primary	required	mmornati__home-assistant-csnet-home-132	mmornati__home-assistant-csnet-h__WJSQNsX	counted	graded	true	false	-	Plan: make `get_temperature_limits` return `None` for `0`/`-1` sentinels (like JS `validateValue`), so callers fall back to their defaults. Writing the failing test first.
+primary	required	modelcontextprotocol__python-sdk-1864	modelcontextprotocol__python-sdk__KoYE4BX	counted	graded	true	false	-	Write the failing test first.
+primary	required	mwouts__jupytext-1443	mwouts__jupytext-1443__w8akFNX	counted	graded	true	true	-	Test fails as expected (returns None). Now the fix:
+primary	required	nesquena__hermes-webui-1818	nesquena__hermes-webui-1818__LneHCXC	counted	graded	true	true	-	Now implement the helpers and wire them into `resolve_model_provider`.
+primary	required	nesquena__hermes-webui-2056	nesquena__hermes-webui-2056__UYtdbHc	counted	graded	true	true	-	Adding failing tests first, then the fix in the `@provider:model` parser.
+primary	required	nesquena__hermes-webui-330_interface	nesquena__hermes-webui-330_inter__uqTNtV4	counted	graded	true	true	-	Both fixes are narrow. Writing failing tests first.
+primary	required	networkx__networkx-8369	networkx__networkx-8369__PYQ3H7H	counted	graded	true	false	-	Writing the failing test first.
+primary	required	niconoe__pyinaturalist-643	niconoe__pyinaturalist-643__wRxhUqd	counted	graded	true	true	-	Fix is in and the suite passes, except one test that fails on a missing module (unrelated). Adding one more test for non-seekable file objects passed in directly:
+primary	required	nilearn__nilearn-5739	nilearn__nilearn-5739__BAusuMh	counted	graded	true	true	-	Reproduce first with a test.
+primary	required	nilearn__nilearn-5741	nilearn__nilearn-5741__TM3x49r	counted	graded	true	true	-	Plan: add an `exclude_subjects` parameter (list of labels, validated like `sub_labels`), applied after the subject list is resolved. Writing failing tests first.
+primary	required	nilearn__nilearn-6031_interface	nilearn__nilearn-6031_interface__FbXHX9a	counted	graded	true	false	-	All 40 tests pass with the fix. Without it, the file fails at import because the new helpers don't exist yet. To confirm the actual behavior bug, I'll run the old code directly:
+primary	required	nolar__kopf-1225	nolar__kopf-1225__rLFbmZo	counted	graded	true	true	-	Updating the tests first so they reproduce the bug: a namespace with a deletionTimestamp (Terminating) should still be watched.
+primary	required	oemof__tespy-921	oemof__tespy-921__i8VRFc5	counted	graded	true	false	-	Let me reproduce first.
+primary	required	olofk__fusesoc-776_interface	olofk__fusesoc-776_interface__ruTd9mg	counted	graded	true	true	-	Plan: record parse failures in `CoreManager.parse_errors`, expose via `Fusesoc.parse_errors`, and make the "core not found" error list them. Writing the failing test first.
+primary	required	oOo0oOo__leanclient-24	oOo0oOo__leanclient-24__nEFDpTK	counted	graded	true	false	-	Found it: both filters read only `range`. Adding failing tests first, then switching to `fullRange` with a `range` fallback.
+primary	required	open-telemetry__opentelemetry-python-4891	open-telemetry__opentelemetry-py__hzxhnez	counted	graded	true	true	-	Now the test: during collect, a view-instrument-match's `collect` records a measurement for a brand-new instrument on the same thread.
+primary	required	openai__openai-agents-python-1965	openai__openai-agents-python-196__CtzwSAW	counted	graded	true	false	-	Fails as expected. Now the fix:
+primary	required	openai__openai-agents-python-1984	openai__openai-agents-python-198__LVaadPD	counted	graded	true	false	-	Now implement (config option `async_tool_calls`, default True, with tracked tasks).
+primary	required	openai__openai-agents-python-2144	openai__openai-agents-python-214__e5eLbDC	counted	graded	true	true	-	Only `reasoning.effort` is forwarded; `reasoning.summary` is dropped. Writing a failing test first.
+primary	required	opsmill__infrahub-8407	opsmill__infrahub-8407__ZD8hXwM	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	required	opsmill__infrahub-8407	opsmill__infrahub-8407__Svoc42g	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	required	opsmill__infrahub-8423	opsmill__infrahub-8423__PZ5Zm8T	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	required	opsmill__infrahub-8423	opsmill__infrahub-8423__kdv8XHo	infra	no model response reached the agent (RuntimeError)	false	false	-	
+primary	required	pallets__click-3239	pallets__click-3239__d7MDE9n	counted	graded	true	true	-	The test fails on the reported case, as expected. Now the fix:
+primary	required	pallets-eco__wtforms-892_interface	pallets-eco__wtforms-892_interfa__baCbxNq	counted	graded	true	true	-	Fails as expected (no `ButtonField`). Now the implementation.
+primary	required	pandas-dev__pandas-64092	pandas-dev__pandas-64092__2G373ZG	counted	graded	true	false	-	Reproduced. Now find the code path.
+primary	required	pandas-dev__pandas-64797	pandas-dev__pandas-64797__NADLx9K	counted	graded	true	false	-	MultiIndex is already excluded. Next I'll exclude RangeIndex as well and see which tests break.
+primary	required	pdm-project__pdm-3759	pdm-project__pdm-3759__SsiS3PV	counted	graded	true	false	-	Fix location: `Core._get_cli_args` in `src/pdm/core.py` always builds a project from the CWD. Writing the failing test first.
+primary	required	pennylaneai__pennylane-9298	pennylaneai__pennylane-9298__aXQM5xt	counted	graded	true	false	-	Fix plan: in `solve`, when `minimize_work_wires=True`, try budgets starting at the structural minimum and increase until every original op is solved, capped at the user's `num_work_wires`.
+primary	required	pgmpy__pgmpy-3137	pgmpy__pgmpy-3137__aauGfNL	counted	graded	true	false	-	Writing a failing test first: a fake CI test where the skeleton depends on edge order unless neighbor sets are snapshotted.
+primary	required	piskvorky__smart_open-889	piskvorky__smart_open-889__imDBjNV	counted	graded	true	true	-	Existing code already has a `KeyError` fallback (from #771). Let me check whether the current tests pass and probe the actual behavior with moto.
+primary	required	piskvorky__smart_open-892	piskvorky__smart_open-892__L4adCkw	counted	graded	false	false	-	Let me reproduce with moto and count S3 GET calls during zip iteration.
+primary	required	plone__cookieplone-templates-308	plone__cookieplone-templates-308__AMXV3Qg	counted	graded	true	false	-	Found it: the backend add-on `.gitignore` template has an `# mxdev` section, but `.mxdev_cache` isn't in it. Next I'm checking the project templates too, then writing the failing test.
+primary	required	plone__cookieplone-templates-322	plone__cookieplone-templates-322__efYnA9y	counted	graded	true	false	-	All three hooks pass `style="pkgutil"`. The plan: write a failing test that namespace dirs have no `__init__.py`, then switch the hooks to `style="native"`.
+primary	required	psd-tools__psd-tools-551	psd-tools__psd-tools-551__Uehf9iW	counted	graded	true	false	-	Root cause found: `read_unicode_string` in `bin_utils.py` builds strings with `chr()` per UTF-16 code unit, so surrogate pairs (emoji) end up as lone surrogates. Writing a failing test first.
+primary	required	psd-tools__psd-tools-593	psd-tools__psd-tools-593__UmBTFrY	counted	graded	true	true	-	Finding so far: the preview path only returns RGBA when the merged image data has an alpha channel. Now checking why the forced composite also comes back RGB.
+primary	required	py-pdf__pdfly-219	py-pdf__pdfly-219__h2aEuy2	counted	graded	true	true	-	Test fails as expected. Now the fix:
+primary	required	pyccel__pyccel-2512	pyccel__pyccel-2512__SB5Ynzm	counted	graded	true	false	-	Reproduced. Now fix both `_build_MathSqrt` and `_build_CmathSqrt`:
+primary	required	pydap__pydap-624	pydap__pydap-624__UMtuKCo	counted	graded	true	true	-	Writing a failing test with an inline DMR (dmrVersion 2.0, empty `Group1` containing `subgroup1`).
+primary	required	pyinfra-dev__pyinfra-1665	pyinfra-dev__pyinfra-1665__xJsN9F8	counted	graded	true	true	-	Write the failing test first.
+primary	required	pyjanitor-devs__pyjanitor-1593	pyjanitor-devs__pyjanitor-1593__42ZGXXf	counted	graded	true	true	-	The new tests fail as expected. Now the `expand` implementation:
+primary	required	pypa__build-1027	pypa__build-1027__z43u69u	counted	graded	true	false	-	Plan: `dist.origin` only exists on Python 3.13+ stdlib, so I'll read PEP 610 `direct_url.json` via `dist.read_text` and compare it against the req URL. Test first.
+primary	required	pypa__twine-1309	pypa__twine-1309__X5fRaKx	counted	graded	true	true	-	Write the failing test first.
+primary	required	pypa__virtualenv-3015	pypa__virtualenv-3015__WGXofc3	counted	graded	true	false	-	Tests fail as expected (no Windows handling exists yet). Now the fix:
+primary	required	pypsa__pypsa-1653	pypsa__pypsa-1653__bdfwFs5	counted	graded	true	false	-	Reproduce first.
+primary	required	pytest-dev__pyfakefs-1269	pytest-dev__pyfakefs-1269__rCrgr9P	counted	graded	true	false	-	Root cause: `__getattr__` treats `readable` as a read method because it starts with `"read"`. Writing the failing test first.
+primary	required	pytest-dev__pyfakefs-1286	pytest-dev__pyfakefs-1286__GpVo4rF	counted	graded	true	true	-	The pathlib test leaves `pathlib.os` patched, which breaks pytest itself. Checking how existing tests clean up.
+primary	required	python-markdown__markdown-1587	python-markdown__markdown-1587__oNWCqn8	counted	graded	true	true	-	Let me reproduce first.
+primary	required	python-wheel-build__fromager-1106	python-wheel-build__fromager-110__KXoFdd8	counted	graded	true	true	-	Writing the failing tests first.
+primary	required	python-wheel-build__fromager-1124	python-wheel-build__fromager-112__qq4FN9X	counted	graded	true	false	-	Tests fail as expected: the `req_type` kwarg doesn't exist yet. Now the implementation.
+primary	required	pytorch__ignite-3532_interface	pytorch__ignite-3532_interface__k6jzdcK	counted	graded	false	false	-	Fix version tag, and add the same to `ParamGroupScheduler` for consistency.
+primary	required	reata__sqllineage-743	reata__sqllineage-743__v9Q85Cy	counted	graded	true	true	-	Writing the failing test first (static partition, plus a dynamic partition case):
+primary	required	reframe-hpc__reframe-3660_interface	reframe-hpc__reframe-3660_interf__FxVpmut	counted	graded	true	false	-	Added a `value_type` argument to `RegressionTestDict` and `RegressionTestDictType`. Next I'll add a test and check that it fails without the fix and passes with it.
+primary	required	researchobject__ro-crate-py-248	researchobject__ro-crate-py-248__j9jf9bM	counted	graded	true	false	-	Fails as expected. Now the fix:
+primary	required	scikit-learn__scikit-learn-33168	scikit-learn__scikit-learn-33168__ci7HVHq	counted	graded	true	true	-	Write the failing test first.
+primary	required	scikit-learn__scikit-learn-33565	scikit-learn__scikit-learn-33565__5kae5LT	counted	graded	true	true	-	Applying the issue's patch (float32 parametrization with looser tolerances):
+primary	required	scikit-rf__scikit-rf-1336	scikit-rf__scikit-rf-1336__cFom2FX	counted	graded	true	false	-	Add a failing test first.
+primary	required	scipp__plopp-513	scipp__plopp-513__58L2yNn	counted	graded	true	false	-	Test reproduces the bug: the 2D image's y-axis gets clamped to (1.5, 5.5). Applying the fix: stop forwarding `ymin`/`ymax` to `imagefigure`.
+primary	required	SciTools__iris-6754	SciTools__iris-6754__LFEHWAG	counted	graded	true	true	-	Tests fail as expected. Now the fix:
+primary	required	sciunto-org__python-bibtexparser-515	sciunto-org__python-bibtexparser__PgXvkZt	counted	graded	true	true	-	Writing the failing test first.
+primary	required	sissbruecker__linkding-1291	sissbruecker__linkding-1291__fgMwoZD	counted	graded	true	false	-	Plan: carry the index page's query string (page, search, sort, unused) through the edit modal and back on redirect. Writing the failing test first.
+primary	required	skypilot-org__skypilot-8908	skypilot-org__skypilot-8908__r9bQhob	counted	graded	true	true	-	Writing the failing test first.
+primary	required	spack__spack-51723	spack__spack-51723__bQsbfsm	counted	graded	false	false	-	I fixed how Spack reads the git version, so the version check should no longer crash on macOS. **Cause:** `extract_git_version_str` in `lib/spack/spack/util/git.py` used the last word of `git --versio
+primary	required	spack__spack-52244	spack__spack-52244__7zYVRZL	counted	graded	true	false	-	Plan: add an `explicit` key to group schema, track it in the manifest, use it in `install_specs` and `spack gc`, and make containerize carry it through. Looking at the container writer now.
+primary	required	stanfordnlp__dspy-8890	stanfordnlp__dspy-8890__ucTN4mH	counted	graded	true	true	-	The test fails as expected. Now the fix:
+primary	required	stravalib__stravalib-709_interface	stravalib__stravalib-709_interfa__MwE9zZk	counted	graded	true	true	-	Tests fail as expected. Now the fix:
+primary	required	sunpy__sunpy-8548_interface	sunpy__sunpy-8548_interface__mt4ytCg	counted	graded	true	false	-	Write a reproduction test first.
+primary	required	sympy__sympy-28660	sympy__sympy-28660__cX44Gxd	counted	AgentTimeoutError, graded on the shipped diff	true	false	-	Now reproduce.
+primary	required	sympy__sympy-28714	sympy__sympy-28714__shrnGnq	counted	graded	true	true	-	Adding the failing test first, next to the existing trivially-true cases.
+primary	required	tox-dev__sphinx-autodoc-typehints-606	tox-dev__sphinx-autodoc-typehint__85siggg	counted	graded	true	false	-	Let me reproduce end-to-end with a real Sphinx build first.
+primary	required	tox-dev__sphinx-autodoc-typehints-607	tox-dev__sphinx-autodoc-typehint__2Dvpc6b	infra	no verifier reward, verifier infrastructure error (VerifierTimeoutError)	true	false	-	Test fails as expected. Now the fix: a helper that falls back to the original object on a wrapper loop.
+primary	required	tox-dev__sphinx-autodoc-typehints-607	tox-dev__sphinx-autodoc-typehint__q9Zotwi	counted	graded	true	false	-	Test fails as expected. Now the fix:
+primary	required	tox-dev__tox-3846	tox-dev__tox-3846__ChKyRMB	counted	graded	true	true	-	Tests fail as expected. Now the fix: let the explicit version be the leading factor, followed by other factors, and still scan the rest for conflicts.
+primary	required	ucfopen__canvasapi-716	ucfopen__canvasapi-716__KAeLzrD	counted	graded	true	true	-	Writing the failing test first.
+primary	required	unit8co__darts-3065	unit8co__darts-3065__5yYeLCA	counted	graded	true	true	-	Writing the failing test first.
+primary	required	UXARRAY__uxarray-1423	UXARRAY__uxarray-1423__gdzj5EU	counted	graded	true	true	-	Reproducing on the regional quad-hexagon grid (zonal mean over latitudes with no faces).
+primary	required	vndee__llm-sandbox-101	vndee__llm-sandbox-101__Zmjg47s	counted	graded	true	true	-	Add regression tests, and update the two existing ones that pinned the buggy `timeout=30` default:
+primary	required	VRSEN__agency-swarm-468	VRSEN__agency-swarm-468__qwbo2tP	counted	graded	true	true	-	Adding a failing test first.
+primary	required	vyperlang__vyper-4801	vyperlang__vyper-4801__JeTQr3B	counted	AgentTimeoutError, graded on the shipped diff	true	false	-	I can't reach the network, so I'm rebuilding the snekmate ERC20 constructor pattern locally (immutables, keccak of immutable strings, logs, mint) to reproduce the bug.
+primary	required	youssofal__mtplx-21	youssofal__mtplx-21__SBn4cPB	counted	graded	true	false	-	Confirmed the root cause matches the report: once the translator sees a non-marker byte it locks into `content` mode. Writing failing tests first.
+primary	required	yukinarit__pyserde-682	yukinarit__pyserde-682__hEAm8d6	counted	graded	true	false	-	Reproduced. Let's look at the deserialization renderer.
+primary	required	zarr-developers__virtualizarr-979	zarr-developers__virtualizarr-97__wrEjctV	counted	graded	true	true	-	Found it: `ChunkManifest` already supports inlined chunks (commit #938), but the kerchunk translator still rejects inline values. Writing the failing tests first.
+primary	required	zwicker-group__py-pde-733	zwicker-group__py-pde-733__LN7zhPR	counted	graded	true	true	-	Writing a failing test first, per the prove-it workflow.

@@ -16,6 +16,8 @@
 // are ordered by the place of their commands (sequence).
 // Deviation D1 (2026-11-17, before any counted session): a passing run is also read per test-runner command when a call's
 // runners and test summaries pair one to one (passingOwn), and the rule as merged is kept as followed_as_merged.
+// B2 (2026-11-21-capy-b2-test-first-prereg section 6.3) adds its reading as an option, detect(..., { rules: "b2" }), returned
+// as followed_b2 beside B1's fields, which it leaves as they were (passingB2).
 import { posix } from "node:path";
 import { showsFailure, showsOutcome, toTranscript } from "../harness-mechanics/score.ts";
 import type { TranscriptEvent } from "../harness-mechanics/vendor/gstack/lib/skill-contract.ts";
@@ -178,6 +180,9 @@ export type Run = { at: number; ok: boolean; result: string; command: string; cw
 export interface Detection {
   /** The primary: test written, failing run before the first source edit, passing run after it. */
   followed: boolean;
+  /** B2's reading (its preregistration's section 6.3), set only when detect is asked for it with { rules: "b2" }: B1's rule
+   *  with the passing run read by passingB2. */
+  followed_b2?: boolean;
   /** The same rule with only Write and Edit seen as writes (the head-to-head's known limit), for the sensitivity line. */
   followed_tool_only: boolean;
   /** The primary under the rule as merged, before deviation D1: the passing run read on the whole Bash call, its exit status
@@ -445,6 +450,118 @@ function passingOwn(r: Run, tests: string[], covered: string[]): number[] {
   return runners.filter((k, i) => s[i] && covered.some((t) => commandSelects(cs[k]!, cs[k]!.cwd ?? r.cwd, t)));
 }
 
+/** B2's per-command passing run (B2 preregistration section 6.3). A Bash call's output is cut into blocks by the order of
+ *  its commands and its runners' own summary lines: every other command in the call must print no summary of its own
+ *  (quietB2), each runner whose output reaches the result prints at most one summary (pytest's closing line, its no-tests
+ *  line included, or unittest's Ran line with the OK or FAILED after it), so with as many summaries as such runners the
+ *  k-th summary closes the k-th runner's block. A runner passed when its summary passed and its own block reports no failed
+ *  test in the session's test files. Returns the places of the passing runners that select a covered test. It returns
+ *  none, and the call is read whole as merged, for a background run read later, a call the parser can't order or with a &,
+ *  a runner that is not pytest or unittest behind known wrappers, a runner started through xargs, find -exec or parallel,
+ *  a command that could print a summary of its own (a script, a loop, make, a command named by a variable), or summaries
+ *  that don't match the runners in number. A call with a command that prints a log it names (printsLog) gives no pass at
+ *  all, per command or merged, since its lines can't be told from a runner's. */
+function passingB2(r: Run, tests: string[], covered: string[]): number[] {
+  if (r.later) return [];
+  const seq = sequence(r.command);
+  if (!seq || seq.items.some((it) => it.kind === "bg")) return [];
+  const cs = shellCommands(r.command, r.cwd), runners: number[] = [];
+  for (const [k, c] of cs.entries()) {
+    const piped = k > 0 && cs[k - 1]!.pipeline === c.pipeline;
+    if (runnerAt(c) >= 0) {
+      if (!soleRun(c) || /(?:^|[\s;&|(])(?:xargs|parallel)\s/.test(c.text)) return [];
+      runners.push(k);
+    } else if (printsLog(c) || !quietB2(c, piped)) return [];
+  }
+  const shown = runners.filter((k) => { const chain = cs.filter((c, j) => j >= k && c.pipeline === cs[k]!.pipeline); return chain.every((c, j) => j === 0 || stdinFilter(c)) && !chain.some((c) => c.redirects.some((x) => STDOUT_REDIRECT.test(x.op))); });
+  const ends = summaryEnds(r.result), ls = resultLines(r.result);
+  if (!shown.length || shown.length !== ends.length) return [];
+  return shown.filter((k, i) => {
+    const block = ls.slice(i ? ends[i - 1]!.end + 1 : 0, ends[i]!.end + 1);
+    return ends[i]!.pass && !block.some((l) => { const f = failedTest(l); return f !== null && tests.some((t) => failedHere(f, t)); }) && covered.some((t) => commandSelects(cs[k]!, cs[k]!.cwd ?? r.cwd, t));
+  });
+}
+/** A result's test summaries in order with the line each ends on: pytest's closing line (counts with their time, its
+ *  no-tests line included; passed when it holds a passed count above 0 and no failed or error count) and unittest's Ran
+ *  line with the OK or FAILED line after it (passed when it ran a test and that line is OK). */
+function summaryEnds(s: string): { end: number; pass: boolean }[] {
+  const ls = resultLines(s), out: { end: number; pass: boolean }[] = [];
+  ls.forEach((l, i) => {
+    if (/\b(?:\d+ (?:passed|failed|errors?|skipped|deselected|xfailed|xpassed|warnings?)|no tests ran)\b.*\bin \d+(?:\.\d+)?s\b/.test(l)) out.push({ end: i, pass: /\b[1-9]\d* passed\b/.test(l) && !/\b\d+ (?:failed|errors?)\b/.test(l) });
+    else if (/^Ran \d+ tests? in /.test(l)) {
+      const j = ls.findIndex((x, n) => n > i && x.trim() !== ""), next = j >= 0 ? ls[j]!.trim() : "";
+      out.push({ end: /^(?:OK|FAILED)\b/.test(next) ? j : i, pass: !/^Ran 0 /.test(l) && /^OK\b/.test(next) });
+    }
+  });
+  return out;
+}
+const STDOUT_REDIRECT = /^(?:1?>>?|1?>\||&>>?)$/;
+const READERS = /^(?:cat|tac|tail|head|less|more|zcat|nl)$/;
+const SEARCHERS = /^(?:grep|egrep|fgrep|rg)$/;
+/** A file printed whose text is code or config, never a test log. */
+const SOURCE_EXT = /\.(?:py|pyi|pyx|pxd|c|h|cc|cpp|hpp|rs|go|js|jsx|ts|tsx|java|kt|rb|toml|cfg|ini|ya?ml|json|md|rst|sh|html|css)$/i;
+/** The files a reader or a search names: its operands after its options and option values (a search's pattern first,
+ *  unless -e or -f gave it) and any file sent to it with <. */
+function fileOperands(c: ShellCommand): string[] {
+  const name = posix.basename(c.words[0] ?? ""), out: string[] = [];
+  const valued = READERS.test(name) ? /^(?:-n|-c|--lines|--bytes)$/ : /^(?:-e|-f|-m|-A|-B|-C|-g|-t|-T|--glob|--type|--max-count|--regexp|--file|--context|--after-context|--before-context)$/;
+  let pattern = SEARCHERS.test(name);
+  for (let k = 1; k < c.words.length; k++) {
+    const a = c.words[k]!;
+    if (valued.test(a)) { if (/^(?:-e|-f|--regexp|--file)$/.test(a)) pattern = false; k++; }
+    else if (a.startsWith("-") && a !== "-") { if (/^--(?:regexp|file)=/.test(a)) pattern = false; }
+    else if (pattern) pattern = false;
+    else if (a !== "-") out.push(a);
+  }
+  return [...out, ...c.redirects.filter((x) => x.op === "<").map((x) => x.target)];
+}
+/** Rule (b) of B2's section 6.3: a command that prints a file it names, so its lines are never a runner's summary: cat,
+ *  tail, head, less and their kin given a file that is not code or config, or grep or rg of a log (a file operand that is
+ *  not code or config, other than a folder searched recursively). */
+function printsLog(c: ShellCommand): boolean {
+  const name = posix.basename(c.words[0] ?? "");
+  if (READERS.test(name)) return fileOperands(c).some((f) => !SOURCE_EXT.test(f));
+  if (!SEARCHERS.test(name)) return false;
+  const recursive = name === "rg" || c.words.some((a) => /^-[a-zA-Z]*[rR]/.test(a) || a === "--recursive");
+  return fileOperands(c).some((f) => !SOURCE_EXT.test(f) && !/\/$|^\.{1,2}$/.test(f) && !(recursive && !/\.[A-Za-z0-9]+$/.test(f)));
+}
+/** A command in a pipe that only filters what it reads from the pipe: a reader or search with no file, sed or awk with only
+ *  its script, or another filter (cut, sort, uniq, tr, wc, tee). */
+function stdinFilter(c: ShellCommand): boolean {
+  const name = posix.basename(c.words[0] ?? "");
+  if (READERS.test(name) || SEARCHERS.test(name)) return fileOperands(c).length === 0;
+  if (/^(?:g?sed|awk)$/.test(name)) return !IN_PLACE.test(c.text) && c.words.slice(1).filter((a) => !a.startsWith("-")).length <= 1;
+  return /^(?:cut|sort|uniq|tr|wc|tee)$/.test(name);
+}
+const QUIET_B2 = /^(?:which|type|wc|diff|cmp|stat|file|du|df|date|chmod|ln|rmdir|pip3?|pyflakes|pycodestyle|autopep8|yapf|bandit|ruff|black|isort|flake8|mypy|pyright|pylint)$/;
+/** Words that mark code that may run tests and print a summary. */
+const RUNS_TESTS = /\b(?:pytest|unittest|doctest|nose2?|TestCase|TextTestRunner|tox|nox)\b/;
+/** Whether a command prints no test summary of its own, for B2's per-command reading: D1's list (printsNoSummary), a filter
+ *  reading a pipe, a reader or search of code or config, find with no -exec, the linters, type checkers and small tools on
+ *  QUIET_B2, and an interpreter running inline code (-c, a heredoc or a here-string) that names no test runner, or only
+ *  printing its version. A script, a module other than pip and the compilers, a shell, make, a loop's own words or a command
+ *  named by a variable could print one. */
+function quietB2(c: ShellCommand, piped: boolean): boolean {
+  if (printsNoSummary(c, piped) && !(piped && FILTER.test(posix.basename(c.words[0] ?? "")) && !stdinFilter(c))) return true;
+  if (piped && stdinFilter(c)) return true;
+  const w = c.words.filter((x) => !/^[A-Za-z_]\w*=/.test(x)), at = w.findIndex((x) => !/^(?:env|nice|time|exec|command|timeout|-\S*|\d+(?:\.\d+)?[smhd]?)$/.test(x));
+  if (at < 0) return true;
+  const name = posix.basename(w[at]!), rest = w.slice(at + 1);
+  if (QUIET.test(name) || QUIET_B2.test(name) || READERS.test(name) || SEARCHERS.test(name)) return !printsLog(c);
+  if (/^(?:g?sed|awk)$/.test(name)) return IN_PLACE.test(c.text) || rest.filter((a) => !a.startsWith("-")).slice(1).every((f) => SOURCE_EXT.test(f));
+  if (name === "find") return !rest.some((a) => /^-(?:exec|execdir|ok|okdir)$/.test(a));
+  if (!INTERPRETER.test(name)) return false;
+  for (let k = 0; k < rest.length; k++) {
+    const a = rest[k]!;
+    if (/^(?:-c|-e|--eval)$/.test(a)) return !RUNS_TESTS.test(rest[k + 1] ?? "");
+    if (a === "-m") return /^(?:pip|py_compile|compileall|json\.tool)$/.test(rest[k + 1] ?? "");
+    if (!a.startsWith("-")) return false;
+    if (a === "-") break;
+  }
+  if (piped || c.redirects.some((x) => x.op === "<")) return false;
+  return ![...c.heredocs, ...c.redirects.filter((x) => x.op === "<<<").map((x) => x.target)].some((code) => RUNS_TESTS.test(code));
+}
+
 type Sequence = { items: { kind: "cmd" | "and" | "or" | "bg"; pipeline: number }[]; at: number[] };
 const MARKS = new Map<string, "and" | "or" | "bg">([["__b1_and__", "and"], ["__b1_or__", "or"], ["__b1_bg__", "bg"]]);
 /** A Bash call's simple commands in order (at: each one's place among items), with the &&, || and & between them. The
@@ -484,7 +601,7 @@ function ordered(s: Sequence, i: number, j: number, ok: boolean): boolean {
 /** The steps in order. One thing comes before another when its tool call is earlier or, in the same Bash call, when one of
  *  its commands is ordered before one of the other's (a failing run as a command that failed). A run's commands are those that select one of the session's tests; a
  *  background run read later has none, so it is never ordered inside the call that reads it. */
-function read(ws: Write[], runs: Run[], fix: Set<string>, seqAt: (at: number) => Sequence | null, asMerged = false) {
+function read(ws: Write[], runs: Run[], fix: Set<string>, seqAt: (at: number) => Sequence | null, mode: "d1" | "merged" | "b2" = "d1") {
   const first = (a: { at: number; ks: number[] }, b: { at: number; ks: number[] }, ok = true) => {
     if (a.at !== b.at) return a.at < b.at;
     const s = seqAt(a.at);
@@ -497,8 +614,13 @@ function read(ws: Write[], runs: Run[], fix: Set<string>, seqAt: (at: number) =>
   const fails = test && source ? runs.flatMap((r) => { const p = place(r); return first(p, source, false) ? tests.filter((t) => first(t, p) && failing(r, [t.path])).map((t) => ({ r, path: t.path })) : []; }) : [];
   const covered = fails.map((f) => f.path), before = fails[0]?.r;
   const passesAfter = (r: Run, covers: string[]) => {
+    if (mode === "b2") {
+      if (!(!r.later && shellCommands(r.command, r.cwd).some(printsLog)) && first(source!, place(r)) && passing(r, paths, covers)) return true;
+      const own = passingB2(r, paths, covers);
+      return own.length > 0 && first(source!, { at: r.at, ks: own });
+    }
     if (first(source!, place(r)) && passing(r, paths, covers)) return true;
-    const own = asMerged ? [] : passingOwn(r, paths, covers);
+    const own = mode === "merged" ? [] : passingOwn(r, paths, covers);
     return own.length > 0 && first(source!, { at: r.at, ks: own });
   };
   const passes = (covers: string[]) => (test && source ? runs.find((r) => passesAfter(r, covers)) : undefined);
@@ -506,8 +628,9 @@ function read(ws: Write[], runs: Run[], fix: Set<string>, seqAt: (at: number) =>
   return { source, test, before, after, followed: !!(test && source && before && closes) };
 }
 
-/** B1's detection for one session: its SDK records, its final patch and the repository root (the session's cwd). */
-export function detect(recs: Rec[], patch: string, rootIn?: string): Detection {
+/** B1's detection for one session: its SDK records, its final patch and the repository root (the session's cwd). With
+ *  { rules: "b2" } it also returns B2's reading as followed_b2; without it the result is B1's alone. */
+export function detect(recs: Rec[], patch: string, rootIn?: string, opts: { rules?: "b1" | "b2" } = {}): Detection {
   const t = toTranscript(recs);
   const root = rootIn ?? t.cwd ?? "/testbed";
   const us = uses(t.events);
@@ -519,10 +642,10 @@ export function detect(recs: Rec[], patch: string, rootIn?: string): Detection {
   const bash = new Map(us.flatMap((u) => (u.name === "Bash" && typeof u.input.command === "string" ? [[u.at, u.input.command] as const] : [])));
   const seqs = new Map<number, Sequence | null>();
   const seqAt = (at: number) => { if (!seqs.has(at)) seqs.set(at, bash.has(at) ? sequence(bash.get(at)!) : null); return seqs.get(at) ?? null; };
-  const all = read(ws, runs, fix, seqAt), merged = read(ws, runs, fix, seqAt, true);
+  const all = read(ws, runs, fix, seqAt), merged = read(ws, runs, fix, seqAt, "merged");
   const tool = read(ws.filter((w) => w.via === "tool"), runs, fix, seqAt);
   const fixWrites = ws.filter((w) => fix.has(w.path));
-  return {
+  const out: Detection = {
     followed: all.followed,
     followed_tool_only: tool.followed,
     followed_as_merged: merged.followed,
@@ -538,4 +661,5 @@ export function detect(recs: Rec[], patch: string, rootIn?: string): Detection {
     test_file: all.test?.path ?? null,
     fix_files: fixList,
   };
+  return opts.rules === "b2" ? { ...out, followed_b2: read(ws, runs, fix, seqAt, "b2").followed } : out;
 }

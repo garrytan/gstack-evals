@@ -1,11 +1,13 @@
 // Value: protects=section 3's sealing: plaintext only in /dev/shm, sealed output outside the repo, plaintext deleted after the seal, decryption only into /dev/shm, and a summary of counts and digests.
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { authorToCustody, openCustody, sealCustody, unsealTo, writeAuthoring } from "../../../lanes/office-hours-rewrite/author/custody.ts";
+import { ageDecrypter, authorToCustody, openCustody, sealCustody, unsealTo, writeAuthoring } from "../../../lanes/office-hours-rewrite/author/custody.ts";
 import { authorRun } from "../../../lanes/office-hours-rewrite/author/run.ts";
-import { FIXTURE_SCREEN, fixtureParser, runCaller, wordLabeller } from "../../../lanes/office-hours-rewrite/author/fixtures.ts";
+import { answersOf, fakeMeter, FIXTURE_SCREEN, fixtureParser, plantedFirstAttempt, runCaller, wordLabeller } from "../../../lanes/office-hours-rewrite/author/fixtures.ts";
 import { CAPS } from "../../../lanes/office-hours-rewrite/frozen.ts";
 import { REPO_ROOT } from "../../../lanes/product-value/io.ts";
 
@@ -47,23 +49,50 @@ describe("custody paths", () => {
 });
 
 describe("writing a run", () => {
-  test("writes the briefs in types.ts's layout, seals them and deletes the plaintext", async () => {
-    const call = runCaller();
-    const run = await authorRun({ call, label: wordLabeller(), parse: fixtureParser, screen: FIXTURE_SCREEN, spent: () => call.state.drafts * 1.04 }, { cap: CAPS.authoring, concurrency: 8 });
+  test("writes the 96 placed briefs, reused ones included, in types.ts's layout, with the outcome log, the reused outcomes and the summary, seals them and deletes the plaintext", async () => {
+    const placed = await plantedFirstAttempt();
+    const m = fakeMeter(runCaller());
+    const run = await authorRun({ call: m.call, label: wordLabeller(), parse: fixtureParser, screen: FIXTURE_SCREEN, spent: m.spent, spentOn: m.spentOn }, { cap: CAPS.authoring, concurrency: 8, reuse: { placed, answers: answersOf(placed), failed: [] } });
     const work = shm();
     const sink = openCustody(work, outside());
     writeAuthoring(sink, run);
     const briefs = readdirSync(join(sink, "briefs"));
-    expect(briefs).toHaveLength(110);
+    expect(briefs).toHaveLength(96);
+    expect(placed.every((x) => briefs.includes(x.id))).toBe(true);
     const t8 = briefs.find((id) => JSON.parse(readFileSync(join(sink, "briefs", id, "brief.json"), "utf8")).type === "T8")!;
     expect(readdirSync(join(sink, "briefs", t8)).sort()).toEqual(["brief.json", "key.json", "opening.md", "prior.json", "sheet.json"]);
-    const pair = JSON.parse(readFileSync(join(sink, "briefs", "d1a", "key.json"), "utf8"));
+    const pair = JSON.parse(readFileSync(join(sink, "briefs", briefs.find((id) => /^d\d+a$/.test(id))!, "key.json"), "utf8"));
     expect(Object.keys(pair).sort()).toEqual(["actions", "call", "decisive", "traction", "twin", "wrong_call"]);
+    expect(readdirSync(join(sink, "authoring")).sort()).toEqual(["outcomes.jsonl", "reused.jsonl", "summary.json"]);
+    expect(readFileSync(join(sink, "authoring", "reused.jsonl"), "utf8").trim().split("\n")).toHaveLength(placed.length);
     rmSync(sink, { recursive: true, force: true });
     const out = outside();
     const summary = authorToCustody(run, { work: shm(), out, sealer: fakeSealer });
     expect(readFileSync(out, "utf8")).toBe("sealed:authoring,briefs");
-    expect(summary.placed).toBe(110);
+    expect(summary.placed).toBe(96);
     expect(JSON.stringify(summary)).not.toContain(run.outcomes[0]!.files!.opening.slice(0, 30));
+  });
+});
+
+describe("custody paths follow links (pre-run change 1)", () => {
+  test("a work or decrypt directory under a /dev/shm folder that links to disk is refused", () => {
+    const disk = temp(join(tmpdir(), "ohr-disk-"));
+    const link = join(temp("/dev/shm/ohr-link-"), "to-disk");
+    symlinkSync(disk, link);
+    expect(() => openCustody(join(link, "w"), outside())).toThrow("E_OHR_CUSTODY");
+    expect(() => unsealTo(join(disk, "x.age"), join(link, "d"), () => {})).toThrow("E_OHR_CUSTODY");
+  });
+  test("a truncated sealed file leaves nothing it decrypted in /dev/shm, and age's failure still surfaces", () => {
+    const keys = temp(join(tmpdir(), "ohr-age-"));
+    const plain = temp(join(tmpdir(), "ohr-plain-"));
+    writeFileSync(join(plain, "brief.md"), randomBytes(256 * 1024).toString("hex"));
+    const sealed = join(keys, "sealed.age");
+    const made = spawnSync("bash", ["-o", "pipefail", "-c", 'age-keygen -o "$1/key.txt" 2>/dev/null && tar -C "$2" -cf - . | age -r "$(age-keygen -y "$1/key.txt")" -o "$3"', "seal", keys, plain, sealed]);
+    expect(made.status).toBe(0);
+    const whole = readFileSync(sealed);
+    writeFileSync(sealed, whole.subarray(0, whole.length >> 1));
+    const dir = "/dev/shm/ohr-w-" + randomBytes(4).toString("hex") + ".open-checkpoint";
+    expect(() => unsealTo(sealed, dir, ageDecrypter(join(keys, "key.txt")))).toThrow("decrypting with age failed");
+    expect(readdirSync("/dev/shm").filter((n) => n.startsWith("ohr-w-"))).toEqual([]);
   });
 });

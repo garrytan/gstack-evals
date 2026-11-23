@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "name": "Codex hooks eval part C judges",
+  "source": "Preregistration 2026-11-19-geva-562-codex-hooks-prereg, section 5.5: Claude Opus 5.5 matches and adjudicates, Gemini 4 Carbon reads second (and is the fallback primary), Claude Sonnet 5.5 reads third, and GPT-6.2 Astra and Gemini 4 Argon write the gold labels of the judge check. GPT-6.1 Sol, the model under test, never judges. Gemini runs on OpenRouter at the google-vertex route src/runner/pricing/prices.ts pins.",
+  "models": {
+    "claude-opus-5-5": {
+      "provider": "anthropic",
+      "roles": [
+        "judge",
+        "adjudicator"
+      ]
+    },
+    "claude-sonnet-5-5": {
+      "provider": "anthropic",
+      "roles": [
+        "judge",
+        "adjudicator"
+      ]
+    },
+    "google/gemini-4-carbon": {
+      "provider": "openrouter",
+      "roles": [
+        "judge",
+        "adjudicator"
+      ]
+    },
+    "google/gemini-4-argon": {
+      "provider": "openrouter",
+      "roles": [
+        "judge"
+      ]
+    },
+    "gpt-6.2-astra": {
+      "provider": "openai",
+      "roles": [
+        "judge"
+      ]
+    },
+    "gpt-6.1-sol": {
+      "provider": "openai",
+      "roles": [
+        "subject"
+      ],
+      "refused_because": "GPT-6.1 Sol is the model under test and cannot judge its own runs (section 5.5)."
+    }
+  },
+  "defaults": {
+    "judge": {
+      "anthropic": "google/gemini-4-carbon",
+      "openai": "claude-opus-5-5",
+      "openrouter": "claude-opus-5-5"
+    },
+    "adjudicator": {
+      "anthropic": "google/gemini-4-carbon",
+      "openai": "claude-opus-5-5",
+      "openrouter": "claude-opus-5-5"
+    },
+    "usersim": "gpt-6-luna"
+  }
+}

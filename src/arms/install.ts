@@ -9,7 +9,8 @@
 // - A tree is installed by its own installer, gstack's `./setup --host <host> --no-browser -q` unless the arm names one,
 //   with the checkout at ~/.local/share/<repo>. The Docker rig runs it in a builder container from the pinned trial
 //   image, with egress at build time and never in a trial; the keyless rig runs it in a scratch HOME. The kept output is
-//   the checkout, the host's skills directory and Claude Code's settings.json. ~/.gstack, ~/.bun and the host's own
+//   the checkout, the host's skills directory, Claude Code's settings.json and Codex's hooks.json (where gstack's setup
+//   registers its Codex hooks). ~/.gstack, ~/.bun and the host's own
 //   state are dropped (each trial seeds its own state root), and so are .git and eval fixture paths (FIXTURE_PATH), which
 //   are also removed from the tree before its installer runs. Links into HOME
 //   become relative and modes become 0755 or 0644, except the host config and data directories the CLIs write their
@@ -120,7 +121,7 @@ const git = (cwd: string, args: string[], env: Record<string, string> = cleanEnv
 const sourceGit = (cwd: string, args: string[]) => git(cwd, ["--no-replace-objects", ...args], { ...cleanEnv(), GIT_NO_LAZY_FETCH: "1" });
 const quote = (s: string): string => "'" + s.replaceAll("'", "'\\''") + "'";
 const checkoutName = (ref: StackRef): string => stackKind(ref)?.name ?? ref.repo.split("/").pop()!;
-const kept = (host: Host, name: string): string[] => [".local/share/" + name, SKILL_DIRS[host], ...(host === "claude" ? [".claude/settings.json"] : [])];
+const kept = (host: Host, name: string): string[] => [".local/share/" + name, SKILL_DIRS[host], ...(host === "claude" ? [".claude/settings.json"] : [".codex/hooks.json"])];
 
 /** Repositories that may hold a stack's commit, in search order: the inferred checkout, gstack checkouts, <state>/sources/*. */
 export function stackSources(o: { root: string | null; home: string; state: string }): string[] {

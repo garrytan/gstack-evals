@@ -1,0 +1,2 @@
+# gstack 6963fa8089af bin/gstack-eval-plan results --check <change 2>/eval-plan.md results-check-ok.md, 2026-11-22:
+RESULTS: ok no_gstack_rows=1/1 rows=3/3 file=tests/weekly-stable/fixtures/results-check-ok.md

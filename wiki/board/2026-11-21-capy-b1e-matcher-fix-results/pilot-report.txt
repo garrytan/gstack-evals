@@ -1,0 +1,13 @@
+== B1e pilot: the two smoke tasks, both arms
+  gstack-main: loaded 0/2 0.0% [0.0, 65.8]; at the first call 0; /verify loaded 0; followed 0/2 [0.0, 65.8]; gaps 0, cap stops 0, safety stops 0, audit 0, passes 2 (descriptive), cost $0.48 ($0.238 a graded session); not loaded: hook log missing 0, hook did not name prove-it 1, line not delivered 0, loaded /verify instead 0, load failed 0, named, not loaded 1, never named 0
+  none: loaded 0/2 0.0% [0.0, 65.8]; at the first call 0; /verify loaded 0; followed 0/2 [0.0, 65.8]; gaps 0, cap stops 0, safety stops 0, audit 0, passes 2 (descriptive), cost $0.32 ($0.159 a graded session)
+  hook put prove-it only (1 sessions): prove-it loaded 0, /verify loaded 0, neither 1
+  hook put prove-it first of two (0 sessions): prove-it loaded 0, /verify loaded 0, neither 0
+  hook put prove-it second of two (0 sessions): prove-it loaded 0, /verify loaded 0, neither 0
+  hook put prove-it not named (1 sessions): prove-it loaded 0, /verify loaded 0, neither 1
+  hook log missing (0 sessions): prove-it loaded 0
+  hook line before the first output (proxy): 1 of 2, quoted 0
+  pilot PASS gstack-main
+  pilot PASS none
+  pilot cap PASS gstack-main: settled $0.48 of $5
+  pilot cap PASS none: settled $0.32 of $3

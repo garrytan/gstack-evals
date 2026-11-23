@@ -14,13 +14,15 @@ import { detect, type Detection } from "./detect.ts";
 import { isB1bArm, ROUTING, type B1bArm } from "./b1b-pins.ts";
 import { isB1cArm, type B1cArm } from "./b1c-pins.ts";
 import { isB1dArm, type B1dArm } from "./b1d-pins.ts";
+import { isB1fArm, type B1fArm } from "./b1f-pins.ts";
 import { ARM_NAMES, ARM_SOURCES, DESCRIBED_SKILL, isArm, REPO, SKILL, type B1Arm } from "./pins.ts";
+import { isWeeklyArm, type WeeklyArm } from "../weekly-stable/pins.ts";
 
 export type B1Row = {
   schema: "b1-session/1";
   model: string;
   part: string | null;
-  arm: B1Arm | B1bArm | B1cArm | B1dArm;
+  arm: B1Arm | B1bArm | B1cArm | B1dArm | B1fArm | WeeklyArm;
   task: string;
   trial: string;
   outcome: "graded" | "cap_stop" | "infra";
@@ -45,8 +47,8 @@ export type B1Row = {
 export type B1TableConfig = { jobs: { dir: string; part?: string }[]; sessions: string[]; home?: string };
 
 const readJson = (p: string) => { try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; } };
-const OWN: Record<B1Arm | B1bArm | B1cArm | B1dArm, string[]> = { none: [], described: ["/.claude/skills/" + DESCRIBED_SKILL], "gstack-shaped": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack"], command: [], "claude-md": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack", "/" + ROUTING.path], hook: ["/.claude/skills/" + SKILL, "/.claude/skills/gstack", "/.gstack"], "project-md": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack"], "gstack-main": ["/.claude/skills", "/.gstack"], "project-md-noescape": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack"] };
-const ownSkill: Record<B1Arm | B1bArm | B1cArm | B1dArm, string | null> = { none: null, described: DESCRIBED_SKILL, "gstack-shaped": SKILL, command: null, "claude-md": SKILL, hook: SKILL, "project-md": SKILL, "gstack-main": SKILL, "project-md-noescape": SKILL };
+const OWN: Record<B1Arm | B1bArm | B1cArm | B1dArm | B1fArm | WeeklyArm, string[]> = { candidate: ["/.claude/skills", "/.gstack"], stable: ["/.claude/skills", "/.gstack"], none: [], described: ["/.claude/skills/" + DESCRIBED_SKILL], "gstack-shaped": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack"], command: [], "claude-md": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack", "/" + ROUTING.path], hook: ["/.claude/skills/" + SKILL, "/.claude/skills/gstack", "/.gstack"], "project-md": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack"], "gstack-main": ["/.claude/skills", "/.gstack"], "project-md-noescape": ["/.claude/skills/" + SKILL, "/.claude/skills/gstack"], own: ["/.claude/skills", "/.gstack"], long: ["/.claude/skills", "/.gstack"], required: ["/.claude/skills", "/.gstack"] };
+const ownSkill: Record<B1Arm | B1bArm | B1cArm | B1dArm | B1fArm | WeeklyArm, string | null> = { candidate: null, stable: null, none: null, described: DESCRIBED_SKILL, "gstack-shaped": SKILL, command: null, "claude-md": SKILL, hook: SKILL, "project-md": SKILL, "gstack-main": SKILL, "project-md-noescape": SKILL, own: SKILL, long: SKILL, required: SKILL };
 let stepsText: string | null = null;
 const stepsNeedle = () => (stepsText ??= JSON.stringify(readFileSync(join(REPO, ARM_SOURCES, "steps.md"), "utf8").trimEnd()).slice(1, -1));
 
@@ -70,7 +72,7 @@ export function b1Row(dir: string, ctx: { part: string | null; sessions: Map<str
   const kwargs = config.agent.kwargs ?? {};
   const arm = String(kwargs.arm ?? "");
   const arms = ctx.arms ?? ARM_NAMES;
-  if (!arms.includes(arm) || !(isArm(arm) || isB1bArm(arm) || isB1cArm(arm) || isB1dArm(arm))) throw new Error("E_USAGE b1 table: " + dir + " has arm " + JSON.stringify(kwargs.arm) + ", not one of " + arms.join(", "));
+  if (!arms.includes(arm) || !(isArm(arm) || isB1bArm(arm) || isB1cArm(arm) || isB1dArm(arm) || isB1fArm(arm) || isWeeklyArm(arm))) throw new Error("E_USAGE b1 table: " + dir + " has arm " + JSON.stringify(kwargs.arm) + ", not one of " + arms.join(", "));
   const task = String(config.task?.path ?? result?.task_name ?? "").split("/").filter(Boolean).at(-1) ?? "?";
   const trial = String(result?.trial_name ?? dir.split("/").filter(Boolean).at(-1));
   const msgs = join(dir, "evaluator", "sdk-messages.jsonl");

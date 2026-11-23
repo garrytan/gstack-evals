@@ -14,6 +14,8 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
 - readers.ts: reader rows: each subagent a session launched, named through a reader map pinned to one gstack commit
   (reader-maps/).
 - run.ts: runReviewUnits, the run loop on a HostRig.
+- codex.ts: what a Codex arm adds (`--host codex`): the codex-arms file's arm specs and the keyless capture of each arm's
+  model input before its first session.
 - cli.ts: the command.
 
 ## Unit repositories
@@ -42,8 +44,8 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
 ## A run
 
 - Task id: `<repo name>-<pr>-<first 8 of head>`. The agent sees only /work/<task id>, seeded with the unit tree.
-- Models: `--models` takes policy models with a Claude Code route (provider anthropic or openrouter), and the dry run
-  prints each one's provider. GPT-6.1 Sol runs as `openai/gpt-6.1-sol`, through OpenRouter's Anthropic-compatible
+- Models: `--models` takes policy models with a Claude Code route (provider anthropic or openrouter), or under
+  `--host codex` a Codex route (provider openai or openrouter), and the dry run prints each one's provider. GPT-6.1 Sol runs as `openai/gpt-6.1-sol`, through OpenRouter's Anthropic-compatible
   Messages route; `gpt-6.1-sol` is its openai route, which the judge and the Codex host use.
 - Prompt: the told prompt with the arm's command (none no prefix, gstack /review, pstack /pstack:interrogate, tstack
   /sol-loop with "Run one review round and stop before any fix.") and the base branch.
@@ -55,7 +57,8 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
   when its worst case at the allowance fits under --spend-cap (CAP_STOP otherwise).
 - Outputs: `<out>/arms/<arm>-<model tag>/` per arm and model in arm contract v1 (arm.json, findings/<unit>.jsonl with each
   finding's pass, cost.tsv; no judgments.tsv, so the arm is raw), plus units.json, parses.tsv, refusals.tsv,
-  cells.ndjson and progress.json. The model tag is a Claude model's family (opus, haiku), else the model id's last path segment, cut to 17 characters
+  cells.ndjson and progress.json. A `--host codex` run also writes `<out>/captures/`, each arm's model input captured
+  before its first session, and `captures.json`. The model tag is a Claude model's family (opus, haiku), else the model id's last path segment, cut to 17 characters
   plus a 6-character hash once it passes 24. Each run rebuilds <out>/arms from the journal, so no stale arm survives a resume there. The receipts sink is a
   merge copy: it keeps any arm an earlier run of the same out dir wrote.
 - Parse outcomes per unit-pass: findings, empty (a real zero), missing (no fenced json block: zero, flagged), malformed
@@ -99,6 +102,12 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   the lock's session_kind and the served review and investigate start lines (src/arms/install.ts). arm_provenance.render
   records the lock. Two arm names may share a stack ref and render, so they install the same tree and differ only in
   their settings. On code units only an arm told /review takes one, since the install checks no other skill's start line.
+- `--host claude|codex`: the CLI every session runs, default claude. `--host codex` runs code units in Codex CLI and
+  needs `--codex-arms <file>`, which names the Codex binary and each arm's effort, hook trust, extra settings, gstack
+  config, switches, install and told prefix (codex.ts). Claude-only flags (`--plan`, `--told-prefix`, `--system-prompt`,
+  `--render`, `--reader-map`, `--cap-stops`, `--arm-models`) are refused under it.
+- `--upstream <url>`, host codex only: send every provider call to this keyless stand-in instead of the provider. It is
+  for keyless checks only, and the run refuses it while a provider key is set.
 - `--max-turns <n>`: the most model turns a session may take, default 60 (the driver's MAX_TURNS).
 - `--session-kind unattended`: GSTACK_SESSION_KIND=unattended in every arm's agent env, none included. Off by default.
 - `--arm-session-kind <arm>=unattended`, repeatable: the same for one arm only, keyed per arm. It can't run beside
@@ -123,7 +132,8 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   units.json record the template's sha256 and each unit's pr_sha256. Left out, every prompt, key and record is today's.
 
 run.json records max_turns and session_kind, and arm_session_kinds, allowance_usd and reader_map (its sha256 and gstack commit) when they
-are set. --resume with other values than run.json records is refused before anything runs, and run.json stays as it was
+are set. A `--host codex` run also records host, codex_arms_sha256 and, under `--upstream`, upstream "keyless"; a resume
+that adds or drops `--upstream` is refused (E_CACHE_STALE), since a keyless check's cells never count as results. --resume with other values than run.json records is refused before anything runs, and run.json stays as it was
 (E_CACHE_STALE). A setting off its default also joins the session key, so a cell run under another value is never
 reused. The allowance is the exception: it joins the key only in a --cap-stops run (below), and otherwise only the
 run.json check refuses a resume under another allowance.

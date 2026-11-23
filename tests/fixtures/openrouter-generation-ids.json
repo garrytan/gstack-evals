@@ -1,0 +1,73 @@
+{
+  "source": "Recorded 2026-11-21 from OpenRouter's Anthropic-compatible POST https://openrouter.ai/api/v1/messages (anthropic-version 2023-06-01, max_tokens 16, one user turn), streamed and not, on two $0 :free models, then GET /api/v1/generation?id= for each answer's X-Generation-Id header and for its body id. Only these fields were kept.",
+  "answers": [
+    {
+      "model": "particle-ai/particle-1:free",
+      "stream": true,
+      "content_type": "text/event-stream",
+      "x_generation_id": "gen-1795275107-fCaW1CmWNSbnWQZgEjpm",
+      "answer_id": "msg_fCaW1CmWNSbnWQZgEjpm",
+      "record": {
+        "id": "gen-1795275107-fCaW1CmWNSbnWQZgEjpm",
+        "model": "particle-ai/particle-1-20261027:free",
+        "provider_name": "Particle AI",
+        "streamed": true
+      },
+      "record_by_answer_id": {
+        "status": 400,
+        "text": "{\"error\":{\"message\":\"id: Invalid generation ID\",\"code\":400}}"
+      }
+    },
+    {
+      "model": "particle-ai/particle-1:free",
+      "stream": false,
+      "content_type": "application/json",
+      "x_generation_id": "gen-1795275135-BfRU5By8mlbjaZXThWiF",
+      "answer_id": "msg_BfRU5By8mlbjaZXThWiF",
+      "record": {
+        "id": "gen-1795275135-BfRU5By8mlbjaZXThWiF",
+        "model": "particle-ai/particle-1-20261027:free",
+        "provider_name": "Particle AI",
+        "streamed": true
+      },
+      "record_by_answer_id": {
+        "status": 400,
+        "text": "{\"error\":{\"message\":\"id: Invalid generation ID\",\"code\":400}}"
+      }
+    },
+    {
+      "model": "google/gemma-4-26b-a4b-it:free",
+      "stream": true,
+      "content_type": "text/event-stream",
+      "x_generation_id": "gen-1795275168-l3CyvqUu9Fxkg4NhlEXf",
+      "answer_id": "msg_l3CyvqUu9Fxkg4NhlEXf",
+      "record": {
+        "id": "gen-1795275168-l3CyvqUu9Fxkg4NhlEXf",
+        "model": "google/gemma-4-26b-a4b-it-20260403:free",
+        "provider_name": "Google AI Studio",
+        "streamed": true
+      },
+      "record_by_answer_id": {
+        "status": 400,
+        "text": "{\"error\":{\"message\":\"id: Invalid generation ID\",\"code\":400}}"
+      }
+    },
+    {
+      "model": "google/gemma-4-26b-a4b-it:free",
+      "stream": false,
+      "content_type": "application/json",
+      "x_generation_id": "gen-1795275443-dyLwVK2qSvX0eQqkQ00i",
+      "answer_id": "msg_dyLwVK2qSvX0eQqkQ00i",
+      "record": {
+        "id": "gen-1795275443-dyLwVK2qSvX0eQqkQ00i",
+        "model": "google/gemma-4-26b-a4b-it-20260403:free",
+        "provider_name": "Google AI Studio",
+        "streamed": true
+      },
+      "record_by_answer_id": {
+        "status": 400,
+        "text": "{\"error\":{\"message\":\"id: Invalid generation ID\",\"code\":400}}"
+      }
+    }
+  ]
+}

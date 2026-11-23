@@ -158,6 +158,7 @@ describe("the run", () => {
     expect(batchFits(fresh, 7921)).toBe(false);
     const seen = { spent: 50, inflightMicros: 0, settled: 40, worst: 1, lease: 90 };
     expect(batchFits(seen, 40)).toBe(true);
+    // pregate-literal: cap=41 this test's own number, not the office-hours rewrite ledger's cap
     expect(batchFits(seen, 41)).toBe(false);
     expect(batchFits({ ...seen, inflightMicros: toMicros(10) }, 30)).toBe(true);
     expect(batchFits({ ...seen, inflightMicros: toMicros(10) }, 31)).toBe(false);

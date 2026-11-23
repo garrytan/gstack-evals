@@ -261,6 +261,86 @@ describe("order, rounds and admission", () => {
   });
 });
 
+describe("OpenRouter sends name the generation id from the X-Generation-Id header (P7)", () => {
+  const five = ["t1", "t2", "t3", "t4", "t5"];
+  const zero = (id: string) => Response.json({ data: { id, total_cost: 0, tokens_prompt: 0, tokens_completion: 0 } });
+  const releases = (ledger: string) => {
+    const db = new Database(ledger, { readonly: true });
+    const n = (db.query("SELECT COUNT(*) AS n FROM releases").get() as { n: number }).n;
+    db.close();
+    return n;
+  };
+  test("a Sol send records the header's gen- id as its response id and the stream's msg_ id beside it, and the release looks up the gen- id", async () => {
+    const { res, s, L } = await go({ script: () => sse({ text: "a report", usage: false }), records: zero, tasks: five, models: ["sol"], cap: 1.3, roundWorst: 1 });
+    const sends = res.records.flatMap((r) => r.sends);
+    expect(sends.length).toBeGreaterThan(0);
+    expect(sends.every((x) => /^gen-[0-9A-Za-z-]+$/.test(x.responseId ?? "") && /^msg_/.test(x.messageId ?? "") && x.idFrom === "x-generation-id")).toBe(true);
+    expect(res.records.every((r) => r.responseIds.every((id) => /^gen-/.test(id)))).toBe(true);
+    expect(s.gets.length).toBeGreaterThan(0);
+    expect(s.gets.every((u) => /\?id=gen-[0-9A-Za-z-]+$/.test(u))).toBe(true);
+    expect(res.records.find((r) => r.task === "t5")!.cls).toBe("scored");
+    expect(releases(L.ledger)).toBe(12);
+  });
+  test("other direction: a Sol answer with no X-Generation-Id keeps no response id and says so, and a needed release stops the item with no lookup and no msg_ fallback", async () => {
+    const { res, s, L } = await go({ script: () => sse({ text: "a report", usage: false, gen: null }), records: zero, tasks: five, models: ["sol"], cap: 1.3, roundWorst: 1 });
+    const sends = res.records.flatMap((r) => r.sends).filter((x) => x.status === 200);
+    expect(sends.length).toBeGreaterThan(0);
+    expect(sends.every((x) => x.responseId === null && x.idFrom === null && /^msg_/.test(x.messageId ?? ""))).toBe(true);
+    expect(res.stop?.cls).toBe("harness");
+    expect(res.stop?.why).toContain("E_TBV_RUN");
+    expect(res.stop?.why).toContain("no OpenRouter generation record");
+    expect(s.gets.length).toBe(0);
+    expect(releases(L.ledger)).toBe(0);
+  });
+  test("other direction: a msg_ id in the X-Generation-Id header is refused the same way", async () => {
+    const { res, s, L } = await go({ script: (c) => sse({ text: "a report", usage: false, gen: "msg_" + c.task + c.n }), records: zero, tasks: five, models: ["sol"], cap: 1.3, roundWorst: 1 });
+    expect(res.records.flatMap((r) => r.sends).filter((x) => x.status === 200).every((x) => x.responseId === null && x.idFrom === null)).toBe(true);
+    expect(res.stop?.cls).toBe("harness");
+    expect(s.gets.length).toBe(0);
+    expect(releases(L.ledger)).toBe(0);
+  });
+  test("other direction: an answered Sol send with no generation id and no message id still counts as unknown, so a needed release stops the item", async () => {
+    const { res, s, L } = await go({ script: () => sse({ text: "a report", usage: false, gen: null, id: "" }), records: zero, tasks: five, models: ["sol"], cap: 1.3, roundWorst: 1 });
+    expect(res.records.flatMap((r) => r.sends).filter((x) => x.status === 200).every((x) => x.responseId === null && !x.messageId)).toBe(true);
+    expect(res.stop?.cls).toBe("harness");
+    expect(res.stop?.why).toContain("no OpenRouter generation record");
+    expect(s.gets.length).toBe(0);
+    expect(releases(L.ledger)).toBe(0);
+  });
+  test("a Sol stream that ends without its final message keeps its full hold even with a gen- id: nothing looks it up, and a refused round is a cap stop", async () => {
+    const { res, s, L } = await go({ script: (c) => (c.n === 1 ? sse({ text: "partial", usage: false, final: false }) : sse({ text: "a report" })), records: zero, tasks: five, models: ["sol"], cap: 1.3, roundWorst: 1 });
+    const cut = res.records.flatMap((r) => r.sends).filter((x) => x.attempt === 1);
+    expect(cut.length).toBeGreaterThan(0);
+    expect(cut.every((x) => ["truncated", "no-final"].includes(x.kind) && x.idFrom === "x-generation-id" && x.micros === null)).toBe(true);
+    expect(res.stop?.cls).toBe("cap");
+    expect(s.gets.length).toBe(0);
+    expect(releases(L.ledger)).toBe(0);
+  });
+  test("a restart refuses a sealed OpenRouter reading from before the fix, with no send, and deletes the plaintext", async () => {
+    const first = await go({ script: () => text(), tasks: ["t1"], models: ["sol"] });
+    const t1 = first.by("t1", "none", "sol");
+    const file = join(first.L.out, "sealed", "reading-" + t1.label + ".json");
+    writeFileSync(file, JSON.stringify({ ...t1, sends: t1.sends.map(({ idFrom: _f, messageId: _m, ...x }) => ({ ...x, responseId: "msg_legacy" })) }) + "\n");
+    const s = stub(() => text());
+    const c = clock();
+    const err = await runItem({ item: ITEM, runId: "run-1", record: first.L.record, ledger: first.L.ledger, out: first.L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now, plan: plan({ script: () => text(), tasks: ["t1", "t2"], models: ["sol"], roundWorst: 0.000001 }), plaintext: first.L.plain, sealCmd: null, unsealCmd: null, devPlaintext: true, held: false, deps: { build: fakeBuild, validate: () => ({ ok: true }), closer: () => true }, log: () => {} }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toMatchObject({ code: "E_TBV_INPUT" });
+    expect(String((err as Error).message)).toContain("predates the generation-id fix");
+    expect(s.calls.length).toBe(0);
+    expect(existsSync(first.L.plain)).toBe(false);
+  });
+  test("an Anthropic send is unchanged: its response id is the stream's message id, and the header is not read", async () => {
+    const { res, s } = await go({ script: () => text(), tasks: ["t1", "t2"], models: ["opus"] });
+    const sends = res.records.flatMap((r) => r.sends);
+    expect(sends.length).toBeGreaterThan(0);
+    expect(sends.every((x) => /^msg_/.test(x.responseId ?? "") && x.messageId === x.responseId && x.idFrom === "body")).toBe(true);
+    expect(s.gets.length).toBe(0);
+  });
+});
+
 describe("reservation release before a headroom refusal", () => {
   const noUsage: Script = () => sse({ text: "a report", usage: false });
   test("a send the generation record shows was not billed is released, and the round is admitted", async () => {

@@ -78,7 +78,7 @@ describe("the responder's lease on a planning resume", () => {
   test("a round is admitted only inside the responder's lease, so a short lease is an admission stop and not a lost cell", async () => {
     const policy = loadPolicy(DEFAULT_POLICY) as LoadedPolicy;
     const stubRig = (): HostRig => ({ baseUrl: "http://proxy", network: "none", imageDigest: null, bind: async () => ({}) as never, finalize: async () => ({}) as never, arms: {}, sandbox: () => ({}) as never, judgeSandbox: () => ({}) as never, egress: () => ({ open: false, detail: "" }), close: async () => ({ committed: 0, unknown: 0, lease_id: null }), recovery: null });
-    const meter = { leaseId: "owner", spent: () => 0, close: async () => ({ spent_micros: 0, unknown_micros: 0 }), call: async () => ({ text: "On weekends.\nSOURCE: profile", status: 200, micros: 1000, cached: false, problem: null, served_by: "openai" }) };
+    const meter = { leaseId: "owner", spent: () => 0, unknown: () => 0, close: async () => ({ spent_micros: 0, unknown_micros: 0 }), call: async () => ({ text: "On weekends.\nSOURCE: profile", status: 200, micros: 1000, cached: false, problem: null, served_by: "openai" }) };
     const run = async (dir: string, ownerLease: number) => {
       fixtureUnit(dir, "aaaaaa", 2);
       const u = (loadUnit(dir, "aaaaaa") as { unit: Unit }).unit;

@@ -26,6 +26,12 @@
 // - Money is integer micro-dollars throughout, and each reserve carries an idempotency key naming the call attempt.
 // - Free routes (model listings, Anthropic token counts, an OpenRouter generation record by id) are forwarded unreserved, and every request, free, paid or
 //   refused, is journaled with its source address.
+// - OpenRouter sends each answer's generation id in its X-Generation-Id response header, while the answer's own id (the
+//   Messages body's id, msg_..., which Claude Code logs) is not one its generation route takes. The proxy records each
+//   OpenRouter answer's own id with that header on the slot and on the outcome line (answer_id, generation_id). Asked for
+//   the generation record of an answer id it recorded with a header, the free generation route reads the record of that
+//   generation id and names it in an x-h2h-generation-id answer header; any other id is forwarded as asked, with no
+//   such header.
 // - A free POST route (a token count) first passes the request-shape refusals every paid call passes (refuseRequestShape),
 //   with the paid route's answer, so a count body takes no hosted tool, MCP server or remote source to the provider. Like
 //   the paid route, it forwards the body it checked (the parsed body, serialized again), so a duplicate key cannot hide a
@@ -221,6 +227,8 @@ export interface ProxyOptions {
   refuseServerTools?: boolean;
   /** Copy these top-level fields of a slot's first paid request whose tools list is non-empty, as the client sent them (null for a field it left out), into the slot's meter as first_request. Off by default; the pstack-checks family turns it on for its stages to record each session's effort and thinking fields. */
   firstRequestFields?: string[];
+  /** Copy these top-level fields of every paid request, as the client sent them (null for a field it left out), into its request line in the journal as fields. Off by default; the Codex hooks eval turns it on for reasoning, to read every request's effort. */
+  requestFields?: string[];
   /** Answer an allowance refusal that only in-flight reservations cause with a retryable 429 E_H2H_RESERVATION_BOUND, counted in Meter.reservation_bound and not in allowance_stops. Off by default; the head-to-head turns it on for its stages. */
   reservationBoundRetry?: boolean;
   sleep?: (ms: number) => Promise<void>;
@@ -308,6 +316,8 @@ interface Slot {
   /** Worst-case micro-dollars and calls reserved and not yet settled. */
   inflightMicros: number;
   inflightCalls: number;
+  /** OpenRouter answers this slot was sent, by the answer's own id (the Messages body's id or its stream's message_start id, which Claude Code logs), each with the X-Generation-Id header OpenRouter sent with it, or null when it sent none. */
+  answers: Map<string, string | null>;
 }
 
 interface CallContext {
@@ -338,6 +348,31 @@ const custodyReason = (n: number) => `the request carries ${n} runner-only marke
 const tripwireReason = (n: number) => `the request carries ${n} forbidden marker(s); the cell is invalid`;
 const sameSecret = (expected: Buffer, presented: string | null) => presented !== null && timingSafeEqual(expected, hash(presented));
 const newMeter = (meter_id: string): Meter => ({ meter_id, micros: 0, requests: 0, unknown: 0, refused: 0, refusals: [], allowance_stops: 0, unsettled: 0, by_model: {}, upstream: { statuses: {}, failed: 0 }, undrained: 0, peak_inflight_micros: 0, peak_inflight_calls: 0, largest_prompt: null, bytes_per_token: null, cache_write: [] });
+
+const GENERATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
+/** An answer's own id: the JSON body's id, or in a stream the message_start event's message.id (or a chat chunk's id). */
+function answerId(text: string, stream: boolean): string | null {
+  const pick = (v: any) => (typeof v === "string" && GENERATION_ID.test(v) ? v : null);
+  if (!stream) {
+    try {
+      return pick((JSON.parse(text) as { id?: unknown })?.id);
+    } catch {
+      return null;
+    }
+  }
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    let event: Record<string, any>;
+    try {
+      event = JSON.parse(line.slice(5).trim());
+    } catch {
+      continue;
+    }
+    const id = pick(event?.type === "message_start" ? event?.message?.id : event?.type === undefined ? event?.id : undefined);
+    if (id) return id;
+  }
+  return null;
+}
 
 const TRIAL_NETWORKS = new BlockList();
 for (const [net, bits] of [["127.0.0.0", 8], ["10.0.0.0", 8], ["172.16.0.0", 12], ["192.168.0.0", 16]] as const) TRIAL_NETWORKS.addSubnet(net, bits, "ipv4");
@@ -572,7 +607,7 @@ export class MeteringProxy {
     if (this.options.allowanceCode === "DR_ALLOWANCE_STOP" && request.forbidden_markers?.length && request.canary === undefined) throw new Error("E_USAGE: metering proxy: a decision-routing bind with forbidden_markers must name its canary");
     for (const m of request.forbidden_markers ?? []) this.slotMarkers.add(m);
     const binding = { slot: `s_${randomBytes(9).toString("base64url")}`, token: `gse_${randomBytes(32).toString("base64url")}`, meter_id: `m_${randomBytes(12).toString("hex")}` };
-    this.slots.set(binding.slot, { tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), markers: [...(request.forbidden_markers ?? [])], deciders: new Set(request.deciders ?? []), canary: request.canary ?? null, allowanceMicros: request.allowance_micros, committedMicros: 0, inflightMicros: 0, inflightCalls: 0, calls: 0 });
+    this.slots.set(binding.slot, { tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), markers: [...(request.forbidden_markers ?? [])], deciders: new Set(request.deciders ?? []), canary: request.canary ?? null, allowanceMicros: request.allowance_micros, committedMicros: 0, inflightMicros: 0, inflightCalls: 0, calls: 0, answers: new Map() });
     this.meters.set(binding.meter_id, newMeter(binding.meter_id));
     return binding;
   }
@@ -747,12 +782,12 @@ export class MeteringProxy {
       for (const h of ["content-encoding", "content-length", "transfer-encoding"]) out.delete(h);
       return out;
     };
-    const forwardFree = async (body?: string) => {
-      const free = { kind: "free", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: ctx.model || null, source: ctx.source };
+    const forwardFree = async (body?: string, generation?: string) => {
+      const free = { kind: "free", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: ctx.model || null, source: ctx.source, ...(generation ? { generation_id: generation } : {}) };
       let res: Response;
       let text: string;
       try {
-        res = await send(target, { method: req.method, headers, body });
+        res = await send(generation ? `${UPSTREAM[provider]}${route}?id=${generation}` : target, { method: req.method, headers, body });
         text = await res.text();
       } catch (e) {
         const reason = `the free route failed upstream and is not resent: ${scrubbedCause(e, ctx.secrets)}`;
@@ -760,7 +795,9 @@ export class MeteringProxy {
         return problem("UPSTREAM", 502, reason);
       }
       this.journal({ ...free, status: res.status, ...(res.ok ? {} : { upstream_body: upstreamBody(text, parsed, ctx.secrets) }) });
-      return new Response(text, { status: res.status, headers: strip(res) });
+      const out = strip(res);
+      if (generation) out.set("x-h2h-generation-id", generation);
+      return new Response(text, { status: res.status, headers: out });
     };
 
     const raw = await readBody();
@@ -794,7 +831,11 @@ export class MeteringProxy {
       const shown = typeof asked === "string" ? quoteClientValue(asked, "model") : null;
       this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: shown !== null && leaks.some(m => shown.includes(m)) ? UNQUOTED : shown, source: ctx.source, decider, cell, markers });
     } else if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, tripwireReason(leaks.length));
-    if (req.method === "GET") return forwardFree();
+    if (req.method === "GET") {
+      const asked = provider === "openrouter" && route === "/v1/generation" ? new URL(req.url).searchParams.get("id") : null;
+      const generation = asked === null ? null : slot.answers.get(asked);
+      return generation ? forwardFree(undefined, generation) : forwardFree();
+    }
     if (!isJson) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body is not JSON, so it cannot be priced");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body must be a JSON object");
     const body = parsed as Record<string, any>;
@@ -822,6 +863,7 @@ export class MeteringProxy {
       return Response.json({ input_tokens: Math.ceil(Buffer.byteLength(raw) / 4) });
     }
     if (allowed.free) return forwardFree(JSON.stringify(body));
+    const sentFields = o.requestFields ? structuredClone(Object.fromEntries(o.requestFields.map(k => [k, body[k] ?? null]))) : null;
     if (o.firstRequestFields && Array.isArray(body.tools) && body.tools.length > 0) this.meter(slot).first_request ??= structuredClone(Object.fromEntries(o.firstRequestFields.map(k => [k, body[k] ?? null])));
     if (body.stream === true && route === "/v1/chat/completions") body.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
     if (provider === "openai" && body.service_tier === undefined) body.service_tier = "default";
@@ -900,7 +942,7 @@ export class MeteringProxy {
       }
       const rid = held.reservation.reservation_id;
       try {
-        this.journal({ kind: "request", reservation_id: rid, idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_micros: maxMicros, source: ctx.source });
+        this.journal({ kind: "request", reservation_id: rid, idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_micros: maxMicros, source: ctx.source, ...(sentFields ? { fields: sentFields } : {}) });
       } catch (e) {
         await this.settle(ctx, rid, maxMicros, { kind: "spent", spent_micros: 0, usage: NO_TOKENS }, null, "not sent: the request line could not be journaled");
         throw e;
@@ -929,6 +971,8 @@ export class MeteringProxy {
       }
       meter.upstream.statuses[String(res.status)] = (meter.upstream.statuses[String(res.status)] ?? 0) + 1;
 
+      const generation = provider === "openrouter" && res.ok ? res.headers.get("x-generation-id") : null;
+      const answered = (text: string, stream: boolean) => (provider === "openrouter" && res.ok ? this.answer(slot, answerId(text, stream), generation) : undefined);
       if (res.ok && (res.headers.get("content-type") ?? "").includes("event-stream") && res.body) {
         const finish = beginStream();
         const [client, metered] = res.body.tee();
@@ -938,7 +982,7 @@ export class MeteringProxy {
             text => {
               const usage = sseUsage(text);
               const cost = usageCost(price, usage);
-              return this.settle(ctx, rid, maxMicros, cost ? { kind: "spent", spent_micros: cost.micros, usage: cost.usage } : { kind: "unknown" }, res.status, cost ? undefined : "the stream ended without usage", undefined, undefined, openRouterBilledMicros(usage));
+              return this.settle(ctx, rid, maxMicros, cost ? { kind: "spent", spent_micros: cost.micros, usage: cost.usage } : { kind: "unknown" }, res.status, cost ? undefined : "the stream ended without usage", undefined, undefined, openRouterBilledMicros(usage), answered(text, true));
             },
             e => this.settle(ctx, rid, maxMicros, { kind: "unknown" }, res.status, `the stream broke: ${scrubbedCause(e, ctx.secrets)}`),
           )
@@ -981,7 +1025,7 @@ export class MeteringProxy {
       else if (res.status >= 500) outcome = { kind: "spent", spent_micros: freeFiveXx ? 0 : maxMicros, usage: NO_TOKENS };
       else outcome = { kind: "unknown" };
       const reason = freeFiveXx ? NO_USAGE_5XX_REASON : res.status >= 500 && !cost ? "a 5xx without usage is charged at its reservation" : undefined;
-      await this.settle(ctx, rid, maxMicros, outcome, res.status, reason, res.ok ? undefined : upstreamBody(text, body, ctx.secrets), freeFiveXx ? { no_usage_5xx: true, shadow_micros: maxMicros } : undefined, openRouterBilledMicros(reported));
+      await this.settle(ctx, rid, maxMicros, outcome, res.status, reason, res.ok ? undefined : upstreamBody(text, body, ctx.secrets), freeFiveXx ? { no_usage_5xx: true, shadow_micros: maxMicros } : undefined, openRouterBilledMicros(reported), answered(text, false));
       if (res.status === 401 || res.status === 403) return problem("E_KEY_REJECTED", 502, `${provider} answered ${res.status} to the proxy's key`);
       if (!retryable) return new Response(text, { status: res.status, headers: strip(res) });
       const delay = retryDelayMs(res, attempt);
@@ -1034,16 +1078,23 @@ export class MeteringProxy {
     }
   }
 
+  /** Records an OpenRouter answer's id with its X-Generation-Id header (null when absent or malformed), for the free generation route and the outcome line. */
+  private answer(slot: Slot, id: string | null, header: string | null): { answer_id: string | null; generation_id: string | null } {
+    const generation = header !== null && GENERATION_ID.test(header) ? header : null;
+    if (id !== null) slot.answers.set(id, generation);
+    return { answer_id: id, generation_id: generation };
+  }
+
   /**
    * Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter.
    * A journal write that fails is reported on stderr and counted as unsettled; the call is still metered and settled.
    */
-  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string, upstream?: string, mark?: { no_usage_5xx: true; shadow_micros: number }, billed: number | null = null): Promise<void> {
+  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string, upstream?: string, mark?: { no_usage_5xx: true; shadow_micros: number }, billed: number | null = null, answer?: { answer_id: string | null; generation_id: string | null }): Promise<void> {
     const meter = this.meter(ctx.slot);
     const micros = outcome.kind === "spent" ? outcome.spent_micros : maxMicros;
     let journaled = true;
     try {
-      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(ctx.provider === "openrouter" ? { billed_micros: billed } : {}), latency_ms: ctx.sentAt === undefined ? null : Date.now() - ctx.sentAt, ...(reason ? { reason } : {}), ...(upstream !== undefined ? { upstream_body: upstream } : {}), ...mark });
+      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(ctx.provider === "openrouter" ? { billed_micros: billed } : {}), latency_ms: ctx.sentAt === undefined ? null : Date.now() - ctx.sentAt, ...(reason ? { reason } : {}), ...(upstream !== undefined ? { upstream_body: upstream } : {}), ...mark, ...answer });
     } catch (e) {
       journaled = false;
       console.error(`E_INTERNAL: metering proxy: the outcome of reservation ${rid} was not journaled: ${scrubbedCause(e, ctx.secrets)}`);

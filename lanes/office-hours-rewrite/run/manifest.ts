@@ -14,6 +14,10 @@
 // Before the first lease, the manifest freezes to <out>/manifest.json: every entry, each brief's content digest read
 // from its files on disk, both pins, both simulator rules digests (checked against the files), the build commit and the
 // drops and their replacements. A relaunch on the same out dir must match it byte for byte (E_OHR_MANIFEST).
+// Pre-run change 3 (rule R113): stage 2 runs in two parts (run/half.ts). The first part schedules the preregistered half
+// and freezes the split; the second part, after the interim read (read/look.ts), schedules every other comparison brief
+// when the read continued, only the second half's builders when it stopped for the new skill, and nothing otherwise.
+// Each part keeps the full schedule's seeded order and arm order, so the two parts together are the full schedule.
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -23,6 +27,7 @@ import { shuffle } from "../../product-value/stats.ts";
 import { ARMS, CAPS, MODELS, PRIMARY_MODELS, QUOTA, SEED, SIM_RULES_SHA256, type Pin } from "../frozen.ts";
 import { REPO_ROOT, simRules } from "../sim/founder.ts";
 import type { ArmId, BriefMeta, ManifestEntry, ModelId } from "../types.ts";
+import { stage2Half, type Action, type Half, type ManifestLook } from "./half.ts";
 import type { Pins } from "./pins.ts";
 
 export const LAUNCHES = {
@@ -134,6 +139,11 @@ export interface Manifest {
   build_commit: string;
   dropped: string[];
   replaced: Replacement[];
+  /** Stage 2's part (pre-run change 3), its half, and on the second part the interim read it follows. */
+  part?: "first" | "second";
+  half?: Half;
+  action?: Action;
+  interim_sha256?: string;
   entries: ManifestEntry[];
 }
 
@@ -150,20 +160,39 @@ export function buildCommit(root: string = REPO_ROOT): string {
 }
 
 /** The launch's manifest, after every check that needs no rig. entries replaces the launch's schedule for the keyless end to end only; no command passes it. */
-export function makeManifest(o: { launch: LaunchName; briefsDir: string; models: readonly ModelId[]; arms: readonly ArmId[]; pins: Pins; buildCommit: string; dropped: readonly string[]; ran?: ReadonlySet<string>; entries?: readonly ManifestEntry[] }): Manifest {
+export function makeManifest(o: { launch: LaunchName; briefsDir: string; models: readonly ModelId[]; arms: readonly ArmId[]; pins: Pins; buildCommit: string; dropped: readonly string[]; ran?: ReadonlySet<string>; entries?: readonly ManifestEntry[]; look?: ManifestLook }): Manifest {
   const briefs = loadBriefs(o.briefsDir);
   const L = LAUNCHES[o.launch];
+  if (o.look && o.launch !== "stage2") throw new Error("E_OHR_MANIFEST only stage 2 on Opus and Sol runs in two parts; " + o.launch + " takes no part");
+  const look = o.look;
+  if (look?.part === "second") {
+    const ranFirst = new Set([...look.half.first.founder, ...look.half.first.builder]);
+    for (const id of o.dropped) if (ranFirst.has(id)) throw new Error("E_OHR_RESERVE " + id + " ran in stage 2's first half, so it cannot be replaced");
+    if (look.action === "stop-current" || look.action === "stop-futility") throw new Error("E_OHR_MANIFEST the interim read stopped stage 2 at its half (" + look.action + "), so no second part runs");
+  }
   const set = o.entries ? { ids: [...new Set(o.entries.map((e) => e.brief))], replaced: [] } : L.set === "calibration" ? { ids: briefs.filter((b) => b.set === "calibration").map((b) => b.id), replaced: [] } : comparisonSet(briefs, o.dropped, o.ran);
   if (L.set === "calibration" && o.dropped.length) throw new Error("E_OHR_RESERVE stage 1 takes no drops; reserves replace comparison briefs only");
   const problem = o.entries ? null : launchProblem(o.launch, briefs, set.ids);
   if (problem) throw new Error("E_OHR_MANIFEST " + problem);
   for (const k of ["founder", "builder"] as const) simRules(k);
-  const entries = o.entries ? [...o.entries] : launchRounds(o.launch, briefs, set.ids, o.arms, o.models).flat();
+  const rounds = o.entries ? [[...o.entries]] : launchRounds(o.launch, briefs, set.ids, o.arms, o.models);
+  const half = o.launch === "stage2" && !o.entries ? (look?.part === "second" ? look.half : stage2Half(briefs, set.ids)) : null;
+  let entries = rounds.flat();
+  if (half) {
+    const first = new Set([...half.first.founder, ...half.first.builder]);
+    const missing = [...first].filter((id) => !set.ids.includes(id));
+    if (missing.length) throw new Error("E_OHR_MANIFEST the comparison set no longer holds first-half briefs " + missing.join(", "));
+    const kind = new Map(briefs.map((b) => [b.id, b.kind]));
+    const second = (id: string) => !first.has(id) && (look?.part !== "second" || look.action === "continue" || kind.get(id) === "builder");
+    const firstRounds = rounds.filter((r) => first.has(r[0]!.brief)), secondRounds = rounds.filter((r) => second(r[0]!.brief));
+    entries = (look?.part === "first" ? firstRounds : look?.part === "second" ? secondRounds : [...firstRounds, ...secondRounds]).flat();
+  }
+  const parts = !look ? {} : look.part === "first" ? { part: look.part, half: half! } : { part: look.part, half: look.half, action: look.action, interim_sha256: look.interim_sha256 };
   return {
     schema: 1, launch: o.launch, stage: L.stage, models: L.models.filter((m) => o.models.includes(m)), arms: ARMS.filter((a) => o.arms.includes(a)),
     briefs: Object.fromEntries([...set.ids].sort().map((id) => [id, briefDigest(o.briefsDir, id)])),
     pins: { current: o.pins.current, new: o.pins.new }, sim_rules: SIM_RULES_SHA256, build_commit: o.buildCommit,
-    dropped: [...o.dropped].sort(), replaced: set.replaced, entries,
+    dropped: [...o.dropped].sort(), replaced: set.replaced, ...parts, entries,
   };
 }
 

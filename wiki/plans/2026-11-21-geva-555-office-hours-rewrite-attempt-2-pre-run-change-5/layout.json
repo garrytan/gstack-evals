@@ -1,0 +1,36 @@
+[
+ {
+  "capture": "shipped-cur858",
+  "skills_listed": 67,
+  "office_hours_entries": 1,
+  "skill_items_injected": 1,
+  "injected_name": "office-hours",
+  "injected_path": "~/.capy/work/ohr2/codex/cur858/.agents/skills/gstack-office-hours/SKILL.md",
+  "injected_bytes": 48068,
+  "injected_sha256": "9aabb2d1949aab7be03eb09814d56279cf1eba3a39f86e362739d48a263b1f72",
+  "whole_rendered_file": true
+ },
+ {
+  "capture": "fixed-cur858",
+  "skills_listed": 60,
+  "office_hours_entries": 0,
+  "skill_items_injected": 0
+ },
+ {
+  "capture": "shipped-new8f",
+  "skills_listed": 67,
+  "office_hours_entries": 1,
+  "skill_items_injected": 1,
+  "injected_name": "office-hours",
+  "injected_path": "~/.capy/work/ohr2/codex/new8f/.agents/skills/gstack-office-hours/SKILL.md",
+  "injected_bytes": 48058,
+  "injected_sha256": "7b927e4de37d5a2ca3db4d8691ec6926a1cc807d460b6a262454edaa9f22cdd7",
+  "whole_rendered_file": true
+ },
+ {
+  "capture": "fixed-new8f",
+  "skills_listed": 60,
+  "office_hours_entries": 0,
+  "skill_items_injected": 0
+ }
+]

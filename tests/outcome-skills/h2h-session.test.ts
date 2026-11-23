@@ -35,6 +35,17 @@ test("endOf reads the session's end from its summary", () => {
   expect(endOf(summary([]))).toBe("infra");
 });
 
+test("a turn.failed refusal is a scored safety stop with no rerun, and the same failure without one reruns once and then gaps", () => {
+  const flagged = summary([turn("t1", "error_result", { refusal: true })]);
+  expect(endOf(flagged)).toBe("safety_stop");
+  expect(retries(endOf(flagged), 1, flagged)).toBe(false);
+  expect(gapOf(endOf(flagged), 1, flagged)).toBe(null);
+  const ordinary = summary([turn("t1", "error_result")]);
+  expect(endOf(ordinary)).toBe("upstream");
+  expect(retries(endOf(ordinary), 1, ordinary)).toBe(true);
+  expect(gapOf(endOf(ordinary), 2, ordinary)).toBe("E_H2H_UPSTREAM_GAP");
+});
+
 test("one whole-session retry on upstream or infra, then a gap; a capture refusal and a cap stop are gaps at once", () => {
   const up = summary([turn("t1", "error_result")]);
   expect(retries("upstream", 1, up)).toBe(true);
@@ -91,7 +102,7 @@ test("Claude Code's refusal fallback is a safety stop, and an ordinary provider 
 });
 
 test("the session record counts turns, continuations, questions, refusals, spend and tokens", () => {
-  const s = summary([turn("t1", "completed"), turn("t2", "completed"), turn("c1", "completed"), turn("c2", "completed")], { finalized: true, allowance_stops: 0, reservation_bound: 3, spent_micros: 4_250_000, usage: { input: 10, output: 20, reasoning: 0, cache_read: 30, cache_write: 40 } }, { continuations: 2, spurious_continuations: 1, done: true, claude_version: "2.1.325 (Claude Code)", questions: { t1: { questions: 2 }, c1: { questions: 1 } } });
+  const s = summary([turn("t1", "completed"), turn("t2", "completed"), turn("c1", "completed"), turn("c2", "completed")], { finalized: true, allowance_stops: 0, reservation_bound: 3, spent_micros: 4_250_000, usage: { input_tokens: 10, output_tokens: 20, cache_read_input_tokens: 30, cache_creation_input_tokens: 40 } }, { continuations: 2, spurious_continuations: 1, done: true, claude_version: "2.1.325 (Claude Code)", questions: { t1: { questions: 2 }, c1: { questions: 1 } } });
   const r = sessionRecord(planned("gsd", "feature"), s, { model: P.model, attempt: 2, exposure: null, wall_ms: 5, home_tree_sha256: "a".repeat(64) });
   expect(r).toMatchObject({ schema: "h2h-session.v1", unit: "u1", arm: "gsd", item: "h2h-pilot", stage: "stage1", index: 3, end: "completed", gap: null, turns: 4, scripted_turns: 2, continuations: 2, spurious_continuations: 1, done_seen: true, questions: 3, reservation_refusals: 3, cost_usd: 4.25, attempts: 2, allowance_stops: 0 });
   expect(r.tokens).toEqual({ input: 10, output: 20, cache_read: 30, cache_write: 40 });

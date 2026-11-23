@@ -8,7 +8,8 @@ export type Source = "A" | "B";
 export type Family = "investigate" | "ship" | "capy" | "review";
 export type Arm = "none" | "current" | "principle" | "lens";
 export type Model = "opus" | "sol" | "particle";
-export type Judge = "sol" | "opus";
+/** The frozen judges, and Astra, which re-reads every packet Sol read for the R78 addendum's judge check and Astra reading. */
+export type Judge = "sol" | "opus" | "astra";
 export type Stratum = "long" | "short" | "other" | "clean";
 export type Turn = "report" | "followup" | "d1" | "d2";
 
@@ -20,7 +21,8 @@ export const ARM_MODELS: Readonly<Record<Model, { provider: "anthropic" | "openr
 };
 /** Section 7: Opus arms are judged by Sol, Sol and particle-1 arms by Opus. */
 export const JUDGE_OF: Readonly<Record<Model, Judge>> = { opus: "sol", sol: "opus", particle: "opus" };
-export const otherJudge = (j: Judge): Judge => (j === "sol" ? "opus" : "sol");
+/** The other judge of a double read. Astra stands in for Sol, so its other judge is Opus. */
+export const otherJudge = (j: Judge): Judge => (j === "opus" ? "sol" : "opus");
 
 /** Frozen bundle files, repo-relative. judge-brief-v2.md replaces judge-brief.md (amendment item 9). */
 export const PREREG_DIR = "wiki/plans/2026-11-05-geva-313-trust-but-verify-prereg";
@@ -179,6 +181,10 @@ export interface SendResult {
   status: number | null;
   reply: Reply | null;
   responseId: string | null;
+  /** The reply's own id (an Anthropic msg_ id, or the body's id), kept beside responseId. Set by the report driver. */
+  messageId?: string | null;
+  /** Where responseId came from: OpenRouter's X-Generation-Id header, the reply body, or null when an OpenRouter answer carried no gen- id. */
+  idFrom?: "x-generation-id" | "body" | null;
   /** meter:call:attempt, the proxy's idempotency key for this send. */
   idempotencyKey: string | null;
   problemCode: string | null;
@@ -230,7 +236,7 @@ export interface ReadingRecord {
   texts: { report: string | null; d1: string | null; d2: string | null };
   responseIds: string[];
   maxTokens: Turn[];
-  sends: Array<{ turn: Turn; attempt: number; kind: AttemptKind; status: number | null; responseId: string | null; idempotencyKey: string | null; micros: number | null; usage: TokenUsage | null }>;
+  sends: Array<{ turn: Turn; attempt: number; kind: AttemptKind; status: number | null; responseId: string | null; messageId?: string | null; idFrom?: "x-generation-id" | "body" | null; idempotencyKey: string | null; micros: number | null; usage: TokenUsage | null }>;
   usd: number;
   cacheRead: number | null;
 }
@@ -372,6 +378,8 @@ export interface ReadingsFile {
     controlTaskIds: string[];
     manifestSha256: string;
     devGap?: { opusPrincipleMinusNone: number; devMdd: number };
+    /** The R78 addendum's Astra reading: Astra's labels in place of Sol's on every reading Sol read. Absent on counted readings. */
+    standIn?: { for: "sol"; by: "astra" };
   };
 }
 

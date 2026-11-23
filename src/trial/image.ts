@@ -83,7 +83,7 @@ export function buildTrialImage(opts: { root?: string; state?: string; run?: Run
   const context = join(state, "images", "empty-context");
   mkdirSync(context, { recursive: true });
   for (const name of readdirSync(context)) rmSync(join(context, name), { recursive: true, force: true });
-  const r = run(docker, ["build", "--target", "trial", "--label", RECIPE_LABEL + "=" + recipe, "-t", tag, "-f", join(root, TRIAL_DOCKERFILE), context], { timeoutMs: 1_800_000 });
+  const r = run(docker, ["build", "--provenance=false", "--target", "trial", "--label", RECIPE_LABEL + "=" + recipe, "-t", tag, "-f", join(root, TRIAL_DOCKERFILE), context], { timeoutMs: 1_800_000 });
   writeAtomic(log, "$ docker build " + TRIAL_DOCKERFILE + " (recipe " + recipe + ")\n" + r.stdout + r.stderr);
   if (r.status !== 0) return { ok: false, code: "E_IMAGE_BUILD", message: "docker build of " + TRIAL_DOCKERFILE + " " + (r.status === null ? "did not finish" : "exited " + r.status) + ": " + lastLine(r.stderr || r.stdout) + " (build log: " + log + ")" };
   const image = inspect(run, tag, docker);

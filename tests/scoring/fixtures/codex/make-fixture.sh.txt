@@ -1,0 +1,45 @@
+#!/bin/bash
+# One scenario: a fresh /testbed repo and CODEX_HOME, real Codex 0.170.0 against the stub, then the rollouts and the final diff.
+set -euo pipefail
+NAME=$1
+W=${W:-$PWD}
+OUT=$W/out/$NAME
+rm -rf /testbed/* /testbed/.git "$OUT" && mkdir -p "$OUT" /testbed/pkg
+cd /testbed
+printf '' > pkg/__init__.py
+cat > pkg/mod.py <<'EOF'
+"""Small arithmetic helpers."""
+
+
+def add(a, b):
+    return a - b  # sum
+
+
+def sub(a, b):
+    return a - b
+
+
+def mul(a, b):
+    return a * b
+
+
+def div(a, b):
+    return a / b
+EOF
+printf '__pycache__/
+.pytest_cache/
+' > .gitignore
+mkdir -p tests && printf 'def test_other():\n    assert True\n' > tests/test_other.py
+/usr/lib/git-core/git init -q && /usr/lib/git-core/git -c user.name=fixture -c user.email=fixture@example.invalid add -A && /usr/lib/git-core/git -c user.name=fixture -c user.email=fixture@example.invalid commit -qm base
+export CODEX_HOME=$OUT/home; mkdir -p $CODEX_HOME
+export HOME_SAVE=$HOME
+export PATH=$W/venv/bin:$W/bin/bin:/usr/local/bin:/usr/bin:/bin
+export OPENAI_API_KEY="${STUB_OPENAI_KEY:?set any placeholder; the stub model ignores it}"
+echo "[fx:$NAME] Fix the failing test in this repository." | timeout 120 codex exec --json --strict-config --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --color never -m gpt-6.2-sol \
+  -c model_provider='"gstack_evals_proxy"' -c model_providers.gstack_evals_proxy.name='"stub"' -c model_providers.gstack_evals_proxy.base_url='"http://127.0.0.1:18555/v1"' \
+  -c model_providers.gstack_evals_proxy.wire_api='"responses"' -c model_providers.gstack_evals_proxy.env_key='"OPENAI_API_KEY"' \
+  -c model_providers.gstack_evals_proxy.request_max_retries=0 -c model_providers.gstack_evals_proxy.stream_max_retries=0 \
+  -c skills.bundled.enabled=false -c web_search='"disabled"' -c check_for_update_on_startup=false -c analytics.enabled=false -c model_reasoning_effort='"low"' - > $OUT/events.jsonl 2> $OUT/stderr.log || echo "codex exit $?"
+/usr/lib/git-core/git add -A && /usr/lib/git-core/git diff --cached -M HEAD > $OUT/final.patch
+cp -r $CODEX_HOME/sessions $OUT/codex-sessions 2>/dev/null || true
+ls -R $OUT/codex-sessions | grep rollout || true

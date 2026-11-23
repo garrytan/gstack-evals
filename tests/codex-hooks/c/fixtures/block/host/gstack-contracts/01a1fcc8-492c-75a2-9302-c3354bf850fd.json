@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "session_id": "01a1fcc8-492c-75a2-9302-c3354bf850fd",
+  "transcript_path": "/tmp/gse-c/home/.codex/sessions/2026/11/21/rollout-2026-11-21T06-25-46-01a1fcc8-492c-75a2-9302-c3354bf850fd.jsonl",
+  "runs": {
+    "gstack-review@14": {
+      "skill": "gstack-review",
+      "load_line": 14,
+      "outcome": "miss",
+      "missing": [
+        "adversarial-pass",
+        "review-report"
+      ],
+      "waived": [],
+      "blocked_at": "2026-11-21T06:25:46.982Z",
+      "updated_at": "2026-11-21T06:25:47.028Z"
+    }
+  }
+}

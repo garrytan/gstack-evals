@@ -56,6 +56,12 @@ describe("item 14: judges priced by judge model and packet kind", () => {
   test("a path stage 1 did not meter takes the costliest metered path of the same kind", () => {
     expect(proj([{ judge: "opus", kind: "d2", n: 10 }], { "sol:d2": 0.05, "sol:first": 9 }).out).toContain("projected $0.50");
   });
+  test("a judge stage 1 never ran, such as Astra, is refused at another judge's cost and priced at its own", () => {
+    const r = proj([{ judge: "astra", kind: "first", n: 10 }], { "sol:first": 0.1, "opus:first": 0.5 });
+    expect(r.refused).toBe(true);
+    expect(r.err).toContain("no measured judge cost for astra:first");
+    expect(proj([{ judge: "astra", kind: "first", n: 10 }], { "sol:first": 0.1, "opus:first": 0.5, "astra:first": 0.4 }).out).toContain("projected $4.00");
+  });
   test("a kind stage 1 never metered is refused", () => {
     expect(proj([{ judge: "opus", kind: "control", n: 1 }], { "sol:first": 0.1 }).err).toContain("no measured judge cost for any control packet");
   });
@@ -69,17 +75,31 @@ describe("item 11: the all-in check before every paid item", () => {
     expect(r.verdict).toBe("START tbv-hr ($630.00)");
     expect(r.out).toContain("crew spent $80.00 (80000 credits; $80.00 of the $300.00 crew reserve)");
   });
-  test("it refuses to start an item that would pass $2,000", () => {
-    expect(allin({ item: "tbv-climb-2", settled: 1500 }).verdict).toStartWith("NO START (to the Captain");
+  test("amendment 2: it starts an item over the $2,000 guideline, and refuses one past the $3,000 stop", () => {
+    const over = allin({ item: "tbv-climb-2", settled: 1500 });
+    expect(over.verdict).toBe("START tbv-climb-2 ($2030.00)");
+    expect(over.out).toContain("line: $2030.00 with tbv-climb-2's cap, over the $2000.00 guideline (it does not bind); the stop is $3000.00");
+    expect(allin({ item: "tbv-climb-2", settled: 2470 }).verdict).toBe("START tbv-climb-2 ($3000.00)");
+    expect(allin({ item: "tbv-climb-2", settled: 2600 }).verdict).toBe("NO START (to the Captain; $3130.00 over the $3000.00 stop)");
+  });
+  test("the Astra item takes the $4,000 guideline and the $5,000 stop", () => {
+    const over = allin({ item: "tbv-r78-astra", settled: 3600 });
+    expect(over.verdict).toBe("START tbv-r78-astra ($4130.00)");
+    expect(over.out).toContain("over the $4000.00 guideline (it does not bind); the stop is $5000.00");
+    expect(allin({ item: "tbv-r78-astra", settled: 4470 }).verdict).toBe("START tbv-r78-astra ($5000.00)");
+    expect(allin({ item: "tbv-r78-astra", settled: 4600 }).verdict).toBe("NO START (to the Captain; $5130.00 over the $5000.00 stop)");
   });
   test("it refuses an item that is not a paid item, and a missing term", () => {
     expect(allin({ item: "tbv-other" }).refused).toBe(true);
     expect(allin({ crewCredits: undefined }).err).toContain("crewCredits");
   });
-  test("other direction: before tbv-held the frozen branches stay", () => {
-    expect(allin({ item: "tbv-held", itemCap: 900, thirdPassCap: 200, capyCap: 150 }).verdict).toStartWith("STAGE 3 WITH THE THIRD OPUS PASS");
-    expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 150 }).verdict).toStartWith("STAGE 3 WITHOUT THE CAPY FAMILY");
-    expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 10 }).verdict).toStartWith("NO STAGE 3");
+  test("amendment 2: before tbv-held the third Opus pass and the capy family stay in up to the $3,000 stop", () => {
+    expect(allin({ item: "tbv-held", itemCap: 900, thirdPassCap: 200, capyCap: 150 }).verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($1430.00)");
+    const over = allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 150 });
+    expect(over.verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($2230.00)");
+    expect(over.out).toContain("line: $2230.00 with tbv-held's and the third Opus pass's caps, over the $2000.00 guideline (it does not bind); the stop is $3000.00");
+    expect(allin({ item: "tbv-held", itemCap: 2470, thirdPassCap: 200, capyCap: 150 }).verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($3000.00)");
+    expect(allin({ item: "tbv-held", itemCap: 2600, thirdPassCap: 200, capyCap: 150 }).verdict).toBe("NO STAGE 3 (to the Captain; $3130.00 over the $3000.00 stop)");
   });
   test("before tbv-held, a negative thirdPassCap or capyCap, or a capyCap over the held cap, is refused", () => {
     const held = (x: Record<string, unknown>) => allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 150, ...x });
@@ -91,7 +111,7 @@ describe("item 11: the all-in check before every paid item", () => {
   });
   test("other direction: zero caps and a capyCap equal to the held cap still run", () => {
     expect(allin({ item: "tbv-held", itemCap: 900, thirdPassCap: 0, capyCap: 0 }).verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($1230.00)");
-    expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 1700 }).verdict).toBe("STAGE 3 WITHOUT THE CAPY FAMILY ($330.00)");
+    expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 1700 }).verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($2230.00)");
   });
 });
 

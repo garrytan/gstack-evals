@@ -1,0 +1,127 @@
+{
+ "2026-11-21-geva-560-destructive-guard-before-after": {
+  "arms": {
+   "1730": "17303862",
+   "main": "gstack main 5afef04e",
+   "v2": "careful_v2, our simulation of the proposed fixes",
+   "55aa": "55aaa6c4",
+   "ab6a": "ab6a38b7, the guard in stable v1.102.1.0"
+  },
+  "destructive_label_corrected": {
+   "destructive": 948,
+   "label_errors": 8,
+   "denominator": 940
+  },
+  "repo_destructive_calls_corrected": {
+   "1730": 11,
+   "calls": 12,
+   "main": 8,
+   "v2": 11,
+   "55aa": 11,
+   "ab6a": 11
+  },
+  "sessions": {
+   "n": 14448,
+   "with_harmless_ask_or_deny": {
+    "1730": 516,
+    "main": 1588,
+    "v2": 379,
+    "55aa": 438,
+    "ab6a": 516
+   }
+  },
+  "paired_ab6a_vs_main": {
+   "unit": "unique commands on the clean fixture; flagged means asked or denied",
+   "DESTRUCTIVE": {
+    "both": 442,
+    "ab6a_only": 488,
+    "main_only": 1,
+    "neither": 17
+   },
+   "HARMLESS": {
+    "both": 761,
+    "ab6a_only": 220,
+    "main_only": 2792,
+    "neither": 249311
+   },
+   "CONTEXT": {
+    "both": 20,
+    "ab6a_only": 127,
+    "main_only": 4,
+    "neither": 139
+   }
+  },
+  "hook_agreement_ab6a": {
+   "guard_vs_careful": {
+    "compared": 7013,
+    "same_decision": 7013
+   },
+   "default_vs_careful": {
+    "compared": 254322,
+    "same_decision": 254322
+   }
+  },
+  "headless_modes_ab6a": {
+   "unit": "decisions of the default hook on the 2,058 commands it asks on or denies in an interactive session",
+   "interactive": {
+    "ask": 2045,
+    "deny": 13
+   },
+   "claude_p": {
+    "warn": 2045,
+    "deny": 13
+   },
+   "agent_sdk_no_marker": {
+    "warn": 2045,
+    "deny": 13
+   },
+   "unattended": {
+    "warn": 2045,
+    "deny": 13
+   }
+  },
+  "latency_full_corpus_ab6a": {
+   "unit": "ms per call, one call per unique command, whole corpus, on a loaded 30-vCPU VM",
+   "careful": {
+    "n": 254322,
+    "p50": 68,
+    "p99": 95
+   },
+   "default_hook": {
+    "n": 254322,
+    "p50": 103,
+    "p99": 131
+   }
+  }
+ },
+ "2026-11-22-geva-560-destructive-guard-9055979": {
+  "destructive_label_corrected": {
+   "destructive": 948,
+   "label_errors": 8,
+   "denominator": 940
+  },
+  "incident_set_hook": {
+   "as_published": "counts.json incident_set.unit names E1 the default hook path",
+   "corrected": "E1 is the /careful hook; the incident_set totals come from E1. The default hook is E3."
+  },
+  "headless_modes_9055": {
+   "unit": "decisions of the default hook on the 2,059 commands it asks on or denies in an interactive session",
+   "interactive": {
+    "ask": 2046,
+    "deny": 13
+   },
+   "claude_p": {
+    "warn": 2046,
+    "deny": 13
+   },
+   "agent_sdk_no_marker": {
+    "warn": 2046,
+    "deny": 13
+   },
+   "unattended": {
+    "warn": 2046,
+    "deny": 13
+   }
+  }
+ }
+}

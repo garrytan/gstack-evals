@@ -151,11 +151,14 @@ function commit(checkout: string, ref: string, flag: string): string {
   return git(checkout, ["rev-parse", "--verify", "--quiet", ref + "^{commit}"]).trim();
 }
 
+/** The 8-word runs (the leak check's word tokens) a history shares with the org rules' wording, given as its runs. */
+export const wordingRuns = (h: History, wording: Set<string>): string[] => [...grams(historyText(h))].filter((g) => wording.has(g));
+
 /** The org-rules scan: each history that shares an 8-word run (the leak check's word tokens) with the org rules' trust-but-verify wording. Prints the history's source and sha256 prefix, never its text or task. */
 export function rulesScan(histories: History[], wording: string, io: Io): number {
   const w = grams(wording);
   if (!w.size) fail("E_TBV_INPUT", "the org rules' wording has fewer than 8 words");
-  const hits = histories.map((h) => ({ h, runs: [...grams(historyText(h))].filter((g) => w.has(g)) })).filter((x) => x.runs.length);
+  const hits = histories.map((h) => ({ h, runs: wordingRuns(h, w) })).filter((x) => x.runs.length);
   io.out("rules: " + histories.length + " histories scanned for the org rules' trust-but-verify wording (" + w.size + " 8-word runs); " + hits.length + " hold a run");
   for (const x of hits) io.out("  history source " + x.h.source + " sha256 " + x.h.sha256.slice(0, 12) + ": " + x.runs.length + " runs, first " + JSON.stringify(x.runs[0]));
   io.out("Verdict: " + (hits.length ? "HIT (to the Captain)" : "CLEAN"));

@@ -1,0 +1,20 @@
+Weekly primary, candidate minus stable, two-sided 0.05 at 80% power. MDD = 2.802 sqrt(d / N).
+d is the share of pairs where the two arms disagree; N is the number of pairs.
+  S80: 80 tasks, one session each, d 0.10: MDD 9.9 points
+  S80: 80 tasks, one session each, d 0.15: MDD 12.1 points
+  S80: 80 tasks, one session each, d 0.20: MDD 14.0 points
+  S390: 130 tasks, three sessions each, d 0.10: MDD 4.5 points
+  S390: 130 tasks, three sessions each, d 0.15: MDD 5.5 points
+  S390: 130 tasks, three sessions each, d 0.20: MDD 6.3 points
+S390 pairs share a task three at a time, so its interval is cluster-robust by task; under pure session noise
+the clustering costs nothing, and a fixed task-by-release effect widens it.
+
+Sessions needed for an MDD of 5 points: N = (2.802 / 0.05)^2 d
+  d 0.10: 314 pairs
+  d 0.15: 471 pairs
+  d 0.20: 628 pairs
+
+  S80 opus: model spend expected $103 (243 sessions)
+  S80 sol: model spend expected $126 (243 sessions)
+  S390 opus: model spend expected $416 (913 sessions)
+  S390 sol: model spend expected $489 (913 sessions)

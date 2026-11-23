@@ -18,9 +18,9 @@ import { treeVolume } from "./oracle.ts";
 import { questionCounts, refuseUnscored, sessionEnd, writeSessionRecord, type PlannedSession, type SessionRecord } from "./session.ts";
 import { memoryPaths } from "./strip.ts";
 import { readUnit, smFail, type SmUnit } from "./unit.ts";
+import { keylessEnv } from "../../../src/trial/env.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 export const HARBOR_MODEL: Record<string, string> = { "claude-opus-5-5": "anthropic/claude-opus-5-5", "openai/gpt-6.1-sol": "anthropic/openai/gpt-6.1-sol", "particle-ai/particle-1": "anthropic/particle-ai/particle-1" };
 
 export interface RunInput {
@@ -114,7 +114,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   const manifestSha = sessionManifest(manifest, label, image);
   const armTar = join(i.out, "arm.tar");
   writeFileSync(armTar, Buffer.alloc(10240));
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
+  const env = keylessEnv();
   env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
   env.PYTHONPATH = join(ROOT, "lanes/real-outcome/agent") + ":" + join(ROOT, "quick/laneb/runner/agent");
   env.PYTHONDONTWRITEBYTECODE = "1";

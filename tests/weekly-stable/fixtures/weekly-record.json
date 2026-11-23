@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "week": "2026-W48",
+  "task_set": "v1",
+  "candidate": {
+    "sha": "dd611038ca41f81fab9fa129b670852c17954b44"
+  },
+  "stable": {
+    "sha": "dd611038ca41f81fab9fa129b670852c17954b44",
+    "tag": "v1.102.2.0"
+  },
+  "window": {
+    "start": "2026-11-30T12:00:00.000Z",
+    "end": "2026-11-22T05:03:07.252Z"
+  },
+  "verdict": "INCOMPLETE",
+  "mdd_points": 5.5,
+  "interval": 0.95,
+  "models": {},
+  "areas": [],
+  "flags": [
+    "gpt-6.2-sol not run: it joins only by a later dated change, after B2's Codex rig passes its own pilot and the weekly total with Sol goes to Garry"
+  ],
+  "incomplete_reason": "no candidate: stable itself is the newest green commit",
+  "stopped_early": false,
+  "stale_after": {
+    "verdict": "2026-12-09T12:00:00.000Z",
+    "flags": "2026-12-09T12:00:00.000Z"
+  },
+  "realized": null,
+  "results_check": "not run: no session ran",
+  "prereg": "https://github.com/garrytan/gstack-evals/tree/main/wiki/plans/2026-11-22-geva-573-weekly-stable-prereg",
+  "results": "https://github.com/garrytan/gstack-evals/releases/tag/weekly-2026-w48-r1",
+  "run": "https://github.com/garrytan/gstack-evals/tree/3bfb9cec589e5dbc86b7618cd744616db923e5ba/lanes/weekly-stable",
+  "supersedes": "weekly-2026-w48"
+}

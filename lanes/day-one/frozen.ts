@@ -164,8 +164,9 @@ export const UNIT_SETS = {
 } as const;
 export type UnitSet = keyof typeof UNIT_SETS;
 
-/** The checker's own texts, which each check stage's manifest records. */
-export const CHECKER_SHA256 = sha256(JSON.stringify([CHECK_HEADER, CHECK_REPAIR, CHECK_FOOTER]));
+/** The checker's identity, which each check stage's manifest records: its own texts, its model and its limits. */
+export const checkerIdentity = (model: string, limits: { minutes: number; turns: number; usd: number }): string => sha256(JSON.stringify([CHECK_HEADER, CHECK_REPAIR, CHECK_FOOTER, model, limits]));
+export const CHECKER_SHA256 = checkerIdentity(MODELS.checker, LIMITS.check);
 export const PROMPTS_SHA256 = sha256(JSON.stringify([COMMON_ASK, REVIEW_ASK, DAY_ONE_PASS, AUTOPLAN_LINE, OWNER_NOTICE, PLATFORM, BUILD_PROMPT, CHECK_HEADER, CHECK_FOOTER, OWNER_HEAD, OWNER_RULES, OWNER_CLOSING, GATE_REPLY, ...PROBE_QUESTIONS]));
 
 /** Each planning arm's first message, its bytes and its sha256, as the prereg lists them. */

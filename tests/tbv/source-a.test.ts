@@ -164,6 +164,7 @@ test("the rebuild agrees with the real Lane B agent under the real pinned Agent 
     const install = Bun.spawnSync(["sh", "-c", 'python3 -m venv --clear "$1" && "$1/bin/pip" install -q "claude-agent-sdk==$2"', "sh", venv, pin]);
     expect(install.exitCode).toBe(0);
   }
+  writeFileSync(join(venv, ".gstack-test-fixture"), "");
   const tmp = mkdtempSync(join(tmpdir(), "tbv-sdk-"));
   const m = (role: string, content: unknown[]) => ({ type: role, message: { role, model: "claude-opus-5-5", content }, parent_tool_use_id: null, session_id: "s" });
   const script = [

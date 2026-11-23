@@ -9,7 +9,7 @@
 //   bun tbv-rule.ts admit <round.json>          round admission against an item's cap
 //   bun tbv-rule.ts headroom <readings.json> --split <manifest.json>    stage 1: NO READ, JUDGE FAIL, agreement, the band, costs
 //   bun tbv-rule.ts projection <proj.json>      stage 1 to later stages: caps from measured costs
-//   bun tbv-rule.ts allin <allin.json>          the all-in check before every paid item; for tbv-held: third Opus pass, capy drop or stop
+//   bun tbv-rule.ts allin <allin.json>          the all-in check before every paid item; for tbv-held: stage 3 with the third Opus pass, or stop
 //   bun tbv-rule.ts caps <caps.json>            the money table: each item's cap from capOf, and the sums at caps
 //   bun tbv-rule.ts compare <readings.json> --split <manifest.json> [--base <dev-base readings.json>]     dev or held-out: families,
 //                                               verdicts, flags and secondaries; a climb joins tbv-dev-base's none and current rows
@@ -31,6 +31,8 @@ export const CAP_FACTOR = 1.15, ROUND = 4, MAX_TOKENS = 4000, RETRIES = 2;
 // A reading's worst case: four sends (report, follow-up, D1, D2); the first carries at most WORST_INPUT tokens, and each later one adds max_tokens and a user turn per earlier send.
 export const SENDS = 4, WORST_INPUT = 130_000, USER_TURN = 100;
 export const LINE_USD = 2000;
+/** Amendment 2 section 7: the $2,000 line is a guideline that does not bind, the third Opus pass and the capy family stay in, and a line past $3,000 stops. tbv-r78-astra judges with GPT-6 Astra, so its check takes the $4,000 guideline (org R71) and the $5,000 stop (org R42), as the Captain ruled on 2026-11-23. */
+export const LINE_STOP_USD = 3000, ASTRA_LINE_USD = 4000, ASTRA_STOP_USD = 5000;
 /** Amendment item 11: crew spend from each thread's counter at about $1 per 1,000 credits, against the $300 crew reserve. */
 export const CREDIT_USD = 0.001, CREW_RESERVE = 300;
 /** Section 7: a seeded 20% of readings in each stage are also read by the other judge. */
@@ -123,7 +125,7 @@ const judged = (r: Reading) => r.status === "scored" || r.status === "no-report"
 /** A reading whose report turn returned text or a refusal: exposure reads its report text, whether or not a judge labelled it. */
 const reported = (r: Reading) => judged(r) || r.status === "unjudged";
 const famOf = (t: Task): Family => t.family ?? (t.source === "A" ? "investigate" : "ship");
-const SKILL: Family[] = ["investigate", "ship", "review"];
+export const SKILL: Family[] = ["investigate", "ship", "review"];
 const gstackArm = (arm: Arm) => arm === "current" || arm === "principle";
 /** The seeded double-read draw (section 7): FNV-1a on the seed and the reading's random label. The judge run picks with it and the rule checks with it. */
 export function doubleRead(label: string): boolean {
@@ -150,6 +152,9 @@ function checkPlan(rd: Readings, split: { text: string; manifest: SplitManifest 
 /** The input guards every reading command runs: a known task, no duplicate, a pass inside the plan, labels that match the key on a scored reading, a finite unsupported count of at least 0, the frozen no-report shape (no fact labels, unsupported 0), a family that matches its task, the frozen judge for its model, a second read only where the seeded draw picked it and only by the other judge with a full label count, response ids no other reading holds, and controls on known tasks with full label counts. */
 function validate(rd: Readings, passesOf: (r: Reading) => number | undefined) {
   const tasks = new Map(rd.tasks.map((t) => [t.id, t]));
+  const standIn = rd.plan.standIn;
+  if (standIn !== undefined && !(rd.stage === "held" && standIn.for === "sol" && standIn.by === "astra")) fail("E_USAGE the plan's standIn " + JSON.stringify(standIn) + " is not the R78 addendum's Astra reading (Astra for Sol, on held readings)");
+  const judgeOf = (m: Model): Judge => (standIn && JUDGE_OF[m] === standIn.for ? standIn.by : JUDGE_OF[m]);
   const keys = new Set<string>();
   const responses = new Set<string>();
   for (const r of rd.readings) {
@@ -158,7 +163,7 @@ function validate(rd: Readings, passesOf: (r: Reading) => number | undefined) {
       if (t.source !== "B") fail("E_USAGE reading " + r.id + " is a capy reading on source " + t.source + " task " + r.task + "; capy reads source B tasks only");
       if (r.model !== "opus" || !gstackArm(r.arm)) fail("E_USAGE reading " + r.id + " is capy " + r.arm + " on " + r.model + "; capy readings are Opus current or principle, and capy none is the ship reading");
     } else if (r.family !== famOf(t)) fail("E_USAGE reading " + r.id + " has family " + r.family + ", but its task " + r.task + " is family " + famOf(t));
-    if (r.judge !== JUDGE_OF[r.model]) fail("E_USAGE reading " + r.id + " is judged by " + r.judge + ", but " + r.model + " arms are judged by " + JUDGE_OF[r.model]);
+    if (r.judge !== judgeOf(r.model)) fail("E_USAGE reading " + r.id + " is judged by " + r.judge + ", but " + r.model + " arms are judged by " + judgeOf(r.model));
     if (reported(r)) {
       if (!Array.isArray(r.responseIds) || !r.responseIds.length) fail("E_USAGE reading " + r.id + " carries no response ids, so a copy could not be told from a reading");
       for (const id of r.responseIds) { if (responses.has(id)) fail("E_USAGE reading " + r.id + " shares response id " + id + " with another reading: a copied reading"); responses.add(id); }
@@ -188,7 +193,7 @@ function validate(rd: Readings, passesOf: (r: Reading) => number | undefined) {
   }
   return tasks;
 }
-const recall = (r: Reading) => (r.status === "no-report" || !r.facts.length ? 0 : r.facts.filter((f) => f.in).length / r.facts.length);
+export const recall = (r: Reading) => (r.status === "no-report" || !r.facts.length ? 0 : r.facts.filter((f) => f.in).length / r.facts.length);
 const recallAny = (r: Reading) => (r.status === "no-report" || !r.facts.length ? 0 : r.facts.filter((f) => f.any).length / r.facts.length);
 
 /** Positive agreement over the seeded double-read sample: every scored reading the draw picks on a task with facts (a clean task has no fact to agree on). */
@@ -276,10 +281,13 @@ function headroom(rd: Readings, split: { text: string; manifest: SplitManifest }
   say("Verdict: " + (r0 > BAND.hi ? "CEILING" : r0 < BAND.lo ? "FLOOR" : "HEADROOM") + " (band " + BAND.lo + " to " + BAND.hi + ")");
 }
 
-/** Amendment item 14: each judge packet is priced at stage 1's measured mean cost for its judge model and packet kind (judge:kind keys, such as sol:first); a path stage 1 did not meter is priced at the costliest metered path of the same kind. An item lists its double-read packets under the other judge. */
+/** Stage 1's judges. A judge outside them, such as Astra, is never priced from their costs. */
+const STAGE1_JUDGES: Judge[] = ["sol", "opus"];
+/** Amendment item 14: each judge packet is priced at stage 1's measured mean cost for its judge model and packet kind (judge:kind keys, such as sol:first); a path stage 1 did not meter is priced at the costliest metered path of the same kind. An item lists its double-read packets under the other judge. A judge stage 1 never ran needs its own judge:kind cost, since a pricier model would read low at another judge's cost. */
 function judgePrice(measured: Record<string, number>, judge: Judge, kind: PacketKind) {
   const m = measured[judge + ":" + kind];
   if (m !== undefined) return m;
+  if (!STAGE1_JUDGES.includes(judge)) fail("E_USAGE no measured judge cost for " + judge + ":" + kind + "; stage 1 never ran " + judge + ", so give its own " + judge + ":" + kind + " cost rather than another judge's");
   const same = Object.entries(measured).filter(([k]) => k.endsWith(":" + kind)).map(([, v]) => v);
   if (!same.length) fail("E_USAGE no measured judge cost for any " + kind + " packet (stage 1 must meter each packet kind)");
   return Math.max(...same);
@@ -318,20 +326,21 @@ function caps(c: { items: { item: string; projected: number; models?: Model[]; c
 }
 
 /** Amendment item 11: the all-in check before the first lease of every paid item, with the crew's actual spend from the thread counters. */
-export const PAID_ITEMS = ["tbv-author", "tbv-hr", "tbv-dev-base", "tbv-climb-1", "tbv-climb-2", "tbv-climb-3", "tbv-held", "tbv-held-p3"];
+export const PAID_ITEMS = ["tbv-author", "tbv-hr", "tbv-dev-base", "tbv-climb-1", "tbv-climb-2", "tbv-climb-3", "tbv-held", "tbv-held-p3", "tbv-r78-astra"];
 function allin(a: { item: string; crewCredits: number; crewRest: number; settled: number; reserved: number; unknown: number; itemCap: number; thirdPassCap?: number; capyCap?: number }) {
   if (!PAID_ITEMS.includes(a.item)) fail("E_USAGE the all-in check runs before a paid item (" + PAID_ITEMS.join(", ") + "), not " + JSON.stringify(a.item));
   for (const k of ["crewCredits", "crewRest", "settled", "reserved", "unknown", "itemCap"] as const) if (!(Number.isFinite(a[k]) && a[k] >= 0)) fail("E_USAGE the all-in check needs " + k + " as a number of at least 0");
   const crewSpent = a.crewCredits * CREDIT_USD;
   const base = crewSpent + a.crewRest + a.settled + a.reserved + a.unknown;
   say("all-in before " + a.item + ": crew spent " + usd(crewSpent) + " (" + a.crewCredits + " credits; " + usd(crewSpent) + " of the " + usd(CREW_RESERVE) + " crew reserve) + crew to come " + usd(a.crewRest) + " + settled " + usd(a.settled) + " + reserved " + usd(a.reserved) + " + unknown " + usd(a.unknown) + " = " + usd(base));
-  if (a.item !== "tbv-held") { say("Verdict: " + (base + a.itemCap <= LINE_USD ? "START " + a.item + " (" + usd(base + a.itemCap) + ")" : "NO START (to the Captain; " + usd(base + a.itemCap) + " over " + usd(LINE_USD) + ")")); return; }
-  if (!(Number.isFinite(a.thirdPassCap) && a.thirdPassCap! >= 0 && Number.isFinite(a.capyCap) && a.capyCap! >= 0 && a.capyCap! <= a.itemCap)) fail("E_USAGE the all-in check before tbv-held needs thirdPassCap and capyCap as numbers of at least 0, and capyCap no more than itemCap");
-  const heldCap = a.itemCap, thirdPassCap = a.thirdPassCap!, capyCap = a.capyCap!;
-  if (base + heldCap + thirdPassCap <= LINE_USD) { say("Verdict: STAGE 3 WITH THE THIRD OPUS PASS (" + usd(base + heldCap + thirdPassCap) + ")"); return; }
-  if (base + heldCap <= LINE_USD) { say("Verdict: STAGE 3, TWO PASSES (" + usd(base + heldCap) + ")"); return; }
-  if (base + heldCap - capyCap <= LINE_USD) { say("Verdict: STAGE 3 WITHOUT THE CAPY FAMILY (" + usd(base + heldCap - capyCap) + ")"); return; }
-  say("Verdict: NO STAGE 3 (to the Captain; " + usd(base + heldCap - capyCap) + " over " + usd(LINE_USD) + ")");
+  const held = a.item === "tbv-held";
+  if (held && !(Number.isFinite(a.thirdPassCap) && a.thirdPassCap! >= 0 && Number.isFinite(a.capyCap) && a.capyCap! >= 0 && a.capyCap! <= a.itemCap)) fail("E_USAGE the all-in check before tbv-held needs thirdPassCap and capyCap as numbers of at least 0, and capyCap no more than itemCap");
+  const [guide, stop] = a.item === "tbv-r78-astra" ? [ASTRA_LINE_USD, ASTRA_STOP_USD] : [LINE_USD, LINE_STOP_USD];
+  const total = base + a.itemCap + (held ? a.thirdPassCap! : 0);
+  say("line: " + usd(total) + " with " + (held ? "tbv-held's and the third Opus pass's caps" : a.item + "'s cap") + ", " + (total <= guide ? "under" : "over") + " the " + usd(guide) + " guideline (it does not bind); the stop is " + usd(stop));
+  const over = "(to the Captain; " + usd(total) + " over the " + usd(stop) + " stop)";
+  if (held) say("Verdict: " + (total <= stop ? "STAGE 3 WITH THE THIRD OPUS PASS (" + usd(total) + ")" : "NO STAGE 3 " + over));
+  else say("Verdict: " + (total <= stop ? "START " + a.item + " (" + usd(total) + ")" : "NO START " + over));
 }
 
 /** The MDD row for the largest tabled task count at or under n, so a smaller read never borrows a larger read's MDD; null under the smallest row. */
@@ -340,8 +349,8 @@ function mddFor(n: number, passes: number) {
   return [...rows].reverse().find(([k]) => k <= n)?.[1] ?? null;
 }
 
-/** One paired contrast b minus a over matched task-pass rows, on the non-clean tasks or, with clean, on the clean tasks only. */
-function contrast(rd: Readings, tasks: Map<string, Task>, model: Model, fams: Family[], b: Arm, a: Arm, f: (r: Reading) => number, clean = false) {
+/** The task-pass rows a contrast pairs: a's and b's readings of the same task and pass, both judged, on the non-clean tasks or, with clean, on the clean tasks only. ra[i] and rb[i] are one pair. */
+export function pairedRows(rd: Readings, model: Model, fams: Family[], b: Arm, a: Arm, clean = false) {
   const ids = new Set(rd.tasks.filter((t) => (t.stratum === "clean") === clean && (fams.includes("capy") ? t.source === "B" : fams.includes(famOf(t)))).map((t) => t.id));
   const pick = (arm: Arm, fam: Family[]) => new Map(rd.readings.filter((r) => r.model === model && r.arm === arm && ids.has(r.task) && fam.includes(r.family)).map((r) => [r.task + "#" + r.pass, r]));
   const famsB = fams.includes("capy") ? (["capy"] as Family[]) : fams;
@@ -350,8 +359,12 @@ function contrast(rd: Readings, tasks: Map<string, Task>, model: Model, fams: Fa
   const passes = fams.includes("capy") ? (rd.plan.capyPasses ?? 2) : (rd.plan.passes[model] ?? 2);
   const planned = ids.size * passes;
   const matched = [...B.keys()].filter((k) => A.has(k) && judged(B.get(k)!) && judged(A.get(k)!));
-  const coverage = planned ? matched.length / planned : 0;
-  const ra = matched.map((k) => A.get(k)!), rb = matched.map((k) => B.get(k)!);
+  return { ids, famsA, famsB, passes, planned, ra: matched.map((k) => A.get(k)!), rb: matched.map((k) => B.get(k)!) };
+}
+/** One paired contrast b minus a over matched task-pass rows, on the non-clean tasks or, with clean, on the clean tasks only. */
+function contrast(rd: Readings, tasks: Map<string, Task>, model: Model, fams: Family[], b: Arm, a: Arm, f: (r: Reading) => number, clean = false) {
+  const { ids, famsA, famsB, passes, planned, ra, rb } = pairedRows(rd, model, fams, b, a, clean);
+  const coverage = planned ? ra.length / planned : 0;
   const ca = clusterMean(ra, tasks, f), cb = clusterMean(rb, tasks, f);
   const pairs = [...ca.keys()].map((c) => ({ id: c, cluster: c, a: ca.get(c)!, b: cb.get(c)! }));
   const s = pairs.length ? clusteredPairedDelta(pairs, { seed: SEED, draws: DRAWS }) : null;
@@ -394,6 +407,7 @@ function joinBase(own: Readings, split: { text: string; manifest: SplitManifest 
 function compare(own: Readings, split: { text: string; manifest: SplitManifest }, base?: { rd: Readings; file: string; sha: string }) {
   if (own.stage === "hr") fail("E_USAGE compare reads dev or held readings");
   checkPlan(own, split);
+  if (own.plan.standIn) say("judge stand-in (R78 addendum): " + own.plan.standIn.by + "'s labels in place of " + own.plan.standIn.for + "'s on every reading " + own.plan.standIn.for + " read; second reads and controls as judged");
   const rd = joinBase(own, split, base);
   const tasks = validate(rd, (r) => (r.family === "capy" ? rd.plan.capyPasses ?? 2 : rd.plan.passes[r.model] ?? 2));
   if (rd.stage === "held" && rd.plan.controlTaskIds.length !== HELD_CONTROLS) fail("E_USAGE stage 3's plan names " + rd.plan.controlTaskIds.length + " control tasks; it runs controls on " + HELD_CONTROLS);

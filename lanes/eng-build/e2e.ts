@@ -30,9 +30,9 @@ import { paidItem, runBuilds, underLease, unitGrader } from "./pipeline.ts";
 import { removeLabelled } from "./screen.ts";
 import { claudePin, removeSessionImages, SESSION_LABEL } from "./session-image.ts";
 import { buildUnit } from "./unit.ts";
+import { dropKeyEnv } from "../../src/trial/env.ts";
 
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
-for (const k of Object.keys(process.env)) if (KEYS.test(k)) delete process.env[k];
+dropKeyEnv();
 const arg = (k: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : undefined; };
 const harbor = arg("--harbor") ?? "harbor";
 const keep = process.argv.includes("--keep");
@@ -67,7 +67,7 @@ const unitImage = built.eb.image.id;
 
 const repo = join(W, "repos", id);
 mkdirSync(repo, { recursive: true });
-const git = (dir: string, args: string[]) => spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", ...args], { encoding: "utf8" });
+const git = (dir: string, args: string[]) => spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "maintenance.auto=false", ...args], { encoding: "utf8" });
 spawnSync("sh", ["-c", 'git -C "$1" archive "$2" | tar -x -C "$3"', "sh", fx.repo, fx.sha.base!, repo]);
 git(repo, ["init", "-q", "-b", "main"]);
 git(repo, ["add", "-A"]);
