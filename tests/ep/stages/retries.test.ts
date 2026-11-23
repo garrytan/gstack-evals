@@ -129,11 +129,11 @@ describe("Carbon's stream and effort, and replies that stop", () => {
     expect(takeSpend(thrown)).toBe(2);
     expect(seen.filter((s) => s.who === "carbon")).toHaveLength(1);
   });
-  test("a 200 with an error body and no usage keeps its body beside the cache and still stops as provider drift", async () => {
+  test("a 200 with an error body and no usage keeps its body beside the cache and still stops, as a failed call", async () => {
     const seen: Seen[] = [];
     const error = { error: { code: 504, message: "A Timeout Occurred" } };
     const cache = join(root, "empty", "cache");
-    expect(await codeOf(() => author("empty", seen, (s) => (s.who === "carbon" ? Response.json(error) : undefined), cache))).toBe("E_PV_PROVIDER_DRIFT");
+    expect(await codeOf(() => author("empty", seen, (s) => (s.who === "carbon" ? Response.json(error) : undefined), cache))).toBe("E_USAGE");
     const kept = readdirSync(cache).filter((f) => f.startsWith("no-usage-"));
     expect(kept).toHaveLength(1);
     expect(JSON.parse(readFileSync(join(cache, kept[0]!), "utf8"))).toEqual(error);
