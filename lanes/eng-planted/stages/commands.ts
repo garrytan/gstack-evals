@@ -34,7 +34,7 @@ import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, settleT
 import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, CARBON_MAX_TOKENS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
 import { PIN_COMMAND } from "./pin.ts";
 import { driverCells, owedOnRefusal, setAsideRefusedGaps, stagePlan } from "./rerun-log.ts";
-import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, gateArms, hintedTodo, poolOrder, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type UnitSource } from "./pipeline.ts";
+import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, gateArms, goldBundles, hintedTodo, poolOrder, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type BundleRef, type UnitSource } from "./pipeline.ts";
 import { bundleSet } from "../readings/judge.ts";
 
 export { CASES as DRY_CASES } from "./cases.ts";
@@ -371,7 +371,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     const role = need(a, "--role") as JudgeRole;
     if (!(role in ROLE_MODEL)) fail("E_USAGE", "--role is " + Object.keys(ROLE_MODEL).join(", "));
     const r = runRecords(run, source(a));
-    const picked = a.flags.has("--bundles") ? (JSON.parse(readFileSync(a.flags.get("--bundles")!, "utf8")) as ReturnType<typeof bundleSet>) : bundleSet(r.units.filter((u) => u.set === "comparison"), r.reviews);
+    const picked = a.flags.has("--bundles") ? (JSON.parse(readFileSync(a.flags.get("--bundles")!, "utf8")) as BundleRef[]) : bundleSet(r.units.filter((u) => u.set === "comparison"), r.reviews);
     const inputs = picked.map((b) => bundleInput(run, b));
     const p = plantedPaid("judge", a, run);
     const gate = itemGate(p, run);
@@ -380,6 +380,14 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     mkdirSync(join(run, "judge"), { recursive: true });
     writeFileSync(out, JSON.stringify(results, null, 1) + "\n");
     io.out("judge " + role + ": " + results.length + " bundles, " + results.filter((x) => x.named).length + " name the planted condition, " + results.filter((x) => x.error).length + " with an error; " + out);
+    return 0;
+  };
+
+  const gold: Command["run"] = (a, io) => {
+    const g = goldBundles(runDir(a), source(a));
+    writeFileSync(need(a, "--out"), JSON.stringify(g.picked, null, 1) + "\n");
+    const n = (f: (b: BundleRef) => boolean) => g.picked.filter(f).length;
+    io.out("gold: " + g.picked.length + " bundles (smoke " + n((b) => b.smoke === true) + ", " + (["standalone", "engphase", "plain", "stock", "plan"] as const).map((s) => s + " " + n((b) => b.source === s && !b.smoke)).join(", ") + "), keyword proxy " + g.proxy.toFixed(2) + (g.short.length ? "; short: " + g.short.join(", ") : ""));
     return 0;
   };
 
@@ -398,7 +406,8 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     reviews: { run: ep(reviews), bools: [], usage: RUN + " --phase pilot|comparison [--gstack <checkout at the pin>] [--parallel n] [--policy <file>] " + PAID, summary: "the pilot's plain reviews or the comparison reviews, with the interim exposure stop (paid: ep-comparison)" },
     builds: { run: ep(builds), bools: [], usage: RUN + " --phase pilot|comparison|stock " + BUILD + " [--parallel n] " + PAID, summary: "the reviewed builds of a phase, or the stock control's (paid: ep-comparison, ep-stock)" },
     records: { run: ep(records), bools: [], usage: RUN + " --out <json>", summary: "every unit, review and build record of the run, in run order, as the readings read them" },
-    judge: { run: ep(judge), bools: [], usage: RUN + " --role judge|gold-opus|gold-gemini [--bundles <json of {unit, source, rep}>] --cache <dir> " + PAID, summary: "the judged secondary's calls over the bundle set, or over the gold set given (paid: ep-judge)" },
+    judge: { run: ep(judge), bools: [], usage: RUN + " --role judge|gold-opus|gold-gemini [--bundles <json of {unit, source, rep, smoke?}>] --cache <dir> " + PAID, summary: "the judged secondary's calls over the bundle set, or over the gold set given (paid: ep-judge)" },
+    gold: { run: ep(gold), bools: [], usage: RUN + " --out <json>", summary: "section 8's gold set over the run, with no model call: the bundles ep judge --bundles reads for the judge check" },
     owed: { run: ep(owed), bools: [], usage: "--run <dir>", summary: "set aside each build cell recorded as a gap whose retry never opened (refused, or never reaching the driver), read from the driver's log; the step's next run retries it" },
     lost: { run: ep(lost), bools: [], usage: "--run <dir> --unit <id> --reason <text>", summary: "record a comparison unit lost to infrastructure; the next reserve unit in seeded order replaces it" },
   };

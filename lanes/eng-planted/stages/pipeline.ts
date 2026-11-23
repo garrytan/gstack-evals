@@ -36,6 +36,8 @@ import { FROZEN, SIZE } from "../frozen.ts";
 import type { BuildArm, GradedBuild, PlantedGrader, PlantedUnit, ReviewArm, ReviewRecord, Reviewer, SessionOutcome, SkillArm } from "../types.ts";
 import { DETECTOR, EB_ARM, isSkillArm, plantedOpening, plantedPrompt, plantedStopHook, SKILL_ARMS, type Opening } from "./arms.ts";
 import { authorCalls, BATCH_1, BATCH_2, drawSets, hintedVerdict, mintSeed, replaceLost, seededOrder, supplyLine, unforeseeable, type AuthorCall, type AuthorMaterial, type Authored, type Candidate, type CallsRecord, type Draw, type HintedVerdict, type Want } from "./author.ts";
+import { goldSet, type GoldCandidate, type GoldPool } from "../readings/judge.ts";
+import { isGap } from "../readings/score.ts";
 import { buildKey, hasReview, isReviewed, oneRetry, readMount, reviewMount, runPlantedBuild, stockMount, writeMount, type PlantedSession } from "./build.ts";
 import { runGated, settleThrown, type ItemGate, type Kind } from "./ledger.ts";
 import { readStep, requireSteps, writeStep, type Step } from "./local.ts";
@@ -653,15 +655,52 @@ export function runRecords(run: string, src: UnitSource): RunRecords {
   return { units: ids.map((id) => drawnUnit(src, run, id)), lost, smoke, reviews, builds, hintedBuilds, unforeseeable: authored.filter((a) => a.unforeseeable).length, admitted: authored.length, hinted };
 }
 
+/** One bundle the judge or a labeller reads: a review (its rep; smoke for an exposure smoke review), or stock, none or
+ * plan. */
+export interface BundleRef {
+  unit: string;
+  source: ReviewArm | "stock" | "none" | "plan";
+  rep: number | null;
+  smoke?: boolean;
+}
+
 /** The judge's bundle for one unit and source: what that builder saw (a review's mount, the stock mount, or the
  * authored plan alone for none and plan), with the unit's hint. */
-export function bundleInput(run: string, b: { unit: string; source: ReviewArm | "stock" | "none" | "plan"; rep: number | null }): { unit: string; source: ReviewArm | "stock" | "none" | "plan"; files: Array<{ path: string; text: string }>; hint: string } {
+export function bundleInput(run: string, b: BundleRef): { unit: string; source: ReviewArm | "stock" | "none" | "plan"; files: Array<{ path: string; text: string }>; hint: string } {
   const dir = authorDir(run, b.unit);
   const hint = existsSync(join(dir, "hint.txt")) ? readFileSync(join(dir, "hint.txt"), "utf8").trim() : fail("E_USAGE", "unit " + b.unit + " has no hint in " + dir);
   let files: Array<{ path: string; text: string }>;
   if (b.source === "none" || b.source === "plan") files = [{ path: "plan.md", text: readFileSync(join(dir, "plan.md"), "utf8") }];
   else if (b.source === "stock") files = readMount(join(run, "builds", "stock", "mounts", b.unit));
-  else files = readMount(join(run, "reviews", "comparison", "mounts", reviewKey(b.unit, b.source, "opus", b.rep ?? fail("E_USAGE", "a review bundle names its rep"))));
+  else files = readMount(join(run, "reviews", b.smoke ? "smoke" : "comparison", "mounts", reviewKey(b.unit, b.source, "opus", b.rep ?? fail("E_USAGE", "a review bundle names its rep"))));
   return { unit: b.unit, source: b.source, files, hint };
+}
+
+/** Section 8's gold set over the run (readings/judge.ts goldSet): the exposure smoke's skill reviews, each skill arm's
+ * comparison reviews and the pilot's plain reviews, each in run order with gaps left out, then the comparison units'
+ * stock and plan-only bundles in the stock builds' seeded order. */
+export function goldBundles(run: string, src: UnitSource): { picked: BundleRef[]; proxy: number; short: string[] } {
+  const r = runRecords(run, src);
+  const df = readJson<DrawFile>(join(run, "draw.json")) ?? fail("E_USAGE", "no draw in " + run);
+  const pilot = new Set(r.units.filter((u) => u.pilot).map((u) => u.id));
+  const refs = new Map<string, BundleRef>();
+  const candidate = (b: BundleRef): GoldCandidate => {
+    const key = b.rep === null ? b.unit + "_" + b.source : (b.smoke ? "smoke_" : "") + reviewKey(b.unit, b.source as ReviewArm, "opus", b.rep);
+    refs.set(key, b);
+    return { key, unit: b.unit, source: b.source, bundle: bundleInput(run, b) };
+  };
+  const reviewed = (recs: ReviewRecord[], smoke: boolean) => recs.filter((x) => x.reviewer === "opus" && !isGap(x)).map((x) => candidate({ unit: x.unit, source: x.arm, rep: x.rep, ...(smoke ? { smoke } : {}) }));
+  const ids = comparisonUnits(run).units;
+  const order = cellOrder(df.seed, ids, ids.map((unit) => ({ unit, arm: "stock", rep: 1 }))).map((c) => c.unit);
+  const pools: Record<GoldPool, GoldCandidate[]> = {
+    smoke: reviewed(r.smoke, true),
+    standalone: reviewed(r.reviews.filter((x) => x.arm === "standalone"), false),
+    engphase: reviewed(r.reviews.filter((x) => x.arm === "engphase"), false),
+    plain: reviewed(r.reviews.filter((x) => x.arm === "plain" && pilot.has(x.unit) && x.rep <= SIZE.pilotK), false),
+    stock: order.map((unit) => candidate({ unit, source: "stock", rep: null })),
+    plan: order.map((unit) => candidate({ unit, source: "plan", rep: null })),
+  };
+  const g = goldSet(pools);
+  return { picked: g.picked.map((c) => refs.get(c.key)!), proxy: g.proxy, short: g.short };
 }
 
