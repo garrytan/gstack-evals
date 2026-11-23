@@ -17,8 +17,8 @@ links:
   - garrytan/gstack-evals#443
   - lanes/outcome-skills/cso/exposure.ts
 attachments:
-  - 5db5b557820b10cd3724aa03a73789aa42af49ca4315dd7df86cd76284edc5ca  kit/recount.ts.txt
-  - aa8aa9c5d4990e51a77a106860d1f1ebcf73e3cd153d7e7eca5f377e0d598fee  recount.json
+  - f6510e777c84e7ed372b051811d966d6569e27458ec011e5c3bad2dcb4cc45a9  kit/recount.ts.txt
+  - 4b1d11fe5eadeca297472f412fbecb8c6c3231065d47a46a952e3eb2ab40efa2  recount.json
 ---
 
 # Correction to the /cso advisories results: how often the procedure ran, and what stopped it
@@ -27,7 +27,7 @@ attachments:
 
 - **We learned that one refusal in /cso's start helper stopped every Opus 5.5 session where the /cso procedure didn't run.** In all 12 of those sessions, the first `start` was refused with "Symlink or special source file" (UNSAFE_PATH), because the repository holds a symlink such as an editor rules file or a version pin. Opus tried `--paths` to work around it and never got a run. **gstack's maintainers should fix the symlink check, including how it ignores `--paths`, before the cso arm is rerun.** It is a cheaper and more certain fix than anything else the results post points to.
 - **We learned that the exposure detector counted fewer /cso runs than the plan's written rule gives.** Read from the raw transcripts with section 8 as written, the procedure ran in 40 of 52 Opus sessions (76.9%) and 52 of 52 particle-1 sessions, not 37 and 40. Opus is still under the 80% rule, so its row and the overall verdict stay FIX-METHOD. Where the procedure ran, /cso still named fewer advisories: 3 of 40 against 10 of 39 for the plain audit. **You should check a transcript-based exposure measure against the tool's own records,** because models trim tool output, and that trimming hid runs here.
-- **We learned that, under the written rule, particle-1's own line reads CUT-CANDIDATE.** /cso named 7 of 52 advisories against 13 of 52 for the plain audit, -11.5 points (95% interval -26.5 to +1.9). The interval rules out a gain of 15 points or more, and the plan's step 4 calls that a cut candidate on a null. It is a split from Opus, and the plan rests the /cso verdict on Opus (section 11), so the verdict for /cso stays FIX-METHOD. Read it with two caveats: power is thin (the smallest difference this test could reliably see is about 21 points), and particle-1 got past the symlink refusal in 11 sessions only by moving, deleting or replacing the repository's symlinks, which Opus never did.
+- **We learned that, under the written rule, particle-1's own line reads CUT-CANDIDATE.** /cso named 7 of 52 advisories against 13 of 52 for the plain audit, -11.5 points (95% interval -26.5 to +1.9). The interval rules out a gain of 15 points or more, and the plan's step 4 calls that a cut candidate on a null. It is a split from Opus, and the plan rests the /cso verdict on Opus (section 11), so the verdict for /cso stays FIX-METHOD. Read it with two caveats: power is thin (the smallest difference this test could reliably see is about 21 points), and particle-1 got past the symlink refusal in 11 sessions after moving, deleting or replacing the repository's symlinks, which Opus never did.
 
 This post supersedes [the results post](../2026-11-23-geva-561-cso-advisories-results/README.md) (#443) for the figures listed below. Every other figure there stands as published. Merged posts don't change, so that post's body stays as it merged and only its status moves to superseded.
 
@@ -41,8 +41,11 @@ This post supersedes [the results post](../2026-11-23-geva-561-cso-advisories-re
 | particle-1: helper run started | 43/52 | 52/52 | No |
 | Opus exploratory split, named where the procedure ran | cso 2/37, plain 9/37 | cso 3/40, plain 10/39 | No (descriptive) |
 | Opus exploratory split, named where it didn't run | cso 1/15, plain 3/14 | cso 0/12, plain 2/12 | No (descriptive) |
-| Opus: cso sessions with no finding, where it ran | 16/37 | 18/40 | No (descriptive) |
+| Opus: cso sessions with no finding, ran / didn't run | 16/37 / 14/15 | 18/40 / 12/12 | No (descriptive) |
 | Opus: cso findings per session, ran / didn't run | 1.0 / 0.07 | 0.95 / 0.00 | No (descriptive) |
+| particle-1 exploratory split, cso named, ran / didn't run | 5/40 / 2/12 | 7/52 / no sessions | No (descriptive) |
+| particle-1: cso sessions with no finding, ran / didn't run | 14/40 / 7/12 | 21/52 / no sessions | No (descriptive) |
+| particle-1: cso findings per session, ran / didn't run | 2.2 / 1.3 | 2.02 / no sessions | No (descriptive) |
 | Opus: procedure stopped short | 15 of 52 sessions | 12 of 52 sessions, all stopped by the symlink refusal | No |
 | particle-1: helper completeness at finish | partial 39, none recorded 13 | partial 49, none recorded 3 | No |
 | particle-1: findings submitted to the helper | 65, from 24 sessions | 69, from 27 sessions | No |
@@ -78,7 +81,7 @@ All 12 Opus sessions where the procedure didn't run are the ones that never star
 
 Neither cause suspected earlier explains any of them. The 64 MiB source cap refused none of their starts: every start in the 12 was refused for the symlink or the `--paths` limit. And none of the 12 reached `inspect`, so a Bash output cap on its inventory can't explain them either.
 
-particle-1 hit the same refusal on its first `start` in 11 sessions, and started a run in all 11. Each one first moved, deleted or replaced the symlinks, in the checked-out repository or in a copy of it. So those particle-1 runs audited a tree whose symlinks had changed. The plan has no rule for this, and this post doesn't adjust for it.
+particle-1 hit the same refusal on its first `start` in 11 sessions, and started a run in all 11. recount.json flags all 11 as running `rm`, `mv`, `unlink` or `cp` between the refusal and the start the helper accepted; that count doesn't check what the command touched. Reading each of those commands and its output in the held-out transcripts, every one moved, deleted or replaced the symlinks the helper had refused (or every symlink in the tree), in the checked-out repository or in a copy of it that the accepted start then audited. That reading is ours and isn't in the published count. So those particle-1 runs audited a tree whose symlinks had changed. The plan has no rule for this, and this post doesn't adjust for it.
 
 ## The particle-1 line, in plain words
 
@@ -92,7 +95,7 @@ Three limits sit beside it:
 
 ## How we recounted
 
-From the GEVA-561 export of 2026-11-23: stage2.tgz rejoined from its four parts and checked against TGZ.sha256 (OK), read only for the 104 cso transcripts (sdk-messages.jsonl) and nothing sealed. kit/recount.ts.txt reads each transcript twice with the repository's own `csoExposure`: once as run, and once after closing the two gaps above in the records it reads (adding the run id to a start's output when a later call used that run and the run's timestamp falls within 60 seconds before the start's snapshot event; clearing the error flag on a finish that printed `"status": "finished"` or exit 0 and no helper refusal). It refuses to finish if closing a gap removes a run. It then runs the plan's verdict code (`analyze` in lanes/outcome-skills/cso/analysis/verdicts.ts) on the published scores and session table, once with each count, and counts the symlink refusals. Its output is recount.json. As run, it reproduces every published figure: 37/52 and 40/52, -17.6 [-31.1, -5.9] and -11.5 [-26.5, +1.9], Holm 0.012 and 0.107, FIX-METHOD on both, and the exposure rows above. The judge inputs are set as the results post reports them: the fallback route passed on named and on the supported label, and headroom was admitted.
+From the GEVA-561 export of 2026-11-23: stage2.tgz rejoined from its four parts and checked against TGZ.sha256 (OK), read only for the 104 cso transcripts (sdk-messages.jsonl) and nothing sealed. kit/recount.ts.txt reads each transcript twice with the repository's own `csoExposure`: once as run, and once after closing the two gaps above in the records it reads (adding the run id to a start's output when a later call used that run and the run's timestamp falls within 60 seconds before the start's snapshot event; clearing the error flag on a finish that printed `"status": "finished"` or exit 0 and no helper refusal). It refuses to finish if closing a gap removes a run, or if the transcripts read don't match the session table's cso rows one for one. It then runs the plan's verdict code (`analyze` in lanes/outcome-skills/cso/analysis/verdicts.ts) on the published scores and session table, once with each count, and counts the symlink refusals. Its output is recount.json, with each row's Holm p value. As run, it reproduces every published figure: 37/52 and 40/52, -17.6 [-31.1, -5.9] and -11.5 [-26.5, +1.9], Holm 0.012 and 0.107, FIX-METHOD on both, and the exposure rows above. The judge inputs are set as the results post reports them: the fallback route passed on named and on the supported label, and headroom was admitted.
 
 The transcripts are held out (below), so the first command needs the export:
 

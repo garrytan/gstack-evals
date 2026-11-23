@@ -51,7 +51,8 @@ function closeGaps(recs: Rec[]): { cut: boolean; flagged: number } {
   return { cut, flagged };
 }
 
-/** The start helper's symlink refusal: first start refused, later starts, and whether the repository's files were moved. */
+/** The start helper's symlink refusal: first start refused, later starts, and whether a Bash command ran rm, mv, unlink or
+ *  cp between the refusal and the accepted start. That count only flags the sessions to read; it doesn't check operands. */
 function symlink(recs: Rec[]) {
   const evs = events(recs), calls = helperCalls(evs);
   const starts = calls.filter((c) => c.op === "start");
@@ -64,7 +65,7 @@ function symlink(recs: Rec[]) {
     prefixLimit: later.some((c) => REFUSAL.exec(c.out)?.[1] === "INVALID_ARGUMENT" && /32 prefixes/.test(c.out)),
     pathsRefused: later.some((c) => REFUSAL.exec(c.out)?.[1] === "UNSAFE_PATH" && /--paths/.test(cmdAt(c.at))),
     started: !!ok,
-    moved: between.some((c) => /(^|[;&|\s])(rm|mv|unlink|cp)\s/.test(c) && !/gstack-cso-launcher/.test(c.split(/[;&|]/)[0] ?? "")),
+    fileCommand: between.some((c) => /(^|[;&|\s])(rm|mv|unlink|cp)\s/.test(c) && !/gstack-cso-launcher/.test(c.split(/[;&|]/)[0] ?? "")),
   };
 }
 
@@ -81,7 +82,7 @@ for (const model of ["opus", "particle"]) {
   };
   const rowsFrozen = table(), rowsWritten = table();
   const t = { sessions: 0, frozen_started: 0, frozen_ran: 0, written_started: 0, written_ran: 0, cut_start: 0, flagged_finish: 0, added: 0,
-    symlink: { refused_first: 0, prefix_limit: 0, paths_refused: 0, both: 0, started_after: 0, moved_before_start: 0 } };
+    symlink: { refused_first: 0, prefix_limit: 0, paths_refused: 0, both: 0, started_after: 0, file_command_before_start: 0 } };
   for (const unit of readdirSync(sessions).sort()) {
     const f = join(sessions, unit, "cso-" + model + "-0", "sdk-messages.jsonl");
     if (!existsSync(f)) continue;
@@ -95,7 +96,7 @@ for (const model of ["opus", "particle"]) {
       if (s.pathsRefused) t.symlink.paths_refused++;
       if (s.prefixLimit && s.pathsRefused) t.symlink.both++;
       if (s.started) t.symlink.started_after++;
-      if (s.started && s.moved) t.symlink.moved_before_start++;
+      if (s.started && s.fileCommand) t.symlink.file_command_before_start++;
     }
     const g = closeGaps(recs);
     const written = csoExposure(recs).exposure;
@@ -117,6 +118,8 @@ for (const model of ["opus", "particle"]) {
 const scores = jsonl(join(bundle, "stage2-scores.jsonl"));
 const [head, ...rows] = readFileSync(join(bundle, "stage2-sessions.tsv"), "utf8").trim().split("\n").map((l) => l.split("\t"));
 const tsv = rows.map((r) => Object.fromEntries(head!.map((k, i) => [k, r[i]])));
+const missing = tsv.filter((r) => r.arm === "cso" && !ran.has(r.model + "|" + r.unit));
+if (missing.length || ran.size !== tsv.filter((r) => r.arm === "cso").length) throw new Error("the transcripts and the session table don't match: " + missing.length + " cso rows have no transcript, " + ran.size + " transcripts read");
 const repo = new Map(scores.map((s) => [s.unit, s.repo]));
 const units = [...new Set(tsv.map((r) => r.unit!))].map((unit) => ({ unit, repo: repo.get(unit) }));
 const named = new Map(scores.map((s) => [s.model + "|" + s.unit + "|" + s.arm, s]));
@@ -126,7 +129,7 @@ const verdicts = (written: boolean) => {
   const a = analyze({ units: units as never, sessions: ss as never, scores: scores as never, headroom_admitted: true,
     judge: { opus: { named: true, validity: true }, particle: { named: true, validity: true } } as never }, loadCsoPrereg());
   return a.rows.map((r, k) => ({ model: r.model, procedure: r.stats.procedure.ran + "/" + r.stats.procedure.of, row: a.verdicts[k]!.row,
-    delta: r.stats.complete.delta, ci95: r.stats.complete.ci95, mdd_points: r.mdd_points, verdict: a.verdicts[k]!.verdict, step: a.verdicts[k]!.step, why: a.verdicts[k]!.why }));
+    delta: r.stats.complete.delta, ci95: r.stats.complete.ci95, p_holm: r.p_holm, mdd_points: r.mdd_points, verdict: a.verdicts[k]!.verdict, step: a.verdicts[k]!.step, why: a.verdicts[k]!.why }));
 };
 const split: Record<string, string> = {};
 for (const model of ["opus", "particle"]) for (const r of [true, false]) {
