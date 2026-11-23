@@ -130,6 +130,7 @@ describe("cso sessions: the record", () => {
     ];
     expect(openedPaths(v, "/work/repo")).toEqual(["api/x.go", "api/y.go", "web/x.go", "web/y.go", "src/*.c"]);
     expect(openedPaths([bash('L=~/.claude/skills/gstack/bin/gstack-cso-launcher; R=1795273710354-cc00549a7600619a; for f in "src/*.h"; do $L read $R $f; done')], "/work/repo")).not.toContain("src/*.h");
+    expect(openedPaths([bash('L=~/.claude/skills/gstack/bin/gstack-cso-launcher; R=1795273710354-cc00549a7600619a; for d in api web; do for f in "*.go" $(ls); do wc -l $f; done; $L read $R $d/x.go; done')], "/work/repo")).toEqual(["api/x.go", "web/x.go"]);
   });
   test("model id and harness version come from the session's own init record, never the plan", () => {
     expect(sessionIdentity(recs)).toEqual({ model_id: "claude-opus-5-5-20261101", harness_version: "2.1.325" });
