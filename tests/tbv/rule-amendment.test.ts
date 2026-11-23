@@ -2,6 +2,7 @@
 // Amendment 1's rule items in the scorer: 11 (all-in before every paid item), 12 (size drops), 13 (outage stops),
 // 14 (judge pricing by judge model and packet kind), 15 (the leak exemption) and 17 (the max_tokens end state).
 import { describe, expect, test } from "bun:test";
+import { capOf, readingWorst } from "../../lanes/tbv/rule.ts";
 import { line, rule, stage1 } from "./rule-helpers.ts";
 
 const ends = (...cases: { kind: string; turn: string }[][]) => rule("endstate", { cases }).out.split("\n");
@@ -46,7 +47,8 @@ describe("item 13: an outage stop", () => {
 });
 
 const PRICES = { opus: { in: 4, out: 20, cacheWrite: 5 }, sol: { in: 2, out: 10, cacheWrite: 2.5 }, particle: { in: 0.1, out: 1 } };
-const proj = (packets: { judge: string; kind: string; n: number }[], judgeMeasured: Record<string, number>) => rule("projection", { items: [{ item: "tbv-dev-base", readings: [], packets }], measured: {}, judgeMeasured, prices: PRICES });
+const ASTRA = { in: 8, out: 40, cacheWrite: 10 };
+const proj = (packets: { judge: string; kind: string; n: number }[], judgeMeasured: Record<string, number>, prices: Record<string, unknown> = PRICES) => rule("projection", { items: [{ item: "tbv-dev-base", readings: [], packets }], measured: {}, judgeMeasured, prices });
 
 describe("item 14: judges priced by judge model and packet kind", () => {
   test("each packet takes its own judge and kind's measured cost", () => {
@@ -60,10 +62,22 @@ describe("item 14: judges priced by judge model and packet kind", () => {
     const r = proj([{ judge: "astra", kind: "first", n: 10 }], { "sol:first": 0.1, "opus:first": 0.5 });
     expect(r.refused).toBe(true);
     expect(r.err).toContain("no measured judge cost for astra:first");
-    expect(proj([{ judge: "astra", kind: "first", n: 10 }], { "sol:first": 0.1, "opus:first": 0.5, "astra:first": 0.4 }).out).toContain("projected $4.00");
+    expect(proj([{ judge: "astra", kind: "first", n: 10 }], { "sol:first": 0.1, "opus:first": 0.5, "astra:first": 0.4 }, { ...PRICES, astra: ASTRA }).out).toContain("projected $4.00");
   });
   test("a kind stage 1 never metered is refused", () => {
     expect(proj([{ judge: "opus", kind: "control", n: 1 }], { "sol:first": 0.1 }).err).toContain("no measured judge cost for any control packet");
+  });
+  test("a judge-only item, such as tbv-r78-astra, prices its round at its judge's price row", () => {
+    const worst = 4 * readingWorst({ inputTokens: 130_000, price: ASTRA });
+    const r = proj([{ judge: "astra", kind: "first", n: 10 }], { "astra:first": 0.4 }, { ...PRICES, astra: ASTRA });
+    expect(r.out).toContain("tbv-dev-base: projected $4.00, round worst case $" + worst.toFixed(2) + ", cap $" + capOf(4, worst).toFixed(2));
+    expect(r.out).not.toContain("Infinity");
+  });
+  test("other direction: a judge-only item with no price row for its judge is refused, never capped at -Infinity", () => {
+    const r = proj([{ judge: "astra", kind: "first", n: 10 }], { "astra:first": 0.4 });
+    expect(r.refused).toBe(true);
+    expect(r.err).toContain("no price for astra");
+    expect(r.out).not.toContain("Infinity");
   });
 });
 
