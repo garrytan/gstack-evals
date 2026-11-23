@@ -1,0 +1,6 @@
+import { readKey, unseal } from "./lanes/outcome-skills/cso/analysis/readout.ts";
+import { writeFileSync } from "node:fs";
+const [file, key, sha, out] = process.argv.slice(2);
+const opened = unseal(file!, readKey(key!), sha!);
+writeFileSync(out!, JSON.stringify(opened, null, 1) + "\n");
+console.log("opened " + file + " against " + sha!.slice(0, 12) + " into " + out);

@@ -473,6 +473,46 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OHR_DRYRUN_FAIL](#e_ohr_dryrun_fail) | 2 | U20 |
 | [E_OHR_PREFLIGHT_FAIL](#e_ohr_preflight_fail) | 2 | U20 |
 | [E_OHR_MODEL_DRIFT](#e_ohr_model_drift) | 2 | U20 |
+| [E_CSO_PREREG](#e_cso_prereg) | 2 | U20 |
+| [E_CSO_UNIT_IDS](#e_cso_unit_ids) | 2 | U20 |
+| [E_CSO_UNIT_FRAME](#e_cso_unit_frame) | 2 | U20 |
+| [E_CSO_ADVISORY](#e_cso_advisory) | 2 | U20 |
+| [E_CSO_DROP_FIX_DATE](#e_cso_drop_fix_date) | 2 | U20 |
+| [E_CSO_DROP_FETCH_LAZY](#e_cso_drop_fetch_lazy) | 2 | U20 |
+| [E_CSO_DROP_SCAN](#e_cso_drop_scan) | 2 | U20 |
+| [E_CSO_DROP_FETCH](#e_cso_drop_fetch) | 2 | U20 |
+| [E_CSO_DROP_SAME_FIX](#e_cso_drop_same_fix) | 2 | U20 |
+| [E_CSO_DROP_CWE](#e_cso_drop_cwe) | 2 | U20 |
+| [E_CSO_DROP_ANSWER_KEY](#e_cso_drop_answer_key) | 2 | U20 |
+| [E_CSO_DROP_CONTAINMENT](#e_cso_drop_containment) | 2 | U20 |
+| [E_CSO_SUPPLY](#e_cso_supply) | 2 | U20 |
+| [E_CSO_DRAW](#e_cso_draw) | 2 | U20 |
+| [E_CSO_ARM](#e_cso_arm) | 2 | U20 |
+| [E_CSO_SESSION](#e_cso_session) | 2 | U20 |
+| [E_CSO_CAP_STOP](#e_cso_cap_stop) | 2 | U20 |
+| [E_CSO_STOP_SAFETY](#e_cso_stop_safety) | 2 | U20 |
+| [E_CSO_STOP_LIMIT](#e_cso_stop_limit) | 2 | U20 |
+| [E_CSO_GAP_UPSTREAM](#e_cso_gap_upstream) | 2 | U20 |
+| [E_CSO_GAP_INFRA](#e_cso_gap_infra) | 2 | U20 |
+| [E_CSO_RERUN_PRECONDITION](#e_cso_rerun_precondition) | 2 | U20 |
+| [E_CSO_RERUN_UNWIRED](#e_cso_rerun_unwired) | 2 | U20 |
+| [E_CSO_FINALIZE_HALT](#e_cso_finalize_halt) | 2 | U20 |
+| [E_CSO_E2E_FAIL](#e_cso_e2e_fail) | 2 | U20 |
+| [E_CSO_SCAN](#e_cso_scan) | 2 | U20 |
+| [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
+| [E_CSO_DROP_INSTALL_DEP](#e_cso_drop_install_dep) | 2 | U20 |
+| [E_CSO_RELEASE](#e_cso_release) | 2 | U20 |
+| [E_CSO_SCORE_INPUT](#e_cso_score_input) | 2 | U20 |
+| [E_CSO_JUDGE_ROUTE](#e_cso_judge_route) | 2 | U20 |
+| [E_CSO_JUDGE_TRANSPORT](#e_cso_judge_transport) | 2 | U20 |
+| [E_CSO_PACKET](#e_cso_packet) | 2 | U20 |
+| [E_CSO_CHECK_INPUT](#e_cso_check_input) | 2 | U20 |
+| [E_CSO_ANCHOR](#e_cso_anchor) | 2 | U20 |
+| [E_CSO_ANALYSIS_INPUT](#e_cso_analysis_input) | 2 | U20 |
+| [E_CSO_READOUT_KEY](#e_cso_readout_key) | 2 | U20 |
+| [E_CSO_READOUT_OUT](#e_cso_readout_out) | 2 | U20 |
+| [E_CSO_PROVIDER_DRIFT](#e_cso_provider_drift) | 2 | U20 |
+| [E_CSO_EXPORT](#e_cso_export) | 2 | U20 |
 | [E_OHR_TAP](#e_ohr_tap) | 2 | U20 |
 | [E_CODEX_CAPTURE](#e_codex_capture) | 2 | U20 |
 | [E_CODEX_C_NO_ROLLOUT](#e_codex_c_no_rollout) | 2 | U20 |
@@ -3725,6 +3765,326 @@ Office-hours rewrite eval (pre-run change 4): a reply named a model other than t
 Fix: Keep the journal and the transcript that show the reported model, and send the question to the Captain. Never retry the item on another model or route.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_PREREG
+
+The /cso real-advisory eval found no usable preregistration: its prereg.json is missing, is not cso-advisories-prereg.v1, lacks an unsigned 32-bit integer seed, or lacks a text or a unit list.
+
+Fix: prereg.json changes only through a dated pre-data change post. Nothing runs on values chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_UNIT_IDS
+
+A /cso eval unit's containment ids are malformed: its GHSA id, a CVE id of its advisory at the pinned advisory database, or its fix commit (40 hex characters) has the wrong shape, so a scan for it would find nothing by construction.
+
+Fix: Rebuild the unit's record from the pinned advisory database and b2-frame.json; never scan with a hand-typed id.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_UNIT_FRAME
+
+The /cso eval's candidate list does not match its frame: b2-frame.json's sha256 differs from prereg.json's frame pin, or a unit id in part1_h2h or part2_added has no row there.
+
+Fix: Restore b2-frame.json at the pinned sha256. The candidate order changes only through a dated pre-data change post.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ADVISORY
+
+A /cso eval advisory record could not be read at the pinned advisory-database commit: the fetch failed, the reply was not JSON, or its id differs from the frame row's GHSA id.
+
+Fix: Read it again from raw.githubusercontent.com at the pinned commit (or a checkout at that commit). A unit never builds from an advisory read anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_FIX_DATE
+
+Section 3, gate 1: the fix commit's committer date (UTC) is before 2026-07-01, so the unit could sit inside a model's training data. The unit is not usable and takes no position.
+
+Fix: None for the unit: it is dropped by rule. Report it in the gate table.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_FETCH_LAZY
+
+Section 3, gate 2's named repair: the session tree's checkout failed in the blobless clone (a lazy blob fetch from the promisor remote), and failed again after one full re-clone of that repository. The unit is not usable and takes no position.
+
+Fix: None for the unit. The build records the drop and goes on; read both failures in the gate row's reason.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_SCAN
+
+Section 3, gate 6, failing closed for one unit: the id scan of the unit's session tree did not finish (a git object store under it that git cannot read, or a tool that failed), so the tree can't be shown free of the unit's ids. The unit is not usable and takes no position.
+
+Fix: None for the unit. The build records the drop and goes on; the gate row's reason names the step that failed. A scan of an arm's installed home that does not finish still refuses (E_CSO_SCAN).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_FETCH
+
+Section 3, gate 2: the repository did not clone, or the fix commit or its first parent is missing from it, or the frame's parent is not the fix's first parent. The unit is not usable and takes no position.
+
+Fix: None for the unit when the repository or commit is gone. A network failure is retried before the gate records the drop.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_SAME_FIX
+
+Section 3, gate 3: an earlier usable unit has the same fix commit or the same parent tree, so the two units would audit one tree. The later unit is not usable.
+
+Fix: None: it is dropped by rule. The earlier unit keeps its position.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_CWE
+
+Section 3, gate 4: the advisory lists no CWE id at the pinned advisory-database commit, so the class rule has nothing to match. The unit is not usable.
+
+Fix: None: it is dropped by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_ANSWER_KEY
+
+Section 3, gate 5: no non-test source file of the fix exists at the parent with a changed line of code (it only adds files, or its source changes are only whitespace, blank lines or comment lines), so the location rule has no pre-fix hunk to test. The unit is not usable.
+
+Fix: None: it is dropped by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_CONTAINMENT
+
+Section 3, gate 6: the unit's one-commit session tree holds its GHSA id, a CVE id of its advisory or its fix commit's first 12 hex characters (in a file, a git object store or an archive two levels deep). The unit is not usable; the record names the path.
+
+Fix: None: it is dropped by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_SUPPLY
+
+The /cso eval's unit build ran out of candidates before it filled every position the plan can use (stage 0, stage 1, one re-pilot block, stage 2 up to its cap and the reserves). The message gives the count filled and the count needed.
+
+Fix: Send the count to the Captain before any paid call (section 12's supply rule). Never widen the candidate list by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DRAW
+
+A /cso eval draw was asked for something the plan does not allow: n2 outside 48 to 100 or not a multiple of 4, a re-pilot restriction other than floor or ceiling, or more positions than the built units fill.
+
+Fix: Read section 12's cost and headroom rules and ask for a draw they allow.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ARM
+
+A /cso eval arm is not the frozen one: a gstack home lacks a pinned file or holds it at another sha256, the clean-room home holds a gstack checkout, the home's tree hash differs from its install record, or a Codex arm was asked to run at latest or with no recorded model or CLI version.
+
+Fix: Reinstall the arm with its recipe at prereg.json's pin and verify it again. A Codex arm takes its model and CLI version from the session record.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_SESSION
+
+A /cso eval session was asked to run on inputs the plan does not allow: an arm or model with no route or entry, an allowance other than the model's or twice it, or a transcript with no init record naming the model and Claude Code version.
+
+Fix: Run the session from the plan's arms, models and limits; read the model id and harness version from the session's own init record.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_CAP_STOP
+
+A /cso eval session's slot was refused at its item's cap. The item ends incomplete and the session is not retried; the record names every unit left unpaired, since sessions from more than one unit can be in flight when the stop lands.
+
+Fix: Report the item as incomplete. A cap stop is never retried to change a verdict; a new line needs the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_STOP_SAFETY
+
+Section 9: a provider's safety system ended a /cso eval session (Anthropic's refusal stop, Claude Code's refusal fallback refused at the proxy, or OpenAI's cyber-policy refusal on Sol). It is a result: the session is scored on the assistant text before the stop and counted per arm.
+
+Fix: None: report it per arm as its own outcome, apart from model failures.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_STOP_LIMIT
+
+Section 9: a /cso eval session reached its wall time (2,700 seconds), its 200 turns or its allowance. It is scored on the assistant text it has.
+
+Fix: None: report limit counts per cell.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_GAP_UPSTREAM
+
+Section 9: a /cso eval session ended on a provider or proxy error twice (the first got one whole-session retry from a fresh container). The session is a gap: the unit leaves that contrast's complete-pair estimate and the gap bounds fill it.
+
+Fix: Report it per cell. More than 10% of a cell's units with gaps makes the cell incomplete.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_GAP_INFRA
+
+Section 9: a /cso eval session failed on infrastructure twice (the first got one rerun), or its capture failed. The session is a gap.
+
+Fix: Read the attempt's harbor.log and summary, name the harness repair, and report the gap per cell.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_RERUN_PRECONDITION
+
+gstack-evals cso rerun refused a precondition before any spend (exit 3): the units file is missing, unreadable or holds no unit ids, or the arm does not run on that model in any stage (untold runs on Opus in stages 0 and 1 only).
+
+Fix: Fix the named input and run again; --dry-run checks it without spending.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_RERUN_UNWIRED
+
+gstack-evals cso rerun has no session runner wired yet, so only --dry-run works.
+
+Fix: Wire the Harbor session runner into lanes/outcome-skills/cso/cli.ts before a real run; until then use --dry-run.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_FINALIZE_HALT
+
+A /cso eval session closed with its metering proxy's finalize failed, or its attempt opened a slot and left no summary, so its allowance stops and spend are unknown. The driver halts the item: nothing more opens on it, and the session gets no retry and no record.
+
+Fix: Bring the proxy journal the message names to the Captain. Once the Captain rules on the session, relaunch the driver with --lift-halt &lt;session>.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_E2E_FAIL
+
+A line of the /cso lane's keyless end-to-end run printed FAIL: on a fixture tree in Harbor containers against a fake provider, a session did not end completed with DONE, its slot did not close finalized, a runtime was not on PATH, its record lacks the reported model or Claude Code version, its exposure read wrong for its arm, or the driver did not stop clean.
+
+Fix: Read the FAIL line and the session dir it names, fix the cause, and run the end-to-end run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CSO_SCAN
+
+A /cso eval id scan did not finish: the tree is missing, a find, grep or git cat-file step failed, or the scan script exited non-zero. Containment fails closed, so no unit counts as clean on that tree.
+
+Fix: Read the failed step in the message, repair the tree or the tool, and scan again from the start. A store git cannot read is never skipped.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_INSTALL_ID
+
+Deviation (a): a /cso eval unit's GHSA id, a CVE id of its advisory or its fix commit's first 12 hex characters appears in an arm's installed gstack tree (a file, a git object or an archive two levels deep). The unit drops from every cell, so pairing holds; the record names the arm, the path and the id.
+
+Fix: None for the unit: it is dropped by rule and the draw moves to the next usable position. Report the drop per arm in the results.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_INSTALL_DEP
+
+Deviation (c): an arm's installed gstack tree holds a /cso eval unit's affected package at or past its fixed version (in bun.lock, package-lock.json, yarn.lock, pnpm-lock.yaml, an installed node_modules package.json, Cargo.lock or go.sum), so that arm carries the fixed code of the library under audit. The unit drops from every cell; the 16 such units at gstack's pin drop by name before the draw.
+
+Fix: None for the unit: it is dropped by rule and the draw moves to the next usable position. Report the drop per arm, with the file and version behind it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_RELEASE
+
+Deviation (b): a /cso eval stage 1 release was asked to carry a judge-check field beyond whether each gold minimum was met and whether each gate passed (a count, a kappa value, a rate or a per-class figure), or lacked a minimum or gate the plan names.
+
+Fix: Release only the booleans deviation (b) allows; everything else stays in the sealed file until stage 2's analysis opens it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_SCORE_INPUT
+
+The /cso eval scorer was handed input it can't score: prereg.json lacks a scoring constant or its redaction list is malformed, a session was scored against another unit, a session with assistant text came with no judge result, or the labels don't match the counted findings one for one.
+
+Fix: Score each session against its own unit record and its own pass A and pass B results; never fill a missing label by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_JUDGE_ROUTE
+
+A /cso eval judge or labeller route names a model with no client, a price row that is missing or not pinned to google-vertex, or a gold pair that is not two labellers.
+
+Fix: Judge routes come from prereg.json judge.production, gold_labellers and fallback through JUDGE_MODELS (lanes/outcome-skills/cso/judge/client.ts); add a model there only with a dated plan change.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_JUDGE_TRANSPORT
+
+A /cso eval judge or labeller call came back with an HTTP status other than 200 from its transport, so it has no reply to parse.
+
+Fix: Read the metering proxy's log for that call. A malformed reply is retried once and then is a judge gap; a transport failure is the run driver's to retry or stop.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_PACKET
+
+A /cso eval pass B packet could not be built: prereg.json lacks scoring.excerpt_lines or judge.max_input_tokens.
+
+Fix: prereg.json changes only through a dated pre-data change post.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_CHECK_INPUT
+
+A /cso eval judge check set is malformed: a report id is listed twice, or anchors are more than anchor_share_max of the check set as sent.
+
+Fix: Build the check set once from the stage 0 and stage 1 reports and at most the anchors the share cap allows.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ANCHOR
+
+A /cso eval anchor or format variant can't be written for a unit: no pre-fix hunk lies in a file of the audited tree, no weakness family is free of the advisory's CWE ids, or no line of the fix file sits 30 lines from every hunk.
+
+Fix: Use another stage 1 unit for the format variants, in check_seed order, and record the unit that couldn't host one.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ANALYSIS_INPUT
+
+The /cso eval analysis or stage 1 readout was handed input it can't use: a unit listed twice, two scores for one unit, arm and model, a score for a unit outside the stage, a cell with no stage 1 cost, or a prereg.json analysis, headroom, limits or interim-look constant missing.
+
+Fix: Feed the analysis one score per unit, arm and model from the scorer, with the stage's own unit list; prereg.json changes only through a dated pre-data change post.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_READOUT_KEY
+
+The /cso eval stage 1 readout key is unusable: missing, inside this repository or a git work tree, readable by group or others, the wrong length, or not the key the sealed file was written with.
+
+Fix: Mint a fresh 32-byte key in the sealed store outside any work tree, mode 0600, before the readout runs; keep it until stage 2's analysis opens the file.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_READOUT_OUT
+
+The /cso eval sealed stage 1 file can't be written or opened: it already exists, can't be created, is not a cso-sealed.v1 file, or doesn't match the sha256 the run record holds.
+
+Fix: A sealed file is written once and never overwritten. Open it only with the recorded sha256 after stage 2's analysis.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_PROVIDER_DRIFT
+
+A /cso eval judge or labeller call through OpenRouter (Gemini 4 Carbon or Argon) was served by a provider other than google-vertex, the route prereg.json pins.
+
+Fix: Stop the judge send and ask the Captain. Never accept a reply from another provider, and never unpin the route.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_EXPORT
+
+The /cso eval export refused: --run is not a directory, --out already exists or overlaps --run, the readout key sits under --run, a file in the run holds the key's bytes, or a run file would collide with MANIFEST.sha256 or scored-texts.jsonl.
+
+Fix: Export a finished run dir to a new dir outside it, with the readout key kept in the sealed store outside the run; move any file that holds the key out of the run first.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_OHR_TAP
 
