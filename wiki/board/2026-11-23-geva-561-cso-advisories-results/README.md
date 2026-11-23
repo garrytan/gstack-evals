@@ -7,7 +7,7 @@ author: GEVA-561
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-23
-status: done
+status: superseded
 links:
   - 2026-11-19-geva-561-cso-advisories-prereg
   - 2026-11-21-capy-cso-advisories-deviations
