@@ -21,6 +21,7 @@ import { composeOverlay, H2H_CLAUDE, h2hBudget, OPENS, SUMMARY } from "../h2h/se
 import { attemptUsage, retryCovered, type AttemptUsage } from "../h2h/sessions/session.ts";
 import { buildRuntimeVolume, runtimePath } from "../h2h/sessions/runtimes.ts";
 import { sessionManifest, type SessionImage } from "../statemachines/image.ts";
+import { keylessEnv } from "../../../src/trial/env.ts";
 import { CSO_PREFIX, csoDriverModels } from "./driver.ts";
 import { events } from "../h2h/sessions/exposure.ts";
 import { csoExposure, loaded } from "./exposure.ts";
@@ -38,7 +39,6 @@ export const CSO_WORK_DIR = "/work";
 export const CSO_PROBE_NODE = "/usr/local/bin/node";
 /** The whole-session retry's meta.rerun. */
 export const CSO_RERUN = "upstream or infra end";
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE|EXA|AGENTRUN)_[A-Z_]*KEY$|_TOKEN$/;
 const KEEP = ["sdk-messages.jsonl", "claude-session.jsonl", SUMMARY];
 type Rec = Record<string, any>;
 
@@ -97,7 +97,7 @@ export function csoRunCopy(i: CsoSessionInput, attempt: 1 | 2, dir: string, p: C
   const manifestSha = sessionManifest(manifest, label(i), i.image);
   const armTar = join(dir, "arm.tar");
   writeFileSync(armTar, Buffer.alloc(10240));
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
+  const env = keylessEnv();
   env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
   env.HARBOR_TELEMETRY = "0";
   env.PYTHONPATH = [join(ROOT, "lanes/outcome-skills/h2h/sessions"), join(ROOT, "lanes/outcome-skills/pfchecks"), join(ROOT, "lanes/real-outcome/agent"), join(ROOT, "quick/laneb/runner/agent")].join(":");
