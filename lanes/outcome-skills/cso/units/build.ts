@@ -27,7 +27,7 @@ export const GATE_CODES: Record<CsoGate | "install_id" | "install_dep", ReasonCo
   fetch: "E_CSO_DROP_FETCH",
   same_fix: "E_CSO_DROP_SAME_FIX",
   cwe: "E_CSO_DROP_CWE",
-  answer_key: "E_CSO_DROP_ANSWER_KEY",
+  ["answer_key"]: "E_CSO_DROP_ANSWER_KEY",
   containment: "E_CSO_DROP_CONTAINMENT",
 };
 
