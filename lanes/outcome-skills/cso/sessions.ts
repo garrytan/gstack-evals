@@ -115,15 +115,21 @@ export function assistantTexts(records: readonly Rec[]): string[] {
 }
 
 const QUOTED = /^["']|["']$/g;
-const LOOP = /\bfor\s+([A-Za-z_]\w*)\s+in\s+([^;\n]*?)\s*[;\n]\s*do\b([\s\S]*?)\bdone\b/g;
-/** A command with each `for V in WORDS; do BODY; done` over listed words written out as BODY once per word. */
+const LOOP = /\bfor\s+([A-Za-z_]\w*)\s+in\s+([^;\n]*?)\s*[;\n]\s*do\b((?:(?!\bfor\s+[A-Za-z_]\w*\s+in\s[^;\n]*[;\n]\s*do\b)[\s\S])*?)\bdone\b/g;
+/** A command with each `for V in WORDS; do BODY; done` over listed words written out as BODY once per word, innermost
+ *  loops first. A glob word stays a glob, which missAnatomy matches against the fix files. */
 function unrolled(cmd: string): string {
-  return cmd.replace(LOOP, (all, v: string, list: string, body: string) => {
-    const words = list.trim().split(/\s+/).filter(Boolean).map((w) => w.replace(QUOTED, ""));
-    if (!words.length || words.some((w) => /[$`()]/.test(w))) return all;
-    const ref = new RegExp("\\$\\{" + v + "\\}|\\$" + v + "(?!\\w)", "g");
-    return words.map((w) => body.replace(ref, w)).join("; ");
-  });
+  for (let pass = 0; pass < 8; pass++) {
+    const next = cmd.replace(LOOP, (all, v: string, list: string, body: string) => {
+      const words = list.trim().split(/\s+/).filter(Boolean).map((w) => w.replace(QUOTED, ""));
+      if (!words.length || words.some((w) => /[$`()]/.test(w))) return all;
+      const ref = new RegExp("\\$\\{" + v + "\\}|\\$" + v + "(?!\\w)", "g");
+      return words.map((w) => body.replace(ref, w)).join("; ");
+    });
+    if (next === cmd) break;
+    cmd = next;
+  }
+  return cmd;
 }
 const SHELL_READ = /^(cat|head|tail|sed|less|more|nl|grep|egrep|rg|awk|wc|find|ls|tree|file|strings|xxd|od)$/;
 /** A shell command's path words for the tools that read files. */

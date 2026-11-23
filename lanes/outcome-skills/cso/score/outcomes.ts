@@ -132,7 +132,13 @@ export function missAnatomy(u: UnitRecord, s: SessionRecord, st: ScoredText, fin
   const fixes = new Set(fixFiles(u, tree));
   if (s.end === "safety_stop") return "safety_stop";
   if (s.end.startsWith("limit_") || s.exposure.tooling_errors > 0 || s.exposure.completeness === "not_assessed") return "limit_tooling_or_not_assessed";
-  if (!s.opened.some((o) => fixes.has(normalizePath(o.replace(/^\.\//, ""), s.helper) ?? ""))) return "never_opened_fix_file";
+  const opens = (o: string) => {
+    const at = normalizePath(o.replace(/^\.\//, ""), s.helper) ?? "";
+    if (fixes.has(at) || !/[*?]/.test(at)) return fixes.has(at);
+    const glob = new RegExp("^" + at.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]") + "$");
+    return [...fixes].some((f) => glob.test(f));
+  };
+  if (!s.opened.some(opens)) return "never_opened_fix_file";
   const onFix = (c: Citation) => {
     const path = normalizePath(c.path, s.helper);
     const at = path === null ? null : resolvePath(path, tree);
