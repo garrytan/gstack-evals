@@ -2,12 +2,14 @@
 // GEVA-583 rerun prereg section 7: the pilot judge gate. pilotGate's rule on fixture reports, and judge --pilot-gate on a
 // fake transport under CSO_PLAN=rerun: one judged row per pilot session with its route, and the gate file.
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import "../../lanes/outcome-skills/cso/cli.ts";
 import { judgeCmd } from "../../lanes/outcome-skills/cso/cli-judge.ts";
-import { pilotGate, type GoldResult, type ReportResult } from "../../lanes/outcome-skills/cso/judge/check.ts";
+import { countedGoldOrder, pilotGate, type GoldResult, type ReportResult } from "../../lanes/outcome-skills/cso/judge/check.ts";
+import { openCheck, readKey, sealCheck } from "../../lanes/outcome-skills/cso/analysis/readout.ts";
 import type { Transport } from "../../lanes/outcome-skills/cso/judge/client.ts";
 import type { CsoModel, SessionRecord, UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
 
@@ -104,3 +106,57 @@ test("judged rows carry their route, and a resume on another route into the same
   expect((await quiet(() => judgeCmd(argv("fallback-opus-particle"), { transport: fake }))).out).toContain("judged 0 sessions");
 });
 
+
+test("the counted gold draw sorts units by the sha256 of <gold_seed>:<unit> and takes Opus then particle-1, skipping gaps", () => {
+  const sha = (u: string) => createHash("sha256").update("7:" + u).digest("hex");
+  const us = ["a", "b", "c", "d"];
+  const sorted = [...us].sort((x, y) => (sha(x) < sha(y) ? -1 : 1));
+  const order = countedGoldOrder(us, 7, (u, m) => !(u === sorted[0] && m === "opus"));
+  expect(order.slice(0, 3)).toEqual([{ unit: sorted[0], model: "particle" }, { unit: sorted[1], model: "opus" }, { unit: sorted[1], model: "particle" }]);
+  expect(order.length).toBe(7);
+});
+
+test("judge --pooled-check pools the parent's sealed reports, the pilot's and the counted draw, extending the draw to the gold floor", async () => {
+  const keyFile = join(dir, "readout.key");
+  writeFileSync(keyFile, "ab".repeat(32));
+  chmodSync(keyFile, 0o600);
+  const k = readKey(keyFile);
+  const many = Array.from({ length: 30 }, (_, i) => "c" + i);
+  for (const u of many) {
+    put(join(work, "units", u + ".json"), readFileSync(join(work, "units", "u1.json"), "utf8").replace('"unit":"u1"', '"unit":"' + u + '"'));
+    put(join(work, "trees", u, "src", "parse.js"), lines);
+  }
+  const counted = many.flatMap((u) => [{ ...sess(u, "opus"), stage: "rerun" }, { ...sess(u, "particle"), stage: "rerun" }]) as SessionRecord[];
+  put(join(dir, "counted.jsonl"), counted.map((s) => JSON.stringify(s)).join("\n") + "\n");
+  put(join(dir, "counted-judged.jsonl"), counted.map((s) => JSON.stringify({ unit: s.unit, arm: s.arm, model: s.model, stage: s.stage, route: "fallback-opus-particle", judged: { findings: [FINDING], labels: [lab] }, refused: false, over_cap: false })).join("\n") + "\n");
+  const pr = (i: number, named: boolean, arm: "cso" | "none"): ReportResult => ({ id: "r" + i, arm, model: "opus", anchor: null, production: { named, validity: ["supported", "unsupported"], refused: false }, gold: [{ named, validity: ["supported", "unsupported"], refused: false, over_cap: false }, { named, validity: ["supported", "unsupported"], refused: false, over_cap: false }] });
+  const parent = (n: number, route = "fallback-opus-particle") => {
+    const reports = Array.from({ length: n }, (_, i) => pr(i, i % 2 === 0, i % 4 < 2 ? "cso" : "none"));
+    const formats = Array.from({ length: 10 }, (_, i) => ({ unit: "f" + i, table: true, prose: true, near_class: false, near_lines: false }));
+    const f = join(dir, "parent-" + n + "-" + route + ".sealed");
+    sealCheck({ schema: "cso-judge-check.v1", check: { route } as never, reports, formats, fill: null }, k, f);
+    return f;
+  };
+  put(join(dir, "pilot-gate.json"), JSON.stringify({ route: "fallback-opus-particle", reports: Array.from({ length: 10 }, (_, i) => ({ ...pr(i, true, "cso"), id: "p" + i })) }));
+  const before = process.env.CSO_PLAN;
+  process.env.CSO_PLAN = "rerun";
+  try {
+    const argv = (pf: string, out: string) => ["--work", work, "--sessions", join(dir, "counted.jsonl"), "--judged", join(dir, "counted-judged.jsonl"), "--out", out, "--run", "t", "--route", "fallback-opus-particle", "--pooled-check", "--parent-check", pf, "--pilot-gate-file", join(dir, "pilot-gate.json"), "--key", keyFile];
+    const enough = await quiet(() => judgeCmd(argv(parent(80), join(dir, "pool-80")), { transport: fake }));
+    expect(enough.code).toBe(0);
+    expect(enough.out).toContain("counted gold reports drawn: 24;");
+    const opened = openCheck(join(dir, "pool-80", "check-fallback-opus-particle.sealed"), k) as unknown as { reports: ReportResult[]; check: { detail: { gold_reports: number } } };
+    expect(opened.reports.length).toBe(114);
+    expect(opened.reports.filter((r) => r.id.startsWith("parent ") && r.arm === "cso").length).toBe(0);
+    expect(opened.reports.filter((r) => r.id.startsWith("counted ")).every((r) => r.arm === "cso" && r.gold.every((g) => g.named === true))).toBe(true);
+    expect(opened.check.detail.gold_reports).toBe(114);
+    const short = await quiet(() => judgeCmd(argv(parent(60), join(dir, "pool-60")), { transport: fake }));
+    expect(short.out).toContain("counted gold reports drawn: 30;");
+    const floor = await quiet(() => judgeCmd(argv(parent(50), join(dir, "pool-50")), { transport: fake }));
+    expect(floor.out).toContain("counted gold reports drawn: 40;");
+    await expect(judgeCmd(argv(parent(80, "production"), join(dir, "pool-prod")), { transport: fake })).rejects.toThrow(/parent check is on route production/);
+  } finally {
+    if (before === undefined) delete process.env.CSO_PLAN;
+    else process.env.CSO_PLAN = before;
+  }
+});

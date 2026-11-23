@@ -24,7 +24,7 @@ import { analyze, type AnalysisInput } from "./analysis/verdicts.ts";
 import { readTree, type TreeIndex } from "./score/checks.ts";
 import { scoreSession, type CsoScore, type Judged } from "./score/outcomes.ts";
 import { scoredText } from "./score/text.ts";
-import { anchorSources, checkSetOrder, extraFindingPool, goldFill, judgeCheck, judgeSession, pilotGate, runFormatVariants, runReport, type FormatResult, type JudgeRun, type ReportResult } from "./judge/check.ts";
+import { anchorSources, checkSetOrder, countedGoldOrder, extraFindingPool, goldFill, goldOnRun, judgeCheck, judgeSession, pilotGate, runFormatVariants, runReport, type FormatResult, type JudgeRun, type ReportResult } from "./judge/check.ts";
 import { judgeRoutes, routeClients, type Transport } from "./judge/client.ts";
 import { openJudgeMeter, probe } from "./judge/meter.ts";
 import { exportCmd } from "./export.ts";
@@ -42,6 +42,7 @@ export function readRows<T>(path: string, key: Buffer | null = null, skipSealed 
   return rows.flatMap((r) => (!isSealedRow(r) ? [r as T] : key ? [openRow<T>(r, key, path)] : skipSealed ? [] : csoFail("E_USAGE", path + " holds rows sealed to the readout key; pass --key")));
 }
 const key = (r: { unit: string; arm: string; model: string; stage: string }) => [r.unit, r.arm, r.model, r.stage].join(" ");
+const key4 = key;
 const NEEDS_KEY = "stage 1 and re-pilot rows are sealed to the readout key from the start (section 12); pass --key";
 const rowLine = (row: unknown, stage: string, k: Buffer | null) => (sealedStage(stage) ? sealRow(row, k ?? csoFail("E_USAGE", NEEDS_KEY)) : JSON.stringify(row));
 const sealingKey = (k: Buffer | null, sessions: readonly { stage: string }[]) => (!k && sessions.some((s) => sealedStage(s.stage)) ? csoFail("E_USAGE", NEEDS_KEY) : k);
@@ -98,14 +99,14 @@ async function score(argv: string[]): Promise<number> {
   return 0;
 }
 
-const JUDGE_HELP = "Usage: gstack-evals cso judge --work <dir> --sessions <file> --out <dir> --run <id> [--route <name>] [--key <path>] [--check | --probe] [--record <path>] [--ledger <path>]\nSends through the metering proxy on one cso-judge lease. --probe: one call down each judge and labeller route (exit 1 if any\nfails). Default: passes A and B on every session not yet in <out>/judged.jsonl. --check: section 7's check on the stage 0\nand stage 1 reports, with anchors and format variants, sealed to the readout key in <out>/check-<route>.sealed (digest beside it);\nonly the release booleans print. With --key (needed for --check and for stage 1 or re-pilot sessions) stage 1 and re-pilot\njudged rows and every kept reply are sealed to the readout key. --pilot-gate (CSO_PLAN=rerun): judges the rerun pilot's\nsessions into <out>/judged.jsonl with gold from both labellers on each, writes <out>/pilot-gate.json and prints the gate;\nexit 1 when it fails.";
+const JUDGE_HELP = "Usage: gstack-evals cso judge --work <dir> --sessions <file> --out <dir> --run <id> [--route <name>] [--key <path>] [--check | --probe] [--record <path>] [--ledger <path>]\nSends through the metering proxy on one cso-judge lease. --probe: one call down each judge and labeller route (exit 1 if any\nfails). Default: passes A and B on every session not yet in <out>/judged.jsonl. --check: section 7's check on the stage 0\nand stage 1 reports, with anchors and format variants, sealed to the readout key in <out>/check-<route>.sealed (digest beside it);\nonly the release booleans print. With --key (needed for --check and for stage 1 or re-pilot sessions) stage 1 and re-pilot\njudged rows and every kept reply are sealed to the readout key. --pilot-gate (CSO_PLAN=rerun): judges the rerun pilot's\nsessions into <out>/judged.jsonl with gold from both labellers on each, writes <out>/pilot-gate.json and prints the gate;\nexit 1 when it fails. --pooled-check (CSO_PLAN=rerun) --parent-check <sealed> --pilot-gate-file <pilot-gate.json> --judged <file>:\nthe rerun's pooled check with gold on the counted draw, sealed to --key in <out>/check-<route>.sealed.";
 
 /** gstack-evals cso judge; a transport replaces the metered one in tests. */
 export async function judgeCmd(argv: string[], o: { transport?: Transport; env?: Record<string, string | undefined>; fetch?: typeof fetch } = {}): Promise<number> {
-  const f = flags(argv, ["--work", "--sessions", "--out", "--run", "--route", "--record", "--ledger", "--key"], ["--check", "--probe", "--pilot-gate"], JUDGE_HELP);
+  const f = flags(argv, ["--work", "--sessions", "--out", "--run", "--route", "--record", "--ledger", "--key", "--parent-check", "--pilot-gate-file", "--judged"], ["--check", "--probe", "--pilot-gate", "--pooled-check"], JUDGE_HELP);
   if (!f) return 0;
-  if ([f.has("--check"), f.has("--probe"), f.has("--pilot-gate")].filter(Boolean).length > 1) csoFail("E_USAGE", "--check, --probe and --pilot-gate are separate runs");
-  const sealKey = f.has("--check") || f.has("--key") ? readKey(f.need("--key")) : null;
+  if ([f.has("--check"), f.has("--probe"), f.has("--pilot-gate"), f.has("--pooled-check")].filter(Boolean).length > 1) csoFail("E_USAGE", "--check, --probe, --pilot-gate and --pooled-check are separate runs");
+  const sealKey = f.has("--check") || f.has("--pooled-check") || f.has("--key") ? readKey(f.need("--key")) : null;
   const sessions = f.has("--probe") ? [] : readRows<SessionRecord>(f.need("--sessions"), sealKey);
   sealingKey(sealKey, sessions);
   const p = loadCsoPrereg(), out = resolve(f.need("--out"));
@@ -121,6 +122,7 @@ export async function judgeCmd(argv: string[], o: { transport?: Transport; env?:
     }
     const w = new Work(resolve(f.need("--work")));
     const clients = routeClients(route, p, transport);
+    if (f.has("--pooled-check")) return await pooledCheck(w, { need: (k) => f.need(k === "--pilot-gate" ? "--pilot-gate-file" : k) }, clients, route.route, route.cells, out, sealKey!, p);
     if (f.has("--pilot-gate")) return await pilotGateRun(w, sessions, clients, route.route, route.cells, out, p);
     if (!f.has("--check")) return await judgeAll(w, sessions, clients.judge, join(out, "judged.jsonl"), route.cells, sealKey, p, route.route);
     const pilot = sessions.filter((s) => (s.stage === "stage0" || s.stage === "stage1") && s.end !== "gap" && route.cells.includes(s.model));
@@ -178,6 +180,51 @@ async function pilotGateRun(w: Work, sessions: SessionRecord[], clients: ReturnT
   writeNew(join(out, "pilot-gate.json"), JSON.stringify({ schema: "cso-rerun-pilot-gate.v1", route, gate, reports }, null, 1) + "\n");
   console.log(JSON.stringify(gate));
   return gate.pass ? 0 : 1;
+}
+
+
+/** The rerun's pooled judge check (rerun prereg section 7) on the fallback route: the parent's sealed check reports, the
+ *  pilot gate's reports and gold on the counted new-cso reports in countedGoldOrder, 24 first and then, while fewer than
+ *  check_reports_min are gold, up to 20 more. The parent's old cso reports join as untold, so the per-arm gate compares the
+ *  new cso arm with none; the parent's format variants stand. No anchor is added, and a validity finding fill is listed but
+ *  never counted, since nothing judges it. Sealed like --check; only the release prints. */
+async function pooledCheck(w: Work, f: { need: (k: string) => string }, clients: ReturnType<typeof routeClients>, route: string, cells: readonly CsoModel[], out: string, key: Buffer, p: CsoPrereg): Promise<number> {
+  const rerun = p.rerun ?? csoFail("E_USAGE", "--pooled-check is the rerun's check; set CSO_PLAN=rerun");
+  const file = join(out, "check-" + route + ".sealed");
+  if (existsSync(file)) csoFail("E_USAGE", file + " already exists; write to a new --out");
+  const parent = openCheck(resolve(f.need("--parent-check")), key) as unknown as { check: JudgeCheck; reports: ReportResult[]; formats: FormatResult[] };
+  if (parent.check.route !== route) csoFail("E_USAGE", "the parent check is on route " + parent.check.route + ", not " + route);
+  const pilot = (JSON.parse(readFileSync(resolve(f.need("--pilot-gate")), "utf8")) as { route: string; reports: ReportResult[] });
+  if (pilot.route !== route) csoFail("E_USAGE", "the pilot gate ran on route " + pilot.route + ", not " + route);
+  const sessions = readRows<SessionRecord>(resolve(f.need("--sessions"))).filter((s) => s.stage === "rerun" && s.arm === "cso" && cells.includes(s.model));
+  const judged = new Map(readRows<{ unit: string; arm: string; model: string; stage: string; route?: string; judged: Judged | null; refused?: boolean; over_cap?: boolean }>(resolve(f.need("--judged"))).map((r) => [key4(r), r]));
+  const byKey = new Map(sessions.map((s) => [key4(s), s]));
+  const units = [...new Set(sessions.map((s) => s.unit))];
+  const order = countedGoldOrder(units, Number(rerun.gold_seed), (u, m) => {
+    const s = byKey.get(key4({ unit: u, arm: "cso", model: m, stage: "rerun" }));
+    return !!s && s.end !== "gap";
+  });
+  const pool: ReportResult[] = [...parent.reports.map((r) => ({ ...r, id: "parent " + r.id, arm: r.arm === "cso" ? ("untold" as const) : r.arm })), ...pilot.reports.map((r) => ({ ...r, id: "pilot " + r.id }))];
+  const j = p.judge as unknown as { check_reports_min: number };
+  const want = Number((rerun.judge as { labelled_outputs?: { counted_cso_sample?: number } }).labelled_outputs?.counted_cso_sample ?? 24);
+  let taken = 0, check = judgeCheck(route, pool, parent.formats, p);
+  for (const o of order) {
+    if (taken >= want && (check.detail as { gold_reports: number }).gold_reports >= j.check_reports_min) break;
+    if (taken >= want + 20) break;
+    const s = byKey.get(key4({ unit: o.unit, arm: "cso", model: o.model, stage: "rerun" }))!;
+    const row = judged.get(key4(s)) ?? csoFail("E_CSO_CHECK_INPUT", key4(s) + " has no judged row; judge the counted sessions first");
+    if (row.route !== undefined && row.route !== route) csoFail("E_CSO_CHECK_INPUT", key4(s) + " was judged on route " + row.route + ", not " + route);
+    pool.push(await goldOnRun("counted " + key4(s), { arm: "cso", model: s.model, anchor: null }, { judged: row.judged, refused: row.refused ?? false, over_cap: row.over_cap ?? false }, clients.gold, w.unit(s.unit), s, w.tree(s.unit), p));
+    taken++;
+    if (taken >= want) check = judgeCheck(route, pool, parent.formats, p);
+  }
+  check = judgeCheck(route, pool, parent.formats, p);
+  const fill = goldFill(check, { anchors: [], findings: extraFindingPool(pool, p) }, p);
+  const sha = sealCheck({ schema: "cso-judge-check.v1", check, reports: pool, formats: parent.formats, fill }, key, file);
+  console.log(JSON.stringify(judgeRelease([check])[0]));
+  if (fill.findings.length) console.log("validity finding fill not run: " + fill.findings.length + " findings short; the check reads short");
+  console.log("counted gold reports drawn: " + taken + "; sealed check " + file + " sha256 " + sha);
+  return 0;
 }
 
 async function judgeAll(w: Work, sessions: SessionRecord[], judge: ReturnType<typeof routeClients>["judge"], file: string, cells: readonly CsoModel[], k: Buffer | null, p: CsoPrereg, route: string): Promise<number> {
