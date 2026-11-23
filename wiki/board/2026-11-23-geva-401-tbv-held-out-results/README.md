@@ -198,7 +198,7 @@ Held-out task bodies, keys, histories and reports never left sealed storage or R
 
 ## Replicate it
 
-The scorer is lanes/tbv/rule.ts at 9125c870, frozen since the scorer pin. With the sealed inputs, the two lines are:
+The scorer is lanes/tbv/rule.ts. It changed twice after the scorer pin: in #250 (a0f61d44), which the pins addendum records, and in the R78 commit 9125c870, which lets Astra stand in for Sol. The held read ran at 65401337, where rule.ts matches #250's version, and at 9125c870 the counted readings and comparison files came out byte for byte the same before Astra spent anything. With the sealed inputs, the two lines are:
 
 ```
 gstack-evals tbv readings --records <reading records> --split held.json --keys <keys> --packet-key <packet keys> \
