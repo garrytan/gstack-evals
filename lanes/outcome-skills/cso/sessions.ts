@@ -121,8 +121,9 @@ const LOOP = /\bfor\s+([A-Za-z_]\w*)\s+in\s+([^;\n]*?)\s*[;\n]\s*do\b((?:(?!\bfo
 function unrolled(cmd: string): string {
   for (let pass = 0; pass < 8; pass++) {
     const next = cmd.replace(LOOP, (all, v: string, list: string, body: string) => {
-      const words = list.trim().split(/\s+/).filter(Boolean).map((w) => w.replace(QUOTED, ""));
-      if (!words.length || words.some((w) => /[$`()]/.test(w))) return all;
+      const raw = list.trim().split(/\s+/).filter(Boolean);
+      if (!raw.length || raw.some((w) => /[$`()]/.test(w) || (/^["']/.test(w) && /[*?]/.test(w)))) return all;
+      const words = raw.map((w) => w.replace(QUOTED, ""));
       const ref = new RegExp("\\$\\{" + v + "\\}|\\$" + v + "(?!\\w)", "g");
       return words.map((w) => body.replace(ref, w)).join("; ");
     });
