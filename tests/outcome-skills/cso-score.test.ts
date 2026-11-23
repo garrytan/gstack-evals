@@ -205,4 +205,8 @@ describe("section 10: the miss anatomy, in the plan's order", () => {
     const late = [...Array.from({ length: 10 }, () => f("src/other.js", 1)), f("src/parse.js", 41)];
     expect(miss({ texts: ["... src/parse.js:41 ..."] }, late)).toBe("outside_first_k");
   });
+  test("a helper handle or a snapshot-rooted path in opened is the tree file it names", () => {
+    expect(miss({ opened: [H], texts: ["Looked at src/other.js:3"] })).toBe("opened_not_named");
+    expect(miss({ opened: [ROOT + "/src/parse.js"], texts: ["Looked at src/other.js:3"] })).toBe("opened_not_named");
+  });
 });

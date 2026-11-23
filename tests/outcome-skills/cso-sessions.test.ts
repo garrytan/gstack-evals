@@ -113,6 +113,15 @@ describe("cso sessions: the record", () => {
     ];
     expect(openedPaths(v, "/work/repo")).toEqual(["packages/happy-dom/src/fetch/Fetch.ts", "lib/a.js", "lib/b.js"]);
   });
+  test("helper reads inside a for loop over listed words count as opened, one path per word", () => {
+    const bash = (command: string) => ({ type: "AssistantMessage", parent_tool_use_id: null, content: [{ type: "tool_use", id: "w" + command.length, name: "Bash", input: { command } }] });
+    const v = [
+      bash("G=~/.claude/skills/gstack/bin/gstack-cso-launcher; R=1795273710354-cc00549a7600619a; D=$(mktemp -d); for f in a.go cipher/b.go; do $G read $R $f > $D/$(echo $f | tr / _) 2>&1; done; wc -l $D/*"),
+      bash('L=~/.claude/skills/gstack/bin/gstack-cso-launcher; R=1795273710354-cc00549a7600619a; for p in "pkg/x.go" pkg/y.go\ndo echo "== $p"; "$L" read $R "$p" | head; done'),
+      bash("L=~/.claude/skills/gstack/bin/gstack-cso-launcher; R=1795273710354-cc00549a7600619a; for w in ci.yml; do $L read $R .github/workflows/${w}; done"),
+    ];
+    expect(openedPaths(v, "/work/repo")).toEqual(["a.go", "cipher/b.go", "pkg/x.go", "pkg/y.go", ".github/workflows/ci.yml"]);
+  });
   test("model id and harness version come from the session's own init record, never the plan", () => {
     expect(sessionIdentity(recs)).toEqual({ model_id: "claude-opus-5-5-20261101", harness_version: "2.1.325" });
     expect(() => sessionIdentity(recs.slice(1))).toThrow(/^E_CSO_SESSION /);

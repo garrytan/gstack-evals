@@ -106,6 +106,9 @@ describe("cso judging commands", () => {
     const s0 = await capture(() => COMMANDS.stage0!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(j, "scores.jsonl")]));
     expect(s0.code).toBe(0);
     expect(s0.out.split("\n").filter((l) => l.startsWith("PASS")).length).toBe(5);
+    const one = join(dir, "sessions-u1.jsonl");
+    writeFileSync(one, sessions.filter((s) => s.stage === "stage0" && s.unit === "u1").map((s) => JSON.stringify(s)).join("\n") + "\n");
+    await expect(capture(() => COMMANDS.stage0!(["--work", work, "--sessions", one, "--scores", join(j, "scores.jsonl")]))).rejects.toThrow(/^E_CSO_ANALYSIS_INPUT.*stage 0/);
   });
   test("judge --check seals its detail to the readout key and leaves no count or kappa in plain", async () => {
     const out = join(dir, "c");

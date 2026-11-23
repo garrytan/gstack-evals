@@ -38,6 +38,11 @@ describe("cso exposure", () => {
     expect(r.helper).toEqual({ snapshot_root: "<REDACTED-internal.user_path>", handles: { [SECRET]: "config/secrets/prod.env" } });
     expect(csoExposure(full).helper.handles).toEqual({});
   });
+  test("a submit batched with finish in one command keeps the count the submit printed", () => {
+    const out = JSON.stringify({ runId: RUN, findings: 3, completeness: "partial" }, null, 2) + "\nfinish_exit=0\n" + JSON.stringify({ runId: RUN, status: "finished", completeness: "complete", report: "report.md" }, null, 2);
+    const batched = [...full.slice(0, -4), ...call(L + " submit " + RUN + " /tmp/s.json && " + L + " finish " + RUN, out)];
+    expect(csoExposure(batched).exposure).toMatchObject({ procedure_ran: true, completeness: "complete", findings_submitted: 3 });
+  });
   test("the base-directory marker for the cso skill counts as loaded; another skill's does not", () => {
     const ctx = (t: string) => [{ type: "UserMessage", content: [{ type: "text", text: t }] }];
     expect(csoExposure(ctx("Base directory for this skill: /root/.claude/skills/gstack/cso")).exposure.loaded).toBe(true);
