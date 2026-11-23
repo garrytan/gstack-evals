@@ -57,3 +57,16 @@ test("the print check marks what can't pair and fails only on a field that doesn
   expect(none.missing).toContain("yield opus findings per new cso session");
   expect(none.missing).toContain("exposure particle: no new cso session");
 });
+
+test("the pilot's parent records from stage 0 pair as stage 2", () => {
+  const pilot = units.slice(0, 2);
+  const i = input(pilot, pilot);
+  const s0 = <T extends { stage: string }>(x: T): T => ({ ...x, stage: "stage0" });
+  i.none = { sessions: i.none.sessions.map(s0), scores: i.none.scores.map(s0) };
+  i.old = { sessions: i.old.sessions.map(s0), scores: i.old.scores.map(s0) };
+  const a = rerunAnalysis(i, p);
+  expect(a.primary.rows.find((r) => r.model === "opus")!.complete.n).toBe(2);
+  expect(a.second.rows.find((r) => r.model === "opus")!.complete.n).toBe(2);
+  expect(a.exposure[0]).toMatchObject({ old_of: 2 });
+  expect(printCheck(a).pass).toBe(true);
+});

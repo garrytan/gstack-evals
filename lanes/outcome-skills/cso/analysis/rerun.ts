@@ -22,7 +22,7 @@ export const MISS_LABEL: Record<Miss, string> = {
 export interface RerunArm { sessions: SessionRecord[]; scores: CsoScore[] }
 export interface RerunInput {
   units: UnitRecord[];
-  /** The parent's stage 2 records: its none arm and its old cso arm. */
+  /** The parent's records, one stage each (stage 2 for the counted run, stage 0 for the pilot), read as stage 2: its none arm and its old cso arm. */
   none: RerunArm; old: RerunArm;
   /** The new cso arm, any stage; read as stage 2's cso cells. */
   fresh: RerunArm;
@@ -41,7 +41,7 @@ const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.l
 
 export function rerunAnalysis(i: RerunInput, p: CsoPrereg) {
   const ids = new Set(i.units.map((u) => u.unit));
-  const pick = <T extends { unit: string; arm: string; stage: string }>(xs: T[], arm: string) => xs.filter((x) => ids.has(x.unit) && x.arm === arm && (arm !== "cso" || x.stage === "stage2"));
+  const pick = <T extends { unit: string; arm: string; stage: string }>(xs: T[], arm: string) => xs.filter((x) => ids.has(x.unit) && x.arm === arm).map(stage2);
   const fresh = { sessions: i.fresh.sessions.filter((s) => ids.has(s.unit) && s.arm === "cso").map(stage2), scores: i.fresh.scores.filter((s) => ids.has(s.unit) && s.arm === "cso").map(stage2) };
   const primary: AnalysisInput = { units: i.units, sessions: [...pick(i.none.sessions, "none"), ...fresh.sessions], scores: [...pick(i.none.scores, "none"), ...fresh.scores], judge: i.judge, headroom_admitted: i.headroom_admitted };
   const second: AnalysisInput = { units: i.units, sessions: [...pick(i.old.sessions, "cso").map(baseline), ...fresh.sessions], scores: [...pick(i.old.scores, "cso").map(baseline), ...fresh.scores], judge: i.judge, headroom_admitted: i.headroom_admitted };
