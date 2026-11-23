@@ -125,7 +125,8 @@ const VIA_SHELL = /^[$`]/;
 /** Fix 1: a start the helper didn't refuse names its run when its output prints an id; else, when the saved record holds as
  *  many runs as the session has unrefused starts, the k-th start takes the k-th run by the creation time in its id; else
  *  the first id a later call passes or prints before any other start. Fix 2: a call is on the run when it names the id, or
- *  a shell variable or substitution while the session holds exactly one accepted start. Fix 3: a finish counts when it
+ *  a shell variable or substitution while the session holds exactly one accepted start and the call shows it reached the
+ *  run (its output names the id, or it exited 0 with no refusal). Fix 3: a finish counts when it
  *  printed the helper's finish or exited 0 with no refusal, though a later step of its command failed; or the record shows
  *  the run finished. Of several runs, the first that was used and finished is read, else the first with an id. */
 function fixedRun(evs: readonly Ev[], calls: readonly HelperCall[], runOf: (c: HelperCall) => string | null, runRecords: readonly Rec[]): RunRead {
@@ -155,7 +156,7 @@ function fixedRun(evs: readonly Ev[], calls: readonly HelperCall[], runOf: (c: H
   };
   const reads = accepted.map((start, k) => {
     const run = idFor(start, k);
-    const on = (c: HelperCall) => run !== null && later(start, c) && (c.args[0] === run || (VIA_SHELL.test(c.args[0] ?? "") && accepted.length === 1));
+    const on = (c: HelperCall) => run !== null && later(start, c) && (c.args[0] === run || (VIA_SHELL.test(c.args[0] ?? "") && accepted.length === 1 && (c.out.includes(run) || (!c.error && !HELPER_REFUSAL.test(c.out)))));
     const finish = calls.filter((c) => on(c) && c.op === "finish" && !refused(c) && (!c.error || (FINISHED.test(c.out) && !c.out.includes("<tool_use_error>")))).at(-1);
     const record = runRecords.find((r) => r?.runId === run);
     return { start, run, on, finish, record, recordFinished: record?.status === "finished", used: calls.some((c) => on(c) && (c.op === "inspect" || c.op === "read")) };

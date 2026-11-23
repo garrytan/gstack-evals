@@ -42,9 +42,13 @@ describe("cso exposure, the rerun's fixed detector", () => {
     expect(fixed(recs)).toMatchObject({ procedure_ran: false, run_id: null });
     expect(frozen(recs).procedure_ran).toBe(false);
   });
-  test("fix 2: a shell variable or substitution is on the run only while one start was accepted", () => {
+  test("fix 2: a shell variable or substitution is on the run only while one start was accepted and the call reached it", () => {
     const one = [...call(L + " start --repo .", JSON.stringify({ runId: RUN })), ...call("R=$(cat /tmp/r); " + L + " read $R src/a.ts", "x"), ...call(L + " finish " + RUN, fin(RUN))];
     expect(fixed(one).procedure_ran).toBe(true);
+    const unset = [...call(L + " start --repo .", JSON.stringify({ runId: RUN })), ...call(L + " read $R src/a.ts", '{"ok":false,"error":{"code":"NOT_FOUND","message":"run"}}', true), ...call(L + " finish " + RUN, fin(RUN))];
+    expect(fixed(unset).procedure_ran).toBe(false);
+    const quiet = [...call(L + " start --repo .", JSON.stringify({ runId: RUN })), ...call(L + " read $R src/a.ts", "Exit code 1", true), ...call(L + " finish " + RUN, fin(RUN))];
+    expect(fixed(quiet).procedure_ran).toBe(false);
     expect(frozen(one).procedure_ran).toBe(false);
     const two = [...call(L + " start --repo .", JSON.stringify({ runId: RUN })), ...call(L + " start --repo . --code", JSON.stringify({ runId: RUN2 })), ...call(L + " read $R src/a.ts", "x"), ...call(L + " finish " + RUN, fin(RUN))];
     expect(fixed(two).procedure_ran).toBe(false);
