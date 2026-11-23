@@ -13,6 +13,10 @@ import { ORACLE_MIN, pairedRows, recall, SKILL, STOCK_MAX } from "./rule.ts";
 import type { Arm, Family, Io, JudgeRecord, Model, PacketKeyEntry, ReadingsFile } from "./types.ts";
 
 export const R78_SEED = 20261122, R78_DRAWS = 2000, KAPPA_MIN = 0.6;
+/** tbv's preregistration was frozen on 2026-11-05. */
+export const TBV_FROZEN = "2026-11-05";
+/** R78's floor of labelled outputs: 40 for a preregistration frozen before 2026-11-22, 100 from that date on. */
+export const r78Floor = (frozen: string) => (frozen < "2026-11-22" ? 40 : 100);
 
 const f3 = (x: number) => (Number.isNaN(x) ? "n/a" : x.toFixed(3));
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
@@ -74,7 +78,8 @@ export function kappaInterval(byTask: Tally[]): [number, number] | null {
 
 /** The judge check for one frozen judge (addendum section 2): the first packets it read as primary with the other frozen
  * judge as the seeded second read. A fact is labelled where Astra and that second judge agree on in; the checked judge,
- * which made no label, is compared with it. A packet with a missing or unjudged read leaves the check and is counted. */
+ * which made no label, is compared with it. A packet with a missing or unjudged read leaves the check and is counted.
+ * The check passes only with R78's floor of labelled outputs and kappa at or over KAPPA_MIN. */
 export function judgeCheck(judge: "sol" | "opus", entries: PacketKeyEntry[], frozen: Map<string, JudgeRecord>, astra: Map<string, JudgeRecord>) {
   const partner = judge === "sol" ? "opus" : "sol";
   const byTask = new Map<string, Tally>();
@@ -103,9 +108,10 @@ export function judgeCheck(judge: "sol" | "opus", entries: PacketKeyEntry[], fro
   const all = tasks.reduce(add, { tp: 0, fn: 0, tn: 0, fp: 0 });
   const kappa = kappaOf(all);
   const ci = kappaInterval(tasks);
-  const pass = kappa >= KAPPA_MIN;
-  const line = "judge check " + judge + ": " + packets + " first packets read by " + judge + " and " + partner + " (left out " + excluded + " with a missing or unjudged read); labels where astra and " + partner + " agree: " + labelled + " facts in " + outputs + " outputs (" + unlabelled + " facts unlabelled); catch rate " + f3(all.tn / (all.tn + all.fp)) + " (" + all.tn + "/" + (all.tn + all.fp) + "), false-fail rate " + f3(all.fn / (all.tp + all.fn)) + " (" + all.fn + "/" + (all.tp + all.fn) + "), kappa " + f3(kappa) + ", 95% CI " + (ci ? "[" + f3(ci[0]) + ", " + f3(ci[1]) + "]" : "n/a") + " (" + R78_DRAWS + " resamples over " + tasks.length + " tasks); R78 gate " + KAPPA_MIN + ": " + (pass ? "passes the R78 judge check" : "failed the R78 judge check");
-  return { packets, outputs, excluded, labelled, unlabelled, kappa, ci, pass, line };
+  const floor = r78Floor(TBV_FROZEN);
+  const pass = outputs >= floor && kappa >= KAPPA_MIN;
+  const line = "judge check " + judge + ": " + packets + " first packets read by " + judge + " and " + partner + " (left out " + excluded + " with a missing or unjudged read); labels where astra and " + partner + " agree: " + labelled + " facts in " + outputs + " outputs (" + unlabelled + " facts unlabelled); catch rate " + f3(all.tn / (all.tn + all.fp)) + " (" + all.tn + "/" + (all.tn + all.fp) + "), false-fail rate " + f3(all.fn / (all.tp + all.fn)) + " (" + all.fn + "/" + (all.tp + all.fn) + "), kappa " + f3(kappa) + ", 95% CI " + (ci ? "[" + f3(ci[0]) + ", " + f3(ci[1]) + "]" : "n/a") + " (" + R78_DRAWS + " resamples over " + tasks.length + " tasks); R78 gate " + KAPPA_MIN + ": " + (pass ? "passes the R78 judge check" : "failed the R78 judge check") + (outputs < floor ? " (" + outputs + " labelled outputs, under R78's floor of " + floor + ")" : "");
+  return { packets, outputs, excluded, labelled, unlabelled, kappa, ci, floor, pass, line };
 }
 
 /** Astra's controls against the frozen bounds: every planned control task's stock and oracle packets, read by Astra. */
@@ -155,11 +161,17 @@ export function tasksWorse(rd: ReadingsFile): string[] {
 const READINGS_FLAGS = ["records", "keys", "split", "packet-key", "judges", "out", "models", "passes", "skill-arms"];
 const READINGS_OPTIONAL = ["capy-passes", "principle-detector", "dev-gap", "held", "seal-cmd"];
 
-/** tbv r78-key --key FILE --out FILE [--held SEALED_DIR --seal-cmd CMD]
- * tbv r78 --astra FILE[,FILE] and tbv readings's flags (--out is the Astra readings file) */
+/** Both R78 commands read held-out material only, so each needs --held and --seal-cmd before it reads anything. */
+function needsHeld(cmd: string, a: Record<string, string>) {
+  if (a.held === undefined || a["seal-cmd"] === undefined) fail("E_USAGE", "tbv " + cmd + " reads held-out material and seals what it writes: pass --held <sealed dir> and --seal-cmd <cmd>");
+}
+
+/** tbv r78-key --key FILE --out FILE --held SEALED_DIR --seal-cmd CMD
+ * tbv r78 --astra FILE[,FILE] and tbv readings's flags, with --held and --seal-cmd (--out is the Astra readings file) */
 export async function run(argv: string[], io: Io): Promise<number> {
   if (argv[0] === "r78-key") {
     const a = parseFlags(argv.slice(1), ["key", "out"], ["held", "seal-cmd"]);
+    needsHeld("r78-key", a);
     const seal = heldOutputs(a, ["out"], undefined, [basename(a.out!)]);
     const entries = readPacketKey(a.key!);
     const out = astraKey(entries);
@@ -170,6 +182,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     return 0;
   }
   const a = parseFlags(argv.slice(1), [...READINGS_FLAGS, "astra"], READINGS_OPTIONAL);
+  needsHeld("r78", a);
   const seal = heldOutputs(a, ["out"], undefined, [basename(a.out!)]);
   const input = readingsInput(a);
   const astra = astraRecords(joinBatches([], a.astra!.split(",").map((f) => readNdjson<JudgeRecord>(f))).judges);

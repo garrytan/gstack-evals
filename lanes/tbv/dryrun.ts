@@ -31,6 +31,9 @@ const KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "UBIC
 const KEYLESS = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.includes(k))) as Record<string, string>;
 /** Frozen checks the build changes on purpose, with the reason and the part 3 check that drives the change at the head. */
 export const ORDERED: Record<string, string> = {
+  "no room for the third pass runs two passes (the third pass's line goes first)": "amendment 2 section 7: the third Opus pass stays in up to the $3,000 stop; part 3d's tbv-held check",
+  "tighter still drops the capy family": "amendment 2 section 7: the capy family stays in up to the $3,000 stop; part 3d's tbv-held check",
+  "open reservations and unknown charges count: the same spend with $150 more open stops stage 3 and goes to the Captain": "amendment 2 section 7: $2,424 is under the $3,000 stop, so stage 3 runs; part 3d's tbv-held check stops past it",
   "the same copies relabelled to the other family are refused too: one Opus none reading per task and pass": "item 1 refuses the copy first, with E_USAGE (a reading's family must match its task); part 3 item 1",
 };
 
@@ -189,9 +192,13 @@ export async function dryrun(out: string, io: Io): Promise<{ pass: number; fail:
   await section("3d. The all-in check before every paid item, on the crew's actual credits (item 11)", () => {
     for (const item of PAID_ITEMS.filter((i) => i !== "tbv-held")) {
       const ok = head("allin", { item, crewCredits: 150_000, crewRest: 100, settled: 300, reserved: 0, unknown: 0, itemCap: 200 });
-      const no = head("allin", { item, crewCredits: 150_000, crewRest: 100, settled: 1500, reserved: 0, unknown: 0, itemCap: 300 });
-      check(item + ": starts at $750 all-in with the crew term printed against the $300 reserve, and does not start at $2,050", ok.verdict === "START " + item + " ($750.00)" && ok.out.includes("crew spent $150.00 (150000 credits; $150.00 of the $300.00 crew reserve)") && no.verdict.startsWith("NO START (to the Captain; $2050.00"));
+      const [guide, stop] = item === "tbv-r78-astra" ? [4000, 5000] : [2000, 3000];
+      const over = head("allin", { item, crewCredits: 150_000, crewRest: 100, settled: guide - 450, reserved: 0, unknown: 0, itemCap: 300 });
+      const no = head("allin", { item, crewCredits: 150_000, crewRest: 100, settled: stop - 450, reserved: 0, unknown: 0, itemCap: 300 });
+      check(item + ": starts at $750 all-in with the crew term printed against the $300 reserve, starts at $" + (guide + 100) + " over the $" + guide + " guideline, and does not start at $" + (stop + 100) + " over the $" + stop + " stop", ok.verdict === "START " + item + " ($750.00)" && ok.out.includes("crew spent $150.00 (150000 credits; $150.00 of the $300.00 crew reserve)") && over.verdict === "START " + item + " ($" + (guide + 100) + ".00)" && over.out.includes("over the $" + guide + ".00 guideline (it does not bind)") && no.verdict === "NO START (to the Captain; $" + (stop + 100) + ".00 over the $" + stop + ".00 stop)");
     }
+    const held = (x: Any) => head("allin", { item: "tbv-held", crewCredits: 60_000, crewRest: 190, settled: 560, reserved: 0, unknown: 0, itemCap: 789, thirdPassCap: 135, capyCap: 190, ...x }).verdict;
+    check("tbv-held: the third Opus pass and the capy family stay in under the $3,000 stop, where the frozen ladder dropped them, and stage 3 stops past it", [held({}), held({ settled: 900 }), held({ settled: 1100 }), held({ settled: 1100, reserved: 50, unknown: 100 })].every((v) => v.startsWith("STAGE 3 WITH THE THIRD OPUS PASS")) && held({ settled: 1900 }) === "NO STAGE 3 (to the Captain; $3074.00 over the $3000.00 stop)");
     check("an item that is not a paid item is refused", head("allin", { item: "tbv-other", crewCredits: 0, crewRest: 0, settled: 0, reserved: 0, unknown: 0, itemCap: 1 }).refused);
   });
 

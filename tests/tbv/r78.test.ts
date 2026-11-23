@@ -2,16 +2,16 @@
 // The R78 addendum's tooling: the Astra run's packet key and route, the judge check, Astra's controls, the Astra readings
 // file and compare's Astra stand-in, and the tasks-worse counts. Keyless.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { worstOf } from "../../lanes/tbv/judge.ts";
-import { astraControls, astraKey, astraReadings, astraRecords, judgeCheck, kappaInterval, kappaOf, run, tasksWorse } from "../../lanes/tbv/r78.ts";
+import { astraControls, astraKey, astraReadings, astraRecords, judgeCheck, kappaInterval, kappaOf, r78Floor, run, tasksWorse } from "../../lanes/tbv/r78.ts";
 import { buildReadings } from "../../lanes/tbv/readings.ts";
 import { judgeSend } from "../../lanes/tbv/routes.ts";
 import { otherJudge, type Judge, type JudgeRecord, type PacketKeyEntry, type PacketKind, type ReadingsFile } from "../../lanes/tbv/types.ts";
 import { chatPrice } from "../../src/runner/pricing/prices.ts";
 import { type Any, controls, file, reading, rule, task } from "./rule-helpers.ts";
-import { capture, cleanup, KEY, keyFor, MANIFEST, record, tmp } from "./s4-helpers.ts";
+import { capture, cleanup, KEY, keyFor, MANIFEST, record, SEAL, shm, tmp, unsealed } from "./s4-helpers.ts";
 
 afterAll(cleanup);
 
@@ -71,10 +71,23 @@ describe("judgeCheck (addendum section 2)", () => {
     expect(c.line).toContain("catch rate 1.000 (1/1), false-fail rate 0.333 (1/3), kappa 0.500");
     expect(c.line).toContain("failed the R78 judge check");
   });
-  test("Opus is checked against facts where Astra and Sol agree, on Sol and particle-1 packets", () => {
+  test("Opus is checked against facts where Astra and Sol agree, on Sol and particle-1 packets; one labelled output is under R78's floor, so it fails at kappa 1", () => {
     const c = judgeCheck("opus", es, byKey(frozen), astra);
-    expect(c).toMatchObject({ packets: 1, labelled: 2, unlabelled: 1, kappa: 1, pass: true });
-    expect(c.line).toContain("passes the R78 judge check");
+    expect(c).toMatchObject({ packets: 1, outputs: 1, labelled: 2, unlabelled: 1, kappa: 1, floor: 40, pass: false });
+    expect(c.line).toEndWith("failed the R78 judge check (1 labelled outputs, under R78's floor of 40)");
+  });
+  test("R78's floor: 40 labelled outputs pass at kappa 1 and 39 fail; the floor is 40 before 2026-11-22 and 100 from that date", () => {
+    const at = (n: number) => {
+      const ps = [...Array(n)].map((_, i) => "q" + i);
+      const es = ps.map((p, i) => entry(p, "first", "t" + (i % 10), "opus", "sol"));
+      const fz = ps.flatMap((p) => [rec(p, "opus", "primary", [true, false]), rec(p, "sol", "second", [true, false])]);
+      return judgeCheck("opus", es, byKey(fz), astraRecords(ps.map((p) => rec(p, "astra", "primary", [true, false]))));
+    };
+    expect(at(40)).toMatchObject({ outputs: 40, kappa: 1, pass: true });
+    expect(at(40).line).toEndWith("passes the R78 judge check");
+    expect(at(39)).toMatchObject({ outputs: 39, kappa: 1, pass: false });
+    expect(at(39).line).toEndWith("failed the R78 judge check (39 labelled outputs, under R78's floor of 40)");
+    expect([r78Floor("2026-11-05"), r78Floor("2026-11-21"), r78Floor("2026-11-22"), r78Floor("2026-12-01")]).toEqual([40, 40, 100, 100]);
   });
   test("the checked judge makes no label: changing its own reads moves the score, never the label count", () => {
     const flipped = frozen.map((j) => (j.judge === "sol" && j.role === "primary" ? { ...j, answer: ans(j.answer!.facts.map((f) => !f.in)) } : j));
@@ -180,7 +193,7 @@ describe("tasksWorse", () => {
 describe("r78-key and r78 runs", () => {
   const files = () => {
     const f = fixture();
-    const dir = tmp("tbv-r78-");
+    const dir = tmp("tbv-r78-"), plain = shm("tbv-r78-out-"), held = join(tmp("tbv-r78-sealed-"), "sealed");
     mkdirSync(join(dir, "keys"));
     for (const [t, k] of Object.entries(f.keys)) writeFileSync(join(dir, "keys", t + ".json"), JSON.stringify(k));
     writeFileSync(join(dir, "records.ndjson"), [f.r1, f.r2, f.r3].map((r) => JSON.stringify(r)).join("\n") + "\n");
@@ -188,22 +201,34 @@ describe("r78-key and r78 runs", () => {
     writeFileSync(join(dir, "packet-key.json"), JSON.stringify({ schema: "tbv-packet-key.v1", entries: f.entries }));
     writeFileSync(join(dir, "judges.ndjson"), f.judges.map((j) => JSON.stringify(j)).join("\n") + "\n");
     writeFileSync(join(dir, "astra.ndjson"), f.astra.map((j) => JSON.stringify(j)).join("\n") + "\n");
-    const argv = ["r78", "--records", join(dir, "records.ndjson"), "--keys", join(dir, "keys"), "--split", join(dir, "split.json"), "--packet-key", join(dir, "packet-key.json"), "--judges", join(dir, "judges.ndjson"), "--astra", join(dir, "astra.ndjson"), "--out", join(dir, "astra-readings.json"), "--models", "opus,sol", "--passes", "opus=2,sol=2", "--skill-arms", "current"];
-    return { f, dir, argv };
+    const argv = ["r78", "--records", join(dir, "records.ndjson"), "--keys", join(dir, "keys"), "--split", join(dir, "split.json"), "--packet-key", join(dir, "packet-key.json"), "--judges", join(dir, "judges.ndjson"), "--astra", join(dir, "astra.ndjson"), "--out", join(plain, "astra-readings.json"), "--held", held, "--seal-cmd", SEAL, "--models", "opus,sol", "--passes", "opus=2,sol=2", "--skill-arms", "current"];
+    return { f, dir, plain, held, argv };
   };
-  test("r78-key writes the Astra key and prints counts", async () => {
-    const { f, dir } = files();
+  const without = (argv: string[], flag: string) => argv.filter((_, i) => i !== argv.indexOf(flag) && i !== argv.indexOf(flag) + 1);
+  test("r78-key writes the Astra key, seals it and prints counts", async () => {
+    const { f, dir, plain, held } = files();
     const c = capture();
-    expect(await run(["r78-key", "--key", join(dir, "packet-key.json"), "--out", join(dir, "astra-key.json")], c.io)).toBe(0);
-    expect(JSON.parse(readFileSync(join(dir, "astra-key.json"), "utf8"))).toEqual({ schema: "tbv-packet-key.v1", entries: astraKey(f.entries) });
+    expect(await run(["r78-key", "--key", join(dir, "packet-key.json"), "--out", join(plain, "astra-key.json"), "--held", held, "--seal-cmd", SEAL], c.io)).toBe(0);
+    const want = { schema: "tbv-packet-key.v1", entries: astraKey(f.entries) };
+    expect(JSON.parse(readFileSync(join(plain, "astra-key.json"), "utf8"))).toEqual(want);
+    expect(JSON.parse(unsealed(join(held, "astra-key.json.sealed")))).toEqual(want);
     expect(c.out.join("\n")).toBe("r78-key: 5 of 5 packets for Astra (first 2, d2 1, control 2)");
   });
+  test("both R78 commands refuse with E_USAGE without --held or --seal-cmd, before they read or write anything", async () => {
+    const { plain, held, argv } = files();
+    const key = ["r78-key", "--key", join(plain, "no-such-key.json"), "--out", join(plain, "astra-key.json"), "--held", held, "--seal-cmd", SEAL];
+    for (const a of [without(without(key, "--held"), "--seal-cmd"), without(key, "--held"), without(key, "--seal-cmd")]) await expect(run(a, capture().io)).rejects.toMatchObject({ code: "E_USAGE", message: expect.stringContaining("pass --held <sealed dir> and --seal-cmd <cmd>") });
+    const noRecords = argv.map((x, i) => (argv[i - 1] === "--records" ? join(plain, "no-such-records.ndjson") : x));
+    for (const a of [without(without(noRecords, "--held"), "--seal-cmd"), without(noRecords, "--held"), without(noRecords, "--seal-cmd")]) await expect(run(a, capture().io)).rejects.toMatchObject({ code: "E_USAGE" });
+    expect([existsSync(join(plain, "astra-key.json")), existsSync(join(plain, "astra-readings.json")), existsSync(held)]).toEqual([false, false, false]);
+  });
   test("r78 writes the Astra readings file and prints the judge check, Astra's controls and tasks worse, naming no task", async () => {
-    const { f, dir, argv } = files();
+    const { f, plain, held, argv } = files();
     const c = capture();
     expect(await run(argv, c.io)).toBe(0);
-    const rd = JSON.parse(readFileSync(join(dir, "astra-readings.json"), "utf8")) as ReadingsFile;
+    const rd = JSON.parse(readFileSync(join(plain, "astra-readings.json"), "utf8")) as ReadingsFile;
     expect({ ...rd, plan: { ...rd.plan, manifestSha256: "m".repeat(64) } }).toEqual(astraReadings(input(f), astraRecords(f.astra)));
+    expect(unsealed(join(held, "astra-readings.json.sealed"))).toBe(readFileSync(join(plain, "astra-readings.json"), "utf8"));
     const out = c.out.join("\n");
     expect(out).toContain("r78: astra records for 5 of the 5 packets sol read in this line (unjudged 0); astra readings 2 of 3");
     expect(out).toContain("judge check sol: 1 first packets read by sol and opus");
@@ -215,7 +240,7 @@ describe("r78-key and r78 runs", () => {
   });
   test("r78 refuses a missing --astra and an incomplete Astra run", async () => {
     const { f, dir, argv } = files();
-    await expect(run(argv.filter((_, i) => i !== argv.indexOf("--astra") && i !== argv.indexOf("--astra") + 1), capture().io)).rejects.toMatchObject({ code: "E_TBV_INPUT" });
+    await expect(run(without(argv, "--astra"), capture().io)).rejects.toMatchObject({ code: "E_TBV_INPUT" });
     writeFileSync(join(dir, "astra.ndjson"), f.astra.filter((j) => j.packet !== "p1").map((j) => JSON.stringify(j)).join("\n") + "\n");
     await expect(run(argv, capture().io)).rejects.toMatchObject({ code: "E_TBV_INPUT", message: expect.stringContaining("Astra run is incomplete") });
   });
