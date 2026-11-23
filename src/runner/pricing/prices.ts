@@ -103,7 +103,6 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   "openai:gpt-5.5": { input: 5, output: 30, cache_read: 0.5 },
   "openai:gpt-6.1-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 } },
   "openai:gpt-6-luna": { input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.125, long: { above_input_tokens: 272_000, input: 0.2, output: 0.75, cache_read: 0.02, cache_write: 0.25 } },
-  "openai:gpt-6.2-astra": { input: 8, output: 40, cache_read: 0.4, cache_write: 10, long: { above_input_tokens: 272_000, input: 16, output: 60, cache_read: 0.8, cache_write: 20 } },
   "openai:gpt-6-astra": { input: 10, output: 50, cache_read: 1, cache_write: 12.5, long: { above_input_tokens: 272_000, input: 20, output: 75, cache_read: 2, cache_write: 25 } },
   // GPT-6.2 Astra (the office-hours rewrite eval's judge, gold pass, unanimous key and simulator auditor). OpenAI's model
   // page (https://developers.openai.com/api/docs/models/gpt-6.2-astra) and pricing page

@@ -44,6 +44,8 @@ attachments:
 - **We learned that gstack's trust-but-verify principle did not measurably improve Opus 5.5's reports on held-out work.** In the first 250 words, Opus with the principle disclosed 3.6 more points of the key facts than Opus with no gstack [-1.1, +8.4], under the 8.2 points this test could detect, and its reports carried about 1.5 more unsupported claims each. GPT-6.1 Sol and particle-1 mostly did not follow the principle, so their results are untested. **You should treat the principle as unproven, and fix how it reaches non-Claude models and how it keeps claims tied to evidence before you claim a gain** (R48 verdict FIX-METHOD).
 - **We learned that today's gstack report guidance may cost disclosure.** Reports written with current gstack named fewer key facts up front than reports with no gstack: Sol -7.9 points [-11.7, -4.2] and Opus -4.8 [-8.9, -0.6]. The frozen rule reads both as untested, because current gstack's own report markers showed up in fewer than 80% of reports, so **this is a descriptive signal, not a verdict.** **You should look at the shared closer that asks agents to report in a few short lines,** which the preregistration named as the likely cause before any data.
 
+Call settled: gstack's trust-but-verify principle (P, f83eba4) is not shown to improve Opus reports, so no gain is claimed for it (FIX-METHOD)
+
 ## What works
 
 **The measurement.** The held-out read ran 2,300 readings on 100 tasks, with no reading left unjudged that a contrast needed. Headline coverage is 0.990 raw and 1.000 once the one held-back control task is set aside (below). Both cross-family judges pass the R78 judge check: Sol at kappa 0.983 [0.961, 1.000] and Opus at 0.614 [0.530, 0.698], each on more than 200 labelled outputs. The stock report of generic concerns scores 0.000 and the oracle report written from the key scores 1.000 under both judges and under GPT-6.2 Astra. The seeded double read agrees at kappa 0.677 (positive agreement 0.804). On the run host, the R78 build reproduced the counted readings and comparison files byte for byte before Astra spent anything. If you build agents, this is a test you can reuse: it grades substance (did the report name the failed check, the skipped step, the unverified claim) and not layout.
@@ -217,10 +219,7 @@ The 100 held-out tasks, their keys, histories and reports stay sealed, so this r
 
 ## Agent notes
 
-- **Paid spend, settled in the ledger with $0 unknown: $1,004.70** across the eval's items: keys (tbv-author) $132.25, stage 1 (tbv-hr) $17.02, dev baseline $105.34, climbs $34.81, $35.30 and $35.12, held read $366.22 of a $486 cap, third Opus pass $145.51 of $174, R78 Astra $133.12 of $200. The R78 cap was raised from $180 to $200 by the gstack-evals Captain (GSTA-2) after the pricing check projected $180.60 from Sol's measured cost per packet, with nothing spent.
-- **All-in.** The last all-in check before a lease read $1,967.48 (crew $744.07 as frozen, crew to come $250, settled $973.40). The line check, the all-in plus the open caps, stayed under the $5,000 stop at every lease (last $2,335.74). The frozen $2,000 verdicts printed NO START and don't bind (amendment 2).
 - **The third pass's caching miss.** tbv-held-p3 cost $133.36 for its 300 readings against $82.97 projected. Its 300 Opus readings wrote as many prompt-cache tokens (20.6M) as the main batch's 600, so a reading cost about $0.44 against $0.28.
-- **Clean keys,** about $7, are disclosed in method note 4.
 - **Custody openings** 8 to 15 for this thread are in the Captain drive (handoffs/GEVA-401/CUSTODY.md), with the run record beside them.
 
 ## Disclosures
