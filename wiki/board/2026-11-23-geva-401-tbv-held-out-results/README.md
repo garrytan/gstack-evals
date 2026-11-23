@@ -131,7 +131,7 @@ The R78 addendum (2026-11-22-geva-401-tbv-r78-addendum) checks each judge agains
 | GPT-6.1 Sol | 222 | 605 (220) | 0.997 (322 of 323) | 0.014 (4 of 282) | 0.983 [0.961, 1.000] | passes |
 | Opus 5.5 | 219 | 740 (219) | 0.818 (498 of 609) | 0.000 (0 of 131) | 0.614 [0.530, 0.698] | passes |
 
-Headline line; the 100-task line gives Sol 0.984 and Opus 0.608. Both pass, but the Opus judge's interval reaches below 0.6, and it misses about one fact in five that the other two agree was disclosed. Opus judges Sol's and particle-1's reports, so their recall levels are probably understated next to Opus's. Contrasts compare arms under the same judge, so this doesn't bias them, but the levels across models should not be compared. Astra's own stock and oracle controls read 0.000 and 1.000.
+Headline line; the 100-task line gives Sol 0.984 and Opus 0.608. Both pass, but the Opus judge's interval reaches below 0.6, and it credits about one fact in five that the other two agree was missed (111 of 609), while it never marks missed a fact they agree was disclosed (0 of 131). Opus judges Sol's and particle-1's reports, so their recall levels are probably overstated next to Opus's. Contrasts compare arms under the same judge, so the error falls on both arms alike, but the levels across models should not be compared. Astra's own stock and oracle controls read 0.000 and 1.000.
 
 **The Astra reading** puts Astra's labels in place of Sol's on every reading Sol judged (that is, every Opus arm). Headline Opus principle minus none becomes +2.5 points [-1.3, +6.5], Holm p 0.623, still not distinguished. Principle minus current becomes +6.3 [+3.2, +9.4] and current minus none -3.8 [-7.2, -0.1], both still untested. Under the addendum's section 3, when the two readings disagree on the sign of a headline Opus comparison, the post shows both and claims nothing from it. The three skill-layer Opus contrasts agree in sign. Two Capy-layer contrasts disagree: principle minus none (+0.8 with Sol's labels, -2.3 with Astra's) and current minus none (+0.2 and -4.2). Nothing is claimed for either. Sol and particle-1 rows don't change, because Opus judged them.
 
@@ -176,7 +176,7 @@ The dev MDD was 13.1 points. Stage 1 had found headroom: Opus with no gstack at 
 1. **The escape-code miss (ruling C1).** The extractor's parseTests read test output without stripping terminal colour codes, so on some histories a colour-coded test line was missed. On dev it changed nothing that counted: 0 of 20 kept dev source A tasks moved, 2 of 41 considered source A histories gained test facts and both fell under the 3-fact floor anyway, and 0 of 188 source B histories hold the escape character. On held A, 8 of 50 kept tasks hold it, 3 tasks change, 3 keys lack a fact the stripped extract adds, and 2 tasks flip stratum. The Captain ruled to run all 100 as frozen, drop the 3 affected tasks from the headline (the 97-task line here) and report the as-run 100 as the sensitivity line. One of the 3 is a control task, so the headline manifest keeps 98 rows with all 20 controls, and that task's reading records are held back inside custody; it counts as excluded, not as a coverage miss (ruling E1). The extract fix (strip escape sequences before parseTests, with a test each way) lands on main in its own pull request after this one.
 2. **Capture files for the current arm (ruling B1).** The P and C record froze C's splice-set digests but archived no capture files, and no current-arm shape was captured at C. The read used the dev baseline's archived captures at 641d622 for current (C's tree equals 641d622's), climb 3's at P for principle and the dev baseline's for none. Every file matches a frozen digest.
 3. **Held-out source B's frame (amendment 2).** Source B adds gstack's crew pull requests merged after P, drawn in merge order. The first keys driver stopped at its pool step because the cluster cap dropped 9 rows, before any spend; it resumed with a rewritten driver and the same seed.
-4. **Held clean runs.** The frozen keys walk keyed 46 held clean rows (about $7) although stage 1's ruling said no keys would be spent on held clean runs. The split kept no clean runs, so the clean-task checks read n/a.
+4. **Held clean runs.** The frozen keys walk keyed 46 held clean rows although stage 1's ruling said no keys would be spent on held clean runs. The split kept no clean runs, so the clean-task checks read n/a.
 5. **The third Opus pass ran.** Amendment 2 made the $2,000 all-in a guideline, so the third Opus pass and the Capy layer ran. Opus's MDD is the 3-pass row.
 6. **One unjudged judge record.** The held judge batch ended with 1 of 4,392 records unjudged. No contrast needed it: coverage is 1.000 on the 100-task line.
 7. **No rig admission.** Every lease printed "leased without admission", because the tbv items run with admission set to warn and the tbv rig has no admission record. Nothing stopped.
@@ -192,7 +192,7 @@ Held-out task bodies, keys, histories and reports never left sealed storage or R
 - Held-out work is mostly "other" and "short" strata; only 4 tasks have a long flagged list.
 - The held set has no clean runs, so it cannot show whether the principle invents worries on clean work.
 - Half of source B is gstack's own crew work, written after P by the people building the principle.
-- The Opus judge misses about one fact in five, so cross-model recall levels are not comparable. Contrasts within a model are.
+- The Opus judge credits about one fact in five that the other two judges agree was missed, so cross-model recall levels are not comparable. Contrasts within a model are.
 - Two Capy-layer contrasts change sign under Astra's labels.
 - particle-1 runs through OpenRouter; its exposure is low enough that every principle contrast on it is untested.
 
@@ -219,7 +219,7 @@ The 100 held-out tasks, their keys, histories and reports stay sealed, so this r
 
 ## Agent notes
 
-- **The third pass's caching miss.** tbv-held-p3 cost $133.36 for its 300 readings against $82.97 projected. Its 300 Opus readings wrote as many prompt-cache tokens (20.6M) as the main batch's 600, so a reading cost about $0.44 against $0.28.
+- **The third pass's caching miss.** tbv-held-p3's 300 Opus readings wrote as many prompt-cache tokens (20.6M) as the main batch's 600, so each reading cost more than projected. The figures are in the experiment's registry row.
 - **Custody openings** 8 to 15 for this thread are in the Captain drive (handoffs/GEVA-401/CUSTODY.md), with the run record beside them.
 
 ## Disclosures
