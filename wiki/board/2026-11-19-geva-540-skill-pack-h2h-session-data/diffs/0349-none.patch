@@ -1,0 +1,133 @@
+diff --git a/Core/GameInstanceManager.cs b/Core/GameInstanceManager.cs
+index 98d848d..82373d4 100644
+--- a/Core/GameInstanceManager.cs
++++ b/Core/GameInstanceManager.cs
+@@ -281,6 +281,11 @@ namespace CKAN
+                 throw new NotGameDirKraken(existingInstance.GameDir, string.Format(
+                     Properties.Resources.GameInstanceCloneInvalid, existingInstance.Game.ShortName));
+             }
++            if (Utilities.IsSameOrSubDirectory(existingInstance.GameDir, newPath))
++            {
++                throw new PathErrorKraken(newPath, string.Format(
++                    Properties.Resources.CopyDirectoryIntoItself, existingInstance.GameDir, newPath));
++            }
+ 
+             CKANPathUtils.CheckFreeSpace(new DirectoryInfo(newPath) switch
+                                          {
+diff --git a/Core/Properties/Resources.resx b/Core/Properties/Resources.resx
+index 758e638..0a528fb 100644
+--- a/Core/Properties/Resources.resx
++++ b/Core/Properties/Resources.resx
+@@ -338,6 +338,7 @@ Free up space on that device or change your settings to use another location.
+   <data name="KrakenInstanceNameTaken" xml:space="preserve"><value>This instance name is already taken: {0}</value></data>
+   <data name="KrakenNoInstance" xml:space="preserve"><value>No instance with this name or at this path: {0}</value></data>
+   <data name="DirectoryNotEmpty" xml:space="preserve"><value>Directory not empty: {0}</value></data>
++  <data name="CopyDirectoryIntoItself" xml:space="preserve"><value>Cannot copy {0} into itself or one of its subdirectories: {1}</value></data>
+   <data name="RelationshipResolverConflictsWith" xml:space="preserve"><value>{0} conflicts with {1}</value></data>
+   <data name="RelationshipResolverConflictingModDescription" xml:space="preserve"><value>{0} (needed for: {1})</value></data>
+   <data name="RelationshipResolverRequiredButResolver" xml:space="preserve"><value>{0} required, but an incompatible version is in the resolver</value></data>
+diff --git a/Core/Utilities.cs b/Core/Utilities.cs
+index 215fc38..c846990 100644
+--- a/Core/Utilities.cs
++++ b/Core/Utilities.cs
+@@ -86,6 +86,12 @@ namespace CKAN
+                                          string[] subFolderRelPathsToLeaveEmpty,
+                                          string[] subFolderRelPathsToForbidHardlinks)
+         {
++            if (IsSameOrSubDirectory(sourceDirPath, destDirPath))
++            {
++                throw new PathErrorKraken(destDirPath,
++                                          string.Format(Properties.Resources.CopyDirectoryIntoItself,
++                                                        sourceDirPath, destDirPath));
++            }
+             using (var transaction = CkanTransaction.CreateTransactionScope())
+             {
+                 CopyDirectory(sourceDirPath, destDirPath, new TxFileManager(),
+@@ -97,6 +103,25 @@ namespace CKAN
+             }
+         }
+ 
++        /// <summary>
++        /// Check whether one path is the same as or inside of another
++        /// </summary>
++        /// <param name="parentPath">The possible parent directory</param>
++        /// <param name="childPath">The possible child directory</param>
++        /// <returns>true if childPath is parentPath or a subdirectory of it, false otherwise</returns>
++        public static bool IsSameOrSubDirectory(string parentPath, string childPath)
++        {
++            var parent = NormalizeDirPath(parentPath);
++            var child  = NormalizeDirPath(childPath);
++            return child.Equals(parent, Platform.PathComparison)
++                || child.StartsWith(parent + Path.DirectorySeparatorChar, Platform.PathComparison);
++        }
++
++        private static string NormalizeDirPath(string path)
++            => Path.GetFullPath(path)
++                   .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
++                   .TrimEnd(Path.DirectorySeparatorChar);
++
+         private static void CopyDirectory(string        sourceDirPath,
+                                           string        destDirPath,
+                                           TxFileManager txFileMgr,
+diff --git a/Tests/Core/GameInstanceManager.cs b/Tests/Core/GameInstanceManager.cs
+index b2e9fca..f835e71 100644
+--- a/Tests/Core/GameInstanceManager.cs
++++ b/Tests/Core/GameInstanceManager.cs
+@@ -159,6 +159,18 @@ namespace Tests.Core
+             }
+         }
+ 
++        [Test]
++        public void CloneInstance_ToSubfolderOfSource_ThrowsPathErrorKraken()
++        {
++            string instanceName = "newInstance";
++            var newPath = Path.Combine(tidy!.KSP.GameDir, "RP1");
++
++            Assert.Throws<PathErrorKraken>(() =>
++                manager?.CloneInstance(tidy.KSP, instanceName, newPath));
++            Assert.IsFalse(manager?.HasInstance(instanceName));
++            Assert.IsFalse(Directory.Exists(newPath));
++        }
++
+         [Test]
+         public void CloneInstance_GoodInstance_ManagerHasValidInstance()
+         {
+diff --git a/Tests/Core/UtilitiesTests.cs b/Tests/Core/UtilitiesTests.cs
+index 5e4727d..e30f853 100644
+--- a/Tests/Core/UtilitiesTests.cs
++++ b/Tests/Core/UtilitiesTests.cs
+@@ -106,6 +106,34 @@ namespace Tests.Core
+             }
+         }
+ 
++        [Test]
++        public void CopyDirectory_DestInsideSource_ThrowsAndCopiesNothing()
++        {
++            // Arrange
++            using (var dir = TemporaryDirectory.CopiedFromDir(goodKspDir))
++            {
++                var source = dir.Directory.FullName;
++                var dest   = Path.Combine(source, "sub", "clone");
++
++                // Act / Assert
++                Assert.Throws<PathErrorKraken>(() =>
++                    Utilities.CopyDirectory(source, dest,
++                                            Array.Empty<string>(), Array.Empty<string>(),
++                                            Array.Empty<string>(), Array.Empty<string>()));
++                Assert.IsFalse(Directory.Exists(dest));
++            }
++        }
++
++        [TestCase("/a/b",  "/a/b",       ExpectedResult = true)]
++        [TestCase("/a/b",  "/a/b/",      ExpectedResult = true)]
++        [TestCase("/a/b/", "/a/b/c",     ExpectedResult = true)]
++        [TestCase("/a/b",  "/a/b/c/../d", ExpectedResult = true)]
++        [TestCase("/a/b",  "/a/bc",      ExpectedResult = false)]
++        [TestCase("/a/b",  "/a",         ExpectedResult = false)]
++        [TestCase("/a/b",  "/a/b/../c",  ExpectedResult = false)]
++        public bool IsSameOrSubDirectory_VariousPaths_Works(string parent, string child)
++            => Utilities.IsSameOrSubDirectory(parent, child);
++
+         private readonly string goodKspDir = TestData.good_ksp_dir();
+     }
+ }

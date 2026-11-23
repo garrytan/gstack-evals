@@ -1,0 +1,106 @@
+== claude-opus-5-5
+claim 1 A1-A0 (primary): not run
+claim 1 A1-A2 (lens): not run
+claim 1 A2-A0 (framing): not run
+claim 1 A3-A0 (qa): not run
+claim 1 A3-A1 (qa_beside): not run
+claim 2 A1-S0 (primary, incremental): n=52 repos=37 diff=-7.1 pts 95% [-13.7, -0.7] p=0.0896 worse=10 better=5 -> NO MEASURABLE DIFFERENCE; MDD 10.8 to 12.0 points (power.txt, k = 3, n = 60, design effect 1.2)
+  first-stage break-rate difference: n=52 repos=37 diff=13.5 pts 95% [4.0, 24.0] p=0.0156 worse=0 better=7 -> breaks more
+  gap worst case: n=54 repos=39 diff=-10.5 pts 95% [-18.7, -3.1] p=0.0242 worse=12 better=5 -> HURTS
+claim 2 A1-S2 (lens, incremental): n=49 repos=36 diff=0.0 pts 95% [-5.0, 5.8] p=1.00 worse=6 better=4 -> no measurable lens effect; MDD 10.8 to 12.0 points (power.txt, k = 3, n = 60, design effect 1.2)
+  first-stage break-rate difference: n=49 repos=36 diff=-4.1 pts 95% [-13.0, 3.7] p=0.625 worse=3 better=1
+  gap worst case: n=54 repos=39 diff=-1.9 pts 95% [-9.6, 5.3] p=0.786 worse=8 better=5 -> NO MEASURABLE DIFFERENCE
+claim 2 S2-S0 (framing, incremental): n=51 repos=38 diff=-7.8 pts 95% [-15.0, -1.4] p=0.0461 worse=10 better=3
+claim 2 A1-S0 (primary, end to end (net value)): n=52 repos=37 diff=-9.0 pts 95% [-17.2, -1.4] p=0.0309 worse=11 better=4
+claim 2 A1-S2 (lens, end to end (net value)): n=49 repos=36 diff=0.0 pts 95% [-5.0, 5.7] p=1.00 worse=6 better=4
+claim 2 S2-S0 (framing, end to end (net value)): n=51 repos=38 diff=-7.8 pts 95% [-15.1, -1.4] p=0.0461 worse=10 better=3
+claim 2 A1-S0 (primary, whole change, incremental (reported only)): n=28 repos=23 diff=-1.2 pts 95% [-9.5, 6.4] p=1.00 worse=4 better=4
+claim 2 A1-S2 (lens, whole change, incremental (reported only)): n=28 repos=23 diff=4.8 pts 95% [-3.2, 15.4] p=0.500 worse=2 better=3
+claim 2 S2-S0 (framing, whole change, incremental (reported only)): n=26 repos=21 diff=-5.1 pts 95% [-16.7, 3.7] p=0.508 worse=5 better=3
+tree S0: kept=54 pass^3 incremental 32/54 end to end 32/54 inherited=0 drift_units=0
+tree A1: kept=52 pass^3 incremental 28/52 end to end 27/52 inherited=2 drift_units=0
+tree S2: kept=51 pass^3 incremental 30/51 end to end 30/51 inherited=1 drift_units=0
+literal choices: first-stage test-patch conflict removed 0 trees; start-set conflict gapped 5 trees
+stratum A1-A0: state no pairs | other no pairs | difference of differences none
+stratum A1-A2: state no pairs | other no pairs | difference of differences none
+July stratum (20 units): claim 1 no pairs | claim 2 n=20 repos=13 diff=-13.3 pts 95% [-27.1, -3.5] p=0.156 worse=5 better=2
+reruns: {"A1":{"strict":{"sessions":41,"fix":2,"no_fix":39,"break":0,"direction_unrecorded":0},"adapted":{"sessions":39,"fix":2,"no_fix":37,"break":0,"direction_unrecorded":0}},"S2":{"strict":{"sessions":41,"fix":1,"no_fix":40,"break":0,"direction_unrecorded":0},"adapted":{"sessions":40,"fix":1,"no_fix":39,"break":0,"direction_unrecorded":0}}}
+fallbacks: {"A1":{"rebuild_failed (strict)":2,"rebuild_failed (adapted)":2,"test_patch_conflict_adapted (adapted)":2,"stable_missing (adapted)":1},"S2":{"rebuild_failed (strict)":2,"rebuild_failed (adapted)":2,"test_patch_conflict_adapted (adapted)":2,"skip_marker (adapted)":2,"stable_missing (adapted)":3}}
+questions: {"A1":{"sessions":54,"ask_user_question":0,"prose":0},"S2":{"sessions":54,"ask_user_question":0,"prose":0}}
+exposure: {"A1":{"sessions":54,"exposed":51,"rate":0.9444444444444444},"S2":{"sessions":54,"exposed":52,"rate":0.9629629629629629}}
+== openai/gpt-6.1-sol
+claim 1 A1-A0 (primary): not run
+claim 1 A1-A2 (lens): not run
+claim 1 A2-A0 (framing): not run
+claim 1 A3-A0 (qa): not run
+claim 1 A3-A1 (qa_beside): not run
+claim 2 A1-S0 (primary, incremental): n=48 repos=37 diff=-6.3 pts 95% [-11.9, -2.0] p=0.0156 worse=7 better=0 -> INCOMPLETE
+  E_SM_CELL_INCOMPLETE openai/gpt-6.1-sol tree A1: gaps on more than 10% of units, no verdict
+  first-stage break-rate difference: n=48 repos=37 diff=12.5 pts 95% [3.6, 24.5] p=0.0313 worse=0 better=6 -> breaks more
+  gap worst case: n=54 repos=39 diff=-12.3 pts 95% [-20.7, -5.2] p=0.00220 worse=12 better=1 -> HURTS
+claim 2 A1-S2 (lens, incremental): n=45 repos=35 diff=-2.2 pts 95% [-8.9, 3.7] p=0.684 worse=6 better=4 -> no reading (incomplete cell); MDD 10.8 to 12.0 points (power.txt, k = 3, n = 60, design effect 1.2)
+  E_SM_CELL_INCOMPLETE openai/gpt-6.1-sol tree A1, openai/gpt-6.1-sol tree S2: gaps on more than 10% of units, no verdict
+  first-stage break-rate difference: n=45 repos=35 diff=-8.9 pts 95% [-20.0, 0.0] p=0.219 worse=5 better=1
+  gap worst case: n=54 repos=39 diff=-2.5 pts 95% [-10.1, 4.8] p=0.648 worse=8 better=5 -> NO MEASURABLE DIFFERENCE
+claim 2 S2-S0 (framing, incremental): n=47 repos=36 diff=-5.7 pts 95% [-11.3, -0.8] p=0.0938 worse=6 better=1
+  E_SM_CELL_INCOMPLETE openai/gpt-6.1-sol tree S2: gaps on more than 10% of units, no verdict
+claim 2 A1-S0 (primary, end to end (net value)): n=48 repos=37 diff=-8.3 pts 95% [-15.6, -2.9] p=0.00781 worse=8 better=0
+  E_SM_CELL_INCOMPLETE openai/gpt-6.1-sol tree A1: gaps on more than 10% of units, no verdict
+claim 2 A1-S2 (lens, end to end (net value)): n=45 repos=35 diff=0.0 pts 95% [-8.1, 7.5] p=1.00 worse=6 better=5
+  E_SM_CELL_INCOMPLETE openai/gpt-6.1-sol tree A1, openai/gpt-6.1-sol tree S2: gaps on more than 10% of units, no verdict
+claim 2 S2-S0 (framing, end to end (net value)): n=47 repos=36 diff=-7.8 pts 95% [-14.7, -1.6] p=0.0469 worse=7 better=1
+  E_SM_CELL_INCOMPLETE openai/gpt-6.1-sol tree S2: gaps on more than 10% of units, no verdict
+claim 2 A1-S0 (primary, whole change, incremental (reported only)): n=32 repos=28 diff=-8.3 pts 95% [-17.2, -1.2] p=0.0625 worse=7 better=1
+  E_SM_CELL_INCOMPLETE openai/gpt-6.1-sol tree A1: gaps on more than 10% of units, no verdict
+claim 2 A1-S2 (lens, whole change, incremental (reported only)): n=32 repos=28 diff=1.0 pts 95% [-3.9, 6.7] p=1.00 worse=2 better=2
+  E_SM_CELL_INCOMPLETE openai/gpt-6.1-sol tree A1, openai/gpt-6.1-sol tree S2: gaps on more than 10% of units, no verdict
+claim 2 S2-S0 (framing, whole change, incremental (reported only)): n=34 repos=27 diff=-11.8 pts 95% [-21.4, -3.2] p=0.0273 worse=8 better=1
+  E_SM_CELL_INCOMPLETE openai/gpt-6.1-sol tree S2: gaps on more than 10% of units, no verdict
+tree S0: kept=53 pass^3 incremental 33/52 end to end 33/52 inherited=0 drift_units=0
+tree A1: kept=48 pass^3 incremental 26/45 end to end 25/45 inherited=3 drift_units=0
+tree S2: kept=47 pass^3 incremental 28/46 end to end 27/46 inherited=1 drift_units=0
+literal choices: first-stage test-patch conflict removed 0 trees; start-set conflict gapped 8 trees
+stratum A1-A0: state no pairs | other no pairs | difference of differences none
+stratum A1-A2: state no pairs | other no pairs | difference of differences none
+July stratum (20 units): claim 1 no pairs | claim 2 n=18 repos=13 diff=-7.4 pts 95% [-20.8, 0.0] p=0.500 worse=2 better=0
+reruns: {"A1":{"strict":{"sessions":40,"fix":4,"no_fix":36,"break":3,"direction_unrecorded":0},"adapted":{"sessions":38,"fix":3,"no_fix":35,"break":3,"direction_unrecorded":0}},"S2":{"strict":{"sessions":42,"fix":2,"no_fix":39,"break":2,"direction_unrecorded":0},"adapted":{"sessions":38,"fix":1,"no_fix":37,"break":0,"direction_unrecorded":0}}}
+fallbacks: {"A1":{"skip_marker (adapted)":3,"rebuild_failed (strict)":1,"rebuild_failed (adapted)":1,"test_patch_conflict_adapted (adapted)":4,"stable_missing (adapted)":2},"S2":{"rebuild_failed (strict)":3,"rebuild_failed (adapted)":3,"test_patch_conflict_adapted (adapted)":5,"skip_marker (adapted)":3,"stable_missing (adapted)":4}}
+questions: {"A1":{"sessions":53,"ask_user_question":0,"prose":0},"S2":{"sessions":54,"ask_user_question":0,"prose":0}}
+exposure: {"A1":{"sessions":53,"exposed":52,"rate":0.9811320754716981},"S2":{"sessions":54,"exposed":54,"rate":1}}
+== particle-ai/particle-1
+claim 1 A1-A0 (primary): not run
+claim 1 A1-A2 (lens): not run
+claim 1 A2-A0 (framing): not run
+claim 1 A3-A0 (qa): not run
+claim 1 A3-A1 (qa_beside): not run
+claim 2 A1-S0 (primary, incremental): n=53 repos=39 diff=-3.8 pts 95% [-12.2, 3.8] p=0.454 worse=8 better=7 -> NO MEASURABLE DIFFERENCE; MDD 10.8 to 12.0 points (power.txt, k = 3, n = 60, design effect 1.2)
+  first-stage break-rate difference: n=53 repos=39 diff=20.8 pts 95% [10.5, 32.7] p=0.000977 worse=0 better=11 -> breaks more
+  gap worst case: n=54 repos=39 diff=-3.1 pts 95% [-11.5, 4.4] p=0.554 worse=8 better=8 -> NO MEASURABLE DIFFERENCE
+claim 2 A1-S2 (lens, incremental): n=51 repos=38 diff=-0.7 pts 95% [-9.2, 7.8] p=1.00 worse=7 better=6 -> no measurable lens effect; MDD 10.8 to 12.0 points (power.txt, k = 3, n = 60, design effect 1.2)
+  first-stage break-rate difference: n=51 repos=38 diff=-5.9 pts 95% [-19.6, 7.5] p=0.549 worse=7 better=4
+  gap worst case: n=54 repos=39 diff=0.6 pts 95% [-8.2, 9.8] p=1.00 worse=8 better=7 -> NO MEASURABLE DIFFERENCE
+claim 2 S2-S0 (framing, incremental): n=52 repos=38 diff=-1.9 pts 95% [-10.4, 5.7] p=0.762 worse=7 better=6
+claim 2 A1-S0 (primary, end to end (net value)): n=53 repos=39 diff=-1.9 pts 95% [-9.6, 4.8] p=0.738 worse=7 better=7
+claim 2 A1-S2 (lens, end to end (net value)): n=51 repos=38 diff=3.9 pts 95% [-4.9, 12.7] p=0.476 worse=6 better=8
+claim 2 S2-S0 (framing, end to end (net value)): n=52 repos=38 diff=-2.6 pts 95% [-10.7, 5.2] p=0.646 worse=7 better=5
+claim 2 A1-S0 (primary, whole change, incremental (reported only)): n=18 repos=17 diff=0.0 pts 95% [-15.7, 13.7] p=1.00 worse=3 better=5
+claim 2 A1-S2 (lens, whole change, incremental (reported only)): n=20 repos=18 diff=10.0 pts 95% [-8.8, 29.6] p=0.404 worse=3 better=7
+claim 2 S2-S0 (framing, whole change, incremental (reported only)): n=20 repos=19 diff=-1.7 pts 95% [-17.5, 14.0] p=1.00 worse=3 better=3
+tree S0: kept=54 pass^3 incremental 31/53 end to end 31/53 inherited=0 drift_units=0
+tree A1: kept=53 pass^3 incremental 30/53 end to end 31/53 inherited=0 drift_units=1
+tree S2: kept=52 pass^3 incremental 30/52 end to end 29/52 inherited=1 drift_units=0
+literal choices: first-stage test-patch conflict removed 0 trees; start-set conflict gapped 2 trees
+stratum A1-A0: state no pairs | other no pairs | difference of differences none
+stratum A1-A2: state no pairs | other no pairs | difference of differences none
+July stratum (20 units): claim 1 no pairs | claim 2 n=19 repos=13 diff=-10.5 pts 95% [-29.4, 3.3] p=0.344 worse=4 better=2
+reruns: {"A1":{"strict":{"sessions":42,"fix":0,"no_fix":41,"break":4,"direction_unrecorded":0},"adapted":{"sessions":41,"fix":0,"no_fix":41,"break":0,"direction_unrecorded":0}},"S2":{"strict":{"sessions":42,"fix":1,"no_fix":40,"break":2,"direction_unrecorded":0},"adapted":{"sessions":40,"fix":1,"no_fix":39,"break":1,"direction_unrecorded":0}}}
+fallbacks: {"A1":{"rebuild_failed (strict)":3,"rebuild_failed (adapted)":3,"stable_missing (adapted)":1},"S2":{"rebuild_failed (strict)":6,"rebuild_failed (adapted)":5,"test_patch_conflict_adapted (adapted)":2,"stable_missing (adapted)":1}}
+questions: {"A1":{"sessions":54,"ask_user_question":0,"prose":0},"S2":{"sessions":54,"ask_user_question":0,"prose":0}}
+exposure: {"A1":{"sessions":54,"exposed":54,"rate":1},"S2":{"sessions":54,"exposed":52,"rate":0.9629629629629629}}
+== pooled across models (stratified by model, descriptive)
+A1-A0 (primary): n=0 diff=0.0 pts 95% [none] p=none worse=0 better=0
+A1-A2 (lens): n=0 diff=0.0 pts 95% [none] p=none worse=0 better=0
+A2-A0 (framing): n=0 diff=0.0 pts 95% [none] p=none worse=0 better=0
+A1-S0 (primary): n=153 diff=-5.7 pts 95% [-9.7, -1.9] p=0.00758 worse=25 better=12
+A1-S2 (lens): n=145 diff=-0.9 pts 95% [-4.9, 3.1] p=0.756 worse=19 better=14
+S2-S0 (framing): n=150 diff=-5.1 pts 95% [-9.3, -1.3] p=0.0191 worse=23 better=10

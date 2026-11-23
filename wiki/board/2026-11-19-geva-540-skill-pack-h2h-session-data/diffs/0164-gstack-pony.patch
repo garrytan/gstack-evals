@@ -1,0 +1,134 @@
+diff --git a/rust/src/tools/ctx_edit.rs b/rust/src/tools/ctx_edit.rs
+index 7aff71f..8c6df5d 100644
+--- a/rust/src/tools/ctx_edit.rs
++++ b/rust/src/tools/ctx_edit.rs
+@@ -280,6 +280,37 @@ pub fn run_io(params: &EditParams, last_mode: &str) -> (String, CacheEffect) {
+         }
+     }
+ 
++    // Compressed ctx_read modes drop/collapse blank lines, so an old_string
++    // copied from that view skips lines the file still has. Match ignoring
++    // blank lines, but only when every match is the same original span.
++    let spans = find_spans_ignoring_blank_lines(content, old_str);
++    if let Some(first) = spans.first()
++        && spans.iter().all(|s| s == first)
++    {
++        let line_sep = if uses_crlf { "\r\n" } else { "\n" };
++        let adapted_new = adapt_new_string_to_line_sep(new_str, line_sep);
++        let args = ReplaceArgs {
++            content,
++            old_str: first,
++            new_str: &adapted_new,
++            occurrences: content.matches(first).count(),
++            replace_all: params.replace_all,
++            old_tokens: count_tokens(&params.old_string),
++            new_tokens: count_tokens(&params.new_string),
++        };
++        return do_replace(path, &pre, params, cap, &args);
++    }
++    if spans.len() > 1 {
++        return (
++            format!(
++                "ERROR: old_string matches {} different places in {file_path} when blank lines are ignored. \
++                 Provide more context to make old_string unique.",
++                spans.len()
++            ),
++            CacheEffect::None,
++        );
++    }
++
+     if content.contains(new_str) {
+         return (
+             format!(
+@@ -662,6 +693,57 @@ fn find_original_span(content: &str, normalized_needle: &str) -> Option<String>
+     None
+ }
+ 
++/// Original spans of `content` whose non-blank lines equal (trailing-whitespace
++/// insensitive) the non-blank lines of `needle`, with any number of blank lines
++/// in between. Each span runs from the first to the last matched line.
++fn find_spans_ignoring_blank_lines<'a>(content: &'a str, needle: &str) -> Vec<&'a str> {
++    let needle_lines: Vec<&str> = needle
++        .lines()
++        .map(str::trim_end)
++        .filter(|l| !l.is_empty())
++        .collect();
++    if needle_lines.is_empty() {
++        return Vec::new();
++    }
++
++    // (start byte, end byte excluding line terminator, trimmed text)
++    let mut lines = Vec::new();
++    let mut offset = 0;
++    for raw in content.split_inclusive('\n') {
++        let body = raw.trim_end_matches(['\n', '\r']);
++        lines.push((offset, offset + body.len(), body.trim_end()));
++        offset += raw.len();
++    }
++
++    let mut spans = Vec::new();
++    let mut start = 0;
++    while start < lines.len() {
++        if lines[start].2 != needle_lines[0] {
++            start += 1;
++            continue;
++        }
++        let mut li = start;
++        let mut matched = true;
++        for nl in &needle_lines[1..] {
++            li += 1;
++            while li < lines.len() && lines[li].2.is_empty() {
++                li += 1;
++            }
++            if li >= lines.len() || lines[li].2 != *nl {
++                matched = false;
++                break;
++            }
++        }
++        if matched {
++            spans.push(&content[lines[start].0..lines[li].1]);
++            start = li + 1;
++        } else {
++            start += 1;
++        }
++    }
++    spans
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+@@ -992,6 +1074,33 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn blank_lines_stripped_by_compressed_read_still_match() {
++        let f = make_temp("fn a() {\n    let x = 1;\n\n\n    let y = 2;\n}\nfn b() {}\n");
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(
++                f.path(),
++                "    let x = 1;\n    let y = 2;\n}",
++                "    let x = 1;\n    let y = 3;\n}",
++                false,
++                false,
++            ),
++        );
++        assert!(result.contains("✓"), "blank-line tolerant match: {result}");
++        let content = std::fs::read_to_string(f.path()).unwrap();
++        assert_eq!(
++            content,
++            "fn a() {\n    let x = 1;\n    let y = 3;\n}\nfn b() {}\n"
++        );
++
++        // Ambiguous across distinct spans → refuse.
++        let g = make_temp("a\n\nb\nc\na\n\n\nb\n");
++        let result = handle(&mut cache, &mk_params(g.path(), "a\nb\n", "z", false, false));
++        assert!(result.contains("2 different places"), "{result}");
++    }
++
+     #[test]
+     fn lf_file_with_crlf_search() {
+         let f = make_temp("line1\nline2\nline3\n");

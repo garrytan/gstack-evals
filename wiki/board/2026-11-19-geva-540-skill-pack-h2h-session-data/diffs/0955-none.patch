@@ -1,0 +1,47 @@
+diff --git a/packages/kit/src/runtime/client/client.js b/packages/kit/src/runtime/client/client.js
+index 1929168..7ba52fe 100644
+--- a/packages/kit/src/runtime/client/client.js
++++ b/packages/kit/src/runtime/client/client.js
+@@ -3017,6 +3017,7 @@ export function is_current_location(value) {
+ 
+ 	const destination = resolve_url(value);
+ 	const current = new URL(location.href);
++	if (destination.origin !== current.origin) return false;
+ 	if (destination.pathname !== current.pathname) return false;
+ 
+ 	const keys = new Set([...destination.searchParams.keys(), ...current.searchParams.keys()]);
+@@ -3044,7 +3045,13 @@ export function is_current_location(value) {
+  * @returns {Promise<void>}
+  */
+ export function apply_action_navigation(location, result, refresh_all) {
+-	return _goto(location, {
++	const url = resolve_url(location);
++	if (url.origin !== origin) {
++		// never navigate to a different origin for a non-redirect action result
++		return applyAction(result);
++	}
++
++	return _goto(url, {
+ 		type: 'form',
+ 		refreshAll: refresh_all,
+ 		action_result: result
+diff --git a/packages/kit/src/runtime/server/page/actions.js b/packages/kit/src/runtime/server/page/actions.js
+index 210cae6..c005f35 100644
+--- a/packages/kit/src/runtime/server/page/actions.js
++++ b/packages/kit/src/runtime/server/page/actions.js
+@@ -81,7 +81,14 @@ export function get_action_location(url) {
+ 		}
+ 	}
+ 
+-	return location.pathname + location.search;
++	// a pathname beginning with `//` would otherwise produce a protocol-relative URL
++	// (e.g. `//evil.com/`) that points to another origin. Prefixing with `/.` preserves
++	// the double slash once resolved against the current origin
++	const pathname = location.pathname.startsWith('//')
++		? '/.' + location.pathname
++		: location.pathname;
++
++	return pathname + location.search;
+ }
+ 
+ /**

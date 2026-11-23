@@ -1,0 +1,34 @@
+diff --git a/tests/PhoneNumber.test.ts b/tests/PhoneNumber.test.ts
+index e26c8e7..f37455c 100644
+--- a/tests/PhoneNumber.test.ts
++++ b/tests/PhoneNumber.test.ts
+@@ -137,4 +137,29 @@ describe('PhoneNumber', () => {
+       });
+     });
+   });
++
++  describe('ReDoS resistance', () => {
++    const payloads = [
++      '1'.repeat(40) + 'x',
++      '+' + '1'.repeat(40) + 'x',
++      '+1 ' + '1 '.repeat(40) + 'x',
++      '+1-' + '1-'.repeat(40) + 'x',
++      '+1 (' + '1'.repeat(40) + ')x',
++      '+' + '1'.repeat(100000) + 'x',
++    ];
++
++    test.each(payloads)('rejects adversarial input quickly (%#)', payload => {
++      const start = Date.now();
++      expect(() => GraphQLPhoneNumber.parseValue(payload)).toThrow(
++        /^Value is not a valid phone number/,
++      );
++      expect(() => GraphQLPhoneNumber.serialize(payload)).toThrow(
++        /^Value is not a valid phone number/,
++      );
++      expect(() =>
++        GraphQLPhoneNumber.parseLiteral({ value: payload, kind: Kind.STRING }, {}),
++      ).toThrow(/^Value is not a valid phone number/);
++      expect(Date.now() - start).toBeLessThan(1000);
++    });
++  });
+ });

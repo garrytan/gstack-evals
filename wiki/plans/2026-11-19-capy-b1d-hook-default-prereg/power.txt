@@ -1,0 +1,50 @@
+$ b1d power
+in-sample keyless coverage (B1's 60 run tasks): prove-it named first or alone 33, second of two 7, not named 20; the most loads the hook can reach without an unnamed load is 40
+held-out keyless coverage (60 tasks): prove-it named alone 39, first of two 3, second of two 7, not named 11
+
+odds of clearing the bar (P[loads >= 39] on the in-sample 60)
+follow rate f	named at f, unnamed 0	unnamed at 0.05	second of two at f/2	expected loads (first column)
+100.0%	1.000	1.000	0.063	40.0
+99.0%	0.939	0.975	0.044	39.6
+98.3%	0.857	0.937	0.035	39.3
+96.7%	0.613	0.797	0.019	38.7
+95.0%	0.399	0.633	0.011	38.0
+93.3%	0.242	0.476	0.006	37.3
+90.0%	0.080	0.243	0.002	36.0
+85.0%	0.012	0.070	0.000	34.0
+80.0%	0.001	0.016	0.000	32.0
+
+paired against B1c's published project-md rows (39 of 60 loaded), coverage model (named at f, unnamed 0)
+follow rate f	true difference	P(hook shown above)	P(hook shown below)
+100.0%	+1.7	0.000	0.000
+96.7%	-0.6	0.000	0.000
+95.0%	-1.7	0.000	0.000
+90.0%	-5.0	0.000	0.010
+85.0%	-8.3	0.000	0.096
+80.0%	-11.7	0.000	0.327
+75.0%	-15.0	0.000	0.619
+70.0%	-18.3	0.000	0.839
+65.0%	-21.7	0.000	0.950
+60.0%	-25.0	0.000	0.988
+uniform model (every task at the same true rate): 80% power to show the hook above B1c's rows at 84.9% (+19.9 points), below at 41.7% (-23.3 points)
+
+held-out, two arms on the same 60 tasks, each task loading independently at its arm's rate
+held-out MDD: with the block at 65.0%, the hook's shortfall detected with 80% power is 26 points (the frozen MDD is 26)
+hook rate	P(hook shown below block)	P(hook - block at or below -26)	P(hook shown above block)
+97%	0.000	0.000	0.999
+90%	0.000	0.000	0.922
+80%	0.000	0.000	0.450
+65%	0.025	0.001	0.025
+50%	0.386	0.112	0.000
+39%	0.821	0.511	0.000
+30%	0.975	0.858	0.000
+
+noescape against the hook (bands at -15 points), the hook at 80%
+noescape rate	matches	middle	clearly loses
+90%	0.970	0.030	0.000
+80%	0.538	0.462	0.000
+75%	0.265	0.735	0.000
+70%	0.097	0.898	0.004
+65%	0.027	0.950	0.023
+60%	0.006	0.913	0.082
+50%	0.000	0.593	0.407

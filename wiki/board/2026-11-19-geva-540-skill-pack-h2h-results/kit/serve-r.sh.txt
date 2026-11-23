@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# serve-r.sh (GEVA-540 kit, not committed): starts the real outcome driver on runner R for one head-to-head item and run
+# id, as GEVA-520's kit/serve.sh did for its items: detached with setsid, logging to ~/h2h/log/serve-<run>.out, serving
+# on the Docker bridge gateway 172.17.0.1 with the control plane on 127.0.0.1. The stage carries every arm of
+# sessions/driver.ts H2H_STAGES for the item, through kit/serve-h2h.ts (outcome serve at b54f6f4e cannot take an h2h
+# arms list; see that file's header). The real ledger is passed by flag: ~/h2h/ledger/ledger.sqlite and ~/h2h/record.
+# The only key read is ANTHROPIC_API_KEY, read from /dev/shm/geva540/keys.env inside the detached shell that execs the
+# driver, so it lives only in that process's environment: never in this script's, never in an argument, never printed.
+# Prints control=<url> and proxy=<host:port> once the driver has opened its lease.
+# Stage 2 serves both its items in one run: --item h2h-opus,h2h-pony prints proxy=h2h-opus=<host:port>,h2h-pony=<host:port>.
+# Usage: serve-r.sh --item <h2h-smoke|h2h-resmoke|h2h-pilot|h2h-opus,h2h-pony> --run <run id> --planned <n> --reruns <n> [--dir <driver dir>]
+#          [--control-port <n>] [--ttl-hours <h>] [--lift-halt <ids>] [--print]
+#   --print shows the driver command and exits before any key is read or anything starts.
+set -euo pipefail
+export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
+KIT=$HOME/kit; REPO=$HOME/h2h/repo; KEYS=/dev/shm/geva540/keys.env
+LEDGER=$HOME/h2h/ledger/ledger.sqlite; RECORD=$HOME/h2h/record; HOST=172.17.0.1
+ITEM=; RUN=; PLANNED=; RERUNS=; DIR=; EXTRA=(); PRINT=0
+die() { echo "$1" >&2; exit "${2:-2}"; }
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --item) ITEM=${2:?}; shift 2 ;;
+    --run) RUN=${2:?}; shift 2 ;;
+    --planned) PLANNED=${2:?}; shift 2 ;;
+    --reruns) RERUNS=${2:?}; shift 2 ;;
+    --dir) DIR=${2:?}; shift 2 ;;
+    --control-port|--ttl-hours|--lift-halt) EXTRA+=("$1" "${2:?}"); shift 2 ;;
+    --print) PRINT=1; shift ;;
+    *) die "E_USAGE serve-r.sh: unknown argument $1" ;;
+  esac
+done
+case "$ITEM" in h2h-smoke|h2h-resmoke|h2h-pilot|h2h-opus,h2h-pony) ;; *) die "E_USAGE serve-r.sh: --item is h2h-smoke, h2h-resmoke, h2h-pilot or h2h-opus,h2h-pony" ;; esac
+[[ "$RUN" =~ ^[A-Za-z0-9._-]+$ ]] || die "E_USAGE serve-r.sh: --run is a run id of letters, digits, dot, dash or underscore"
+[[ "$PLANNED" =~ ^[0-9]+$ && "$RERUNS" =~ ^[0-9]+$ ]] || die "E_USAGE serve-r.sh: --planned and --reruns take whole numbers"
+DIR=${DIR:-$HOME/h2h/run/$RUN/driver}
+LOG=$HOME/h2h/log/serve-$RUN.out
+cd "$REPO"
+MACHINE=$(bun --no-env-file -e 'const { machineId } = await import(process.env.HOME + "/h2h/repo/src/runner/ledger/ledger.ts"); console.log(machineId())')
+CMD=(bun --no-env-file "$KIT/serve-h2h.ts" --run "$RUN" --envelope-host "$MACHINE" --item "$ITEM" --host "$HOST" --dir "$DIR"
+  --planned "$PLANNED" --reruns "$RERUNS" --ledger "$LEDGER" --ledger-record "$RECORD" "${EXTRA[@]}")
+if [ "$PRINT" = 1 ]; then printf '%q ' "${CMD[@]}"; echo; exit 0; fi
+[ -r "$KEYS" ] || die "E_USAGE serve-r.sh: no readable $KEYS; nothing started" 3
+[ -e "$DIR/driver.lock" ] && die "E_USAGE serve-r.sh: $DIR/driver.lock is there; a driver may already serve run $RUN" 3
+mkdir -p "$(dirname "$LOG")" "$DIR"
+start=$(wc -l < "$LOG" 2>/dev/null || echo 0)
+echo "== $(date -u +%FT%TZ) serve-r.sh item=$ITEM run=$RUN planned=$PLANNED reruns=$RERUNS dir=$DIR" >> "$LOG"
+GSTACK_EVALS_LEDGER=$LEDGER GSTACK_EVALS_LEDGER_RECORD=$RECORD setsid -f bash -c '
+  k=$( set -a; . "$1" >/dev/null 2>&1; printf %s "${ANTHROPIC_API_KEY:-}" )
+  [ -n "$k" ] || { echo "E_USAGE serve-r.sh: $1 holds no ANTHROPIC_API_KEY; nothing started"; exit 3; }
+  export ANTHROPIC_API_KEY="$k"; unset k; shift
+  exec "$@"' serve-r "$KEYS" "${CMD[@]}" >> "$LOG" 2>&1 < /dev/null
+for _ in $(seq 1 120); do
+  got=$(tail -n +"$((start + 1))" "$LOG")
+  if grep -q '^stage=' <<< "$got"; then
+    grep -m1 '^control=' <<< "$got"
+    n=$(grep -c '^stage=' <<< "$got")
+    want=$(tr ',' '\n' <<< "$ITEM" | grep -c .)
+    [ "$n" -ge "$want" ] || { sleep 1; continue; }
+    if [ "$want" = 1 ]; then grep '^stage=' <<< "$got" | sed -E 's/.* proxy=([^ ]+).*/proxy=\1/'
+    else echo "proxy=$(grep '^stage=' <<< "$got" | sed -E 's/^stage=([^ ]+) .* proxy=([^ ]+).*/\1=\2/' | paste -sd,)"; fi
+    exit 0
+  fi
+  grep -qE '^(E_[A-Z_]+|CAP_STOP) ' <<< "$got" && { grep -E '^(E_[A-Z_]+|CAP_STOP) ' <<< "$got" >&2; exit 3; }
+  sleep 1
+done
+die "E_USAGE serve-r.sh: the driver printed no stage line in 120 s; see $LOG" 3

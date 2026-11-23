@@ -1,0 +1,53 @@
+diff --git a/.changeset/proto-pollution-convert-token-data.md b/.changeset/proto-pollution-convert-token-data.md
+new file mode 100644
+index 0000000..2b4c517
+--- /dev/null
++++ b/.changeset/proto-pollution-convert-token-data.md
+@@ -0,0 +1,5 @@
++---
++'style-dictionary': patch
++---
++
++Security fix: prevent prototype pollution in `convertTokenData` when converting token arrays or maps to objects with keys such as `{__proto__.foo}`.
+diff --git a/__tests__/utils/convertTokenData.test.js b/__tests__/utils/convertTokenData.test.js
+index f50aa0e..2953826 100644
+--- a/__tests__/utils/convertTokenData.test.js
++++ b/__tests__/utils/convertTokenData.test.js
+@@ -94,5 +94,21 @@ describe('utils', () => {
+         });
+       });
+     });
++
++    it('should not pollute the prototype through token keys', () => {
++      const tokens = [
++        { key: '{__proto__.polluted}', value: 'malicious' },
++        { key: '{constructor.prototype.polluted}', value: 'malicious' },
++        { key: '{toString.polluted}', value: 'malicious' },
++      ];
++      const obj = convertTokenData(tokens, { output: 'object' });
++      expect(/** @type {any} */ ({}).polluted).to.be.undefined;
++      expect(/** @type {any} */ (Object).polluted).to.be.undefined;
++      expect(Object.getPrototypeOf(obj)).to.equal(Object.prototype);
++      expect(obj).to.eql({
++        constructor: { prototype: { polluted: tokens[1] } },
++        toString: { polluted: tokens[2] },
++      });
++    });
+   });
+ });
+diff --git a/lib/utils/convertTokenData.js b/lib/utils/convertTokenData.js
+index c3dabb0..eba695a 100644
+--- a/lib/utils/convertTokenData.js
++++ b/lib/utils/convertTokenData.js
+@@ -34,9 +34,10 @@ function convertToTokenObject(tokenArray) {
+   tokenArray.forEach((token) => {
+     const { key } = token;
+     const keyArr = /** @type {string} */ (key).replace('{', '').replace('}', '').split('.');
++    if (keyArr.includes('__proto__')) return;
+     let slice = obj;
+     keyArr.forEach((k, i, arr) => {
+-      if (slice[k] === undefined) {
++      if (!Object.hasOwn(slice, k)) {
+         slice[k] = {};
+       }
+       // end

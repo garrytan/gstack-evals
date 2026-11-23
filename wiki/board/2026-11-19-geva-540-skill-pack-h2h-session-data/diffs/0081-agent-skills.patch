@@ -1,0 +1,80 @@
+diff --git a/src/lib/ares_process.c b/src/lib/ares_process.c
+index aebea1a..38a896c 100644
+--- a/src/lib/ares_process.c
++++ b/src/lib/ares_process.c
+@@ -1236,11 +1236,12 @@ static ares_conn_t *ares_fetch_connection(const ares_channel_t *channel,
+     return NULL;
+   }
+ 
+-  /* If the associated server has failures, don't use it.  It should be cleaned
+-   * up later. */
+-  if (conn->server->consec_failures > 0) {
+-    return NULL;
+-  }
++  /* NOTE: Do not reject the connection simply because the server has
++   * consecutive failures.  Doing so causes a brand new UDP socket to be opened
++   * for every single query sent to a server with any failures, leading to
++   * socket exhaustion under load.  Connections to servers with failures are
++   * closed (and thus the source port reset) by ares_check_cleanup_conns() once
++   * they become idle. */
+ 
+   /* Used too many times */
+   if (channel->udp_max_queries > 0 &&
+diff --git a/test/ares-test-mock.cc b/test/ares-test-mock.cc
+index 5b9c15e..a49857f 100644
+--- a/test/ares-test-mock.cc
++++ b/test/ares-test-mock.cc
+@@ -252,6 +252,53 @@ static int SocketConnectCallback(ares_socket_t fd, int type, void *data) {
+   return rc;
+ }
+ 
++// Regression test: when a server has consecutive failures, parallel queries
++// must still share a single UDP connection rather than each opening a new
++// socket (which leads to socket exhaustion under load).
++#define FAILED_SERVER_PARALLEL_QUERIES 16
++TEST_P(MockUDPChannelTest, ParallelLookupsReuseConnAfterServerFailure) {
++  DNSPacket failrsp;
++  failrsp.set_response().set_aa().set_rcode(SERVFAIL)
++    .add_question(new DNSQuestion("fail.example.com", T_A));
++  ON_CALL(server_, OnRequest("fail.example.com", T_A))
++    .WillByDefault(SetReply(&server_, &failrsp));
++  DNSPacket rsp;
++  rsp.set_response().set_aa()
++    .add_question(new DNSQuestion("www.google.com", T_A))
++    .add_answer(new DNSARR("www.google.com", 100, {2, 3, 4, 5}));
++  ON_CALL(server_, OnRequest("www.google.com", T_A))
++    .WillByDefault(SetReply(&server_, &rsp));
++
++  // Cause the (only) server to accumulate consecutive failures.
++  HostResult failresult;
++  ares_gethostbyname(channel_, "fail.example.com.", AF_INET, HostCallback,
++                     &failresult);
++  Process();
++  EXPECT_TRUE(failresult.done_);
++  EXPECT_EQ(ARES_ESERVFAIL, failresult.status_);
++
++  int rc = ARES_SUCCESS;
++  ares_set_socket_callback(channel_, SocketConnectCallback, &rc);
++  sock_cb_count = 0;
++
++  HostResult result[FAILED_SERVER_PARALLEL_QUERIES];
++  for (size_t i = 0; i < FAILED_SERVER_PARALLEL_QUERIES; i++) {
++    ares_gethostbyname(channel_, "www.google.com.", AF_INET, HostCallback,
++                       &result[i]);
++  }
++  Process();
++
++  // A single (fresh) UDP socket should be shared by all queries.
++  EXPECT_EQ(1, sock_cb_count);
++
++  for (size_t i = 0; i < FAILED_SERVER_PARALLEL_QUERIES; i++) {
++    std::stringstream ss;
++    EXPECT_TRUE(result[i].done_);
++    ss << result[i].host_;
++    EXPECT_EQ("{'www.google.com' aliases=[] addrs=[2.3.4.5]}", ss.str());
++  }
++}
++
+ TEST_P(MockChannelTest, SockCallback) {
+   DNSPacket rsp;
+   rsp.set_response().set_aa()

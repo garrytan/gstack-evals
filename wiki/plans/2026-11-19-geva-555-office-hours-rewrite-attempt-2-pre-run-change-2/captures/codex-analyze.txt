@@ -1,0 +1,46 @@
+Session starts (first request), approximate o200k tokens per input item
+none: 0 skills listed, names listed twice []; total 11268 tokens, 51043 bytes; instructions field 0 chars, tools field 0; fields {"model": "gpt-6.1-sol", "reasoning": {"effort": "low", "context": "all_turns"}, "store": false, "stream": true, "include": ["reasoning.encrypted_content"], "tool_choice": "auto", "parallel_tool_calls": false, "text": {"verbosity": "low"}}
+   additional_tools     parts 1   24828 bytes    6116 tokens
+   base instructions    parts 1   21534 bytes    4143 tokens
+   permissions          parts 2    1261 bytes     242 tokens
+   agent role           parts 1    2400 bytes     530 tokens
+   agent mode           parts 1     271 bytes      52 tokens
+   environment context  parts 1     479 bytes     127 tokens
+   user message         parts 1     270 bytes      58 tokens
+current: 63 skills listed, names listed twice []; total 30995 tokens, 128261 bytes; instructions field 0 chars, tools field 0; fields {"model": "gpt-6.1-sol", "reasoning": {"effort": "low", "context": "all_turns"}, "store": false, "stream": true, "include": ["reasoning.encrypted_content"], "tool_choice": "auto", "parallel_tool_calls": false, "text": {"verbosity": "low"}}
+   additional_tools     parts 1   24828 bytes    6113 tokens
+   base instructions    parts 1   21534 bytes    4143 tokens
+   skills list          parts 3   30250 bytes    7391 tokens
+   agent role           parts 1    2400 bytes     530 tokens
+   agent mode           parts 1     271 bytes      52 tokens
+   environment context  parts 1     485 bytes     127 tokens
+   user message         parts 1     284 bytes      61 tokens
+   skill body           parts 1   48209 bytes   12578 tokens
+   skill: {"name": "office-hours", "wrapper_bytes": 48209, "body_bytes": 48068, "body_sha256": "ba7f2e3cd426f871deb5bb5c65c6dbca3a3c676d71eae9ac307133a02b696f9a", "body_tokens": 12533, "item_tokens": 12578}; matches rendered pin file: True
+new: 63 skills listed, names listed twice []; total 31025 tokens, 128235 bytes; instructions field 0 chars, tools field 0; fields {"model": "gpt-6.1-sol", "reasoning": {"effort": "low", "context": "all_turns"}, "store": false, "stream": true, "include": ["reasoning.encrypted_content"], "tool_choice": "auto", "parallel_tool_calls": false, "text": {"verbosity": "low"}}
+   additional_tools     parts 1   24828 bytes    6115 tokens
+   base instructions    parts 1   21534 bytes    4143 tokens
+   skills list          parts 3   30246 bytes    7391 tokens
+   agent role           parts 1    2400 bytes     530 tokens
+   agent mode           parts 1     271 bytes      52 tokens
+   environment context  parts 1     477 bytes     127 tokens
+   user message         parts 1     284 bytes      61 tokens
+   skill body           parts 1   48195 bytes   12606 tokens
+   skill: {"name": "office-hours", "wrapper_bytes": 48195, "body_bytes": 48058, "body_sha256": "c8b25fa81d3143c908b824955898e564702d9585858705cc0a9984137e9dbb26", "body_tokens": 12561, "item_tokens": 12606}; matches rendered pin file: True
+
+Multi-turn sessions: first message, then 4 resumed turns (codex exec resume)
+none: request tokens [11268, 11695, 12038, 12321, 12616]; skill body carried in every request: False
+   request 2: +427 tokens, new items [('assistant message', 360), ('user message', 67)], append-only True, same prompt_cache_key True, other fields unchanged True
+   request 3: +343 tokens, new items [('assistant message', 292), ('user message', 51)], append-only True, same prompt_cache_key True, other fields unchanged True
+   request 4: +283 tokens, new items [('assistant message', 241), ('user message', 42)], append-only True, same prompt_cache_key True, other fields unchanged True
+   request 5: +295 tokens, new items [('assistant message', 247), ('user message', 48)], append-only True, same prompt_cache_key True, other fields unchanged True
+current: request tokens [31000, 31427, 31770, 32053, 32348]; skill body carried in every request: True
+   request 2: +427 tokens, new items [('assistant message', 360), ('user message', 67)], append-only True, same prompt_cache_key True, other fields unchanged True
+   request 3: +343 tokens, new items [('assistant message', 292), ('user message', 51)], append-only True, same prompt_cache_key True, other fields unchanged True
+   request 4: +283 tokens, new items [('assistant message', 241), ('user message', 42)], append-only True, same prompt_cache_key True, other fields unchanged True
+   request 5: +295 tokens, new items [('assistant message', 247), ('user message', 48)], append-only True, same prompt_cache_key True, other fields unchanged True
+new: request tokens [31027, 31454, 31797, 32080, 32375]; skill body carried in every request: True
+   request 2: +427 tokens, new items [('assistant message', 360), ('user message', 67)], append-only True, same prompt_cache_key True, other fields unchanged True
+   request 3: +343 tokens, new items [('assistant message', 292), ('user message', 51)], append-only True, same prompt_cache_key True, other fields unchanged True
+   request 4: +283 tokens, new items [('assistant message', 241), ('user message', 42)], append-only True, same prompt_cache_key True, other fields unchanged True
+   request 5: +295 tokens, new items [('assistant message', 247), ('user message', 48)], append-only True, same prompt_cache_key True, other fields unchanged True

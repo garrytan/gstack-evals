@@ -1,0 +1,3 @@
+https://github.com/gastownhall/beads at 095cfdd7b55168e6d255c5030f22d63c03c43517
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE, THIRD_PARTY_LICENSES

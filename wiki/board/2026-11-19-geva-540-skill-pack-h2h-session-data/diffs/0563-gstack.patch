@@ -1,0 +1,72 @@
+diff --git a/internal/tui/components/detailedit/controller.go b/internal/tui/components/detailedit/controller.go
+index d86fec5..5f01dea 100644
+--- a/internal/tui/components/detailedit/controller.go
++++ b/internal/tui/components/detailedit/controller.go
+@@ -319,7 +319,32 @@ func (c Controller) Update(msg tea.Msg) (Controller, tea.Cmd, *Submit, bool) {
+ 		return c, tea.Batch(cmds...), nil, true
+ 	}
+ 
+-	switch msg.(type) {
++	switch msg := msg.(type) {
++	case tea.PasteMsg:
++		if !c.Active() {
++			return c, nil, nil, false
++		}
++
++		var previousContext dataautocomplete.Context
++		if c.usesAutocomplete() {
++			previousContext = c.inputBox.CurrentAutocompleteContext()
++		}
++
++		c.inputBox, taCmd = c.inputBox.Update(msg)
++
++		if c.usesAutocomplete() {
++			currentContext := c.inputBox.CurrentAutocompleteContext()
++			if currentContext != previousContext {
++				if c.hideOnEmpty && currentContext == (dataautocomplete.Context{}) {
++					c.ac.Hide()
++				} else {
++					c.ac.Show(currentContext.Content, c.inputBox.AutocompleteItemsToExclude())
++				}
++			}
++		}
++
++		return c, taCmd, nil, true
++
+ 	case spinner.TickMsg, popupautocomplete.ClearFetchStatusMsg:
+ 		var acCmd tea.Cmd
+ 		*c.ac, acCmd = c.ac.Update(msg)
+diff --git a/internal/tui/components/detailedit/controller_test.go b/internal/tui/components/detailedit/controller_test.go
+index cafc2b7..4b7660d 100644
+--- a/internal/tui/components/detailedit/controller_test.go
++++ b/internal/tui/components/detailedit/controller_test.go
+@@ -338,3 +338,29 @@ func TestUnassignModeDoesNotUseAutocomplete(t *testing.T) {
+ 
+ 	require.False(t, c.usesAutocomplete())
+ }
++
++func TestCommentModeAcceptsPastedText(t *testing.T) {
++	data.ClearUserCache()
++	c := newTestController(t)
++	c, _ = c.Enter(EnterOptions{
++		Mode:                             ModeComment,
++		Prompt:                           "comment",
++		Source:                           dataautocomplete.UserMentionSource{},
++		Repo:                             testRepo(),
++		SuggestionKind:                   SuggestionUsers,
++		EnterFetch:                       FetchNone,
++		ConfirmDiscardOnCancel:           true,
++		HideAutocompleteWhenContextEmpty: true,
++	})
++
++	c, _, submit, handled := c.Update(tea.PasteMsg{Content: "this should paste into gh-dash"})
++	require.True(t, handled)
++	require.Nil(t, submit)
++	require.Equal(t, "this should paste into gh-dash", c.inputBox.Value())
++}
++
++func TestPasteIgnoredWhenInactive(t *testing.T) {
++	c := newTestController(t)
++	_, _, _, handled := c.Update(tea.PasteMsg{Content: "ignored"})
++	require.False(t, handled)
++}

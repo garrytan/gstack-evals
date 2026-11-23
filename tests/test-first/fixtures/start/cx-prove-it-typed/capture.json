@@ -1,0 +1,10 @@
+{
+  "exit": 0,
+  "requests": 1,
+  "model": "gpt-6.2-sol",
+  "effort": "low",
+  "typed": "{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"$prove-it add() in calc.py returns the difference of its arguments. Make it return their sum.\"}]}",
+  "injected": [
+    "6a3d74d59052f06ceef3f2b12b65698655f096e484c60a24fee76a0cc9b16b96"
+  ]
+}

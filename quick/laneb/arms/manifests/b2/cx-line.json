@@ -1,0 +1,37 @@
+{
+  "arm": "cx-line",
+  "base_arm": "line",
+  "host": "codex",
+  "cli": "codex-cli 0.170.0",
+  "spec": "cx-line:strip_snapshot=true:closing_line=hm-status",
+  "typed": false,
+  "session_kind": null,
+  "hook_trust": false,
+  "gstack": null,
+  "prove_it": null,
+  "line": {
+    "path": ".codex/AGENTS.md",
+    "sha256": "477d390c64ac0b99cb8b0e78eff99d1e96fac91adfbb13de36c82f3539c9d710",
+    "text": "When you fix a bug, first write a test that reproduces it and run it to see it fail, then fix the bug and run the test again to see it pass."
+  },
+  "switches": null,
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu (in arms/codex.Dockerfile's build stage)",
+  "tar": {
+    "file": "cx-line.tar",
+    "bytes": 10240,
+    "sha256": "1335f4dfd9c84c667005081e6f371b7399eff117abed79e276ad1a7368d59c0e"
+  },
+  "tree": {
+    "files": 1,
+    "symlinks": 0,
+    "dirs": 1,
+    "digest": "badcb42f0dc0377ef69b1131cefa9d3f01035663cbbc7f180fba31fa46396521"
+  },
+  "inventory_sha256": "badcb42f0dc0377ef69b1131cefa9d3f01035663cbbc7f180fba31fa46396521",
+  "prompt_input": {
+    "sha256": "eea6643f729000fe0e544f370baabf9967543f1c3a9894ef3d7be05b652bec78",
+    "skills": [],
+    "prove_it_line": null,
+    "agents_md": true
+  }
+}

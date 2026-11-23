@@ -1,0 +1,157 @@
+diff --git a/backend/local/local.go b/backend/local/local.go
+index 91ec9cd..4e2bd83 100644
+--- a/backend/local/local.go
++++ b/backend/local/local.go
+@@ -1441,6 +1441,74 @@ func (o *Object) mkdirAll() error {
+ 	return file.MkdirAll(dir, 0777)
+ }
+ 
++// checkSymlinkTarget checks that the symlink target supplied by the
++// remote is relative and does not escape the root of the Fs.
++//
++// The symlink target comes from untrusted remote data so we must not
++// allow it to point outside of the destination otherwise subsequent
++// writes through the symlink could land anywhere on the filesystem.
++func (o *Object) checkSymlinkTarget(target string) error {
++	if target == "" {
++		return errors.New("empty symlink target")
++	}
++	if strings.ContainsRune(target, 0) {
++		return errors.New("symlink target contains NUL byte")
++	}
++	osTarget := filepath.FromSlash(target)
++	if filepath.IsAbs(osTarget) || filepath.VolumeName(osTarget) != "" || strings.HasPrefix(osTarget, string(filepath.Separator)) || strings.HasPrefix(target, "/") {
++		return fmt.Errorf("symlink target %q is absolute", target)
++	}
++	// Only allow ".." as leading components. A ".." after a normal
++	// component could be traversing a symlink, which would make the
++	// lexical check below unreliable.
++	seenNormal := false
++	for _, part := range strings.Split(filepath.ToSlash(osTarget), "/") {
++		switch part {
++		case "", ".":
++		case "..":
++			if seenNormal {
++				return fmt.Errorf("symlink target %q contains \"..\" after a path component", target)
++			}
++		default:
++			seenNormal = true
++		}
++	}
++	// Resolve the real locations of the root and the directory
++	// containing the link so symlinks in the path can't be used to
++	// escape.
++	root, err := filepath.Abs(o.fs.root)
++	if err != nil {
++		return err
++	}
++	if realRoot, err := filepath.EvalSymlinks(root); err == nil {
++		root = realRoot
++	}
++	dir, err := filepath.Abs(filepath.Dir(o.path))
++	if err != nil {
++		return err
++	}
++	dir, err = filepath.EvalSymlinks(dir)
++	if err != nil {
++		return fmt.Errorf("failed to resolve symlink directory: %w", err)
++	}
++	if !isWithin(root, dir) {
++		return fmt.Errorf("symlink directory %q is outside of the root", dir)
++	}
++	if !isWithin(root, filepath.Join(dir, osTarget)) {
++		return fmt.Errorf("symlink target %q points outside of the root", target)
++	}
++	return nil
++}
++
++// isWithin returns true if path is root or inside root
++func isWithin(root, path string) bool {
++	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
++	if err != nil {
++		return false
++	}
++	return !(rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel))
++}
++
+ type nopWriterCloser struct {
+ 	*bytes.Buffer
+ }
+@@ -1542,7 +1610,13 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 				}
+ 			}
+ 			// Use the contents for the copied object to create a symlink
+-			err = os.Symlink(symlinkData.String(), o.path)
++			// but only if the target is safe
++			target := symlinkData.String()
++			if err = o.checkSymlinkTarget(target); err != nil {
++				fs.Errorf(o, "Refusing to create symlink: %v", err)
++				return err
++			}
++			err = os.Symlink(target, o.path)
+ 		}
+ 
+ 		// only continue if symlink creation succeeded
+diff --git a/backend/local/local_internal_test.go b/backend/local/local_internal_test.go
+index f36cc17..71cee75 100644
+--- a/backend/local/local_internal_test.go
++++ b/backend/local/local_internal_test.go
+@@ -195,6 +195,58 @@ func TestSymlink(t *testing.T) {
+ 	require.NoError(t, in.Close())
+ }
+ 
++// Check that symlink targets from untrusted remotes can't escape the root
++func TestSymlinkUnsafeTarget(t *testing.T) {
++	ctx := context.Background()
++	outside := t.TempDir()
++	dir := t.TempDir()
++	fRaw, err := NewFs(ctx, "local", dir, configmap.Simple{"links": "true"})
++	require.NoError(t, err)
++	f := fRaw.(*Fs)
++
++	put := func(remote, contents string) error {
++		src := object.NewStaticObjectInfo(remote, time.Now(), int64(len(contents)), true, nil, nil)
++		_, err := f.Put(ctx, bytes.NewBufferString(contents), src)
++		return err
++	}
++
++	// Safe relative links are allowed
++	require.NoError(t, put("a/b/ok.rclonelink", "../c/file"))
++	require.NoError(t, put("a/up.rclonelink", ".."))
++	require.NoError(t, put("a/b/y.rclonelink", "../.."))
++
++	for _, target := range []string{
++		outside,
++		"/etc",
++		"..",
++		"../x",
++		"a/../../x",
++		"y/../..",
++		"y/..",
++	} {
++		t.Run(target, func(t *testing.T) {
++			if target == "y/.." || target == "y/../.." {
++				assert.Error(t, put("a/b/pwn.rclonelink", target))
++			} else {
++				assert.Error(t, put("pwn.rclonelink", target))
++			}
++		})
++	}
++	_, err = os.Lstat(filepath.Join(dir, "pwn"))
++	assert.True(t, os.IsNotExist(err))
++	_, err = os.Lstat(filepath.Join(dir, "a", "b", "pwn"))
++	assert.True(t, os.IsNotExist(err))
++
++	// A file written under the rejected link must stay inside dir
++	require.Error(t, put("pwn.rclonelink", outside))
++	require.NoError(t, put("pwn/authorized_keys", "pwned"))
++	_, err = os.Stat(filepath.Join(outside, "authorized_keys"))
++	assert.True(t, os.IsNotExist(err))
++	data, err := os.ReadFile(filepath.Join(dir, "pwn", "authorized_keys"))
++	require.NoError(t, err)
++	assert.Equal(t, "pwned", string(data))
++}
++
+ func TestSymlinkError(t *testing.T) {
+ 	m := configmap.Simple{
+ 		"links":      "true",

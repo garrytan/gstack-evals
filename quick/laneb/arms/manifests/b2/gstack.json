@@ -1,0 +1,154 @@
+{
+  "arm": "gstack",
+  "base_arm": "gstack",
+  "host": "claude",
+  "cli": "claude-code 2.1.312",
+  "spec": "gstack:session_kind=unattended:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status",
+  "typed": false,
+  "session_kind": "unattended",
+  "hook_trust": false,
+  "gstack": {
+    "repo": "https://github.com/garrytan/gstack.git",
+    "tag": "v1.102.1.0",
+    "sha": "29bff55dd8a14b32ff282d5a37097e3a53e3250a",
+    "version": "1.102.1.0",
+    "setup": "./setup --host claude --no-browser --loadout full"
+  },
+  "prove_it": null,
+  "line": null,
+  "switches": {
+    "skill_routing": "on",
+    "skill_contracts": "on",
+    "telemetry": "off"
+  },
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -cf <arm>.tar .claude .gstack (in quick/laneb/arms/Dockerfile's builder image)",
+  "tar_gz_sha256": "8bc8aa4d652fc590a9b6a70a5ba04fb2d5ad65d9dbff621bdf0030d6df6a3156",
+  "loadout_lock_sha256": "28b55f4232905d01caa9651c847dce272de56a7ce0928b085b33e4b3ddadfe33",
+  "fetch": {
+    "repo": "https://github.com/garrytan/gstack.git",
+    "sha": "29bff55dd8a14b32ff282d5a37097e3a53e3250a",
+    "head": "29bff55dd8a14b32ff282d5a37097e3a53e3250a",
+    "method": "git init; git fetch --depth 1 <repo> <sha>; git checkout FETCH_HEAD; git -c pack.threads=1 repack -a -d -F",
+    "git_archive_sha256": "12e552dcb081f9ecda0c301b691546407022f84dda0b397ac4be3948e7fd55f7"
+  },
+  "tar": {
+    "file": "gstack.tar",
+    "bytes": 1372723200,
+    "sha256": "d5688d9b6246340a9cf5a671bbfb62b8cb8f97e25300ff47eed8fff6fc1b3861"
+  },
+  "tree": {
+    "files": 14630,
+    "symlinks": 9,
+    "dirs": 1728,
+    "bytes": 1358697395,
+    "digest": "1c7904e531f6873ccb5eee28a2f830b4ddb96783f3a1641a05b9683bb048d85f"
+  },
+  "skills": {
+    "count": 64,
+    "tree_digest": "daf8a77d7532c1af3db50ee8a29812bd05e78465866454de7bb6de88b5889285",
+    "skill_md_digest": "5f5ed83880c898ce0de0a3948f85a991693b5de97cc0a640e6c87623484b3e10",
+    "names": [
+      "_gstack-command",
+      "autoplan",
+      "benchmark",
+      "benchmark-models",
+      "browse",
+      "canary",
+      "careful",
+      "codex",
+      "connect-chrome",
+      "context-restore",
+      "context-save",
+      "cso",
+      "design-consultation",
+      "design-html",
+      "design-motion",
+      "design-review",
+      "design-shotgun",
+      "deslop-shared-libs",
+      "devex-review",
+      "diagram",
+      "document-generate",
+      "document-release",
+      "eval-plan",
+      "freeze",
+      "gstack",
+      "gstack-upgrade",
+      "guard",
+      "health",
+      "ios-clean",
+      "ios-design-review",
+      "ios-fix",
+      "ios-qa",
+      "ios-sync",
+      "land-and-deploy",
+      "landing-report",
+      "learn",
+      "make-pdf",
+      "modernize",
+      "office-hours",
+      "open-gstack-browser",
+      "pair-agent",
+      "plan-ceo-review",
+      "plan-design-review",
+      "plan-devex-review",
+      "plan-eng-review",
+      "plan-tune",
+      "qa",
+      "qa-only",
+      "retro",
+      "review",
+      "runaway-stopper",
+      "scrape",
+      "setup-browser-cookies",
+      "setup-deploy",
+      "setup-gbrain",
+      "ship",
+      "skillify",
+      "spec",
+      "sync-gbrain",
+      "test-audit",
+      "ubicloud",
+      "unfreeze",
+      "verify",
+      "write-skill"
+    ]
+  },
+  "settings": {
+    "sha256": "50464312bcbed69140e18c9cfc42de124c3848129406b22379dc34d18d1ee05e",
+    "hooks": [
+      {
+        "event": "Stop",
+        "matcher": "",
+        "command": "/root/.claude/skills/gstack/hosts/claude/hooks/timeline-stop-hook",
+        "timeout": 5,
+        "source": null
+      },
+      {
+        "event": "Stop",
+        "matcher": "",
+        "command": "/root/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook",
+        "timeout": 10,
+        "source": null
+      },
+      {
+        "event": "UserPromptSubmit",
+        "matcher": "",
+        "command": "/root/.claude/skills/gstack/hosts/claude/hooks/skill-route-hook",
+        "timeout": 5,
+        "source": null
+      },
+      {
+        "event": "PreToolUse",
+        "matcher": "Bash|PowerShell",
+        "command": "/root/.claude/skills/gstack/hosts/claude/hooks/destructive-guard-hook",
+        "timeout": 10,
+        "source": null
+      }
+    ]
+  },
+  "inventory_sha256": "0309d272f1c9350708ebccc34b3b94fa489444fc8dd70625e712c96f60585ad7",
+  "start": {
+    "gstack-stop": "3671155602a5193c3d116daf4b0de51335b9b8b6ed9ad020ab5e5ff7611fb1c9"
+  }
+}

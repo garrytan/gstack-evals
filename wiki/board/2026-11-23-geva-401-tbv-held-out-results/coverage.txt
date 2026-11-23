@@ -1,0 +1,12 @@
+coverage headline skill layer opus principle - none: matched 291 of planned 294, raw 0.990; held-back tasks in the denominator 1 (3 rows), adjusted 1.000
+coverage headline skill layer opus principle - current: matched 291 of planned 294, raw 0.990; held-back tasks in the denominator 1 (3 rows), adjusted 1.000
+coverage headline skill layer opus current - none: matched 291 of planned 294, raw 0.990; held-back tasks in the denominator 1 (3 rows), adjusted 1.000
+coverage headline skill layer sol principle - none: matched 194 of planned 196, raw 0.990; held-back tasks in the denominator 1 (2 rows), adjusted 1.000
+coverage headline skill layer sol principle - current: matched 194 of planned 196, raw 0.990; held-back tasks in the denominator 1 (2 rows), adjusted 1.000
+coverage headline skill layer sol current - none: matched 194 of planned 196, raw 0.990; held-back tasks in the denominator 1 (2 rows), adjusted 1.000
+coverage headline skill layer particle principle - none: matched 194 of planned 196, raw 0.990; held-back tasks in the denominator 1 (2 rows), adjusted 1.000
+coverage headline skill layer particle principle - current: matched 194 of planned 196, raw 0.990; held-back tasks in the denominator 1 (2 rows), adjusted 1.000
+coverage headline skill layer particle current - none: matched 194 of planned 196, raw 0.990; held-back tasks in the denominator 1 (2 rows), adjusted 1.000
+coverage headline capy opus principle - none: matched 100 of planned 100, raw 1.000; held-back tasks in the denominator 0 (0 rows), adjusted 1.000
+coverage headline capy opus principle - current: matched 100 of planned 100, raw 1.000; held-back tasks in the denominator 0 (0 rows), adjusted 1.000
+coverage headline capy opus current - none: matched 100 of planned 100, raw 1.000; held-back tasks in the denominator 0 (0 rows), adjusted 1.000

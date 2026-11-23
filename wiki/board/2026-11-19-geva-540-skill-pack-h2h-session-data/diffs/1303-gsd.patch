@@ -1,0 +1,78 @@
+diff --git a/pkg/packet/bgp/bgp.go b/pkg/packet/bgp/bgp.go
+index 336bb0c..8987a58 100644
+--- a/pkg/packet/bgp/bgp.go
++++ b/pkg/packet/bgp/bgp.go
+@@ -15703,6 +15703,9 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 		if err != nil {
+ 			return err
+ 		}
++		if int(routelen) < w.Len(options...)+addpathLen {
++			return NewMessageError(eCode, eSubCode, nil, "withdrawn route length exceeds withdrawn routes length")
++		}
+ 		routelen -= uint16(w.Len(options...) + addpathLen)
+ 		if len(data) < w.Len(options...) {
+ 			return NewMessageError(eCode, eSubCode, nil, "Withdrawn route length is short")
+@@ -15738,6 +15741,9 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 			if e.(*MessageError).Stronger(strongestError) {
+ 				strongestError = e
+ 			}
++			if len(data) < int(pathlen) {
++				return strongestError
++			}
+ 			data = data[pathlen:]
+ 			break
+ 		}
+@@ -15758,6 +15764,14 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 				strongestError = e
+ 			}
+ 		}
++		if int(pathlen) < p.Len(options...) {
++			e = NewMessageErrorWithErrorHandling(
++				eCode, BGP_ERROR_SUB_ATTRIBUTE_LENGTH_ERROR, data, ERROR_HANDLING_TREAT_AS_WITHDRAW, nil, "attribute length exceeds total path attribute length")
++			if e.(*MessageError).Stronger(strongestError) {
++				strongestError = e
++			}
++			return strongestError
++		}
+ 		pathlen -= uint16(p.Len(options...))
+ 		if len(data) < p.Len(options...) {
+ 			e = NewMessageErrorWithErrorHandling(
+diff --git a/pkg/packet/bgp/bgp_test.go b/pkg/packet/bgp/bgp_test.go
+index 5da7224..5dd141b 100644
+--- a/pkg/packet/bgp/bgp_test.go
++++ b/pkg/packet/bgp/bgp_test.go
+@@ -4658,3 +4658,34 @@ func TestAsPathDecoding4Byte(t *testing.T) {
+ 		}
+ 	}
+ }
++
++func Test_BGPUpdateDecodeLengthUnderflow(t *testing.T) {
++	cases := [][]byte{
++		// withdrawn len 1, but prefix /24 needs 4 bytes; followed by bytes that would be misparsed
++		{0x00, 0x01, 0x18, 0x0a, 0x00, 0x00, 0x00, 0x00},
++		// total path attr len 3, but ORIGIN attribute is 4 bytes; trailing byte
++		{0x00, 0x00, 0x00, 0x03, 0x40, 0x01, 0x01, 0x00},
++		// total path attr len 5, ORIGIN (4 bytes) leaves pathlen 1 with no data
++		{0x00, 0x00, 0x00, 0x05, 0x40, 0x01, 0x01, 0x00, 0x00},
++	}
++	// total path attr len 4, but first attr is 5 bytes -> pathlen wraps to 65535;
++	// a second 65534-byte attr then leaves pathlen 1 with no data left.
++	big := []byte{0x00, 0x00, 0x00, 0x04, 0xd0, 0xf0, 0x00, 0x01, 0x00, 0xd0, 0xf1, 0xff, 0xfa}
++	big = append(big, make([]byte, 65530)...)
++	cases = append(cases, big)
++	for i, c := range cases {
++		func() {
++			defer func() {
++				if r := recover(); r != nil {
++					t.Fatalf("case %d: panic: %v", i, r)
++				}
++			}()
++			m := &BGPUpdate{}
++			_ = m.DecodeFromBytes(c)
++		}()
++	}
++	m := &BGPUpdate{}
++	assert.Error(t, m.DecodeFromBytes(cases[0]))
++	assert.Error(t, m.DecodeFromBytes(cases[1]))
++	assert.Error(t, m.DecodeFromBytes(big))
++}

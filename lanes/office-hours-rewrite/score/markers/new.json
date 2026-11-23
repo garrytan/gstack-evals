@@ -1,0 +1,80 @@
+{
+  "pin": "new",
+  "sha": "8fcca8a5a0491ca6077b28103d85a47938fa6264",
+  "note": "Candidate markers read from the pin's office-hours files in their prose-question form. Stage 1 transcripts freeze the final sets (prereg section 12 stage 4); until then these are build-time candidates.",
+  "source_files": {
+    "office-hours/SKILL.md": "30ff20bce6b13af39a61ff92fd1c6c968490512f3a207ca4e915041816ee2f2d",
+    "office-hours/sections/design-and-handoff.md": "dedaede7e5e83ff8e8ccb75d5a9c610174c228f2501475abe15cef5d8433a144",
+    "office-hours/sections/landscape.md": "6c70b6eaac271fc27951268dd8062b6ec3b1d502b4ef6b9ddb690c3d24419c61",
+    "office-hours/sections/phase-2a-startup-diagnostic.md": "f62e3fbd1dc864f99ab9d7ee25930534d2ea5c22786ce5d67d0b0aa72290ba05",
+    "office-hours/sections/phase-2b-builder-brainstorm.md": "05251d190b32f1da63165e8339211404963556ef5b9cf4c3e46361cbc51027e2",
+    "office-hours/sections/phase-2c-pivot-discovery.md": "559b4ebf91bb1e7fd8b80ce7df09d5b85c77f7f7ca671f6ba434a621f1e26dc6",
+    "office-hours/sections/preamble.md": "188d404f839d5abb390dd96f716fa965a0d8b2d2a40619fd2ff75f4d6ba7f001",
+    "office-hours/sections/second-opinion.md": "0ef8cc1c5ce9e614b1ea7d0fadce66128c43855c48d50104898900fb7590aa62",
+    "office-hours/sections/visual-design.md": "fdd31b99d7f19fbe08d7d2407112f81e1a242f4d90d321e69007e15633378595"
+  },
+  "skill_loaded": {
+    "reads": [
+      "office-hours/SKILL.md"
+    ],
+    "skill_tool": "office-hours",
+    "texts": [
+      "## Phase 2A: Startup Mode",
+      "## Phase 2B: Builder Mode"
+    ]
+  },
+  "questions": {
+    "Q1": "\\bstrongest evidence\\b|\\b(?:upset|scramble|panic)\\b.*\\b(?:disappeared|disappear|vanished|went away|shut down)\\b",
+    "Q2": "\\bworkarounds?\\b|\\b(?:right now|today|currently)\\b.*\\b(?:solve|handle|deal with|cope with)\\b|\\b(?:solve|handle|deal with|cope with)\\b.*\\b(?:right now|today|currently)\\b",
+    "Q3": "\\bname the (?:actual |specific |real |one )?(?:human|person)\\b|\\bgets them (?:promoted|fired)\\b|\\bkeeps? them up at night\\b|\\bwho (?:exactly |specifically )?needs this most\\b",
+    "Q4": "\\b(?:smallest|narrowest|simplest)\\b.*\\b(?:version|thing|product|wedge|offer)\\b.*\\bpay\\b|\\bpay real money\\b",
+    "Q5": "\\bwatched (?:someone|somebody|anyone|a user|users|people|a customer|customers|them)\\b.*\\b(?:use|using|try|trying)\\b|\\bwithout helping\\b",
+    "Q6": "\\b(?:in|over the next) (?:3|three) years\\b|\\bmore essential or less\\b",
+    "reality-check": "\\bone real outcome\\b|\\bused it this week without being asked\\b|\\bone paying (?:user|customer)\\b",
+    "conversation-count": "\\bhow many (?:target )?(?:customers|people|buyers) have you (?:talked|spoken) to\\b",
+    "pivot-love-or-size": "\\bloved\\b.*\\b(?:market|too small)\\b|\\btoo small\\b.*\\bloved\\b",
+    "pivot-sunk-cost": "\\bstarting (?:from )?zero\\b",
+    "pivot-commitment": "\\bwalk away\\b",
+    "pivot-kill-criterion": "\\bwhat result,? by what date\\b",
+    "B-coolest": "\\bcoolest version\\b",
+    "B-show": "\\bwho would you show (?:this|it) to\\b",
+    "B-fastest": "\\bfastest path to something\\b",
+    "B-closest": "\\bexisting thing is closest\\b|\\bclosest to this\\b",
+    "B-10x": "\\bunlimited time\\b|\\b10x version\\b"
+  },
+  "startup_only": {
+    "questions": {
+      "Q1": "\\bstrongest evidence\\b|\\b(?:upset|scramble|panic)\\b.*\\b(?:disappeared|disappear|vanished|went away|shut down)\\b",
+      "Q2": "\\bworkarounds?\\b|\\b(?:right now|today|currently)\\b.*\\b(?:solve|handle|deal with|cope with)\\b|\\b(?:solve|handle|deal with|cope with)\\b.*\\b(?:right now|today|currently)\\b",
+      "Q3": "\\bname the (?:actual |specific |real |one )?(?:human|person)\\b|\\bgets them (?:promoted|fired)\\b|\\bkeeps? them up at night\\b|\\bwho (?:exactly |specifically )?needs this most\\b",
+      "Q4": "\\b(?:smallest|narrowest|simplest)\\b.*\\b(?:version|thing|product|wedge|offer)\\b.*\\bpay\\b|\\bpay real money\\b",
+      "Q5": "\\bwatched (?:someone|somebody|anyone|a user|users|people|a customer|customers|them)\\b.*\\b(?:use|using|try|trying)\\b|\\bwithout helping\\b",
+      "Q6": "\\b(?:in|over the next) (?:3|three) years\\b|\\bmore essential or less\\b",
+      "reality-check": "\\bone real outcome\\b|\\bused it this week without being asked\\b|\\bone paying (?:user|customer)\\b",
+      "conversation-count": "\\bhow many (?:target )?(?:customers|people|buyers) have you (?:talked|spoken) to\\b",
+      "pivot-love-or-size": "\\blove\\b.*\\b(?:market|too small)\\b|\\btoo small\\b.*\\blove\\b|\\bloved\\b.*\\b(?:market|too small)\\b|\\btoo small\\b.*\\bloved\\b",
+      "pivot-sunk-cost": "\\bbuild (?:on )?monday\\b|\\btook the current business away\\b|\\bstarting (?:from )?zero\\b",
+      "pivot-commitment": "\\bfire your best (?:current )?customer\\b|\\bwalk away\\b",
+      "pivot-kill-criterion": "\\bwhat result,? by what date\\b",
+      "payment-test": "\\bpayment link\\b|\\bwould (?:they|anyone|you|people|he|she) (?:actually )?pay\\b|\\bhas anyone (?:offered to )?(?:pay|paid)\\b|\\bprepay",
+      "wallet": "\\bwallet\\b|\\bwhich\\W+would\\W+they\\W+pay\\b",
+      "two-sentence-pitch": "\\btwo[- ]sentence\\b|\\bin two sentences\\b"
+    },
+    "lines": {
+      "kill-line": "KILL/CONTINUE|\\bkill (?:line|criterion|date)\\b",
+      "evidence-ladder": "\\bprepay\\s*>|\\bsigned contract\\s*>|\\bpriced LOI\\b|\\bunpriced LOI\\b|\\bLOI without a price\\b",
+      "payment-test": "\\bpayment link\\b",
+      "two-sentence-pitch": "\\btwo[- ]sentence (?:version|pitch)\\b"
+    }
+  },
+  "builder_mode": {
+    "reads": [
+      "office-hours/sections/phase-2b-builder-brainstorm.md"
+    ],
+    "doc_mode": "^Mode:[ \\t]*Builder\\b"
+  },
+  "deliverables": {
+    "design": "-design-[^/]*\\.md$",
+    "memo": "-memo-[^/]*\\.md$"
+  }
+}

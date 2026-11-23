@@ -1,0 +1,72 @@
+diff --git a/src/core/event/index.js b/src/core/event/index.js
+index f1a5571..5ee66c9 100644
+--- a/src/core/event/index.js
++++ b/src/core/event/index.js
+@@ -407,8 +407,10 @@ export function Events(Base) {
+       };
+       const { query } = this.route;
+       const focusEl = query.id
+-        ? // Heading ID
+-          dom.find(`#${query.id}`)
++        ? // Heading ID (scoped to main content to avoid matching
++          // elements with the same ID elsewhere, e.g. the coverpage)
++          dom.find(`.markdown-section [id="${query.id}"]`) ||
++          dom.find(`[id="${query.id}"]`)
+         : // First heading
+           dom.find('#main :where(h1, h2, h3, h4, h5, h6)') ||
+           // Content container
+diff --git a/test/e2e/coverpage.test.js b/test/e2e/coverpage.test.js
+new file mode 100644
+index 0000000..6f75c49
+--- /dev/null
++++ b/test/e2e/coverpage.test.js
+@@ -0,0 +1,49 @@
++import docsifyInit from '../helpers/docsify-init.js';
++import { test, expect } from './fixtures/docsify-init-fixture.js';
++
++test.describe('Coverpage', () => {
++  test('coverpage heading link focuses heading in main content', async ({
++    page,
++  }) => {
++    await docsifyInit({
++      markdown: {
++        coverpage: `
++          # Quick start
++        `,
++        homepage: `
++          # Quick start
++
++          Content
++        `,
++      },
++    });
++
++    const coverHeading = page.locator('section.cover h1 a');
++    const mainHeading = page.locator('#main h1#quick-start');
++
++    await expect(coverHeading).toBeVisible();
++    await coverHeading.click();
++    await expect(page).toHaveURL(/id=quick-start/);
++    await expect(mainHeading).toBeFocused();
++  });
++
++  test('direct URL with id focuses heading in main content', async ({
++    page,
++  }) => {
++    await docsifyInit({
++      markdown: {
++        coverpage: `
++          # Quick start
++        `,
++        homepage: `
++          # Quick start
++
++          Content
++        `,
++      },
++    });
++
++    await page.goto('/#/?id=quick-start');
++    await expect(page.locator('#main h1#quick-start')).toBeFocused();
++  });
++});

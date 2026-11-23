@@ -23,6 +23,8 @@ const CHECK_OK = new Set(["SUCCESS", "NEUTRAL"]);
 const CHECK_HARD = new Set(["FAILURE", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED"]);
 const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
+/** ANSI escape sequences (CSI, 8-bit CSI, OSC, charset designations and two-byte), stripped before test output is parsed, so coloured output reads as plain. */
+const ANSI = /\x1b\[[0-?]*[ -\/]*[@-~]|\x9b[0-?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()*+][ -~]|\x1b[@-Z\\-_]/g;
 /** Python's str.splitlines(). */
 const splitLines = (s: string) => s.split(/\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/);
 const byBytes = (a: string, b: string) => Buffer.compare(Buffer.from(a), Buffer.from(b));
@@ -42,7 +44,7 @@ function cmdKey(cmd: string): [string | null, string | null] {
 }
 function parseTests(out: string): { items: Array<[string, string]>; counts: Record<string, number>; summary: boolean } {
   const items = new Map<string, string>();
-  const lines = splitLines(out);
+  const lines = splitLines(out.replace(ANSI, ""));
   for (const line of lines) {
     for (const [i, rx] of TEST_LINE.entries()) {
       const m = rx.exec(line);

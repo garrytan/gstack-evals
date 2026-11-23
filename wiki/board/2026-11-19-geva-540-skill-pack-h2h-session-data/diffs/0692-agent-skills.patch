@@ -1,0 +1,137 @@
+diff --git a/src/cc65/coptstop.c b/src/cc65/coptstop.c
+index 7a9416b..dfe914c 100644
+--- a/src/cc65/coptstop.c
++++ b/src/cc65/coptstop.c
+@@ -1141,14 +1141,19 @@ static unsigned Opt_a_tosbitwise (StackOpData* D, opc_t OPC)
+     if ((GetRegInfo (D->Code, D->IP, REG_X) & REG_X) != 0) {
+         /* Replace the high-byte load with 0 for EOR, or just leave it alone */
+         if (OPC == OP65_EOR) {
+-            X = NewCodeEntry (OP65_LDX, AM65_IMM, MakeHexArg (0), 0, D->Rhs.X.ChgEntry->LI);
++            X = NewCodeEntry (OP65_LDX, AM65_IMM, MakeHexArg (0), 0, D->OpEntry->LI);
+             InsertEntry (D, X, D->IP++);
+-            D->Rhs.X.Flags |= LI_REMOVE;
++            if ((D->Rhs.X.Flags & LI_DIRECT) != 0) {
++                D->Rhs.X.Flags |= LI_REMOVE;
++            }
+         } else {
+             D->Rhs.X.Flags |= LI_DONT_REMOVE;
+         }
+-    } else {
+-        /* Rhs load entries may be removed */
++    } else if ((D->Rhs.X.Flags & LI_DIRECT) != 0) {
++        /* Rhs load entries may be removed. Remove the high byte load only
++        ** if there is one, since otherwise its ChgIndex may refer to an
++        ** unrelated entry.
++        */
+         D->Rhs.X.Flags |= LI_REMOVE;
+     }
+ 
+@@ -1373,8 +1378,12 @@ static unsigned Opt_a_tossub (StackOpData* D)
+     /* Inline the sbc */
+     D->IP = D->OpIndex+1;
+ 
+-    /* Must be true because of OP_RHS_LOAD */
+-    CHECK ((D->Rhs.A.Flags & D->Rhs.X.Flags & LI_DIRECT) != 0);
++    /* Must be true because of OP_RHS_LOAD. Since this is a RegA-only
++    ** optimization, RegAPreCondOk checks only the low byte. The high byte
++    ** is the same for both operands and may have no tracked load at all
++    ** (for example, if a label in between reset the load tracking).
++    */
++    CHECK ((D->Rhs.A.Flags & LI_DIRECT) != 0);
+ 
+     /* sec */
+     X = NewCodeEntry (OP65_SEC, AM65_IMP, 0, 0, D->OpEntry->LI);
+@@ -1403,9 +1412,14 @@ static unsigned Opt_a_tossub (StackOpData* D)
+         InsertEntry (D, X, D->IP++);
+     }
+ 
+-    /* Rhs load entries must be removed */
+-    D->Rhs.X.Flags |= LI_REMOVE;
++    /* Rhs load entries must be removed. Remove the high byte load only if
++    ** there is one, since otherwise its ChgIndex may refer to an unrelated
++    ** entry. Keeping it is harmless: X is either reloaded above or unused.
++    */
+     D->Rhs.A.Flags |= LI_REMOVE;
++    if ((D->Rhs.X.Flags & LI_DIRECT) != 0) {
++        D->Rhs.X.Flags |= LI_REMOVE;
++    }
+ 
+     /* Remove the push and the call to the tossubax function */
+     RemoveRemainders (D);
+diff --git a/test/val/bug2946.c b/test/val/bug2946.c
+new file mode 100644
+index 0000000..2fd6e4c
+--- /dev/null
++++ b/test/val/bug2946.c
+@@ -0,0 +1,71 @@
++/* bug #2946: Incomplete, non-removable Rhs asserts in OptStackOps */
++
++#include <stdio.h>
++#include <stdlib.h>
++
++unsigned char a, b = 0;
++unsigned char c = 10;
++unsigned char d = 1;
++
++unsigned failures = 0;
++
++void check (unsigned char got, unsigned char expected, const char* what)
++{
++    if (got != expected) {
++        printf ("%s: got %u, expected %u\n", what, got, expected);
++        ++failures;
++    }
++}
++
++void test_sub (void)
++{
++    /* 'if' needed to produce a label below, moved by OptJumpTarget3  */
++    if (b != 0) {
++        /* Operation not important; it only affects the removal of one LDX #$00 */
++        b = 0;
++    }
++
++    /* d >= 0 is const, A/X=1 (Warning: Result of comparison is always true) */
++    a = c - (d >= 0);
++    check (a, 9, "c - (d >= 0)");
++}
++
++void test_or (void)
++{
++    if (b != 0) {
++        b = 0;
++    }
++    a = c | (d >= 0);
++    check (a, 11, "c | (d >= 0)");
++}
++
++void test_xor (void)
++{
++    if (b != 0) {
++        b = 0;
++    }
++    a = c ^ (d >= 0);
++    check (a, 11, "c ^ (d >= 0)");
++}
++
++void test_and (void)
++{
++    if (b != 0) {
++        b = 0;
++    }
++    a = c & (d >= 0);
++    check (a, 0, "c & (d >= 0)");
++}
++
++int main (void)
++{
++    test_sub ();
++    test_or ();
++    test_xor ();
++    test_and ();
++
++    if (failures != 0) {
++        printf ("failures: %u\n", failures);
++    }
++    return failures != 0;
++}

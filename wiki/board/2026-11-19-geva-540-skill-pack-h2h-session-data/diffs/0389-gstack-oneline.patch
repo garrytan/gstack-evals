@@ -1,0 +1,19 @@
+diff --git a/internal/notification/types.go b/internal/notification/types.go
+index 175c8cf..0fa18b4 100644
+--- a/internal/notification/types.go
++++ b/internal/notification/types.go
+@@ -58,11 +58,11 @@ func extractMessage(l container.LogEvent) any {
+ 	case string:
+ 		return container.StripANSI(v)
+ 	case []container.LogFragment:
+-		cleaned := make([]container.LogFragment, len(v))
++		lines := make([]string, len(v))
+ 		for i, fragment := range v {
+-			cleaned[i] = container.LogFragment{Message: container.StripANSI(fragment.Message)}
++			lines[i] = container.StripANSI(fragment.Message)
+ 		}
+-		return cleaned
++		return strings.Join(lines, "\n")
+ 	case *orderedmap.OrderedMap[string, any]:
+ 		// Convert OrderedMap to regular map for expr compatibility
+ 		result := make(map[string]any)

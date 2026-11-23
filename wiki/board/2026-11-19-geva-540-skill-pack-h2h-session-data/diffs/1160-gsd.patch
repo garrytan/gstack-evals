@@ -1,0 +1,234 @@
+diff --git a/backend/local/local.go b/backend/local/local.go
+index 91ec9cd..7debc24 100644
+--- a/backend/local/local.go
++++ b/backend/local/local.go
+@@ -1438,9 +1438,106 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
+ // mkdirAll makes all the directories needed to store the object
+ func (o *Object) mkdirAll() error {
+ 	dir := filepath.Dir(o.path)
++	if o.fs.opt.TranslateSymlinks {
++		// In -l/--links mode symlinks are treated as objects, so
++		// never write through a symlinked parent directory - it
++		// may have been planted by an untrusted source and point
++		// outside the destination.
++		if err := o.fs.checkNoSymlinkInPath(dir); err != nil {
++			return err
++		}
++	}
+ 	return file.MkdirAll(dir, 0777)
+ }
+ 
++// isWithinDir returns true if path p is root or is inside root.
++//
++// Both paths should be cleaned.
++func isWithinDir(root, p string) bool {
++	rel, err := filepath.Rel(root, p)
++	if err != nil {
++		return false
++	}
++	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
++}
++
++// checkNoSymlinkInPath checks that no existing component of dir
++// below the root of f is a symlink.
++func (f *Fs) checkNoSymlinkInPath(dir string) error {
++	root := filepath.Clean(f.root)
++	dir = filepath.Clean(dir)
++	if !isWithinDir(root, dir) {
++		return fmt.Errorf("refusing to write to %q: outside of root %q", dir, root)
++	}
++	rel, err := filepath.Rel(root, dir)
++	if err != nil || rel == "." {
++		return err
++	}
++	current := root
++	for _, part := range strings.Split(rel, string(filepath.Separator)) {
++		if part == "" {
++			continue
++		}
++		current = filepath.Join(current, part)
++		fi, err := os.Lstat(current)
++		if err != nil {
++			if os.IsNotExist(err) {
++				// Nothing further down can exist
++				return nil
++			}
++			return err
++		}
++		if fi.Mode()&os.ModeSymlink != 0 {
++			return fmt.Errorf("refusing to write through symlinked directory %q", current)
++		}
++	}
++	return nil
++}
++
++// removeSymlinkBeforeWrite removes an existing symlink at o.path in
++// -l/--links mode so that writing a regular file never follows a
++// symlink which may point outside the destination.
++func (o *Object) removeSymlinkBeforeWrite() error {
++	if !o.fs.opt.TranslateSymlinks {
++		return nil
++	}
++	fi, err := os.Lstat(o.path)
++	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
++		return nil
++	}
++	if removeErr := os.Remove(o.path); removeErr != nil {
++		fs.Errorf(o, "Failed to remove previous symlink: %v", removeErr)
++		return removeErr
++	}
++	return nil
++}
++
++// checkSymlinkTarget checks that the symlink target, when resolved
++// relative to the directory containing the link, stays within the
++// root of the Fs.
++//
++// This stops an untrusted source creating symlinks which point
++// outside the destination.
++func (o *Object) checkSymlinkTarget(target string) error {
++	if target == "" {
++		return fmt.Errorf("refusing to create symlink %q: empty target", o.path)
++	}
++	if strings.ContainsRune(target, 0) {
++		return fmt.Errorf("refusing to create symlink %q: target contains NUL", o.path)
++	}
++	root := filepath.Clean(o.fs.root)
++	var resolved string
++	if filepath.IsAbs(target) || filepath.VolumeName(target) != "" {
++		resolved = filepath.Clean(target)
++	} else {
++		resolved = filepath.Join(filepath.Dir(o.path), target)
++	}
++	if !isWithinDir(root, resolved) {
++		return fmt.Errorf("refusing to create symlink %q -> %q: target is outside the destination %q", o.path, target, root)
++	}
++	return nil
++}
++
+ type nopWriterCloser struct {
+ 	*bytes.Buffer
+ }
+@@ -1491,6 +1588,9 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 	// If it is a translated link, just read in the contents, and
+ 	// then create a symlink
+ 	if !o.translatedLink {
++		if err := o.removeSymlinkBeforeWrite(); err != nil {
++			return err
++		}
+ 		f, err := file.OpenFile(o.path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+ 		if err != nil {
+ 			if runtime.GOOS == "windows" && os.IsPermission(err) {
+@@ -1533,6 +1633,10 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 	}
+ 
+ 	if o.translatedLink {
++		if err == nil {
++			// Validate the target - the source may be untrusted
++			err = o.checkSymlinkTarget(symlinkData.String())
++		}
+ 		if err == nil {
+ 			// Remove any current symlink or file, if one exists
+ 			if _, err := os.Lstat(o.path); err == nil {
+@@ -1606,6 +1710,10 @@ func (f *Fs) OpenWriterAt(ctx context.Context, remote string, size int64) (fs.Wr
+ 		return nil, errors.New("can't open a symlink for random writing")
+ 	}
+ 
++	if err := o.removeSymlinkBeforeWrite(); err != nil {
++		return nil, err
++	}
++
+ 	out, err := file.OpenFile(o.path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+ 	if err != nil {
+ 		return nil, err
+diff --git a/backend/local/local_internal_test.go b/backend/local/local_internal_test.go
+index f36cc17..4f90913 100644
+--- a/backend/local/local_internal_test.go
++++ b/backend/local/local_internal_test.go
+@@ -10,6 +10,7 @@ import (
+ 	"path/filepath"
+ 	"runtime"
+ 	"sort"
++	"strings"
+ 	"testing"
+ 	"time"
+ 
+@@ -20,6 +21,7 @@ import (
+ 	"github.com/rclone/rclone/fs/hash"
+ 	"github.com/rclone/rclone/fs/object"
+ 	"github.com/rclone/rclone/fs/operations"
++	"github.com/rclone/rclone/fs/sync"
+ 	"github.com/rclone/rclone/fstest"
+ 	"github.com/rclone/rclone/lib/file"
+ 	"github.com/rclone/rclone/lib/readers"
+@@ -730,3 +732,70 @@ func TestCopySymlink(t *testing.T) {
+ 	want = fstest.NewItem("dst2/file.txt", "hello world", when)
+ 	fstest.CompareItems(t, []fs.DirEntry{dst}, []fstest.Item{want}, nil, f.precision, "")
+ }
++
++// Test that in -l/--links mode an untrusted source can't create a
++// symlink pointing outside the destination, nor write through one.
++func TestCopySymlinkEscape(t *testing.T) {
++	ctx := context.Background()
++	r := fstest.NewRun(t)
++	defer r.Finalise()
++	when := time.Now()
++
++	outside := t.TempDir()
++
++	// Source: "evil" with a link escaping the destination and a file under it
++	r.WriteFile("evil/pwn.rclonelink", outside, when)
++	r.WriteFile("evil/rel.rclonelink", "../../..", when)
++	r.WriteFile("evil/ok.rclonelink", "pwn2/file.txt", when)
++	r.WriteFile("evil/pwn/authorized_keys", "attacker key", when)
++
++	srcF, err := NewFs(ctx, "local", filepath.Join(r.LocalName, "evil"), configmap.Simple{})
++	require.NoError(t, err)
++	dstF, err := NewFs(ctx, "local", filepath.Join(r.LocalName, "dst"), configmap.Simple{"links": "true"})
++	require.NoError(t, err)
++	require.NoError(t, dstF.Mkdir(ctx, ""))
++
++	put := func(f fs.Fs, remote, contents string) error {
++		src := object.NewStaticObjectInfo(remote, when, int64(len(contents)), true, nil, nil)
++		_, err := f.Put(ctx, strings.NewReader(contents), src)
++		return err
++	}
++
++	// Absolute target outside the destination is refused
++	err = put(dstF, "pwn.rclonelink", outside)
++	require.Error(t, err)
++	_, err = os.Lstat(filepath.Join(r.LocalName, "dst", "pwn"))
++	assert.True(t, os.IsNotExist(err))
++
++	// Relative target escaping the destination is refused
++	err = put(dstF, "rel.rclonelink", "../../..")
++	require.Error(t, err)
++
++	// Relative target inside the destination is allowed
++	require.NoError(t, put(dstF, "ok.rclonelink", "pwn2/file.txt"))
++	target, err := os.Readlink(filepath.Join(r.LocalName, "dst", "ok"))
++	require.NoError(t, err)
++	assert.Equal(t, "pwn2/file.txt", target)
++
++	// A pre-planted escaping symlink is never written through
++	require.NoError(t, os.Symlink(outside, filepath.Join(r.LocalName, "dst", "planted")))
++	err = put(dstF, "planted/authorized_keys", "attacker key")
++	require.Error(t, err)
++	_, err = os.Stat(filepath.Join(outside, "authorized_keys"))
++	assert.True(t, os.IsNotExist(err))
++
++	// A file written over a symlink replaces the symlink rather than following it
++	outsideFile := filepath.Join(outside, "victim")
++	require.NoError(t, os.WriteFile(outsideFile, []byte("orig"), 0600))
++	require.NoError(t, os.Symlink(outsideFile, filepath.Join(r.LocalName, "dst", "over")))
++	require.NoError(t, put(dstF, "over", "attacker"))
++	b, err := os.ReadFile(outsideFile)
++	require.NoError(t, err)
++	assert.Equal(t, "orig", string(b))
++
++	// Full sync of the malicious source writes nothing outside
++	err = sync.CopyDir(ctx, dstF, srcF, false)
++	assert.Error(t, err)
++	_, err = os.Stat(filepath.Join(outside, "authorized_keys"))
++	assert.True(t, os.IsNotExist(err))
++}

@@ -5,17 +5,23 @@ real_agent's RealAgent and leaves real_agent.py and pf_agent.py untouched. Per t
   1. checks the trial container runs the image the manifest pins for its session (real_agent's U4 image check);
   2. allows egress to the metering proxy only, as pf_agent does;
   3. copies pfchecks' sh scripts and this folder's sh/ into the container, and the arm's installed HOME over /root (the
-     none arm copies nothing), with docker cp, so the image's own files under /root stay;
+     none arm copies nothing), with docker cp, so the image's own files under /root stay; docker cp keeps the host's
+     uid, and with home_owner=session (off by default; the /cso lane's runner sets it) every copied home path is then
+     chowned to the container's own user, as a real user's home is owned by that user;
   4. runs h2h_turns' session on one driver slot (H2hSlots: meta names no phase, cap_usd is the session allowance, a
      whole-session retry names meta.rerun, and a 409 on the open is a cap stop).
 Claude Code is the container's own pinned binary, run through real_agent's docker-exec wrapper (FREEZE) as cli_path.
 h2h_config is a host JSON file run.ts writes: turns, continuation, done_rule, continuation_cap, limits, no_answer,
-disallowed_tools, env, home (a host dir, or null) and home_rule.
+disallowed_tools, env, home (a host dir, or null) and home_rule; the extension's part P (ext/session.ts) adds generations,
+which h2h_turns reads to write each answer's generation record before the slot closes.
+An s-* arm (the extension's part S, Sol in Codex) runs ext/h2h_codex.py's loop in step 4 instead, on the same slot; its
+h2h_config is ext/run.ts's and adds host "codex" and the codex block. Every other arm stays on the Claude Code path.
 """
 import asyncio
 import json
 import shlex
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -25,8 +31,12 @@ from pydantic import Field
 
 import egress
 import laneb_agent as lb
+from h2h_home import home_owner_argv
 from h2h_turns import SlotRefused, Turns, run_session
 from pf_agent import DriverSlots
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ext"))
+from h2h_codex import CodexTurns  # noqa: E402
 from real_agent import FREEZE, RealAgent, RealOptions, SandboxSetupError
 
 HERE = Path(__file__).resolve().parent
@@ -38,6 +48,8 @@ HOME = "/root"
 
 class H2hOptions(RealOptions):
     h2h_config: str = Field(description="Host path of the session's h2h config (run.ts writes it); never mounted in the container.")
+    home_owner: str = Field(default="", description="session: chown the copied home's paths to the container's own user after the copy; empty (the default) leaves docker cp's host uid.")
+
 
 
 class H2hSlots(DriverSlots):
@@ -97,7 +109,18 @@ class H2hAgent(RealAgent):
             cp = subprocess.run(["docker", "cp", str(src) + "/.", f"{container}:{dest}"], capture_output=True, text=True, timeout=600)
             if cp.returncode != 0:
                 raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP could not copy {src} into the container at {dest}: {cp.stderr[-300:]}")
+        if o.home_owner not in ("", "session"):
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP home_owner is session or empty, not {o.home_owner!r}")
+        argv = home_owner_argv(container, h["home"], HOME) if o.home_owner == "session" and h.get("home") else []
+        if argv:
+            own = subprocess.run(argv, capture_output=True, text=True, timeout=600)
+            if own.returncode != 0:
+                raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP could not give the copied home to the session's user: {own.stderr[-300:]}")
+            log({"event": "home_owner", "paths": len(argv) - 7})
         repo = task["repo_dir"]
+        if o.arm.split(":", 1)[-1].startswith("s-"):
+            await self._run_codex(h, task, container, evdir, events, log, context)
+            return
         model = self._resolved_model_name() or o.upstream_model
         env = {**h["env"], "ANTHROPIC_MODEL": model, **{k: model for k in lb.ALIAS_ENV}}
         host_dir = Path(tempfile.mkdtemp(prefix="h2h-agent-"))
@@ -110,7 +133,7 @@ class H2hAgent(RealAgent):
             "cli_path": str(wrapper), "cwd": str(host_dir), "repo": repo, "work": WORK, "sh_dir": SH_DIR, "home": HOME, "exec_prefix": ["docker", "exec", "-i", "-w", repo, container], "container": container,
             "out": str(evdir), "model": model, "no_answer": h["no_answer"], "env": env, "turns": h["turns"], "continuation": h["continuation"], "done_rule": h["done_rule"],
             "continuation_cap": h["continuation_cap"], "limits": h["limits"], "disallowed_tools": h["disallowed_tools"], "home_rule": h["home_rule"], "rerun": o.rerun or None,
-            "commits": task["commits"], "head": task["base_commit"],
+            "commits": task["commits"], "head": task["base_commit"], "generations": bool(h.get("generations")),
         }
         summary = await run_session(Turns(cfg, H2hSlots(self, trial, h["limits"], log)))
         summary["events"] = events
@@ -119,3 +142,24 @@ class H2hAgent(RealAgent):
         spent = ((summary.get("slot") or {}).get("close") or {}).get("spent_micros")
         context.cost_usd = spent / 1_000_000 if spent is not None else None
         context.metadata = {"h2h": {"arm": o.arm, "trial": trial, "turns": [t["termination"] for t in summary["turns"]], "refused": summary.get("refused")}}
+
+    async def _run_codex(self, h: dict, task: dict, container: str, evdir: Path, events: list, log, context) -> None:
+        """An s-* arm's session: ext/h2h_codex.py's loop on the same driver slot, with Codex run in the container through
+        the runtime volume's sol-agent link and the config's codex block (ext/run.ts writes it)."""
+        o = self.options
+        if not isinstance(h.get("codex"), dict) or h.get("host") != "codex":
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP arm {o.arm} runs in Codex, but its h2h config names no codex host block (ext/run.ts writes it); nothing was opened")
+        repo = task["repo_dir"]
+        trial = "h2h-" + uuid.uuid4().hex[:12]
+        cfg = {
+            "repo": repo, "work": WORK, "sh_dir": SH_DIR, "home": HOME, "exec_prefix": ["docker", "exec", "-i", "-w", repo, container], "container": container, "out": str(evdir),
+            "no_answer": h["no_answer"], "env": h["env"], "turns": h["turns"], "continuation": h["continuation"], "done_rule": h["done_rule"], "continuation_cap": h["continuation_cap"],
+            "limits": h["limits"], "home_rule": h["home_rule"], "rerun": o.rerun or None, "commits": task["commits"], "head": task["base_commit"], "codex": h["codex"],
+        }
+        summary = await run_session(CodexTurns(cfg, H2hSlots(self, trial, h["limits"], log)))
+        summary["events"] = events
+        summary["trial"] = trial
+        (evdir / "h2h-summary.json").write_text(json.dumps(summary, indent=1, default=str))
+        spent = ((summary.get("slot") or {}).get("close") or {}).get("spent_micros")
+        context.cost_usd = spent / 1_000_000 if spent is not None else None
+        context.metadata = {"h2h": {"arm": o.arm, "host": "codex", "trial": trial, "turns": [t["termination"] for t in summary["turns"]], "refused": summary.get("refused"), "thread": (summary.get("codex") or {}).get("thread_id")}}

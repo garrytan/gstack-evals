@@ -29,8 +29,11 @@ import { sessionLimits, type PfArm } from "../pfchecks/arms.ts";
 import { ALLOWANCE, ITEMS as PF_ITEMS, MODEL_ITEM, MODELS, type Arm } from "../pfchecks/items.ts";
 import { PfError } from "../pfchecks/prereg.ts";
 import { EFFORT_KEYS, reservationBound } from "../pfchecks/session.ts";
-import { H2H_SKILL, H2H_STAGES, h2hLimits, h2hModel, isH2hArm } from "../h2h/sessions/driver.ts";
+import { H2H_SKILL, h2hLimits, h2hModel } from "../h2h/sessions/driver.ts";
+import { extFirstRequestFields, extStageProvider, h2hItems, h2hStageArms, h2hStageLimits, h2hStageModel, isExtStage, isStageArm } from "../h2h/ext/driver.ts";
 import { H2hError } from "../h2h/prereg.ts";
+import { CSO_SKILL, CSO_STAGES, csoDriverLimits, csoDriverModels, csoItemCapUsd, isCsoArm } from "../cso/driver.ts";
+import { CsoError } from "../cso/prereg.ts";
 
 export const DEFAULT_TTL_MS = 72 * 3_600_000;
 export const DEADLINE_GRACE_MS = 120_000;
@@ -50,7 +53,7 @@ export interface StageSpec {
   arm: string;
   /** Family SM only: the model the stage's item pays for, and every SM arm its sessions may name (arm is the stage's label then). Its proxy refuses provider-side tools. */
   model?: string;
-  /** Family SM's arms, or a PF stage's: pf:P, pf:C, pf:N on a told PF item, pf:blind on pf-blind. A PF stage takes its models from PF_STAGES, and its proxy refuses provider-side tools and records each slot's first main request's effort fields. Or an h2h stage's h2h:<arm> arms on an h2h model item (h2h/sessions/driver.ts H2H_STAGES): it runs prereg.json's model with one slot per session at the session allowance, and its proxy refuses provider-side tools and answers a reservation-bound refusal with a retryable 429. */
+  /** Family SM's arms, or a PF stage's: pf:P, pf:C, pf:N on a told PF item, pf:blind on pf-blind. A PF stage takes its models from PF_STAGES, and its proxy refuses provider-side tools and records each slot's first main request's effort fields. Or an h2h stage's h2h:<arm> arms on an h2h model item (h2h/sessions/driver.ts H2H_STAGES, or the extension's h2h/ext/driver.ts EXT_STAGES): it runs prereg.json's model (an extension item: its part's model on its part's provider route) with one slot per session at the session allowance, and its proxy refuses provider-side tools and answers a reservation-bound refusal with a retryable 429. Or a cso stage's cso:<arm> arms on a cso session item (cso/driver.ts CSO_STAGES): it serves Opus 5.5 and particle-1, one slot per session at that model's allowance, with h2h's proxy settings. */
   arms?: string[];
   /** A none stage on a registry with no told arm (the eng-review build read's builds): the program skills its item charges. G's none stage always charges every told arm's skill. */
   skills?: string[];
@@ -78,6 +81,10 @@ export interface ServeOptions {
   pf_allowance?: Record<Arm, Record<string, number>>;
   /** h2h stages' session allowance in dollars: prereg.json's by default, or twice it after stage 1's doubling rule. */
   h2h_allowance_usd?: number;
+  /** cso stages' session allowance per model in dollars: prereg.json's by default, or twice it after stage 1's doubling rule. */
+  cso_allowance_usd?: Record<string, number>;
+  /** cso items' re-priced caps in dollars after stage 1; an item's recorded cap may not pass this or prereg.json's. */
+  cso_caps_usd?: Record<string, number>;
   retry?: RetryBudget;
   registry?: Registry;
   env?: Record<string, string | undefined>;
@@ -130,7 +137,7 @@ export interface CloseAnswer {
   refusals: string[] | null;
   /** Refusals at the slot's allowance check, the proxy's only allowance stop; the end kind reads this, never the E_ALLOWANCE code. */
   allowance_stops: number | null;
-  /** PF sessions only: the effort and thinking fields (pfchecks session.ts EFFORT_KEYS) of the slot's first request with a tools list, as its metering proxy recorded them, or null when it sent none. */
+  /** PF sessions: the effort and thinking fields (pfchecks session.ts EFFORT_KEYS) of the slot's first request with a tools list, as its metering proxy recorded them, or null when it sent none. Extension items of parts S and L (h2h/ext/driver.ts EXT_FIRST_REQUEST): that request's prompt fields, absent when it sent none. */
   first_request?: Record<string, unknown> | null;
   /** PF sessions: the slot's allowance stops that only its calls still in flight caused (pfchecks session.ts reservationBound). h2h sessions: the proxy's
    *  reservation-bound refusals (Meter.reservation_bound), which are retryable and never an allowance stop. */
@@ -172,6 +179,8 @@ interface Stage {
   pf: boolean;
   /** h2h stages only (model is prereg.json's): one slot per session at the session allowance. */
   h2h?: boolean;
+  /** cso stages only (models are prereg.json's two): one slot per session at that model's allowance. */
+  cso?: boolean;
   lease_id: string;
   reserved: number;
   expires: number;
@@ -288,8 +297,9 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   }
   if (!o.stages.length) fail("E_USAGE", "name at least one --stage <item>=<arm>");
   const pfStage = (st: StageSpec) => [st.arm, ...(st.arms ?? [])].some((a) => a.startsWith("pf:"));
-  const h2hStage = (st: StageSpec) => !pfStage(st) && [st.arm, ...(st.arms ?? [])].some(isH2hArm);
-  const smStage = (st: StageSpec) => !pfStage(st) && !h2hStage(st) && (st.model !== undefined || st.arms !== undefined);
+  const h2hStage = (st: StageSpec) => !pfStage(st) && [st.arm, ...(st.arms ?? [])].some(isStageArm);
+  const csoStage = (st: StageSpec) => !pfStage(st) && !h2hStage(st) && [st.arm, ...(st.arms ?? [])].some(isCsoArm);
+  const smStage = (st: StageSpec) => !pfStage(st) && !h2hStage(st) && !csoStage(st) && (st.model !== undefined || st.arms !== undefined);
   const pfAllowance = o.pf_allowance ?? ALLOWANCE;
   for (const st of o.stages) {
     if (pfStage(st)) {
@@ -313,16 +323,36 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     }
     if (h2hStage(st)) {
       const arms = st.arms ?? [st.arm];
-      if (arms.some((a) => !isH2hArm(a))) fail("E_USAGE", "stage " + st.item + " mixes h2h arms with other lanes' arms; an h2h stage serves h2h arms only");
-      const own = Object.hasOwn(H2H_STAGES, st.item) ? H2H_STAGES[st.item]! : fail("E_USAGE", "h2h stage " + st.item + " is not an h2h model item; h2h stages are " + Object.keys(H2H_STAGES).join(", "));
+      if (arms.some((a) => !isStageArm(a))) fail("E_USAGE", "stage " + st.item + " mixes h2h arms with other lanes' arms; an h2h stage serves h2h arms only");
+      const own = h2hStageArms(st.item) ?? fail("E_USAGE", "h2h stage " + st.item + " is not an h2h model item; h2h stages are " + h2hItems().join(", "));
       if (st.model !== undefined) fail("E_USAGE", "h2h stage " + st.item + " runs prereg.json's model, not a stage model");
       const stray = arms.filter((a) => !own.includes(a));
       if (!arms.length || stray.length) fail("E_USAGE", "h2h stage " + st.item + " serves " + own.join(", ") + ", not " + (stray.join(", ") || "no arm"));
       try {
-        smProvider(reg, h2hModel());
-        h2hLimits(o.h2h_allowance_usd);
+        if (isExtStage(st.item)) h2hStageLimits(st.item, o.h2h_allowance_usd);
+        else {
+          smProvider(reg, h2hModel());
+          h2hLimits(o.h2h_allowance_usd);
+        }
       } catch (e) {
         fail("E_USAGE", "h2h stage " + st.item + ": " + (e instanceof H2hError || e instanceof LedgerError ? e.message : String(e)));
+      }
+      continue;
+    }
+    if (csoStage(st)) {
+      const arms = st.arms ?? [st.arm];
+      if (arms.some((a) => !isCsoArm(a))) fail("E_USAGE", "stage " + st.item + " mixes cso arms with other lanes' arms; a cso stage serves cso arms only");
+      const own = Object.hasOwn(CSO_STAGES, st.item) ? CSO_STAGES[st.item]! : fail("E_USAGE", "cso stage " + st.item + " is not a cso session item; cso stages are " + Object.keys(CSO_STAGES).join(", "));
+      if (st.model !== undefined) fail("E_USAGE", "cso stage " + st.item + " serves prereg.json's models, not a stage model");
+      const stray = arms.filter((a) => !own.includes(a));
+      if (!arms.length || stray.length) fail("E_USAGE", "cso stage " + st.item + " serves " + own.join(", ") + ", not " + (stray.join(", ") || "no arm"));
+      try {
+        for (const m of csoDriverModels()) {
+          smProvider(reg, m);
+          csoDriverLimits(m, o.cso_allowance_usd);
+        }
+      } catch (e) {
+        fail("E_USAGE", "cso stage " + st.item + ": " + (e instanceof CsoError || e instanceof LedgerError ? e.message : String(e)));
       }
       continue;
     }
@@ -335,7 +365,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     const def = ITEMS[st.item];
     if (def?.model !== st.model) fail("E_USAGE", "SM stage " + st.item + " pays for model " + st.model + ", but " + (def ? "line item " + st.item + " pays for " + (def.model ?? "no model's sessions") : st.item + " is not one of family SM's line items (" + Object.keys(ITEMS).join(", ") + ")") + "; nothing was opened");
   }
-  const servedBy = o.stages.flatMap((s) => (pfStage(s) ? (s.arms ?? [s.arm]).flatMap((a) => PF_STAGES[s.item]!.models.map((m) => a + "@" + m)) : h2hStage(s) ? (s.arms ?? [s.arm]).map((a) => a + "@" + h2hModel()) : smStage(s) ? s.arms!.map((a) => a + "@" + s.model) : [s.arm]));
+  const servedBy = o.stages.flatMap((s) => (pfStage(s) ? (s.arms ?? [s.arm]).flatMap((a) => PF_STAGES[s.item]!.models.map((m) => a + "@" + m)) : h2hStage(s) ? (s.arms ?? [s.arm]).map((a) => a + "@" + h2hStageModel(s.item)) : csoStage(s) ? (s.arms ?? [s.arm]).flatMap((a) => csoDriverModels().map((m) => a + "@" + m)) : smStage(s) ? s.arms!.map((a) => a + "@" + s.model) : [s.arm]));
   if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(servedBy).size !== servedBy.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
   mkdirSync(o.dir, { recursive: true });
   const dir = realpathSync(o.dir);
@@ -443,10 +473,11 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     const halt = [...halts].find(([, h]) => h.item === st.item);
     if (halt) fail("E_SM_FINALIZE_HALT", "line item " + st.item + " halted in run " + o.run_id + " at " + halt[1].at + ": session " + halt[0] + (halt[1].cause ? " was closed as " + halt[1].cause + ", never by the driver's own close, so its proxy finalize never ran" : " closed with its proxy finalize failed") + ", so its allowance stops are unknown and its retry waits for the Captain's ruling on the proxy journal " + halt[1].journal + "; once the Captain rules, relaunch with --lift-halt " + halt[0] + "; nothing was opened");
     if (s.cap_micros === null) return fail("E_LEDGER_MISSING", "no approved cap is on record for line item " + st.item + "; nothing was opened");
+    if (csoStage(st) && s.cap_micros > Math.round(csoItemCapUsd(st.item, o.cso_caps_usd) * 1e6)) fail("E_USAGE", "line item " + st.item + " records a cap of " + s.cap_micros + " micros, above the $" + csoItemCapUsd(st.item, o.cso_caps_usd) + " prereg.json or a re-priced cap allows; nothing was opened");
     if (s.program === null) return fail("E_USAGE", "line item " + st.item + " is in no program; a G stage is admitted by O6's envelope, so its item joins the program with --program at init; nothing was opened");
-    const arm = pfStage(st) || h2hStage(st) ? null : smStage(st) ? smArm(reg, st.arms![0]!) : reg.arms[st.arm]!;
+    const arm = pfStage(st) || h2hStage(st) || csoStage(st) ? null : smStage(st) ? smArm(reg, st.arms![0]!) : reg.arms[st.arm]!;
     const told = [...new Set(Object.values(reg.arms).flatMap((a) => (a.kind === "told" && a.skill ? [a.skill] : [])))];
-    const want = !arm ? [h2hStage(st) ? H2H_SKILL : "pf"] : smStage(st) ? [arm.kind === "told" ? arm.skill! : "sm"] : arm.kind === "told" ? [arm.skill!] : told.length ? told : st.skills ?? [];
+    const want = !arm ? [h2hStage(st) ? H2H_SKILL : csoStage(st) ? CSO_SKILL : "pf"] : smStage(st) ? [arm.kind === "told" ? arm.skill! : "sm"] : arm.kind === "told" ? [arm.skill!] : told.length ? told : st.skills ?? [];
     if (s.skills.length !== want.length || want.some((k) => !s.skills.includes(k))) fail("E_USAGE", "line item " + st.item + " splits its spend across " + (s.skills.join(", ") || "no skill") + ", but arm " + st.arm + " spends for " + want.join(", ") + "; a stage's item carries its own arm's skills, so the envelope charges the skill that spends; nothing was opened");
     if (s.run_id !== null && s.run_id !== o.run_id) fail("E_ITEM_BOUND", "line item " + st.item + " is bound to run " + s.run_id + ", so run " + o.run_id + " cannot spend from it; nothing was opened");
     if (s.open) fail("E_LEASE_UNSETTLED", "lease " + s.open.lease_id + " on line item " + st.item + " (machine " + s.open.machine_id + ", run " + s.open.run_id + ") is still open; settle it on that machine, then launch the driver again; nothing was opened");
@@ -507,10 +538,11 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
           }
           if (req.method === "POST" && path === "/stop") {
             const b = (await req.json().catch(() => null)) as { code?: unknown; session?: unknown } | null;
-            if (b?.code === "E_PF_FINALIZE_HALT" || b?.code === "E_H2H_FINALIZE_HALT") {
+            if (b?.code === "E_PF_FINALIZE_HALT" || b?.code === "E_H2H_FINALIZE_HALT" || b?.code === "E_CSO_FINALIZE_HALT") {
               const session = typeof b.session === "string" && b.session ? b.session : "(not named)";
               record({ event: "halt_stop", code: b.code, session }, true);
-              if (b.code === "E_H2H_FINALIZE_HALT") warn("E_H2H_FINALIZE_HALT", "outcome driver: the h2h session runner halted session " + session + " and stopped the driver; every stage still serving settles as failed, never completed, and the driver exits 2; the next launch of the run waits for the Captain's ruling on that session");
+              if (b.code === "E_CSO_FINALIZE_HALT") warn("E_CSO_FINALIZE_HALT", "outcome driver: the cso session runner halted session " + session + " and stopped the driver; every stage still serving settles as failed, never completed, and the driver exits 2; the next launch of the run waits for the Captain's ruling on that session");
+              else if (b.code === "E_H2H_FINALIZE_HALT") warn("E_H2H_FINALIZE_HALT", "outcome driver: the h2h session runner halted session " + session + " and stopped the driver; every stage still serving settles as failed, never completed, and the driver exits 2; the next launch of the run waits for the Captain's ruling on that session");
               else warn("E_PF_FINALIZE_HALT", "outcome driver: pf-run halted session " + session + " and stopped the driver; every stage still serving settles as failed, never completed, and the driver exits 2; the next launch of the run waits for the Captain's ruling on that session");
               for (const s of stages) {
                 if (s.state === "stopped") continue;
@@ -561,8 +593,9 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       const sm = smStage(st);
       const pf = pfStage(st);
       const h2h = h2hStage(st);
-      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch, ...(sm || pf || h2h ? { refuseServerTools: true } : {}), ...(pf ? { firstRequestFields: [...EFFORT_KEYS] } : {}), ...(h2h ? { reservationBoundRetry: true } : {}) });
-      const stage: Stage = { item: st.item, arm: st.arm, kind: pf || h2h ? "prompt" : sm ? smArm(reg, st.arms![0]!).kind : reg.arms[st.arm]!.kind, arms: pf || h2h ? [...(st.arms ?? [st.arm])] : sm ? [...st.arms!] : [st.arm], ...(sm ? { model: st.model } : h2h ? { model: h2hModel() } : {}), ...(pf ? { models: PF_STAGES[st.item]!.models } : {}), pf, ...(h2h ? { h2h } : {}), lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, halted: false, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
+      const cso = csoStage(st);
+      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch, ...(sm || pf || h2h || cso ? { refuseServerTools: true } : {}), ...(pf ? { firstRequestFields: [...EFFORT_KEYS] } : {}), ...(h2h && extFirstRequestFields(st.item) ? { firstRequestFields: extFirstRequestFields(st.item) } : {}), ...(h2h || cso ? { reservationBoundRetry: true } : {}) });
+      const stage: Stage = { item: st.item, arm: st.arm, kind: pf || h2h || cso ? "prompt" : sm ? smArm(reg, st.arms![0]!).kind : reg.arms[st.arm]!.kind, arms: pf || h2h || cso ? [...(st.arms ?? [st.arm])] : sm ? [...st.arms!] : [st.arm], ...(sm ? { model: st.model } : h2h ? { model: h2hStageModel(st.item) } : {}), ...(pf ? { models: PF_STAGES[st.item]!.models } : cso ? { models: csoDriverModels() } : {}), pf, ...(h2h ? { h2h } : {}), ...(cso ? { cso } : {}), lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, halted: false, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
       stages.push(stage);
       proxy.start();
     } catch (error) {
@@ -634,7 +667,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         undrained: meter ? meter.undrained : null,
         unsettled: meter ? meter.unsettled : null,
         ...(s.pf ? pfClose(s.journal, sess.meter_id, sess.allowance, meter?.first_request ?? null) : {}),
-        ...(s.h2h && meter ? { reservation_bound: meter.reservation_bound ?? 0 } : {}),
+        ...((s.h2h || s.cso) && meter ? { reservation_bound: meter.reservation_bound ?? 0 } : {}),
+        ...(s.h2h && meter?.first_request ? { first_request: meter.first_request } : {}),
       };
       sess.closed = answer;
       const hold = sess.key ? holds.get(sess.key) : undefined;
@@ -652,7 +686,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       }
       if (halt) {
         s.halted = true;
-        log((s.h2h ? "E_H2H_FINALIZE_HALT" : "E_SM_FINALIZE_HALT") + " outcome driver: session " + sess.id + " on line item " + s.item + " closed with its proxy finalize failed, so its allowance stops are unknown; the item opens no more sessions or leases until the Captain rules on the proxy journal " + s.journal + " and a relaunch lifts the halt with --lift-halt " + sess.id);
+        log((s.h2h ? "E_H2H_FINALIZE_HALT" : s.cso ? "E_CSO_FINALIZE_HALT" : "E_SM_FINALIZE_HALT") + " outcome driver: session " + sess.id + " on line item " + s.item + " closed with its proxy finalize failed, so its allowance stops are unknown; the item opens no more sessions or leases until the Captain rules on the proxy journal " + s.journal + " and a relaunch lifts the halt with --lift-halt " + sess.id);
         drain(s, "halted", null);
         if (s.ended !== "cap_stop") s.ended = "halted";
       }
@@ -765,8 +799,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     if (!pf && phase !== undefined) return refusal("E_USAGE", 400, "meta.phase is for PF sessions only; arm " + meta.arm + " opens one slot per session");
     if (pf && phase !== "task" && phase !== "wrapup") return refusal("E_USAGE", 400, "a PF open names meta.phase \"task\" or \"wrapup\", not " + JSON.stringify(phase ?? null));
     const turns = pf ? sessionLimits((meta.arm as string).slice(3) as PfArm, b.model, pfAllowance) : null;
-    const limits = turns ? { session_cap_usd: turns[phase!].allowance_usd, wall_limit_sec: turns[phase!].wall_limit_sec } : stage.h2h ? h2hLimits(o.h2h_allowance_usd) : stage.model === undefined ? reg.arms[stage.arm]!.limits : smLimits(reg, meta.arm, stage.model);
-    if (!pf && stage.model === undefined && b.model !== reg.pins.model) return refusal("E_USAGE", 400, "model " + JSON.stringify(b.model ?? null) + " is not the registry's pinned " + reg.pins.model);
+    const limits = turns ? { session_cap_usd: turns[phase!].allowance_usd, wall_limit_sec: turns[phase!].wall_limit_sec } : stage.h2h ? h2hStageLimits(stage.item, o.h2h_allowance_usd) : stage.cso ? csoDriverLimits(b.model, o.cso_allowance_usd) : stage.model === undefined ? reg.arms[stage.arm]!.limits : smLimits(reg, meta.arm, stage.model);
+    if (!pf && !stage.cso && stage.model === undefined && b.model !== reg.pins.model) return refusal("E_USAGE", 400, "model " + JSON.stringify(b.model ?? null) + " is not the registry's pinned " + reg.pins.model);
     if (b.cap_usd !== limits.session_cap_usd) return refusal("E_USAGE", 400, "cap_usd " + JSON.stringify(b.cap_usd ?? null) + " is not arm " + (pf ? meta.arm + "'s " + phase + " allowance_usd on " + b.model : stage.arm + "'s session_cap_usd") + " of " + limits.session_cap_usd);
     if (typeof b.trial !== "string" || !b.trial || typeof meta.task !== "string" || !meta.task || !Number.isSafeInteger(meta.trial_n) || meta.trial_n < 1) return refusal("E_USAGE", 400, "an open needs trial, meta.task and meta.trial_n (a whole number from 1)");
     if (meta.rerun !== undefined && (typeof meta.rerun !== "string" || !meta.rerun)) return refusal("E_USAGE", 400, "meta.rerun, when given, names the repair the rerun follows");
@@ -775,7 +809,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       if (stage.ended === "cap_stop") return refusal("CAP_STOP", 409, "stage " + stage.item + " (" + stage.arm + ") is cap-stopped, scope " + stage.scope + "; do not retry: the stage ends incomplete", { item: stage.item, scope: stage.scope });
       return refusal("E_LEASE_CLOSED", 503, "stage " + stage.item + " (" + stage.arm + ") is " + stage.state + " (" + (stage.ended ?? "stopping") + "); retry after the driver is launched again for run " + o.run_id, { item: stage.item });
     }
-    const key = meta.arm + "|" + (pf ? b.model : (stage.model ?? "")) + "|" + meta.task + "|" + meta.trial_n;
+    const key = meta.arm + "|" + (pf || stage.cso ? b.model : (stage.model ?? "")) + "|" + meta.task + "|" + meta.trial_n;
     const seen = triples.get(key) ?? 0;
     const wrapped = wraps.get(key) ?? 0;
     if (phase === "wrapup") {
@@ -808,7 +842,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       capStop(stage);
       return refusal("CAP_STOP", 409, "stage " + stage.item + " (" + stage.arm + ") has " + usd(Math.max(room, 0)) + " of room on lease " + stage.lease_id + " (" + usd(stage.reserved) + " reserved, " + usd(held) + " held, " + usd(pending) + " still allowed to live sessions); a session needs " + usd(allowance) + (wrapAllowance ? " plus " + usd(wrapAllowance) + " for its wrap-up turn" : "") + ". Do not retry: the stage ends incomplete, scope " + stage.scope, { item: stage.item, scope: stage.scope, room_micros: room, allowance_micros: allowance });
     }
-    const provider = pf ? smProvider(reg, b.model) : stage.model === undefined ? "anthropic" : smProvider(reg, stage.model);
+    const provider = pf || stage.cso ? smProvider(reg, b.model) : stage.h2h && isExtStage(stage.item) ? extStageProvider(stage.item) : stage.model === undefined ? "anthropic" : smProvider(reg, stage.model);
     const binding = stage.proxy.bind({ cell: { run_id: o.run_id, arm: meta.arm, task: meta.task, model: b.model, trial: meta.trial_n, attempt: phase === "wrapup" ? seen : seen + 1 }, models: [provider + ":" + b.model], allowance_micros: allowance });
     const id = "ses_" + randomBytes(9).toString("hex");
     const answer: OpenAnswer = { id, token: binding.token, base_url: "http://" + urlHost(o.host) + ":" + stage.proxy.port + "/" + binding.slot + "/" + provider, ledger: "u4", item: stage.item, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance };
@@ -829,7 +863,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         holds.set(key, { stage, micros: wrapAllowance, task: id, until: null });
       }
     }
-    record({ event: "open", id, item: stage.item, arm: meta.arm, ...(pf ? { model: b.model, phase } : stage.model === undefined ? {} : { model: stage.model }), task: meta.task, trial_n: meta.trial_n, ...(meta.rerun ? { rerun: meta.rerun } : {}), trial: b.trial, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance });
+    record({ event: "open", id, item: stage.item, arm: meta.arm, ...(pf ? { model: b.model, phase } : stage.cso ? { model: b.model } : stage.model === undefined ? {} : { model: stage.model }), task: meta.task, trial_n: meta.trial_n, ...(meta.rerun ? { rerun: meta.rerun } : {}), trial: b.trial, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance });
     return Response.json(answer);
   };
 

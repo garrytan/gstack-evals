@@ -1,0 +1,22 @@
+diff --git a/src/lib/ares_process.c b/src/lib/ares_process.c
+index aebea1a..9d0acf2 100644
+--- a/src/lib/ares_process.c
++++ b/src/lib/ares_process.c
+@@ -1236,11 +1236,12 @@ static ares_conn_t *ares_fetch_connection(const ares_channel_t *channel,
+     return NULL;
+   }
+ 
+-  /* If the associated server has failures, don't use it.  It should be cleaned
+-   * up later. */
+-  if (conn->server->consec_failures > 0) {
+-    return NULL;
+-  }
++  /* NOTE: Do not reject the connection simply because the server has
++   * consecutive failures.  Doing so causes a brand new UDP socket to be opened
++   * for every query sent to a server with any failures, which under load leads
++   * to socket exhaustion (regression in 1.34.6).  Idle connections to failing
++   * servers are still closed by ares_check_cleanup_conns(), which resets the
++   * source port as intended. */
+ 
+   /* Used too many times */
+   if (channel->udp_max_queries > 0 &&

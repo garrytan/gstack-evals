@@ -1,0 +1,35 @@
+diff --git a/crates/hir-def/src/expr_store/tests/body.rs b/crates/hir-def/src/expr_store/tests/body.rs
+index c7b9edf..8dbd8b4 100644
+--- a/crates/hir-def/src/expr_store/tests/body.rs
++++ b/crates/hir-def/src/expr_store/tests/body.rs
+@@ -141,6 +141,16 @@ fn main() {
+     );
+ }
+ 
++#[test]
++fn malformed_type_bound_no_panic() {
++    lower(
++        r#"
++fn main() {
++    let x: vec![]+;
++}"#,
++    );
++}
++
+ #[test]
+ fn macro_resolve() {
+     // Regression test for a path resolution bug introduced with inner item handling.
+diff --git a/crates/syntax/src/ast/node_ext.rs b/crates/syntax/src/ast/node_ext.rs
+index 1eb658f..ef83333 100644
+--- a/crates/syntax/src/ast/node_ext.rs
++++ b/crates/syntax/src/ast/node_ext.rs
+@@ -880,7 +880,8 @@ impl ast::TypeBound {
+         } else if let Some(lifetime) = self.lifetime() {
+             Some(TypeBoundKind::Lifetime(lifetime))
+         } else {
+-            unreachable!()
++            // Can happen with malformed code, e.g. `let x: vec![]+;`
++            None
+         }
+     }
+ }

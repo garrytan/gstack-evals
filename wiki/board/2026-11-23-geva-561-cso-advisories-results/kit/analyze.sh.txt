@@ -1,0 +1,12 @@
+set -uo pipefail
+K=/dev/shm/cso-readout.key
+trap 'rm -f $K; test ! -e $K && echo "key removed $(date -u +%FT%TZ)"' EXIT
+cd ~/work/gstack-evals; export PATH=$HOME/.bun/bin:$PATH
+test -r $K || { echo "no key"; exit 1; }
+sha256sum $K | cut -c1-64
+jq -c '[.units[] | select(.role == "stage2") | .unit]' ~/units/draw-52.json > ~/stage2/units.json; jq length ~/stage2/units.json
+echo "== analyze $(date -u +%FT%TZ)"
+bin/gstack-evals cso analyze --work ~/units --sessions ~/stage2/sessions.jsonl --scores ~/stage2/scores.jsonl --units ~/stage2/units.json --check ~/judge-e/check-production.sealed --check ~/judge-e/check-fallback-opus-particle.sealed --key $K --headroom-admitted > ~/stage2/analysis.json 2> ~/stage2/analysis.err; echo "analyze exit $?"
+grep -v "^RIG_UNPROVEN" ~/stage2/analysis.err | tail -3
+echo "== open stage 1 $(date -u +%FT%TZ)"
+bun ~/open-s1.ts ~/stage1/stage1-readout-f.sealed $K 7f271d3db91ba19c07668be85e63e4835c8a62266e3b6f2db286b9066f50ce4b ~/stage2/stage1-opened.json; echo "open exit $?"

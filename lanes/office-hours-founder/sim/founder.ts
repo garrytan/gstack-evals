@@ -11,9 +11,11 @@
 //   refusal, when the call's worst case (the proxy's own reservation at 1,200 output tokens) does not fit what is left of
 //   the session's allowance. A reply served by anything but Google Vertex (OpenRouter names it Google) is a drift
 //   (E_OF_PROVIDER_DRIFT); the meter's own pin check accepts any name starting with Google, Google AI Studio included,
-//   so this check is the strict one. A proxy allowance refusal (E_ALLOWANCE) is an allowance refusal; any other failed
-//   call is a provider failure. The run side scores an allowance refusal and a check failure as missing and stops the
-//   simulator's items on a drift.
+//   so this check is the strict one. A proxy allowance refusal (E_ALLOWANCE) is an allowance refusal; any other 402 is
+//   the ledger refusing the reserve (CAP_STOP), a cap stop; any other failed call is a provider failure. The run side
+//   scores an allowance refusal and a check failure as missing, ends the launch on a cap stop and stops the simulator's
+//   items on a drift.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { chatPrice, openRouterRouting, priceRequest, reservationMicros } from "../../../src/runner/pricing/prices.ts";
@@ -40,6 +42,9 @@ export const FOUNDER_RULES = [
   "",
   "Reply with a JSON object only: {\"reply\": \"<what you say>\", \"revealed\": [\"<fact id>\", ...], \"rules\": [<the rule numbers you applied>]}. List in revealed every hidden fact your reply states or clearly implies, and no other.",
 ].join("\n");
+
+/** The sha256 of the simulator rules in force, which a launch's frozen manifest binds. */
+export const rulesSha256 = (rules: string = FOUNDER_RULES): string => createHash("sha256").update(rules).digest("hex");
 
 /** Section 4's call settings for every simulator call. */
 export const SIM_CALL = { model: "gemini", effort: "medium", temperature: 0, seed: SEED, maxTokens: 1200 } as const;
@@ -89,7 +94,7 @@ export function founderCall(o: { meter: Pick<Meter, "call">; session: SimSession
       throw e;
     }
     o.session.spent_micros += res.micros ?? worst;
-    if (res.text === null) return { kind: "call-failed", reason: res.status === 402 && res.problem?.startsWith("E_ALLOWANCE") ? "allowance" : "provider", detail: res.problem ?? "HTTP " + res.status };
+    if (res.text === null) return { kind: "call-failed", reason: res.status === 402 ? (res.problem?.startsWith("E_ALLOWANCE") ? "allowance" : "cap") : "provider", detail: res.problem ?? "HTTP " + res.status };
     if (!VERTEX.test(res.served_by ?? "")) return drift(MODELS.gemini.id + " was served by " + (res.served_by ?? "an unnamed provider") + ", not Google Vertex");
     return { kind: "text", text: res.text };
   };

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/garrytan/gstack-evals/blob/main/schema/verdict.schema.json",
-  "$comment": "Version 1.0.0 (semver). The root is <out>/verdict.json; #/$defs/error is <out>/error.json. Adding an optional field is a minor version; renaming, removing or retyping one is a major version.",
+  "$comment": "Version 1.1.0 (semver). The root is <out>/verdict.json; #/$defs/error is <out>/error.json. Adding an optional field is a minor version; renaming, removing or retyping one is a major version.",
   "title": "Skill eval verdict (a superset of gstack's contract verdict file)",
   "description": "verdict, reasons, harness_version, model, trials, calibration, arms, tasks and adjudication keep the contract's names and shapes. With several models, model lists them comma-separated and arms and tasks hold the first model's blocks; every model has a block under models. The contract's UNCOVERED is the BROKEN_TASK warning. Money in spend is integer micro-dollars.",
   "type": "object",
@@ -256,7 +256,8 @@
         "timeouts": {"type": "integer", "minimum": 0},
         "excluded": {"type": "integer", "minimum": 0},
         "loaded_bytes_per_run": {"type": ["number", "null"]},
-        "wall_s_per_run": {"type": ["number", "null"]}
+        "wall_s_per_run": {"type": ["number", "null"]},
+        "unanswered_questions": {"description": "Questions this arm's sessions asked through the host's question tool and got no answer to: a Codex tool question in a task with no user replies, which Claude Code instead ends as E_USER_TURNS_MISSING. 0 where no session recorded any. Added in 1.1.0.", "type": "integer", "minimum": 0}
       }
     },
     "smallest_detectable_loss": {

@@ -1,0 +1,229 @@
+diff --git a/types.go b/types.go
+index 3c6b8fe..02f6af2 100644
+--- a/types.go
++++ b/types.go
+@@ -4,11 +4,14 @@ import (
+ 	"encoding"
+ 	"reflect"
+ 	"time"
++
++	"github.com/pelletier/go-toml/v2/unstable"
+ )
+ 
+ var timeType = reflect.TypeOf((*time.Time)(nil)).Elem()
+ var textMarshalerType = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
+ var textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
++var unmarshalerType = reflect.TypeOf((*unstable.Unmarshaler)(nil)).Elem()
+ var mapStringInterfaceType = reflect.TypeOf(map[string]interface{}(nil))
+ var sliceInterfaceType = reflect.TypeOf([]interface{}(nil))
+ var stringType = reflect.TypeOf("")
+diff --git a/unmarshaler.go b/unmarshaler.go
+index 189be52..0a7b6e1 100644
+--- a/unmarshaler.go
++++ b/unmarshaler.go
+@@ -62,8 +62,15 @@ func (d *Decoder) DisallowUnknownFields() *Decoder {
+ // that don't have a straightforward TOML representation to provide their own
+ // decoding logic.
+ //
+-// Currently, types can only decode from a single value. Tables and array tables
+-// are not supported.
++// When a type implementing the interface is the target of a single value, its
++// UnmarshalTOML method is called once with that value's node.
++//
++// When it is the target of a table (including the document root, a [table],
++// or an element of an [[array table]]), UnmarshalTOML is called once per
++// expression of that table, in document order. For the document root, this
++// includes every expression of the document: KeyValue, Table and ArrayTable
++// nodes. For other tables, it receives each KeyValue node of the table's body.
++// Nodes are only valid for the duration of the call.
+ //
+ // *Unstable:* This method does not follow the compatibility guarantees of
+ // semver. It can be changed or removed without a new major version being
+@@ -249,6 +256,10 @@ func (d *decoder) FromParser(v interface{}) error {
+ }
+ 
+ func (d *decoder) fromParser(root reflect.Value) error {
++	if u, ok := d.tableUnmarshaler(root); ok {
++		return d.unmarshalerFromParser(u)
++	}
++
+ 	for d.nextExpr() {
+ 		err := d.handleRootExpression(d.expr(), root)
+ 		if err != nil {
+@@ -259,6 +270,43 @@ func (d *decoder) fromParser(root reflect.Value) error {
+ 	return d.p.Error()
+ }
+ 
++// unmarshalerFromParser feeds every root expression of the document, in order,
++// to the given unmarshaler.
++func (d *decoder) unmarshalerFromParser(u unstable.Unmarshaler) error {
++	for d.nextExpr() {
++		expr := d.expr()
++		if _, err := d.seen.CheckExpression(expr); err != nil {
++			return err
++		}
++		if err := u.UnmarshalTOML(expr); err != nil {
++			return err
++		}
++	}
++	return d.p.Error()
++}
++
++// tableUnmarshaler returns the unstable.Unmarshaler implemented by v (or the
++// value it points to), if the unmarshaler interface is enabled. Nil pointers
++// are initialized as needed.
++func (d *decoder) tableUnmarshaler(v reflect.Value) (unstable.Unmarshaler, bool) {
++	if !d.unmarshalerInterface {
++		return nil, false
++	}
++	for v.Kind() == reflect.Ptr {
++		if v.IsNil() {
++			if !v.CanSet() || !reflect.PointerTo(v.Type().Elem()).Implements(unmarshalerType) {
++				return nil, false
++			}
++		}
++		v = initAndDereferencePointer(v)
++	}
++	if !v.CanAddr() || !v.Addr().CanInterface() {
++		return nil, false
++	}
++	u, ok := v.Addr().Interface().(unstable.Unmarshaler)
++	return u, ok
++}
++
+ /*
+ Rules for the unmarshal code:
+ 
+@@ -599,6 +647,10 @@ func (d *decoder) handleTable(key unstable.Iterator, v reflect.Value) (reflect.V
+ // Handle root expressions until the end of the document or the next
+ // non-key-value.
+ func (d *decoder) handleKeyValues(v reflect.Value) (reflect.Value, error) {
++	if u, ok := d.tableUnmarshaler(v); ok {
++		return reflect.Value{}, d.unmarshalerKeyValues(u)
++	}
++
+ 	var rv reflect.Value
+ 	for d.nextExpr() {
+ 		expr := d.expr()
+@@ -628,6 +680,25 @@ func (d *decoder) handleKeyValues(v reflect.Value) (reflect.Value, error) {
+ 	return rv, nil
+ }
+ 
++// unmarshalerKeyValues feeds the key-value expressions of the current table,
++// in order, to the given unmarshaler.
++func (d *decoder) unmarshalerKeyValues(u unstable.Unmarshaler) error {
++	for d.nextExpr() {
++		expr := d.expr()
++		if expr.Kind != unstable.KeyValue {
++			d.stashExpr()
++			break
++		}
++		if _, err := d.seen.CheckExpression(expr); err != nil {
++			return err
++		}
++		if err := u.UnmarshalTOML(expr); err != nil {
++			return err
++		}
++	}
++	return nil
++}
++
+ type (
+ 	handlerFn    func(key unstable.Iterator, v reflect.Value) (reflect.Value, error)
+ 	valueMakerFn func() reflect.Value
+diff --git a/unmarshaler_test.go b/unmarshaler_test.go
+index 6ee6636..f37795a 100644
+--- a/unmarshaler_test.go
++++ b/unmarshaler_test.go
+@@ -3998,3 +3998,91 @@ foo = "bar"`,
+ 		})
+ 	}
+ }
++
++type orderedRecorder struct {
++	Entries []string
++}
++
++func (r *orderedRecorder) UnmarshalTOML(node *unstable.Node) error {
++	var parts []string
++	it := node.Key()
++	for it.Next() {
++		parts = append(parts, string(it.Node().Data))
++	}
++	entry := node.Kind.String() + ":" + strings.Join(parts, ".")
++	if node.Kind == unstable.KeyValue {
++		entry += "=" + string(node.Value().Data)
++	}
++	r.Entries = append(r.Entries, entry)
++	return nil
++}
++
++func TestUnmarshal_CustomUnmarshalerRootDocument(t *testing.T) {
++	input := `b = "1"
++a = "2"
++[t]
++z = "3"
++[[arr]]
++y = "4"
++`
++	var r orderedRecorder
++	err := toml.NewDecoder(strings.NewReader(input)).EnableUnmarshalerInterface().Decode(&r)
++	assert.NoError(t, err)
++	assert.Equal(t, []string{
++		"KeyValue:b=1",
++		"KeyValue:a=2",
++		"Table:t",
++		"KeyValue:z=3",
++		"ArrayTable:arr",
++		"KeyValue:y=4",
++	}, r.Entries)
++}
++
++func TestUnmarshal_CustomUnmarshalerRootError(t *testing.T) {
++	var r errUnmarshaler
++	err := toml.NewDecoder(strings.NewReader(`foo = "bar"`)).EnableUnmarshalerInterface().Decode(&r)
++	assert.Error(t, err)
++}
++
++type errUnmarshaler struct{}
++
++func (errUnmarshaler) UnmarshalTOML(*unstable.Node) error {
++	return errors.New("called")
++}
++
++func TestUnmarshal_CustomUnmarshalerTable(t *testing.T) {
++	type cfg struct {
++		Name string
++		Tbl  orderedRecorder
++		Ptr  *orderedRecorder
++		Arr  []orderedRecorder
++	}
++	input := `name = "x"
++[tbl]
++b = 1
++a = 2
++[ptr]
++c = 3
++[[arr]]
++d = 4
++[[arr]]
++e = 5
++`
++	var c cfg
++	err := toml.NewDecoder(strings.NewReader(input)).EnableUnmarshalerInterface().Decode(&c)
++	assert.NoError(t, err)
++	assert.Equal(t, "x", c.Name)
++	assert.Equal(t, []string{"KeyValue:b=1", "KeyValue:a=2"}, c.Tbl.Entries)
++	assert.True(t, c.Ptr != nil)
++	assert.Equal(t, []string{"KeyValue:c=3"}, c.Ptr.Entries)
++	assert.Equal(t, 2, len(c.Arr))
++	assert.Equal(t, []string{"KeyValue:d=4"}, c.Arr[0].Entries)
++	assert.Equal(t, []string{"KeyValue:e=5"}, c.Arr[1].Entries)
++}
++
++func TestUnmarshal_CustomUnmarshalerTableDisabled(t *testing.T) {
++	var r orderedRecorder
++	err := toml.NewDecoder(strings.NewReader(`entries = ["a"]`)).Decode(&r)
++	assert.NoError(t, err)
++	assert.Equal(t, []string{"a"}, r.Entries)
++}

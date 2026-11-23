@@ -1,0 +1,50 @@
+diff --git a/examples/blp_model.conf b/examples/blp_model.conf
+new file mode 100644
+index 0000000..845ccc2
+--- /dev/null
++++ b/examples/blp_model.conf
+@@ -0,0 +1,11 @@
++[request_definition]
++r = sub, sub_level, obj, obj_level, act
++
++[policy_definition]
++p = sub, obj, act
++
++[policy_effect]
++e = some(where (p.eft == allow))
++
++[matchers]
++m = (r.act == "read" && r.sub_level >= r.obj_level) || (r.act == "write" && r.sub_level <= r.obj_level)
+diff --git a/model_test.go b/model_test.go
+index 98a09e2..648c385 100644
+--- a/model_test.go
++++ b/model_test.go
+@@ -706,3 +706,28 @@ func TestReBACModel(t *testing.T) {
+ 	testEnforce(t, e, "bob", "doc3", "read", false)
+ 	testEnforce(t, e, "bob", "doc3", "write", false)
+ }
++
++func TestBLPModel(t *testing.T) {
++	e, _ := NewEnforcer("examples/blp_model.conf")
++
++	testEnforceBLP(t, e, true, "alice", 3, "data1", 1, "read")
++	testEnforceBLP(t, e, true, "bob", 2, "data2", 2, "read")
++	testEnforceBLP(t, e, true, "charlie", 1, "data1", 1, "read")
++	testEnforceBLP(t, e, false, "bob", 2, "data3", 3, "read")
++	testEnforceBLP(t, e, false, "charlie", 1, "data2", 2, "read")
++
++	testEnforceBLP(t, e, true, "alice", 3, "data3", 3, "write")
++	testEnforceBLP(t, e, true, "bob", 2, "data3", 3, "write")
++	testEnforceBLP(t, e, true, "charlie", 1, "data2", 2, "write")
++	testEnforceBLP(t, e, false, "alice", 3, "data1", 1, "write")
++	testEnforceBLP(t, e, false, "bob", 2, "data1", 1, "write")
++}
++
++func testEnforceBLP(t *testing.T, e *Enforcer, res bool, rvals ...interface{}) {
++	t.Helper()
++	if myRes, err := e.Enforce(rvals...); err != nil {
++		t.Errorf("Enforce Error: %s", err)
++	} else if myRes != res {
++		t.Errorf("%v: %t, supposed to be %t", rvals, myRes, res)
++	}
++}

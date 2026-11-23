@@ -1,0 +1,1969 @@
+{
+ "schema": "cso-unit-build.v1",
+ "need": 134,
+ "filled": 134,
+ "units": [
+  "capricorn86__happy-dom-ghsa-834v-8h66-3h79",
+  "patriksimek__vm2-ghsa-x6m4-chr9-cg97",
+  "patriksimek__vm2-ghsa-c48m-32m9-vx93",
+  "sveltejs__kit-ghsa-27mw-82g8-phjj",
+  "patriksimek__vm2-ghsa-x965-fc75-jpqh",
+  "go-jose__go-jose-ghsa-4w3g-jfj2-cw2q",
+  "getkin__kin-openapi-ghsa-p6wj-qrr4-pgh5",
+  "sveltejs__kit-ghsa-pfhg-q3qv-9q6r",
+  "qax-os__excelize-ghsa-g27h-8qhm-6pff",
+  "follow-redirects__follow-redirects-ghsa-q3jh-wrc6-jgq8",
+  "nuxt__nuxt-ghsa-x287-wcfc-q46c",
+  "qax-os__excelize-ghsa-c85p-xxjj-2r75",
+  "markdown-it__markdown-it-ghsa-r7fv-28h4-cvq7",
+  "intlify__vue-i18n-ghsa-83rm-6c8r-g728",
+  "qax-os__excelize-ghsa-fq3v-74gv-27gm",
+  "markdown-it__markdown-it-ghsa-vfgh-jcmw-g37q",
+  "follow-redirects__follow-redirects-ghsa-8r9p-f939-6h3c",
+  "getkin__kin-openapi-ghsa-g8cf-rcjf-c8cf",
+  "yahoo__serialize-javascript-ghsa-m5mm-p8h7-m29v",
+  "jhaals__yopass-ghsa-6r69-c6wg-7g8m",
+  "borewit__music-metadata-ghsa-53v6-4h7p-p4gj",
+  "containerd__containerd-ghsa-pg57-6jwg-q645",
+  "yahoo__serialize-javascript-ghsa-gfhx-hw2g-v5hg",
+  "rclone__rclone-ghsa-p6m2-r3w9-mpxw",
+  "traefik__traefik-ghsa-7ghq-v6jf-g56c",
+  "amir20__dozzle-ghsa-p2w3-6x73-2f6x",
+  "semaphoreui__semaphore-ghsa-cxvf-gvfq-36w2",
+  "xmldom__xmldom-ghsa-4w3w-2rp5-g8jm",
+  "grpc__grpc-go-ghsa-2v4p-qf9q-27wj",
+  "traefik__traefik-ghsa-v67p-phpq-fc8x",
+  "openchoreo__openchoreo-ghsa-52gf-6rpq-fgmx",
+  "rclone__rclone-ghsa-66hp-wgxq-6f5q",
+  "oras-project__oras-go-ghsa-h7vf-4x9w-h99v",
+  "rclone__rclone-ghsa-cf44-9pgv-m4xc",
+  "traefik__traefik-ghsa-42cj-m3vj-89wv",
+  "getkin__kin-openapi-ghsa-mmfr-pmjx-hw9w",
+  "oras-project__oras-go-ghsa-fxhp-mv3v-67qp",
+  "forgekeep__nebula-mesh-ghsa-7rx3-5wx3-5v76",
+  "kite-org__kite-ghsa-c534-2w9c-x7fm",
+  "payloadcms__payload-ghsa-4ww4-68q3-h7g5",
+  "mcollina__msgpack5-ghsa-5x5g-h9x8-2fh9",
+  "payloadcms__payload-ghsa-pj5h-5q6c-3pfx",
+  "backstage__backstage-ghsa-2cmg-v53w-8xfp",
+  "nodejs__undici-ghsa-2m5v-pch6-74hx",
+  "a2aproject__a2a-java-ghsa-9rhm-2h4x-jwmx",
+  "distribution__distribution-ghsa-685w-q87j-wqw3",
+  "backstage__backstage-ghsa-hmp2-4m7g-22cv",
+  "nuxt__nuxt-ghsa-xfq5-w38q-pc2x",
+  "expressjs__multer-ghsa-q7qp-rjg7-q26m",
+  "getarcaneapp__arcane-ghsa-mp22-58ff-6fhr",
+  "backstage__backstage-ghsa-xm5q-p7w3-x6cp",
+  "yawkat__lz4-java-ghsa-gm45-99xc-r7wv",
+  "patrickjuchli__basic-ftp-ghsa-c475-qrg2-pj4r",
+  "markdown-it__markdown-it-ghsa-gfr2-rv44-r23c",
+  "nodejs__undici-ghsa-4w7w-5xrc-9h26",
+  "quasarframework__quasar-ghsa-r5mf-4r5x-q78f",
+  "mcollina__msgpack5-ghsa-24ch-f2g6-9hhh",
+  "tryghost__ghost-ghsa-9m4w-fmjw-fvjq",
+  "lxsmnsyc__seroval-ghsa-wp97-x4hv-qvhp",
+  "sveltejs__devalue-ghsa-mcm9-63f2-9j32",
+  "tinacms__tinacms-ghsa-c42q-qvc3-j6vg",
+  "mcollina__msgpack5-ghsa-8hq7-ggx2-cc6m",
+  "corazawaf__coraza-ghsa-prpw-wwv7-xjjr",
+  "coredns__coredns-ghsa-74w3-63xv-x9mv",
+  "microsoft__openapi.net-ghsa-7pxr-59rr-hqj2",
+  "getarcaneapp__arcane-ghsa-pw5q-rjx4-7f7p",
+  "dgraph-io__dgraph-ghsa-qj98-gp63-54xj",
+  "tinylibs__tinypool-ghsa-5gmw-xhrv-c9v3",
+  "borewit__music-metadata-ghsa-f94x-6692-553q",
+  "nodejs__undici-ghsa-4qv8-2p9j-2685",
+  "withastro__astro-ghsa-mpr7-6m5w-76rw",
+  "signalk__signalk-server-ghsa-4xm8-rg9h-jhq2",
+  "xerial__snappy-java-ghsa-xqrx-qh46-34m7",
+  "vitejs__vite-ghsa-vfpm-58rq-9qcg",
+  "ardatan__graphql-tools-ghsa-434m-5hcj-pxf3",
+  "lxsmnsyc__seroval-ghsa-9wx9-5pv9-3349",
+  "containerd__containerd-ghsa-rp3h-jf77-q9p4",
+  "tryghost__ghost-ghsa-r7f2-6fj8-6fg2",
+  "lxsmnsyc__seroval-ghsa-jp82-f5mq-hwhp",
+  "adonisjs__http-server-ghsa-2m6q-8v3h-jqww",
+  "payloadcms__payload-ghsa-xgv3-crq2-6f69",
+  "cli__cli-ghsa-mm27-mwq9-fr5g",
+  "corazawaf__coraza-ghsa-pc5q-qfxp-ggqv",
+  "asynchttpclient__async-http-client-ghsa-jmqq-x5g9-9p2w",
+  "a2aproject__a2a-java-ghsa-x32g-jvvm-4725",
+  "yawkat__lz4-java-ghsa-343h-94h5-c4wr",
+  "nuxt__nuxt-ghsa-3xf4-9g3c-4h4w",
+  "postcss__postcss-selector-parser-ghsa-rj75-hqrm-r3gf",
+  "asynchttpclient__async-http-client-ghsa-p2jm-6hj6-9rjg",
+  "withastro__astro-ghsa-98hj-9722-w3j8",
+  "nrwl__nx-ghsa-qm8w-vx34-5j9j",
+  "vercel__next.js-ghsa-h694-7cp9-m8p3",
+  "i18next__i18next-http-backend-ghsa-9jhj-wvmw-cfx5",
+  "kubeflow__pipelines-ghsa-8fmv-6rg5-5924",
+  "nationalsecurityagency__emissary-ghsa-c6q7-wqw2-h65w",
+  "expressjs__compression-ghsa-vc2v-76pw-4v95",
+  "argoproj__argo-cd-ghsa-j6cw-g6p4-7hch",
+  "sveltejs__devalue-ghsa-hx4r-w6wj-j8fg",
+  "tinylibs__tinypool-ghsa-85c8-ppgw-ccpr",
+  "langchain-ai__langchainjs-ghsa-m6rx-h84q-8r95",
+  "xerial__snappy-java-ghsa-q233-g92q-qxp6",
+  "vercel__next.js-ghsa-3w37-wq28-93x7",
+  "theagentrouter__agent-router-ghsa-953h-535j-jg2v",
+  "ljharb__shell-quote-ghsa-pqg4-j6r4-53mv",
+  "browserify__pbkdf2-ghsa-477h-4r7f-fvrx",
+  "fasterxml__jackson-core-ghsa-7hhh-6rmp-j9qf",
+  "go-jose__go-jose-ghsa-mgcc-cww5-fp2q",
+  "asynchttpclient__async-http-client-ghsa-2jwh-9rmr-j4xf",
+  "yawkat__lz4-java-ghsa-4v53-57pg-c464",
+  "uhop__stream-json-ghsa-mjw6-4jj6-33hc",
+  "zip-rs__zip2-ghsa-9hj8-73fh-9963",
+  "better-auth__better-auth-ghsa-965c-763c-88jm",
+  "tokio-rs__tokio-ghsa-5wjr-9356-4wc8",
+  "angular__angular-ghsa-62vg-58rm-qff7",
+  "fastify__busboy-ghsa-x8mw-p69m-v3mx",
+  "cli__cli-ghsa-cg6r-mpgc-h9mm",
+  "zip-rs__zip2-ghsa-hjqx-j4rw-g7xv",
+  "open-telemetry__opentelemetry-java-ghsa-ccrj-gw8r-854m",
+  "quasarframework__quasar-ghsa-68jq-fhch-4xq4",
+  "better-auth__better-auth-ghsa-44jh-23m7-hpcf",
+  "a2aproject__a2a-java-ghsa-4fpj-g9jf-9rgg",
+  "gtsteffaniak__filebrowser-ghsa-mgqf-5mf5-prfj",
+  "microsoft__kiota-ghsa-6gw6-rv2g-25mg",
+  "sveltejs__devalue-ghsa-x5rw-q4pp-hg5g",
+  "tinacms__tinacms-ghsa-pwhx-cvv3-qj5c",
+  "fastify__fastify-ghsa-389g-gv7q-r4x8",
+  "steveukx__git-js-ghsa-x6jw-m9v5-85vh",
+  "signalk__signalk-server-ghsa-7wpf-ch8f-5f4x",
+  "vuejs__core-ghsa-g2v6-rqmx-r4w6",
+  "containerd__containerd-ghsa-p7v4-vr35-mj6f",
+  "patorjk__figlet.js-ghsa-62ch-8vmq-8xm7",
+  "i18next__i18next-http-backend-ghsa-3cmx-xjww-583x",
+  "squirrelchat__smol-toml-ghsa-r4xh-jqrq-34v2",
+  "kedacore__keda-ghsa-637c-6jxx-4rwm"
+ ],
+ "gates": [
+  {
+   "unit": "capricorn86__happy-dom-ghsa-834v-8h66-3h79",
+   "part": "part1",
+   "index": 0,
+   "usable": true,
+   "position": 1
+  },
+  {
+   "unit": "patriksimek__vm2-ghsa-x6m4-chr9-cg97",
+   "part": "part1",
+   "index": 1,
+   "usable": true,
+   "position": 2
+  },
+  {
+   "unit": "graphql-hive__graphql-scalars-ghsa-x8rm-f576-gq67",
+   "part": "part1",
+   "index": 2,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2025-01-28, before 2026-07-01"
+  },
+  {
+   "unit": "patriksimek__vm2-ghsa-c48m-32m9-vx93",
+   "part": "part1",
+   "index": 3,
+   "usable": true,
+   "position": 3
+  },
+  {
+   "unit": "sveltejs__kit-ghsa-27mw-82g8-phjj",
+   "part": "part1",
+   "index": 4,
+   "usable": true,
+   "position": 4
+  },
+  {
+   "unit": "patriksimek__vm2-ghsa-x965-fc75-jpqh",
+   "part": "part1",
+   "index": 5,
+   "usable": true,
+   "position": 5
+  },
+  {
+   "unit": "go-jose__go-jose-ghsa-4w3g-jfj2-cw2q",
+   "part": "part1",
+   "index": 6,
+   "usable": true,
+   "position": 6
+  },
+  {
+   "unit": "getkin__kin-openapi-ghsa-p6wj-qrr4-pgh5",
+   "part": "part1",
+   "index": 7,
+   "usable": true,
+   "position": 7
+  },
+  {
+   "unit": "sveltejs__kit-ghsa-pfhg-q3qv-9q6r",
+   "part": "part1",
+   "index": 8,
+   "usable": true,
+   "position": 8
+  },
+  {
+   "unit": "qax-os__excelize-ghsa-g27h-8qhm-6pff",
+   "part": "part1",
+   "index": 9,
+   "usable": true,
+   "position": 9
+  },
+  {
+   "unit": "follow-redirects__follow-redirects-ghsa-q3jh-wrc6-jgq8",
+   "part": "part1",
+   "index": 10,
+   "usable": true,
+   "position": 10
+  },
+  {
+   "unit": "nuxt__nuxt-ghsa-x287-wcfc-q46c",
+   "part": "part1",
+   "index": 11,
+   "usable": true,
+   "position": 11
+  },
+  {
+   "unit": "qax-os__excelize-ghsa-c85p-xxjj-2r75",
+   "part": "part1",
+   "index": 12,
+   "usable": true,
+   "position": 12
+  },
+  {
+   "unit": "markdown-it__markdown-it-ghsa-r7fv-28h4-cvq7",
+   "part": "part1",
+   "index": 13,
+   "usable": true,
+   "position": 13
+  },
+  {
+   "unit": "intlify__vue-i18n-ghsa-83rm-6c8r-g728",
+   "part": "part1",
+   "index": 14,
+   "usable": true,
+   "position": 14
+  },
+  {
+   "unit": "qax-os__excelize-ghsa-fq3v-74gv-27gm",
+   "part": "part1",
+   "index": 15,
+   "usable": true,
+   "position": 15
+  },
+  {
+   "unit": "markdown-it__markdown-it-ghsa-vfgh-jcmw-g37q",
+   "part": "part1",
+   "index": 16,
+   "usable": true,
+   "position": 16
+  },
+  {
+   "unit": "katex__katex-ghsa-238p-pmpm-9mq7",
+   "part": "part1",
+   "index": 17,
+   "usable": false,
+   "gate": "install_id",
+   "code": "E_CSO_DROP_INSTALL_ID",
+   "reason": "E_CSO_DROP_INSTALL_ID an arm's installed gstack tree names this unit's id (deviation (a))"
+  },
+  {
+   "unit": "follow-redirects__follow-redirects-ghsa-8r9p-f939-6h3c",
+   "part": "part1",
+   "index": 18,
+   "usable": true,
+   "position": 17
+  },
+  {
+   "unit": "labstack__echo-ghsa-23wf-92cp-8pcj",
+   "part": "part1",
+   "index": 19,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-04-25, before 2026-07-01"
+  },
+  {
+   "unit": "getkin__kin-openapi-ghsa-g8cf-rcjf-c8cf",
+   "part": "part1",
+   "index": 20,
+   "usable": true,
+   "position": 18
+  },
+  {
+   "unit": "yahoo__serialize-javascript-ghsa-m5mm-p8h7-m29v",
+   "part": "part1",
+   "index": 21,
+   "usable": true,
+   "position": 19
+  },
+  {
+   "unit": "jhaals__yopass-ghsa-6r69-c6wg-7g8m",
+   "part": "part1",
+   "index": 22,
+   "usable": true,
+   "position": 20
+  },
+  {
+   "unit": "borewit__music-metadata-ghsa-53v6-4h7p-p4gj",
+   "part": "part1",
+   "index": 23,
+   "usable": true,
+   "position": 21
+  },
+  {
+   "unit": "containerd__containerd-ghsa-pg57-6jwg-q645",
+   "part": "part1",
+   "index": 24,
+   "usable": true,
+   "position": 22
+  },
+  {
+   "unit": "anycable__anycable-ghsa-5p54-whvp-x327",
+   "part": "part1",
+   "index": 25,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-29, before 2026-07-01"
+  },
+  {
+   "unit": "yahoo__serialize-javascript-ghsa-gfhx-hw2g-v5hg",
+   "part": "part1",
+   "index": 26,
+   "usable": true,
+   "position": 23
+  },
+  {
+   "unit": "kcp-dev__kcp-ghsa-c8w2-fgvx-vhv4",
+   "part": "part1",
+   "index": 27,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-25, before 2026-07-01"
+  },
+  {
+   "unit": "amir20__dozzle-ghsa-xcw9-qmmf-vqxj",
+   "part": "part1",
+   "index": 28,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-22, before 2026-07-01"
+  },
+  {
+   "unit": "rclone__rclone-ghsa-p6m2-r3w9-mpxw",
+   "part": "part1",
+   "index": 29,
+   "usable": true,
+   "position": 24
+  },
+  {
+   "unit": "traefik__traefik-ghsa-7ghq-v6jf-g56c",
+   "part": "part1",
+   "index": 30,
+   "usable": true,
+   "position": 25
+  },
+  {
+   "unit": "amir20__dozzle-ghsa-p2w3-6x73-2f6x",
+   "part": "part1",
+   "index": 31,
+   "usable": true,
+   "position": 26
+  },
+  {
+   "unit": "rabbitmq__amqp091-go-ghsa-465g-fh3v-9jw4",
+   "part": "part1",
+   "index": 32,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-18, before 2026-07-01"
+  },
+  {
+   "unit": "semaphoreui__semaphore-ghsa-cxvf-gvfq-36w2",
+   "part": "part1",
+   "index": 33,
+   "usable": true,
+   "position": 27
+  },
+  {
+   "unit": "xmldom__xmldom-ghsa-4w3w-2rp5-g8jm",
+   "part": "part1",
+   "index": 34,
+   "usable": true,
+   "position": 28
+  },
+  {
+   "unit": "rabbitmq__amqp091-go-ghsa-j497-x9hr-x34x",
+   "part": "part1",
+   "index": 35,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-19, before 2026-07-01"
+  },
+  {
+   "unit": "xmldom__xmldom-ghsa-w2rr-34g9-rvrj",
+   "part": "part1",
+   "index": 36,
+   "usable": false,
+   "gate": "same_fix",
+   "code": "E_CSO_DROP_SAME_FIX",
+   "reason": "E_CSO_DROP_SAME_FIX an earlier usable unit has fix cba1321218b069182695813fa7565653708e172e or parent tree 148adcb4be2275aa4f88dc429b2ba8fd1ae6dd55"
+  },
+  {
+   "unit": "grpc__grpc-go-ghsa-2v4p-qf9q-27wj",
+   "part": "part1",
+   "index": 37,
+   "usable": true,
+   "position": 29
+  },
+  {
+   "unit": "traefik__traefik-ghsa-v67p-phpq-fc8x",
+   "part": "part1",
+   "index": 38,
+   "usable": true,
+   "position": 30
+  },
+  {
+   "unit": "rabbitmq__amqp091-go-ghsa-33mj-cw25-m34h",
+   "part": "part1",
+   "index": 39,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-19, before 2026-07-01"
+  },
+  {
+   "unit": "openchoreo__openchoreo-ghsa-52gf-6rpq-fgmx",
+   "part": "part1",
+   "index": 40,
+   "usable": true,
+   "position": 31
+  },
+  {
+   "unit": "rclone__rclone-ghsa-66hp-wgxq-6f5q",
+   "part": "part1",
+   "index": 41,
+   "usable": true,
+   "position": 32
+  },
+  {
+   "unit": "oras-project__oras-go-ghsa-h7vf-4x9w-h99v",
+   "part": "part1",
+   "index": 42,
+   "usable": true,
+   "position": 33
+  },
+  {
+   "unit": "cilium__cilium-ghsa-fm8w-2m5w-9j7r",
+   "part": "part1",
+   "index": 43,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-09, before 2026-07-01"
+  },
+  {
+   "unit": "rclone__rclone-ghsa-cf44-9pgv-m4xc",
+   "part": "part1",
+   "index": 44,
+   "usable": true,
+   "position": 34
+  },
+  {
+   "unit": "magicmirrororg__magicmirror-ghsa-q4gh-4ffp-5cg8",
+   "part": "part1",
+   "index": 45,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-10, before 2026-07-01"
+  },
+  {
+   "unit": "aquasecurity__trivy-ghsa-mcj4-mphf-j9ff",
+   "part": "part1",
+   "index": 46,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-10, before 2026-07-01"
+  },
+  {
+   "unit": "traefik__traefik-ghsa-42cj-m3vj-89wv",
+   "part": "part1",
+   "index": 47,
+   "usable": true,
+   "position": 35
+  },
+  {
+   "unit": "contentful__contentful-mcp-server-ghsa-2xhg-73j7-rrgx",
+   "part": "part1",
+   "index": 48,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-01, before 2026-07-01"
+  },
+  {
+   "unit": "getkin__kin-openapi-ghsa-mmfr-pmjx-hw9w",
+   "part": "part1",
+   "index": 49,
+   "usable": true,
+   "position": 36
+  },
+  {
+   "unit": "that1drifter__browse-mcp-ghsa-m9mq-7m7q-xc6p",
+   "part": "part1",
+   "index": 50,
+   "usable": false,
+   "gate": "fetch",
+   "code": "E_CSO_DROP_FETCH",
+   "reason": "E_CSO_DROP_FETCH the fix commit 5352a4a56f626254b445bfa07e4bb48c5aad15c1 did not fetch: fatal: could not read Username for 'https://github.com': terminal prompts disabled"
+  },
+  {
+   "unit": "labstack__echo-ghsa-vfp3-v2gw-7wfq",
+   "part": "part1",
+   "index": 51,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-14, before 2026-07-01"
+  },
+  {
+   "unit": "oras-project__oras-go-ghsa-8xwf-rjm4-xvhv",
+   "part": "part1",
+   "index": 52,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-05-28, before 2026-07-01"
+  },
+  {
+   "unit": "fission__fission-ghsa-q6vm-xqc9-v3ff",
+   "part": "part1",
+   "index": 53,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-01, before 2026-07-01"
+  },
+  {
+   "unit": "pion__dtls-ghsa-wg4g-wm44-ch5j",
+   "part": "part1",
+   "index": 54,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-02, before 2026-07-01"
+  },
+  {
+   "unit": "gopacket__gopacket-ghsa-g6v3-7xmc-w563",
+   "part": "part1",
+   "index": 55,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-04, before 2026-07-01"
+  },
+  {
+   "unit": "openrundev__openrun-ghsa-h5g6-xmh4-hc37",
+   "part": "part1",
+   "index": 56,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-02, before 2026-07-01"
+  },
+  {
+   "unit": "fission__fission-ghsa-r5jh-q2mw-gcx4",
+   "part": "part1",
+   "index": 57,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-01, before 2026-07-01"
+  },
+  {
+   "unit": "oras-project__oras-go-ghsa-fxhp-mv3v-67qp",
+   "part": "part1",
+   "index": 58,
+   "usable": true,
+   "position": 37
+  },
+  {
+   "unit": "forgekeep__nebula-mesh-ghsa-7rx3-5wx3-5v76",
+   "part": "part1",
+   "index": 59,
+   "usable": true,
+   "position": 38
+  },
+  {
+   "unit": "goshs-labs__goshs-ghsa-rmxw-pq4x-3fvh",
+   "part": "part1",
+   "index": 60,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-09, before 2026-07-01"
+  },
+  {
+   "unit": "gofiber__fiber-ghsa-gcfq-8gqf-4876",
+   "part": "part1",
+   "index": 61,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-05-08, before 2026-07-01"
+  },
+  {
+   "unit": "pion__stun-ghsa-34rh-wp3j-6cxc",
+   "part": "part1",
+   "index": 62,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-02, before 2026-07-01"
+  },
+  {
+   "unit": "rancher__rancher-ghsa-vx8h-4prv-g744",
+   "part": "part1",
+   "index": 63,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-05-13, before 2026-07-01"
+  },
+  {
+   "unit": "sigstore__sigstore-go-ghsa-9vcr-p3rj-q5q6",
+   "part": "part1",
+   "index": 64,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-05-27, before 2026-07-01"
+  },
+  {
+   "unit": "forgekeep__nebula-mesh-ghsa-2p2f-px33-4vv5",
+   "part": "part1",
+   "index": 65,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-04, before 2026-07-01"
+  },
+  {
+   "unit": "style-dictionary__style-dictionary-ghsa-vj5c-m527-mpff",
+   "part": "part1",
+   "index": 66,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-08, before 2026-07-01"
+  },
+  {
+   "unit": "kite-org__kite-ghsa-c534-2w9c-x7fm",
+   "part": "part1",
+   "index": 67,
+   "usable": true,
+   "position": 39
+  },
+  {
+   "unit": "payloadcms__payload-ghsa-4ww4-68q3-h7g5",
+   "part": "part2",
+   "index": 0,
+   "usable": true,
+   "position": 40
+  },
+  {
+   "unit": "mcollina__msgpack5-ghsa-5x5g-h9x8-2fh9",
+   "part": "part2",
+   "index": 1,
+   "usable": true,
+   "position": 41
+  },
+  {
+   "unit": "payloadcms__payload-ghsa-pj5h-5q6c-3pfx",
+   "part": "part2",
+   "index": 2,
+   "usable": true,
+   "position": 42
+  },
+  {
+   "unit": "backstage__backstage-ghsa-2cmg-v53w-8xfp",
+   "part": "part2",
+   "index": 3,
+   "usable": true,
+   "position": 43
+  },
+  {
+   "unit": "nodejs__undici-ghsa-2m5v-pch6-74hx",
+   "part": "part2",
+   "index": 4,
+   "usable": true,
+   "position": 44
+  },
+  {
+   "unit": "a2aproject__a2a-java-ghsa-9rhm-2h4x-jwmx",
+   "part": "part2",
+   "index": 5,
+   "usable": true,
+   "position": 45
+  },
+  {
+   "unit": "distribution__distribution-ghsa-685w-q87j-wqw3",
+   "part": "part2",
+   "index": 6,
+   "usable": true,
+   "position": 46
+  },
+  {
+   "unit": "backstage__backstage-ghsa-hmp2-4m7g-22cv",
+   "part": "part2",
+   "index": 7,
+   "usable": true,
+   "position": 47
+  },
+  {
+   "unit": "corazawaf__coraza-ghsa-5gj4-9gm7-2fx2",
+   "part": "part2",
+   "index": 8,
+   "usable": false,
+   "gate": "containment",
+   "code": "E_CSO_DROP_CONTAINMENT",
+   "reason": "E_CSO_DROP_CONTAINMENT the session tree holds ghsa-5gj4-9gm7-2fx2 at git .git, ghsa-5gj4-9gm7-2fx2 at file docs/adr/0058-json-flattened-key-collision.md, ghsa-5gj4-9gm7-2fx2 at file docs/adr/README.md, ghsa-5gj4-9gm7-2fx2 at file internal/bodyprocessors/json.go, ghsa-5gj4-9gm7-2fx2 at file internal/bodyprocessors/json_process_test.go"
+  },
+  {
+   "unit": "nuxt__nuxt-ghsa-xfq5-w38q-pc2x",
+   "part": "part2",
+   "index": 9,
+   "usable": true,
+   "position": 48
+  },
+  {
+   "unit": "honojs__node-server-ghsa-rmxm-3fg6-px4f",
+   "part": "part2",
+   "index": 10,
+   "usable": false,
+   "gate": "install_id",
+   "code": "E_CSO_DROP_INSTALL_ID",
+   "reason": "E_CSO_DROP_INSTALL_ID an arm's installed gstack tree names this unit's id (deviation (a))"
+  },
+  {
+   "unit": "expressjs__multer-ghsa-q7qp-rjg7-q26m",
+   "part": "part2",
+   "index": 11,
+   "usable": true,
+   "position": 49
+  },
+  {
+   "unit": "insumerapi__mppx-condition-gate-ghsa-jg6q-3qfh-r9f8",
+   "part": "part2",
+   "index": 12,
+   "usable": false,
+   "gate": "answer_key",
+   "code": "E_CSO_DROP_ANSWER_KEY",
+   "reason": "E_CSO_DROP_ANSWER_KEY no non-test source file of the fix exists at the parent"
+  },
+  {
+   "unit": "getarcaneapp__arcane-ghsa-mp22-58ff-6fhr",
+   "part": "part2",
+   "index": 13,
+   "usable": true,
+   "position": 50
+  },
+  {
+   "unit": "backstage__backstage-ghsa-xm5q-p7w3-x6cp",
+   "part": "part2",
+   "index": 14,
+   "usable": true,
+   "position": 51
+  },
+  {
+   "unit": "yawkat__lz4-java-ghsa-gm45-99xc-r7wv",
+   "part": "part2",
+   "index": 15,
+   "usable": true,
+   "position": 52
+  },
+  {
+   "unit": "appium__appium-ghsa-qfxx-c367-67f8",
+   "part": "part2",
+   "index": 16,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-27, before 2026-07-01"
+  },
+  {
+   "unit": "patrickjuchli__basic-ftp-ghsa-c475-qrg2-pj4r",
+   "part": "part2",
+   "index": 17,
+   "usable": true,
+   "position": 53
+  },
+  {
+   "unit": "markdown-it__markdown-it-ghsa-gfr2-rv44-r23c",
+   "part": "part2",
+   "index": 18,
+   "usable": true,
+   "position": 54
+  },
+  {
+   "unit": "nodejs__undici-ghsa-4w7w-5xrc-9h26",
+   "part": "part2",
+   "index": 19,
+   "usable": true,
+   "position": 55
+  },
+  {
+   "unit": "gofiber__fiber-ghsa-g5jq-qmqr-qrwf",
+   "part": "part2",
+   "index": 20,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2024-03-17, before 2026-07-01"
+  },
+  {
+   "unit": "quasarframework__quasar-ghsa-r5mf-4r5x-q78f",
+   "part": "part2",
+   "index": 21,
+   "usable": true,
+   "position": 56
+  },
+  {
+   "unit": "mcollina__msgpack5-ghsa-24ch-f2g6-9hhh",
+   "part": "part2",
+   "index": 22,
+   "usable": true,
+   "position": 57
+  },
+  {
+   "unit": "tryghost__ghost-ghsa-9m4w-fmjw-fvjq",
+   "part": "part2",
+   "index": 23,
+   "usable": true,
+   "position": 58
+  },
+  {
+   "unit": "lxsmnsyc__seroval-ghsa-wp97-x4hv-qvhp",
+   "part": "part2",
+   "index": 24,
+   "usable": true,
+   "position": 59
+  },
+  {
+   "unit": "sveltejs__devalue-ghsa-mcm9-63f2-9j32",
+   "part": "part2",
+   "index": 25,
+   "usable": true,
+   "position": 60
+  },
+  {
+   "unit": "tinacms__tinacms-ghsa-c42q-qvc3-j6vg",
+   "part": "part2",
+   "index": 26,
+   "usable": true,
+   "position": 61
+  },
+  {
+   "unit": "mcollina__msgpack5-ghsa-8hq7-ggx2-cc6m",
+   "part": "part2",
+   "index": 27,
+   "usable": true,
+   "position": 62
+  },
+  {
+   "unit": "corazawaf__coraza-ghsa-prpw-wwv7-xjjr",
+   "part": "part2",
+   "index": 28,
+   "usable": true,
+   "position": 63
+  },
+  {
+   "unit": "coredns__coredns-ghsa-74w3-63xv-x9mv",
+   "part": "part2",
+   "index": 29,
+   "usable": true,
+   "position": 64
+  },
+  {
+   "unit": "microsoft__openapi.net-ghsa-7pxr-59rr-hqj2",
+   "part": "part2",
+   "index": 30,
+   "usable": true,
+   "position": 65
+  },
+  {
+   "unit": "getarcaneapp__arcane-ghsa-pw5q-rjx4-7f7p",
+   "part": "part2",
+   "index": 31,
+   "usable": true,
+   "position": 66
+  },
+  {
+   "unit": "dgraph-io__dgraph-ghsa-qj98-gp63-54xj",
+   "part": "part2",
+   "index": 32,
+   "usable": true,
+   "position": 67
+  },
+  {
+   "unit": "tinylibs__tinypool-ghsa-5gmw-xhrv-c9v3",
+   "part": "part2",
+   "index": 33,
+   "usable": true,
+   "position": 68
+  },
+  {
+   "unit": "labstack__echo-ghsa-246p-cpwv-v3jq",
+   "part": "part2",
+   "index": 34,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-03-31, before 2026-07-01"
+  },
+  {
+   "unit": "borewit__music-metadata-ghsa-f94x-6692-553q",
+   "part": "part2",
+   "index": 35,
+   "usable": true,
+   "position": 69
+  },
+  {
+   "unit": "cure53__dompurify-ghsa-mrv2-3pqr-j5jr",
+   "part": "part2",
+   "index": 36,
+   "usable": false,
+   "gate": "install_id",
+   "code": "E_CSO_DROP_INSTALL_ID",
+   "reason": "E_CSO_DROP_INSTALL_ID an arm's installed gstack tree names this unit's id (deviation (a))"
+  },
+  {
+   "unit": "nodejs__undici-ghsa-4qv8-2p9j-2685",
+   "part": "part2",
+   "index": 37,
+   "usable": true,
+   "position": 70
+  },
+  {
+   "unit": "withastro__astro-ghsa-mpr7-6m5w-76rw",
+   "part": "part2",
+   "index": 38,
+   "usable": true,
+   "position": 71
+  },
+  {
+   "unit": "signalk__signalk-server-ghsa-4xm8-rg9h-jhq2",
+   "part": "part2",
+   "index": 39,
+   "usable": true,
+   "position": 72
+  },
+  {
+   "unit": "langchain-ai__langchainjs-ghsa-5x6v-p487-7qh2",
+   "part": "part2",
+   "index": 40,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-04-14, before 2026-07-01"
+  },
+  {
+   "unit": "xerial__snappy-java-ghsa-xqrx-qh46-34m7",
+   "part": "part2",
+   "index": 41,
+   "usable": true,
+   "position": 73
+  },
+  {
+   "unit": "vitejs__vite-ghsa-vfpm-58rq-9qcg",
+   "part": "part2",
+   "index": 42,
+   "usable": true,
+   "position": 74
+  },
+  {
+   "unit": "ardatan__graphql-tools-ghsa-434m-5hcj-pxf3",
+   "part": "part2",
+   "index": 43,
+   "usable": true,
+   "position": 75
+  },
+  {
+   "unit": "dcmjs-org__dcmjs-ghsa-px68-xx5g-48q5",
+   "part": "part2",
+   "index": 44,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-05-19, before 2026-07-01"
+  },
+  {
+   "unit": "lxsmnsyc__seroval-ghsa-9wx9-5pv9-3349",
+   "part": "part2",
+   "index": 45,
+   "usable": true,
+   "position": 76
+  },
+  {
+   "unit": "copernik-eu__copernik-xml-factory-ghsa-xm28-xvqc-gxxg",
+   "part": "part2",
+   "index": 46,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-25, before 2026-07-01"
+  },
+  {
+   "unit": "containerd__containerd-ghsa-rp3h-jf77-q9p4",
+   "part": "part2",
+   "index": 47,
+   "usable": true,
+   "position": 77
+  },
+  {
+   "unit": "tryghost__ghost-ghsa-r7f2-6fj8-6fg2",
+   "part": "part2",
+   "index": 48,
+   "usable": true,
+   "position": 78
+  },
+  {
+   "unit": "lxsmnsyc__seroval-ghsa-jp82-f5mq-hwhp",
+   "part": "part2",
+   "index": 49,
+   "usable": true,
+   "position": 79
+  },
+  {
+   "unit": "adonisjs__http-server-ghsa-2m6q-8v3h-jqww",
+   "part": "part2",
+   "index": 50,
+   "usable": true,
+   "position": 80
+  },
+  {
+   "unit": "payloadcms__payload-ghsa-xgv3-crq2-6f69",
+   "part": "part2",
+   "index": 51,
+   "usable": true,
+   "position": 81
+  },
+  {
+   "unit": "cli__cli-ghsa-mm27-mwq9-fr5g",
+   "part": "part2",
+   "index": 52,
+   "usable": true,
+   "position": 82
+  },
+  {
+   "unit": "corazawaf__coraza-ghsa-pc5q-qfxp-ggqv",
+   "part": "part2",
+   "index": 53,
+   "usable": true,
+   "position": 83
+  },
+  {
+   "unit": "asynchttpclient__async-http-client-ghsa-jmqq-x5g9-9p2w",
+   "part": "part2",
+   "index": 54,
+   "usable": true,
+   "position": 84
+  },
+  {
+   "unit": "a2aproject__a2a-java-ghsa-x32g-jvvm-4725",
+   "part": "part2",
+   "index": 55,
+   "usable": true,
+   "position": 85
+  },
+  {
+   "unit": "yawkat__lz4-java-ghsa-343h-94h5-c4wr",
+   "part": "part2",
+   "index": 56,
+   "usable": true,
+   "position": 86
+  },
+  {
+   "unit": "nuxt__nuxt-ghsa-3xf4-9g3c-4h4w",
+   "part": "part2",
+   "index": 57,
+   "usable": true,
+   "position": 87
+  },
+  {
+   "unit": "postcss__postcss-selector-parser-ghsa-rj75-hqrm-r3gf",
+   "part": "part2",
+   "index": 58,
+   "usable": true,
+   "position": 88
+  },
+  {
+   "unit": "asynchttpclient__async-http-client-ghsa-p2jm-6hj6-9rjg",
+   "part": "part2",
+   "index": 59,
+   "usable": true,
+   "position": 89
+  },
+  {
+   "unit": "starman69__mcp-sanitizer-ghsa-7w82-6f9j-v9jp",
+   "part": "part2",
+   "index": 60,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-24, before 2026-07-01"
+  },
+  {
+   "unit": "withastro__astro-ghsa-98hj-9722-w3j8",
+   "part": "part2",
+   "index": 61,
+   "usable": true,
+   "position": 90
+  },
+  {
+   "unit": "ardatan__graphql-tools-ghsa-mp66-8ww2-pcwm",
+   "part": "part2",
+   "index": 62,
+   "usable": false,
+   "gate": "same_fix",
+   "code": "E_CSO_DROP_SAME_FIX",
+   "reason": "E_CSO_DROP_SAME_FIX an earlier usable unit has fix c2f226e6f68236be9e4a577f29faeaa92547458b or parent tree b667a96d8c75cce7bc24d77ef3f730e8d24f8981"
+  },
+  {
+   "unit": "nrwl__nx-ghsa-qm8w-vx34-5j9j",
+   "part": "part2",
+   "index": 63,
+   "usable": true,
+   "position": 91
+  },
+  {
+   "unit": "vercel__next.js-ghsa-h694-7cp9-m8p3",
+   "part": "part2",
+   "index": 64,
+   "usable": true,
+   "position": 92
+  },
+  {
+   "unit": "i18next__i18next-http-backend-ghsa-9jhj-wvmw-cfx5",
+   "part": "part2",
+   "index": 65,
+   "usable": true,
+   "position": 93
+  },
+  {
+   "unit": "beaugunderson__ip-address-ghsa-rxp7-6hxx-x8q5",
+   "part": "part2",
+   "index": 66,
+   "usable": false,
+   "gate": "install_id",
+   "code": "E_CSO_DROP_INSTALL_ID",
+   "reason": "E_CSO_DROP_INSTALL_ID an arm's installed gstack tree names this unit's id (deviation (a))"
+  },
+  {
+   "unit": "kubeflow__pipelines-ghsa-8fmv-6rg5-5924",
+   "part": "part2",
+   "index": 67,
+   "usable": true,
+   "position": 94
+  },
+  {
+   "unit": "nationalsecurityagency__emissary-ghsa-c6q7-wqw2-h65w",
+   "part": "part2",
+   "index": 68,
+   "usable": true,
+   "position": 95
+  },
+  {
+   "unit": "tryghost__ghost-ghsa-354h-gmhv-mr9c",
+   "part": "part2",
+   "index": 69,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-04-08, before 2026-07-01"
+  },
+  {
+   "unit": "expressjs__compression-ghsa-vc2v-76pw-4v95",
+   "part": "part2",
+   "index": 70,
+   "usable": true,
+   "position": 96
+  },
+  {
+   "unit": "argoproj__argo-cd-ghsa-j6cw-g6p4-7hch",
+   "part": "part2",
+   "index": 71,
+   "usable": true,
+   "position": 97
+  },
+  {
+   "unit": "sveltejs__devalue-ghsa-hx4r-w6wj-j8fg",
+   "part": "part2",
+   "index": 72,
+   "usable": true,
+   "position": 98
+  },
+  {
+   "unit": "tinylibs__tinypool-ghsa-85c8-ppgw-ccpr",
+   "part": "part2",
+   "index": 73,
+   "usable": true,
+   "position": 99
+  },
+  {
+   "unit": "cure53__dompurify-ghsa-c6gr-qvv4-5v3f",
+   "part": "part2",
+   "index": 74,
+   "usable": false,
+   "gate": "install_id",
+   "code": "E_CSO_DROP_INSTALL_ID",
+   "reason": "E_CSO_DROP_INSTALL_ID an arm's installed gstack tree names this unit's id (deviation (a))"
+  },
+  {
+   "unit": "langchain-ai__langchainjs-ghsa-m6rx-h84q-8r95",
+   "part": "part2",
+   "index": 75,
+   "usable": true,
+   "position": 100
+  },
+  {
+   "unit": "expressjs__body-parser-ghsa-27r3-jxmh-p828",
+   "part": "part2",
+   "index": 76,
+   "usable": false,
+   "gate": "install_id",
+   "code": "E_CSO_DROP_INSTALL_ID",
+   "reason": "E_CSO_DROP_INSTALL_ID an arm's installed gstack tree names this unit's id (deviation (a))"
+  },
+  {
+   "unit": "wailsapp__wails-ghsa-47hv-j4px-h3c9",
+   "part": "part2",
+   "index": 77,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-21, before 2026-07-01"
+  },
+  {
+   "unit": "xerial__snappy-java-ghsa-q233-g92q-qxp6",
+   "part": "part2",
+   "index": 78,
+   "usable": true,
+   "position": 101
+  },
+  {
+   "unit": "vercel__next.js-ghsa-3w37-wq28-93x7",
+   "part": "part2",
+   "index": 79,
+   "usable": true,
+   "position": 102
+  },
+  {
+   "unit": "nuxt-modules__og-image-ghsa-2x6f-rp82-ppmj",
+   "part": "part2",
+   "index": 80,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-24, before 2026-07-01"
+  },
+  {
+   "unit": "techarohq__anubis-ghsa-6wcg-mqvh-fcvg",
+   "part": "part2",
+   "index": 81,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-05-15, before 2026-07-01"
+  },
+  {
+   "unit": "theagentrouter__agent-router-ghsa-953h-535j-jg2v",
+   "part": "part2",
+   "index": 82,
+   "usable": true,
+   "position": 103
+  },
+  {
+   "unit": "ljharb__shell-quote-ghsa-pqg4-j6r4-53mv",
+   "part": "part2",
+   "index": 83,
+   "usable": true,
+   "position": 104
+  },
+  {
+   "unit": "browserify__pbkdf2-ghsa-477h-4r7f-fvrx",
+   "part": "part2",
+   "index": 84,
+   "usable": true,
+   "position": 105
+  },
+  {
+   "unit": "fasterxml__jackson-core-ghsa-7hhh-6rmp-j9qf",
+   "part": "part2",
+   "index": 85,
+   "usable": true,
+   "position": 106
+  },
+  {
+   "unit": "go-jose__go-jose-ghsa-mgcc-cww5-fp2q",
+   "part": "part2",
+   "index": 86,
+   "usable": true,
+   "position": 107
+  },
+  {
+   "unit": "moby__sys-ghsa-mjcv-p78q-w5fw",
+   "part": "part2",
+   "index": 87,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-23, before 2026-07-01"
+  },
+  {
+   "unit": "asynchttpclient__async-http-client-ghsa-2jwh-9rmr-j4xf",
+   "part": "part2",
+   "index": 88,
+   "usable": true,
+   "position": 108
+  },
+  {
+   "unit": "yawkat__lz4-java-ghsa-4v53-57pg-c464",
+   "part": "part2",
+   "index": 89,
+   "usable": true,
+   "position": 109
+  },
+  {
+   "unit": "uhop__stream-json-ghsa-mjw6-4jj6-33hc",
+   "part": "part2",
+   "index": 90,
+   "usable": true,
+   "position": 110
+  },
+  {
+   "unit": "zip-rs__zip2-ghsa-9hj8-73fh-9963",
+   "part": "part2",
+   "index": 91,
+   "usable": true,
+   "position": 111
+  },
+  {
+   "unit": "better-auth__better-auth-ghsa-965c-763c-88jm",
+   "part": "part2",
+   "index": 92,
+   "usable": true,
+   "position": 112
+  },
+  {
+   "unit": "tokio-rs__tokio-ghsa-5wjr-9356-4wc8",
+   "part": "part2",
+   "index": 93,
+   "usable": true,
+   "position": 113
+  },
+  {
+   "unit": "angular__angular-ghsa-62vg-58rm-qff7",
+   "part": "part2",
+   "index": 94,
+   "usable": true,
+   "position": 114
+  },
+  {
+   "unit": "fastify__busboy-ghsa-x8mw-p69m-v3mx",
+   "part": "part2",
+   "index": 95,
+   "usable": true,
+   "position": 115
+  },
+  {
+   "unit": "honojs__hono-ghsa-5r4p-p66f-jhc7",
+   "part": "part2",
+   "index": 96,
+   "usable": false,
+   "gate": "install_dep",
+   "code": "E_CSO_DROP_INSTALL_DEP",
+   "reason": "E_CSO_DROP_INSTALL_DEP named drop: bun.lock hono@4.13.16, fixed in 4.13.11"
+  },
+  {
+   "unit": "borewit__music-metadata-ghsa-5gfj-9q3v-qfp3",
+   "part": "part2",
+   "index": 97,
+   "usable": false,
+   "gate": "answer_key",
+   "code": "E_CSO_DROP_ANSWER_KEY",
+   "reason": "E_CSO_DROP_ANSWER_KEY no non-test source file of the fix exists at the parent"
+  },
+  {
+   "unit": "cli__cli-ghsa-cg6r-mpgc-h9mm",
+   "part": "part2",
+   "index": 98,
+   "usable": true,
+   "position": 116
+  },
+  {
+   "unit": "zip-rs__zip2-ghsa-hjqx-j4rw-g7xv",
+   "part": "part2",
+   "index": 99,
+   "usable": true,
+   "position": 117
+  },
+  {
+   "unit": "vitejs__vite-ghsa-8g5g-mxqh-grgj",
+   "part": "part2",
+   "index": 100,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-04-06, before 2026-07-01"
+  },
+  {
+   "unit": "open-telemetry__opentelemetry-java-ghsa-ccrj-gw8r-854m",
+   "part": "part2",
+   "index": 101,
+   "usable": true,
+   "position": 118
+  },
+  {
+   "unit": "gitoxidelabs__gitoxide-ghsa-q54r-jf2p-rfr2",
+   "part": "part2",
+   "index": 102,
+   "usable": false,
+   "gate": "containment",
+   "code": "E_CSO_DROP_SCAN",
+   "reason": "E_CSO_DROP_SCAN the session tree's id scan did not finish, so the tree can't be shown clean: E_CSO_SCAN the id scan of /tmp/cso-arch-jMWmP8/18 did not finish: git cat-file cycle-breaker-indirect failed; fail closed"
+  },
+  {
+   "unit": "quasarframework__quasar-ghsa-68jq-fhch-4xq4",
+   "part": "part2",
+   "index": 103,
+   "usable": true,
+   "position": 119
+  },
+  {
+   "unit": "better-auth__better-auth-ghsa-44jh-23m7-hpcf",
+   "part": "part2",
+   "index": 104,
+   "usable": true,
+   "position": 120
+  },
+  {
+   "unit": "sylphxai__anymd-ghsa-q344-5v34-gm84",
+   "part": "part2",
+   "index": 105,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-25, before 2026-07-01"
+  },
+  {
+   "unit": "a2aproject__a2a-java-ghsa-4fpj-g9jf-9rgg",
+   "part": "part2",
+   "index": 106,
+   "usable": true,
+   "position": 121
+  },
+  {
+   "unit": "angular__angular-ghsa-jfgx-762w-99vr",
+   "part": "part2",
+   "index": 107,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2025-12-03, before 2026-07-01"
+  },
+  {
+   "unit": "gtsteffaniak__filebrowser-ghsa-mgqf-5mf5-prfj",
+   "part": "part2",
+   "index": 108,
+   "usable": true,
+   "position": 122
+  },
+  {
+   "unit": "microsoft__kiota-ghsa-6gw6-rv2g-25mg",
+   "part": "part2",
+   "index": 109,
+   "usable": true,
+   "position": 123
+  },
+  {
+   "unit": "sveltejs__devalue-ghsa-x5rw-q4pp-hg5g",
+   "part": "part2",
+   "index": 110,
+   "usable": true,
+   "position": 124
+  },
+  {
+   "unit": "starman69__mcp-sanitizer-ghsa-4mfg-r38w-w8fg",
+   "part": "part2",
+   "index": 111,
+   "usable": false,
+   "gate": "fix_commit_date",
+   "code": "E_CSO_DROP_FIX_DATE",
+   "reason": "E_CSO_DROP_FIX_DATE the fix was committed on 2026-06-24, before 2026-07-01"
+  },
+  {
+   "unit": "tinacms__tinacms-ghsa-pwhx-cvv3-qj5c",
+   "part": "part2",
+   "index": 112,
+   "usable": true,
+   "position": 125
+  },
+  {
+   "unit": "fastify__fastify-ghsa-389g-gv7q-r4x8",
+   "part": "part2",
+   "index": 113,
+   "usable": true,
+   "position": 126
+  },
+  {
+   "unit": "steveukx__git-js-ghsa-x6jw-m9v5-85vh",
+   "part": "part2",
+   "index": 114,
+   "usable": true,
+   "position": 127
+  },
+  {
+   "unit": "signalk__signalk-server-ghsa-7wpf-ch8f-5f4x",
+   "part": "part2",
+   "index": 115,
+   "usable": true,
+   "position": 128
+  },
+  {
+   "unit": "vuejs__core-ghsa-g2v6-rqmx-r4w6",
+   "part": "part2",
+   "index": 116,
+   "usable": true,
+   "position": 129
+  },
+  {
+   "unit": "containerd__containerd-ghsa-p7v4-vr35-mj6f",
+   "part": "part2",
+   "index": 117,
+   "usable": true,
+   "position": 130
+  },
+  {
+   "unit": "patorjk__figlet.js-ghsa-62ch-8vmq-8xm7",
+   "part": "part2",
+   "index": 118,
+   "usable": true,
+   "position": 131
+  },
+  {
+   "unit": "i18next__i18next-http-backend-ghsa-3cmx-xjww-583x",
+   "part": "part2",
+   "index": 119,
+   "usable": true,
+   "position": 132
+  },
+  {
+   "unit": "squirrelchat__smol-toml-ghsa-r4xh-jqrq-34v2",
+   "part": "part2",
+   "index": 120,
+   "usable": true,
+   "position": 133
+  },
+  {
+   "unit": "kedacore__keda-ghsa-637c-6jxx-4rwm",
+   "part": "part2",
+   "index": 121,
+   "usable": true,
+   "position": 134
+  }
+ ],
+ "stripped": {
+  "capricorn86__happy-dom-ghsa-834v-8h66-3h79": [],
+  "patriksimek__vm2-ghsa-x6m4-chr9-cg97": [
+   ".claude",
+   "CLAUDE.md"
+  ],
+  "patriksimek__vm2-ghsa-c48m-32m9-vx93": [
+   ".claude",
+   "CLAUDE.md"
+  ],
+  "sveltejs__kit-ghsa-27mw-82g8-phjj": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "patriksimek__vm2-ghsa-x965-fc75-jpqh": [
+   ".claude",
+   "CLAUDE.md"
+  ],
+  "go-jose__go-jose-ghsa-4w3g-jfj2-cw2q": [],
+  "getkin__kin-openapi-ghsa-p6wj-qrr4-pgh5": [],
+  "sveltejs__kit-ghsa-pfhg-q3qv-9q6r": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "qax-os__excelize-ghsa-g27h-8qhm-6pff": [],
+  "follow-redirects__follow-redirects-ghsa-q3jh-wrc6-jgq8": [],
+  "nuxt__nuxt-ghsa-x287-wcfc-q46c": [
+   "AGENTS.md"
+  ],
+  "qax-os__excelize-ghsa-c85p-xxjj-2r75": [],
+  "markdown-it__markdown-it-ghsa-r7fv-28h4-cvq7": [],
+  "intlify__vue-i18n-ghsa-83rm-6c8r-g728": [],
+  "qax-os__excelize-ghsa-fq3v-74gv-27gm": [],
+  "markdown-it__markdown-it-ghsa-vfgh-jcmw-g37q": [],
+  "follow-redirects__follow-redirects-ghsa-8r9p-f939-6h3c": [],
+  "getkin__kin-openapi-ghsa-g8cf-rcjf-c8cf": [],
+  "yahoo__serialize-javascript-ghsa-m5mm-p8h7-m29v": [],
+  "jhaals__yopass-ghsa-6r69-c6wg-7g8m": [],
+  "borewit__music-metadata-ghsa-53v6-4h7p-p4gj": [],
+  "containerd__containerd-ghsa-pg57-6jwg-q645": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   "vendor/github.com/pelletier/go-toml/v2/AGENTS.md",
+   "vendor/go.opentelemetry.io/otel/AGENTS.md",
+   "vendor/go.opentelemetry.io/otel/CLAUDE.md"
+  ],
+  "yahoo__serialize-javascript-ghsa-gfhx-hw2g-v5hg": [],
+  "rclone__rclone-ghsa-p6m2-r3w9-mpxw": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "traefik__traefik-ghsa-7ghq-v6jf-g56c": [
+   ".claude"
+  ],
+  "amir20__dozzle-ghsa-p2w3-6x73-2f6x": [
+   ".claude",
+   "CLAUDE.md"
+  ],
+  "semaphoreui__semaphore-ghsa-cxvf-gvfq-36w2": [
+   ".claude"
+  ],
+  "xmldom__xmldom-ghsa-4w3w-2rp5-g8jm": [],
+  "grpc__grpc-go-ghsa-2v4p-qf9q-27wj": [],
+  "traefik__traefik-ghsa-v67p-phpq-fc8x": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "openchoreo__openchoreo-ghsa-52gf-6rpq-fgmx": [],
+  "rclone__rclone-ghsa-66hp-wgxq-6f5q": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "oras-project__oras-go-ghsa-h7vf-4x9w-h99v": [],
+  "rclone__rclone-ghsa-cf44-9pgv-m4xc": [],
+  "traefik__traefik-ghsa-42cj-m3vj-89wv": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "getkin__kin-openapi-ghsa-mmfr-pmjx-hw9w": [],
+  "oras-project__oras-go-ghsa-fxhp-mv3v-67qp": [],
+  "forgekeep__nebula-mesh-ghsa-7rx3-5wx3-5v76": [],
+  "kite-org__kite-ghsa-c534-2w9c-x7fm": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "payloadcms__payload-ghsa-4ww4-68q3-h7g5": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md",
+   "packages/create-payload-app/CLAUDE.md"
+  ],
+  "mcollina__msgpack5-ghsa-5x5g-h9x8-2fh9": [
+   "AGENTS.md"
+  ],
+  "payloadcms__payload-ghsa-pj5h-5q6c-3pfx": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md",
+   "packages/create-payload-app/CLAUDE.md"
+  ],
+  "backstage__backstage-ghsa-2cmg-v53w-8xfp": [
+   ".claude",
+   "AGENTS.md",
+   "plugins/catalog-backend/CLAUDE.md"
+  ],
+  "nodejs__undici-ghsa-2m5v-pch6-74hx": [],
+  "a2aproject__a2a-java-ghsa-9rhm-2h4x-jwmx": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "distribution__distribution-ghsa-685w-q87j-wqw3": [],
+  "backstage__backstage-ghsa-hmp2-4m7g-22cv": [
+   ".claude",
+   "AGENTS.md"
+  ],
+  "nuxt__nuxt-ghsa-xfq5-w38q-pc2x": [
+   "AGENTS.md"
+  ],
+  "expressjs__multer-ghsa-q7qp-rjg7-q26m": [],
+  "getarcaneapp__arcane-ghsa-mp22-58ff-6fhr": [
+   "AGENTS.md"
+  ],
+  "backstage__backstage-ghsa-xm5q-p7w3-x6cp": [
+   ".claude",
+   "AGENTS.md",
+   "plugins/catalog-backend/CLAUDE.md"
+  ],
+  "yawkat__lz4-java-ghsa-gm45-99xc-r7wv": [],
+  "patrickjuchli__basic-ftp-ghsa-c475-qrg2-pj4r": [],
+  "markdown-it__markdown-it-ghsa-gfr2-rv44-r23c": [],
+  "nodejs__undici-ghsa-4w7w-5xrc-9h26": [],
+  "quasarframework__quasar-ghsa-r5mf-4r5x-q78f": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "mcollina__msgpack5-ghsa-24ch-f2g6-9hhh": [
+   "AGENTS.md"
+  ],
+  "tryghost__ghost-ghsa-9m4w-fmjw-fvjq": [
+   ".claude",
+   "AGENTS.md",
+   "apps/shade/.claude",
+   "apps/shade/AGENTS.md",
+   "e2e/AGENTS.md",
+   "koenig/koenig-lexical/AGENTS.md",
+   "packages/limit-service/AGENTS.md"
+  ],
+  "lxsmnsyc__seroval-ghsa-wp97-x4hv-qvhp": [],
+  "sveltejs__devalue-ghsa-mcm9-63f2-9j32": [],
+  "tinacms__tinacms-ghsa-c42q-qvc3-j6vg": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   "examples/AGENTS.md",
+   "examples/CLAUDE.md",
+   "examples/astro/kitchen-sink/AGENTS.md",
+   "examples/astro/kitchen-sink/CLAUDE.md",
+   "examples/hugo/kitchen-sink/AGENTS.md",
+   "examples/hugo/kitchen-sink/CLAUDE.md",
+   "examples/next/kitchen-sink/AGENTS.md",
+   "examples/next/kitchen-sink/CLAUDE.md",
+   "examples/next/tina-self-hosted-demo/AGENTS.md",
+   "examples/next/tina-self-hosted-demo/CLAUDE.md",
+   "examples/react/kitchen-sink/AGENTS.md",
+   "examples/react/kitchen-sink/CLAUDE.md",
+   "packages/v4/AGENTS.md",
+   "packages/v4/CLAUDE.md"
+  ],
+  "mcollina__msgpack5-ghsa-8hq7-ggx2-cc6m": [
+   "AGENTS.md"
+  ],
+  "corazawaf__coraza-ghsa-prpw-wwv7-xjjr": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "coredns__coredns-ghsa-74w3-63xv-x9mv": [],
+  "microsoft__openapi.net-ghsa-7pxr-59rr-hqj2": [],
+  "getarcaneapp__arcane-ghsa-pw5q-rjx4-7f7p": [
+   "AGENTS.md"
+  ],
+  "dgraph-io__dgraph-ghsa-qj98-gp63-54xj": [],
+  "tinylibs__tinypool-ghsa-5gmw-xhrv-c9v3": [],
+  "borewit__music-metadata-ghsa-f94x-6692-553q": [],
+  "nodejs__undici-ghsa-4qv8-2p9j-2685": [],
+  "withastro__astro-ghsa-mpr7-6m5w-76rw": [
+   "AGENTS.md"
+  ],
+  "signalk__signalk-server-ghsa-4xm8-rg9h-jhq2": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "xerial__snappy-java-ghsa-xqrx-qh46-34m7": [
+   "CLAUDE.md"
+  ],
+  "vitejs__vite-ghsa-vfpm-58rq-9qcg": [],
+  "ardatan__graphql-tools-ghsa-434m-5hcj-pxf3": [],
+  "lxsmnsyc__seroval-ghsa-9wx9-5pv9-3349": [],
+  "containerd__containerd-ghsa-rp3h-jf77-q9p4": [
+   "vendor/github.com/pelletier/go-toml/v2/AGENTS.md",
+   "vendor/go.opentelemetry.io/otel/AGENTS.md",
+   "vendor/go.opentelemetry.io/otel/CLAUDE.md"
+  ],
+  "tryghost__ghost-ghsa-r7f2-6fj8-6fg2": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md",
+   "apps/shade/.claude",
+   "apps/shade/AGENTS.md",
+   "e2e/AGENTS.md",
+   "e2e/CLAUDE.md",
+   "koenig/koenig-lexical/AGENTS.md",
+   "koenig/koenig-lexical/CLAUDE.md",
+   "packages/limit-service/CLAUDE.md"
+  ],
+  "lxsmnsyc__seroval-ghsa-jp82-f5mq-hwhp": [],
+  "adonisjs__http-server-ghsa-2m6q-8v3h-jqww": [],
+  "payloadcms__payload-ghsa-xgv3-crq2-6f69": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md",
+   "packages/create-payload-app/CLAUDE.md"
+  ],
+  "cli__cli-ghsa-mm27-mwq9-fr5g": [
+   "AGENTS.md"
+  ],
+  "corazawaf__coraza-ghsa-pc5q-qfxp-ggqv": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "asynchttpclient__async-http-client-ghsa-jmqq-x5g9-9p2w": [
+   "AGENTS.md"
+  ],
+  "a2aproject__a2a-java-ghsa-x32g-jvvm-4725": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "yawkat__lz4-java-ghsa-343h-94h5-c4wr": [],
+  "nuxt__nuxt-ghsa-3xf4-9g3c-4h4w": [
+   "AGENTS.md"
+  ],
+  "postcss__postcss-selector-parser-ghsa-rj75-hqrm-r3gf": [],
+  "asynchttpclient__async-http-client-ghsa-p2jm-6hj6-9rjg": [
+   "AGENTS.md"
+  ],
+  "withastro__astro-ghsa-98hj-9722-w3j8": [
+   "AGENTS.md"
+  ],
+  "nrwl__nx-ghsa-qm8w-vx34-5j9j": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md",
+   "packages/devkit/CLAUDE.md",
+   "packages/nx/src/native/CLAUDE.md"
+  ],
+  "vercel__next.js-ghsa-h694-7cp9-m8p3": [
+   ".claude",
+   ".github/AGENTS.md",
+   ".github/CLAUDE.md",
+   "AGENTS.md",
+   "CLAUDE.md",
+   "packages/next/AGENTS.md",
+   "test/AGENTS.md",
+   "turbopack/AGENTS.md",
+   "turbopack/CLAUDE.md"
+  ],
+  "i18next__i18next-http-backend-ghsa-9jhj-wvmw-cfx5": [],
+  "kubeflow__pipelines-ghsa-8fmv-6rg5-5924": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "nationalsecurityagency__emissary-ghsa-c6q7-wqw2-h65w": [],
+  "expressjs__compression-ghsa-vc2v-76pw-4v95": [],
+  "argoproj__argo-cd-ghsa-j6cw-g6p4-7hch": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "sveltejs__devalue-ghsa-hx4r-w6wj-j8fg": [],
+  "tinylibs__tinypool-ghsa-85c8-ppgw-ccpr": [],
+  "langchain-ai__langchainjs-ghsa-m6rx-h84q-8r95": [
+   "AGENTS.md"
+  ],
+  "xerial__snappy-java-ghsa-q233-g92q-qxp6": [
+   "CLAUDE.md"
+  ],
+  "vercel__next.js-ghsa-3w37-wq28-93x7": [
+   ".claude",
+   ".github/AGENTS.md",
+   ".github/CLAUDE.md",
+   "AGENTS.md",
+   "CLAUDE.md",
+   "packages/next/AGENTS.md",
+   "test/AGENTS.md",
+   "turbopack/AGENTS.md",
+   "turbopack/CLAUDE.md"
+  ],
+  "theagentrouter__agent-router-ghsa-953h-535j-jg2v": [
+   ".claude",
+   "site/AGENTS.md"
+  ],
+  "ljharb__shell-quote-ghsa-pqg4-j6r4-53mv": [],
+  "browserify__pbkdf2-ghsa-477h-4r7f-fvrx": [],
+  "fasterxml__jackson-core-ghsa-7hhh-6rmp-j9qf": [],
+  "go-jose__go-jose-ghsa-mgcc-cww5-fp2q": [],
+  "asynchttpclient__async-http-client-ghsa-2jwh-9rmr-j4xf": [
+   "AGENTS.md"
+  ],
+  "yawkat__lz4-java-ghsa-4v53-57pg-c464": [],
+  "uhop__stream-json-ghsa-mjw6-4jj6-33hc": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "zip-rs__zip2-ghsa-9hj8-73fh-9963": [],
+  "better-auth__better-auth-ghsa-965c-763c-88jm": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "tokio-rs__tokio-ghsa-5wjr-9356-4wc8": [],
+  "angular__angular-ghsa-62vg-58rm-qff7": [
+   "AGENTS.md",
+   "adev/src/context/AGENTS.md"
+  ],
+  "fastify__busboy-ghsa-x8mw-p69m-v3mx": [],
+  "cli__cli-ghsa-cg6r-mpgc-h9mm": [
+   "AGENTS.md"
+  ],
+  "zip-rs__zip2-ghsa-hjqx-j4rw-g7xv": [],
+  "open-telemetry__opentelemetry-java-ghsa-ccrj-gw8r-854m": [
+   "AGENTS.md"
+  ],
+  "quasarframework__quasar-ghsa-68jq-fhch-4xq4": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "better-auth__better-auth-ghsa-44jh-23m7-hpcf": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "a2aproject__a2a-java-ghsa-4fpj-g9jf-9rgg": [
+   ".claude",
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "gtsteffaniak__filebrowser-ghsa-mgqf-5mf5-prfj": [],
+  "microsoft__kiota-ghsa-6gw6-rv2g-25mg": [],
+  "sveltejs__devalue-ghsa-x5rw-q4pp-hg5g": [],
+  "tinacms__tinacms-ghsa-pwhx-cvv3-qj5c": [
+   "AGENTS.md",
+   "CLAUDE.md",
+   "examples/AGENTS.md",
+   "examples/CLAUDE.md",
+   "examples/astro/kitchen-sink/AGENTS.md",
+   "examples/astro/kitchen-sink/CLAUDE.md",
+   "examples/hugo/kitchen-sink/AGENTS.md",
+   "examples/hugo/kitchen-sink/CLAUDE.md",
+   "examples/next/kitchen-sink/AGENTS.md",
+   "examples/next/kitchen-sink/CLAUDE.md",
+   "examples/next/tina-self-hosted-demo/AGENTS.md",
+   "examples/next/tina-self-hosted-demo/CLAUDE.md",
+   "examples/react/kitchen-sink/AGENTS.md",
+   "examples/react/kitchen-sink/CLAUDE.md",
+   "packages/v4/AGENTS.md",
+   "packages/v4/CLAUDE.md"
+  ],
+  "fastify__fastify-ghsa-389g-gv7q-r4x8": [],
+  "steveukx__git-js-ghsa-x6jw-m9v5-85vh": [],
+  "signalk__signalk-server-ghsa-7wpf-ch8f-5f4x": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "vuejs__core-ghsa-g2v6-rqmx-r4w6": [],
+  "containerd__containerd-ghsa-p7v4-vr35-mj6f": [
+   "vendor/github.com/pelletier/go-toml/v2/AGENTS.md"
+  ],
+  "patorjk__figlet.js-ghsa-62ch-8vmq-8xm7": [],
+  "i18next__i18next-http-backend-ghsa-3cmx-xjww-583x": [],
+  "squirrelchat__smol-toml-ghsa-r4xh-jqrq-34v2": [],
+  "kedacore__keda-ghsa-637c-6jxx-4rwm": [
+   "AGENTS.md"
+  ]
+ }
+}

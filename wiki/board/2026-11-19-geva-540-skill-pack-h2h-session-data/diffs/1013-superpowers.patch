@@ -1,0 +1,104 @@
+diff --git a/context.go b/context.go
+index ec7fdd9..895af2a 100644
+--- a/context.go
++++ b/context.go
+@@ -165,21 +165,31 @@ func (c *Context) Scheme() string {
+ 	if c.IsTLS() {
+ 		return "https"
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXForwardedProto); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXForwardedProto)); ok {
+ 		return scheme
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXForwardedProtocol); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXForwardedProtocol)); ok {
+ 		return scheme
+ 	}
+ 	if ssl := c.request.Header.Get(HeaderXForwardedSsl); ssl == "on" {
+ 		return "https"
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXUrlScheme); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXUrlScheme)); ok {
+ 		return scheme
+ 	}
+ 	return "http"
+ }
+ 
++// sanitizeScheme normalizes a scheme value taken from a request header and reports whether it is one of the
++// allowed schemes (http, https, ws, wss). Header values are client controlled and must not be trusted verbatim.
++func sanitizeScheme(scheme string) (string, bool) {
++	switch s := strings.ToLower(strings.TrimSpace(scheme)); s {
++	case "http", "https", "ws", "wss":
++		return s, true
++	}
++	return "", false
++}
++
+ // RealIP returns the client IP address using the configured extraction strategy.
+ //
+ // If Echo#IPExtractor is set, it is used to resolve the client IP from the incoming request (typically via proxy
+diff --git a/context_test.go b/context_test.go
+index 9376f0f..b1ed4f6 100644
+--- a/context_test.go
++++ b/context_test.go
+@@ -1147,6 +1147,30 @@ func TestContext_Scheme(t *testing.T) {
+ 	}
+ }
+ 
++func TestContext_Scheme_RejectsUntrustedValues(t *testing.T) {
++	tests := []struct {
++		header string
++		value  string
++		expect string
++	}{
++		{HeaderXForwardedProto, "javascript", "http"},
++		{HeaderXForwardedProto, "data", "http"},
++		{HeaderXForwardedProto, "file", "http"},
++		{HeaderXForwardedProto, " HTTPS ", "https"},
++		{HeaderXForwardedProto, "wss", "wss"},
++		{HeaderXForwardedProtocol, "vbscript", "http"},
++		{HeaderXForwardedProtocol, "ws", "ws"},
++		{HeaderXUrlScheme, "gopher", "http"},
++		{HeaderXUrlScheme, "https://evil.com/", "http"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.header+"="+tt.value, func(t *testing.T) {
++			c := &Context{request: &http.Request{Header: http.Header{tt.header: []string{tt.value}}}}
++			assert.Equal(t, tt.expect, c.Scheme())
++		})
++	}
++}
++
+ func TestContext_IsWebSocket(t *testing.T) {
+ 	tests := []struct {
+ 		c  *Context
+diff --git a/middleware/redirect_test.go b/middleware/redirect_test.go
+index a127ca4..aed2e8a 100644
+--- a/middleware/redirect_test.go
++++ b/middleware/redirect_test.go
+@@ -169,6 +169,12 @@ func TestRedirectWWWRedirect(t *testing.T) {
+ 			expectLocation:   "https://www.a.com/",
+ 			expectStatusCode: http.StatusMovedPermanently,
+ 		},
++		{
++			whenHost:         "b.com",
++			whenHeader:       map[string][]string{echo.HeaderXForwardedProto: {"javascript"}},
++			expectLocation:   "http://www.b.com/",
++			expectStatusCode: http.StatusMovedPermanently,
++		},
+ 		{
+ 			whenHost:         "www.ip",
+ 			expectLocation:   "",
+@@ -209,6 +215,12 @@ func TestRedirectNonWWWRedirect(t *testing.T) {
+ 			expectLocation:   "https://a.com/",
+ 			expectStatusCode: http.StatusMovedPermanently,
+ 		},
++		{
++			whenHost:         "www.b.com",
++			whenHeader:       map[string][]string{echo.HeaderXForwardedProto: {"javascript"}},
++			expectLocation:   "http://b.com/",
++			expectStatusCode: http.StatusMovedPermanently,
++		},
+ 		{
+ 			whenHost:         "ip",
+ 			expectLocation:   "",

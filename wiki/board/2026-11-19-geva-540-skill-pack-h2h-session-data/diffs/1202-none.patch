@@ -1,0 +1,129 @@
+diff --git a/echo.go b/echo.go
+index f22d2dd..f25d257 100644
+--- a/echo.go
++++ b/echo.go
+@@ -589,6 +589,12 @@ func StaticDirectoryHandler(fileSystem fs.FS, disablePathUnescaping bool) Handle
+ 	return func(c *Context) error {
+ 		p := c.Param("*")
+ 		if !disablePathUnescaping { // when router is already unescaping we do not want to do is twice
++			// Security: router matches routes using the escaped path, so an encoded separator (`%2F`, `%5C`) would be
++			// part of a single path segment for routing but turn into a directory separator after unescaping. This
++			// would allow bypassing route-level protection (middlewares on more specific routes/groups).
++			if containsEncodedPathSeparator(p) {
++				return ErrNotFound
++			}
+ 			tmpPath, err := url.PathUnescape(p)
+ 			if err != nil {
+ 				return fmt.Errorf("failed to unescape path variable: %w", err)
+@@ -890,3 +896,16 @@ func sanitizeURI(uri string) string {
+ 	}
+ 	return uri
+ }
++
++// containsEncodedPathSeparator checks if given (escaped) path contains percent-encoded path separators (`%2F` or `%5C`).
++func containsEncodedPathSeparator(p string) bool {
++	for i := 0; i+2 < len(p); i++ {
++		if p[i] != '%' {
++			continue
++		}
++		if (p[i+1] == '2' && (p[i+2] == 'f' || p[i+2] == 'F')) || (p[i+1] == '5' && (p[i+2] == 'c' || p[i+2] == 'C')) {
++			return true
++		}
++	}
++	return false
++}
+diff --git a/echo_test.go b/echo_test.go
+index 17d9b4a..e7d75d7 100644
+--- a/echo_test.go
++++ b/echo_test.go
+@@ -263,9 +263,24 @@ func TestEcho_StaticFS(t *testing.T) {
+ 			givenPrefix:          "/",
+ 			givenFs:              os.DirFS("_fixture/"),
+ 			whenURL:              "/open.redirect.hackercom%2f..",
+-			expectStatus:         http.StatusMovedPermanently,
+-			expectHeaderLocation: "/open.redirect.hackercom/../", // location starting with `//open` would be very bad
+-			expectBodyStartsWith: "",
++			expectStatus:         http.StatusNotFound, // encoded slashes are rejected
++			expectBodyStartsWith: "{\"message\":\"Not Found\"}\n",
++		},
++		{
++			name:                 "encoded slash is rejected",
++			givenPrefix:          "/",
++			givenFs:              os.DirFS("_fixture/"),
++			whenURL:              "/images%2Fwalle.png",
++			expectStatus:         http.StatusNotFound,
++			expectBodyStartsWith: "{\"message\":\"Not Found\"}\n",
++		},
++		{
++			name:                 "encoded backslash is rejected",
++			givenPrefix:          "/",
++			givenFs:              os.DirFS("_fixture/"),
++			whenURL:              "/images%5cwalle.png",
++			expectStatus:         http.StatusNotFound,
++			expectBodyStartsWith: "{\"message\":\"Not Found\"}\n",
+ 		},
+ 	}
+ 
+@@ -1278,3 +1293,20 @@ func BenchmarkEchoGitHubAPIMisses(b *testing.B) {
+ func BenchmarkEchoParseAPI(b *testing.B) {
+ 	benchmarkEchoRoutes(b, parseAPI)
+ }
++
++func TestEcho_StaticFS_encodedSlashDoesNotBypassGroupMiddleware(t *testing.T) {
++	e := New()
++	deny := func(next HandlerFunc) HandlerFunc {
++		return func(c *Context) error { return ErrForbidden }
++	}
++	g := e.Group("/images", deny)
++	g.GET("/*", func(c *Context) error { return c.String(http.StatusOK, "secret") })
++	e.StaticFS("/", os.DirFS("_fixture/"))
++
++	for _, u := range []string{"/images/walle.png", "/images%2Fwalle.png", "/images%2fwalle.png", "/images%5Cwalle.png"} {
++		req := httptest.NewRequest(http.MethodGet, u, nil)
++		rec := httptest.NewRecorder()
++		e.ServeHTTP(rec, req)
++		assert.NotEqual(t, http.StatusOK, rec.Code, u)
++	}
++}
+diff --git a/middleware/static.go b/middleware/static.go
+index 152dded..463b3fc 100644
+--- a/middleware/static.go
++++ b/middleware/static.go
+@@ -205,6 +205,12 @@ func (config StaticConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
+ 				pathUnescape = !config.DisablePathUnescaping // because router could already do PathUnescape
+ 			}
+ 			if pathUnescape {
++				// Security: router matches using escaped path, so encoded separators must not become real ones
++				// after unescaping, as that would allow bypassing route-level protection.
++				lp := strings.ToLower(p)
++				if strings.Contains(lp, "%2f") || strings.Contains(lp, "%5c") {
++					return echo.ErrNotFound
++				}
+ 				p, err = url.PathUnescape(p)
+ 				if err != nil {
+ 					return err
+diff --git a/middleware/static_test.go b/middleware/static_test.go
+index c31e1a4..448026e 100644
+--- a/middleware/static_test.go
++++ b/middleware/static_test.go
+@@ -506,3 +506,20 @@ func TestStatic_DirectoryBrowsing(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestStatic_encodedSlashInGroupWildcardIsRejected(t *testing.T) {
++	e := echo.New()
++	g := e.Group("/static")
++	g.Use(StaticWithConfig(StaticConfig{Root: "testdata/dist/public"}))
++	g.GET("/*", func(c *echo.Context) error { return echo.ErrNotFound })
++
++	req := httptest.NewRequest(http.MethodGet, "/static/assets%2Freadme.md", nil)
++	rec := httptest.NewRecorder()
++	e.ServeHTTP(rec, req)
++	assert.Equal(t, http.StatusNotFound, rec.Code)
++
++	req = httptest.NewRequest(http.MethodGet, "/static/assets/readme.md", nil)
++	rec = httptest.NewRecorder()
++	e.ServeHTTP(rec, req)
++	assert.Equal(t, http.StatusOK, rec.Code)
++}

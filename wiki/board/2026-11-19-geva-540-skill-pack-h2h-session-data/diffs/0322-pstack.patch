@@ -1,0 +1,135 @@
+diff --git a/plugin/aa55udp.go b/plugin/aa55udp.go
+index fed3063..64f2c6b 100644
+--- a/plugin/aa55udp.go
++++ b/plugin/aa55udp.go
+@@ -6,7 +6,10 @@ import (
+ 	"encoding/hex"
+ 	"errors"
+ 	"fmt"
++	"maps"
++	"math"
+ 	"net"
++	"slices"
+ 	"strings"
+ 	"time"
+ 
+@@ -32,7 +35,7 @@ type AA55UDP struct {
+ 	log    *util.Logger
+ 	conn   *net.UDPConn
+ 	pdu    []byte // 6-byte PDU body, no CRC
+-	decode string // int32be | uint32be | int16be | uint16be
++	decode string
+ 	scale  float64
+ }
+ 
+@@ -46,7 +49,7 @@ func init() {
+ //	host:     192.168.1.26   # inverter IP; port 8899 is always used
+ //	register: 30127          # Modbus register address (0-based, uint16)
+ //	count:    2              # number of registers to read (1=U16, 2=S32/U32)
+-//	decode:   int32be        # int32be | uint32be | int16be | uint16be
++//	decode:   int32be        # int32be | uint32be | int16be | uint16be | float32
+ //	scale:    1.0            # optional multiplier (default 1.0)
+ func NewAA55UDPFromConfig(_ context.Context, other map[string]interface{}) (Plugin, error) {
+ 	cc := struct {
+@@ -67,10 +70,8 @@ func NewAA55UDPFromConfig(_ context.Context, other map[string]interface{}) (Plug
+ 		return nil, errors.New("aa55udp: count must be ≥ 1")
+ 	}
+ 
+-	switch cc.Decode {
+-	case "int32be", "uint32be", "int16be", "uint16be":
+-	default:
+-		return nil, fmt.Errorf("aa55udp: unsupported decode %q (want int32be|uint32be|int16be|uint16be)", cc.Decode)
++	if _, ok := aa55Decoders[cc.Decode]; !ok {
++		return nil, fmt.Errorf("aa55udp: unsupported decode %q (want %s)", cc.Decode, aa55DecoderNames())
+ 	}
+ 
+ 	pdu := buildPDU(cc.Register, cc.Count)
+@@ -179,32 +180,35 @@ func stripAA55Header(buf []byte) ([]byte, error) {
+ 	return buf[5 : 5+byteCount], nil
+ }
+ 
+-// decodeAt extracts an integer at the given byte offset of payload and
++type aa55Decoder struct {
++	width  int
++	decode func([]byte) float64
++}
++
++var aa55Decoders = map[string]aa55Decoder{
++	"int32be":  {4, func(b []byte) float64 { return float64(int32(binary.BigEndian.Uint32(b))) }},
++	"uint32be": {4, func(b []byte) float64 { return float64(binary.BigEndian.Uint32(b)) }},
++	"int16be":  {2, func(b []byte) float64 { return float64(int16(binary.BigEndian.Uint16(b))) }},
++	"uint16be": {2, func(b []byte) float64 { return float64(binary.BigEndian.Uint16(b)) }},
++	"float32":  {4, func(b []byte) float64 { return float64(math.Float32frombits(binary.BigEndian.Uint32(b))) }},
++}
++
++func aa55DecoderNames() string {
++	names := slices.Sorted(maps.Keys(aa55Decoders))
++	return strings.Join(names, "|")
++}
++
++// decodeAt extracts a value at the given byte offset of payload and
+ // interprets it according to decode.
+ func decodeAt(payload []byte, offset int, decode string) (float64, error) {
+-	switch decode {
+-	case "int32be":
+-		if len(payload) < offset+4 {
+-			return 0, fmt.Errorf("payload too short for int32be at offset %d (len=%d)", offset, len(payload))
+-		}
+-		return float64(int32(binary.BigEndian.Uint32(payload[offset:]))), nil
+-	case "uint32be":
+-		if len(payload) < offset+4 {
+-			return 0, fmt.Errorf("payload too short for uint32be at offset %d (len=%d)", offset, len(payload))
+-		}
+-		return float64(binary.BigEndian.Uint32(payload[offset:])), nil
+-	case "int16be":
+-		if len(payload) < offset+2 {
+-			return 0, fmt.Errorf("payload too short for int16be at offset %d (len=%d)", offset, len(payload))
+-		}
+-		return float64(int16(binary.BigEndian.Uint16(payload[offset:]))), nil
+-	case "uint16be":
+-		if len(payload) < offset+2 {
+-			return 0, fmt.Errorf("payload too short for uint16be at offset %d (len=%d)", offset, len(payload))
+-		}
+-		return float64(binary.BigEndian.Uint16(payload[offset:])), nil
++	d, ok := aa55Decoders[decode]
++	if !ok {
++		return 0, fmt.Errorf("unknown decode type: %s", decode)
++	}
++	if len(payload) < offset+d.width {
++		return 0, fmt.Errorf("payload too short for %s at offset %d (len=%d)", decode, offset, len(payload))
+ 	}
+-	return 0, fmt.Errorf("unknown decode type: %s", decode)
++	return d.decode(payload[offset:]), nil
+ }
+ 
+ // modbusCRC16 computes the Modbus CRC-16 (little-endian byte order).
+diff --git a/plugin/aa55udp_test.go b/plugin/aa55udp_test.go
+index a617a6f..c0f75cb 100644
+--- a/plugin/aa55udp_test.go
++++ b/plugin/aa55udp_test.go
+@@ -3,6 +3,7 @@ package plugin
+ import (
+ 	"encoding/binary"
+ 	"encoding/hex"
++	"math"
+ 	"net"
+ 	"testing"
+ 
+@@ -158,8 +159,16 @@ func TestDecodeAt_TooShort(t *testing.T) {
+ 	require.Error(t, err)
+ }
+ 
++func TestDecodeAt_Float32(t *testing.T) {
++	payload := make([]byte, 4)
++	binary.BigEndian.PutUint32(payload, math.Float32bits(1234567.5))
++	v, err := decodeAt(payload, 0, "float32")
++	require.NoError(t, err)
++	assert.InDelta(t, 1234567.5, v, 0)
++}
++
+ func TestDecodeAt_UnknownType(t *testing.T) {
+-	_, err := decodeAt(make([]byte, 4), 0, "float32")
++	_, err := decodeAt(make([]byte, 4), 0, "float64")
+ 	require.Error(t, err)
+ }
+ 

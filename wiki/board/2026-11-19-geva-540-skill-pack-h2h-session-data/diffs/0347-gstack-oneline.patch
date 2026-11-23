@@ -1,0 +1,35 @@
+diff --git a/Core/Properties/Resources.resx b/Core/Properties/Resources.resx
+index 758e638..b966a6e 100644
+--- a/Core/Properties/Resources.resx
++++ b/Core/Properties/Resources.resx
+@@ -338,6 +338,7 @@ Free up space on that device or change your settings to use another location.
+   <data name="KrakenInstanceNameTaken" xml:space="preserve"><value>This instance name is already taken: {0}</value></data>
+   <data name="KrakenNoInstance" xml:space="preserve"><value>No instance with this name or at this path: {0}</value></data>
+   <data name="DirectoryNotEmpty" xml:space="preserve"><value>Directory not empty: {0}</value></data>
++  <data name="DirectoryInsideSource" xml:space="preserve"><value>Destination directory {0} cannot be inside source directory {1}</value></data>
+   <data name="RelationshipResolverConflictsWith" xml:space="preserve"><value>{0} conflicts with {1}</value></data>
+   <data name="RelationshipResolverConflictingModDescription" xml:space="preserve"><value>{0} (needed for: {1})</value></data>
+   <data name="RelationshipResolverRequiredButResolver" xml:space="preserve"><value>{0} required, but an incompatible version is in the resolver</value></data>
+diff --git a/Core/Utilities.cs b/Core/Utilities.cs
+index 215fc38..851ae7d 100644
+--- a/Core/Utilities.cs
++++ b/Core/Utilities.cs
+@@ -86,6 +86,18 @@ namespace CKAN
+                                          string[] subFolderRelPathsToLeaveEmpty,
+                                          string[] subFolderRelPathsToForbidHardlinks)
+         {
++            var fullSource = Path.GetFullPath(sourceDirPath)
++                                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
++                             + Path.DirectorySeparatorChar;
++            var fullDest   = Path.GetFullPath(destDirPath)
++                                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
++                             + Path.DirectorySeparatorChar;
++            if (fullDest.StartsWith(fullSource, Platform.PathComparison))
++            {
++                throw new PathErrorKraken(destDirPath,
++                                          string.Format(Properties.Resources.DirectoryInsideSource,
++                                                        destDirPath, sourceDirPath));
++            }
+             using (var transaction = CkanTransaction.CreateTransactionScope())
+             {
+                 CopyDirectory(sourceDirPath, destDirPath, new TxFileManager(),

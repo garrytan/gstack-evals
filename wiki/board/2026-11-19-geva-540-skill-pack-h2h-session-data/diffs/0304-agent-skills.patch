@@ -1,0 +1,57 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java b/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
+index fcc4c74..85b8846 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
++++ b/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
+@@ -152,7 +152,7 @@ public class CognitoJsonHandler {
+         List<UserPoolClient> clients = service.listUserPoolClients(request.path("UserPoolId").asText());
+         ObjectNode response = objectMapper.createObjectNode();
+         ArrayNode items = response.putArray("UserPoolClients");
+-        clients.forEach(c -> items.add(clientToNode(c)));
++        clients.forEach(c -> items.add(clientToDescriptionNode(c)));
+         return Response.ok(response).build();
+     }
+ 
+@@ -465,6 +465,14 @@ public class CognitoJsonHandler {
+         return node;
+     }
+ 
++    private ObjectNode clientToDescriptionNode(UserPoolClient c) {
++        ObjectNode node = objectMapper.createObjectNode();
++        node.put("ClientId", c.getClientId());
++        node.put("UserPoolId", c.getUserPoolId());
++        node.put("ClientName", c.getClientName());
++        return node;
++    }
++
+     private ObjectNode clientToNode(UserPoolClient c) {
+         ObjectNode node = objectMapper.createObjectNode();
+         node.put("ClientId", c.getClientId());
+diff --git a/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoIntegrationTest.java b/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoIntegrationTest.java
+index b7bc724..e1c008a 100644
+--- a/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoIntegrationTest.java
++++ b/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoIntegrationTest.java
+@@ -171,6 +171,24 @@ class CognitoIntegrationTest {
+ 
+     // ── Groups ────────────────────────────────────────────────────────
+ 
++    @Test
++    @Order(5)
++    void listUserPoolClientsReturnsOnlyDescriptionFields() throws Exception {
++        JsonNode response = cognitoJson("ListUserPoolClients", """
++                {
++                  "UserPoolId": "%s"
++                }
++                """.formatted(poolId));
++
++        JsonNode clients = response.path("UserPoolClients");
++        assertEquals(1, clients.size());
++        JsonNode client = clients.get(0);
++        assertEquals(clientId, client.path("ClientId").asText());
++        assertEquals("jwt-client", client.path("ClientName").asText());
++        assertEquals(poolId, client.path("UserPoolId").asText());
++        assertEquals(3, client.size(), "Unexpected fields: " + client);
++    }
++
+     @Test
+     @Order(10)
+     void createGroup() throws Exception {

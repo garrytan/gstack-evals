@@ -1,0 +1,176 @@
+diff --git a/execution/rerun/rerun.go b/execution/rerun/rerun.go
+index 9ac1725..c8367c0 100644
+--- a/execution/rerun/rerun.go
++++ b/execution/rerun/rerun.go
+@@ -37,7 +37,7 @@ func init() {
+ 
+ type failedMetadata struct {
+ 	Args           []string
+-	failedItemsMap map[string]map[string]bool
++	failedItemsMap map[string]map[string]int
+ 	FailedItems    []string
+ }
+ 
+@@ -60,14 +60,28 @@ func (m *failedMetadata) aggregateFailedItems() {
+ }
+ 
+ func newFailedMetaData() *failedMetadata {
+-	return &failedMetadata{Args: make([]string, 0), failedItemsMap: make(map[string]map[string]bool), FailedItems: []string{}}
++	return &failedMetadata{Args: make([]string, 0), failedItemsMap: make(map[string]map[string]int), FailedItems: []string{}}
+ }
+ 
+ func (m *failedMetadata) addFailedItem(itemName string, item string) {
+ 	if _, ok := m.failedItemsMap[itemName]; !ok {
+-		m.failedItemsMap[itemName] = make(map[string]bool)
++		m.failedItemsMap[itemName] = make(map[string]int)
++	}
++	m.failedItemsMap[itemName][item]++
++}
++
++func (m *failedMetadata) removeFailedItem(itemName string, item string) {
++	items, ok := m.failedItemsMap[itemName]
++	if !ok || items[item] == 0 {
++		return
++	}
++	items[item]--
++	if items[item] == 0 {
++		delete(items, item)
++	}
++	if len(items) == 0 {
++		delete(m.failedItemsMap, itemName)
+ 	}
+-	m.failedItemsMap[itemName][item] = true
+ }
+ 
+ // ListenFailedScenarios listens to execution events and writes the failed scenarios to JSON file
+@@ -97,10 +111,14 @@ func ListenFailedScenarios(wg *sync.WaitGroup, specDirs []string) {
+ }
+ 
+ func prepareScenarioFailedMetadata(res *result.ScenarioResult, sce *gauge.Scenario, executionInfo *gauge_messages.ExecutionInfo) {
++	specPath := executionInfo.GetCurrentSpec().GetFileName()
++	item := fmt.Sprintf("%s:%v", util.RelPathToProjectRoot(specPath), sce.Span.Start)
++	// A retry only happens after a failed attempt, which was already recorded.
++	if executionInfo.GetCurrentScenario().GetRetries().GetCurrentRetry() > 0 {
++		failedMeta.removeFailedItem(specPath, item)
++	}
+ 	if res.GetFailed() {
+-		specPath := executionInfo.GetCurrentSpec().GetFileName()
+-		failedScenario := util.RelPathToProjectRoot(specPath)
+-		failedMeta.addFailedItem(specPath, fmt.Sprintf("%s:%v", failedScenario, sce.Span.Start))
++		failedMeta.addFailedItem(specPath, item)
+ 	}
+ }
+ 
+@@ -111,7 +129,7 @@ func addSpecFailedMetadata(res result.Result, args []string) {
+ }
+ 
+ func addSuiteFailedMetadata(res result.Result, args []string) {
+-	failedMeta.failedItemsMap = make(map[string]map[string]bool)
++	failedMeta.failedItemsMap = make(map[string]map[string]int)
+ 	for _, arg := range args {
+ 		path, err := filepath.Abs(arg)
+ 		path = util.RelPathToProjectRoot(path)
+diff --git a/execution/rerun/rerun_test.go b/execution/rerun/rerun_test.go
+index 922f25c..d8a1698 100644
+--- a/execution/rerun/rerun_test.go
++++ b/execution/rerun/rerun_test.go
+@@ -59,7 +59,45 @@ func (s *MySuite) TestGetScenarioFailedMetadata(c *C) {
+ 	prepareScenarioFailedMetadata(sr1, sce, &gauge_messages.ExecutionInfo{CurrentSpec: &gauge_messages.SpecInfo{FileName: spec1Abs}})
+ 
+ 	c.Assert(len(failedMeta.failedItemsMap[spec1Abs]), Equals, 1)
+-	c.Assert(failedMeta.failedItemsMap[spec1Abs][spec1Rel+":2"], Equals, true)
++	c.Assert(failedMeta.failedItemsMap[spec1Abs][spec1Rel+":2"], Equals, 1)
++}
++
++func attemptInfo(specPath string, retry int32) *gauge_messages.ExecutionInfo {
++	return &gauge_messages.ExecutionInfo{
++		CurrentSpec:     &gauge_messages.SpecInfo{FileName: specPath},
++		CurrentScenario: &gauge_messages.ScenarioInfo{Retries: &gauge_messages.ScenarioRetriesInfo{MaxRetries: 2, CurrentRetry: retry}},
++	}
++}
++
++func (s *MySuite) TestScenarioPassingOnRetryIsNotRecordedAsFailed(c *C) {
++	failedMeta = newFailedMetaData()
++	specAbs := filepath.Join(config.ProjectRoot, "specs", "example1.spec")
++	sce := &gauge.Scenario{Span: &gauge.Span{Start: 2}}
++	failed := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_FAILED}}
++	passed := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_PASSED}}
++
++	prepareScenarioFailedMetadata(failed, sce, attemptInfo(specAbs, 0))
++	prepareScenarioFailedMetadata(passed, sce, attemptInfo(specAbs, 1))
++	failedMeta.aggregateFailedItems()
++
++	c.Assert(failedMeta.FailedItems, DeepEquals, []string{})
++}
++
++func (s *MySuite) TestRowPassingOnRetryKeepsSiblingRowFailure(c *C) {
++	failedMeta = newFailedMetaData()
++	specRel := filepath.Join("specs", "example1.spec")
++	specAbs := filepath.Join(config.ProjectRoot, specRel)
++	sce := &gauge.Scenario{Span: &gauge.Span{Start: 2}}
++	failed := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_FAILED}}
++	passed := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_PASSED}}
++
++	prepareScenarioFailedMetadata(failed, sce, attemptInfo(specAbs, 0))
++	prepareScenarioFailedMetadata(failed, sce, attemptInfo(specAbs, 1))
++	prepareScenarioFailedMetadata(failed, sce, attemptInfo(specAbs, 0))
++	prepareScenarioFailedMetadata(passed, sce, attemptInfo(specAbs, 1))
++	failedMeta.aggregateFailedItems()
++
++	c.Assert(failedMeta.FailedItems, DeepEquals, []string{specRel + ":2"})
+ }
+ 
+ func (s *MySuite) TestAddSpecPreHookFailedMetadata(c *C) {
+@@ -70,7 +108,7 @@ func (s *MySuite) TestAddSpecPreHookFailedMetadata(c *C) {
+ 	addFailedMetadata(spec1, []string{}, addSpecFailedMetadata)
+ 
+ 	c.Assert(len(failedMeta.failedItemsMap[spec1Rel]), Equals, 1)
+-	c.Assert(failedMeta.failedItemsMap[spec1Rel][spec1Rel], Equals, true)
++	c.Assert(failedMeta.failedItemsMap[spec1Rel][spec1Rel], Equals, 1)
+ }
+ 
+ func (s *MySuite) TestAddSpecPostHookFailedMetadata(c *C) {
+@@ -81,21 +119,21 @@ func (s *MySuite) TestAddSpecPostHookFailedMetadata(c *C) {
+ 	addFailedMetadata(spec1, []string{}, addSpecFailedMetadata)
+ 
+ 	c.Assert(len(failedMeta.failedItemsMap[spec1Rel]), Equals, 1)
+-	c.Assert(failedMeta.failedItemsMap[spec1Rel][spec1Rel], Equals, true)
++	c.Assert(failedMeta.failedItemsMap[spec1Rel][spec1Rel], Equals, 1)
+ }
+ 
+ func (s *MySuite) TestAddSpecFailedMetadataOverwritesPreviouslyAddedValues(c *C) {
+ 	spec1Rel := filepath.Join("specs", "example1.spec")
+ 	spec1Abs := filepath.Join(config.ProjectRoot, spec1Rel)
+ 	spec1 := &result.SpecResult{ProtoSpec: &gauge_messages.ProtoSpec{PreHookFailures: []*gauge_messages.ProtoHookFailure{{ErrorMessage: "error"}}, FileName: spec1Abs}}
+-	failedMeta.failedItemsMap[spec1Rel] = make(map[string]bool)
+-	failedMeta.failedItemsMap[spec1Rel]["scn1"] = true
+-	failedMeta.failedItemsMap[spec1Rel]["scn2"] = true
++	failedMeta.failedItemsMap[spec1Rel] = make(map[string]int)
++	failedMeta.failedItemsMap[spec1Rel]["scn1"] = 1
++	failedMeta.failedItemsMap[spec1Rel]["scn2"] = 1
+ 
+ 	addSpecFailedMetadata(spec1, []string{})
+ 
+ 	c.Assert(len(failedMeta.failedItemsMap[spec1Rel]), Equals, 1)
+-	c.Assert(failedMeta.failedItemsMap[spec1Rel][spec1Rel], Equals, true)
++	c.Assert(failedMeta.failedItemsMap[spec1Rel][spec1Rel], Equals, 1)
+ }
+ 
+ func (s *MySuite) TestGetRelativePath(c *C) {
+@@ -111,11 +149,11 @@ func (s *MySuite) TestGetAllFailedItems(c *C) {
+ 	spec1Rel := filepath.Join("specs", "example1.spec")
+ 	spec2Rel := filepath.Join("specs", "example2.spec")
+ 	metaData := newFailedMetaData()
+-	metaData.failedItemsMap[spec1Rel] = make(map[string]bool)
+-	metaData.failedItemsMap[spec2Rel] = make(map[string]bool)
+-	metaData.failedItemsMap[spec1Rel]["scn1"] = true
+-	metaData.failedItemsMap[spec1Rel]["scn2"] = true
+-	metaData.failedItemsMap[spec2Rel]["scn3"] = true
++	metaData.failedItemsMap[spec1Rel] = make(map[string]int)
++	metaData.failedItemsMap[spec2Rel] = make(map[string]int)
++	metaData.failedItemsMap[spec1Rel]["scn1"] = 1
++	metaData.failedItemsMap[spec1Rel]["scn2"] = 1
++	metaData.failedItemsMap[spec2Rel]["scn3"] = 1
+ 
+ 	failedItems := metaData.getFailedItems()
+ 	sort.Strings(failedItems)

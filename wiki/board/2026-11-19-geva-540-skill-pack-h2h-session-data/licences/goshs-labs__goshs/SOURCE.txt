@@ -1,0 +1,3 @@
+https://github.com/goshs-labs/goshs at d8140e63ad6892b1c1fcff7d661d513f5ded2fb9
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

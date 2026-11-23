@@ -1,0 +1,84 @@
+diff --git a/bindgen-tests/tests/expectations/tests/default-alias-style-new-type-constants.rs b/bindgen-tests/tests/expectations/tests/default-alias-style-new-type-constants.rs
+new file mode 100644
+index 0000000..cce83f5
+--- /dev/null
++++ b/bindgen-tests/tests/expectations/tests/default-alias-style-new-type-constants.rs
+@@ -0,0 +1,11 @@
++#![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals)]
++pub const FooBar: u32 = 0;
++pub const NegConst: i32 = -1;
++#[repr(transparent)]
++#[derive(Debug, Default, Copy, Clone)]
++pub struct Foo(pub ::std::os::raw::c_uint);
++pub const Foo_A: Foo = Foo(1);
++pub const Plain: ::std::os::raw::c_uint = 3;
++pub const PlainFloat: f32 = 2.5;
++pub type Boom = ::std::os::raw::c_uint;
++pub const Boom_A: Boom = 2;
+diff --git a/bindgen-tests/tests/headers/default-alias-style-new-type-constants.h b/bindgen-tests/tests/headers/default-alias-style-new-type-constants.h
+new file mode 100644
+index 0000000..0e50b9f
+--- /dev/null
++++ b/bindgen-tests/tests/headers/default-alias-style-new-type-constants.h
+@@ -0,0 +1,14 @@
++// bindgen-flags: --default-alias-style=new_type --normal-alias=Boom
++
++typedef unsigned int Foo;
++static const Foo Foo_A = 1;
++
++// Plain macros and non-typedef constants must not be wrapped.
++#define FooBar 0x00000000
++#define NegConst -1
++static const unsigned int Plain = 3;
++static const float PlainFloat = 2.5;
++
++// Explicitly a plain type alias: not wrapped.
++typedef unsigned int Boom;
++static const Boom Boom_A = 2;
+diff --git a/bindgen/codegen/mod.rs b/bindgen/codegen/mod.rs
+index 5ffe088..5a014d4 100644
+--- a/bindgen/codegen/mod.rs
++++ b/bindgen/codegen/mod.rs
+@@ -810,11 +810,24 @@ impl CodeGenerator for Var {
+             };
+ 
+             if let Some(mut val) = const_expr {
+-                let var_ty_item = ctx.resolve_item(var_ty);
+-                if matches!(
+-                    var_ty_item.alias_style(ctx),
+-                    AliasVariation::NewType | AliasVariation::NewTypeDeref
+-                ) {
++                // Only wrap the value if the constant's type is a typedef
++                // that is generated as a newtype. Builtin types (e.g. the
++                // `u32` of a `#define`) are never wrapped, even when the
++                // default alias style is `NewType`.
++                let var_ty_item = var_ty
++                    .into_resolver()
++                    .through_type_refs()
++                    .resolve(ctx);
++                let is_alias = matches!(
++                    var_ty_item.kind().as_type().map(|ty| ty.kind()),
++                    Some(TypeKind::Alias(..))
++                );
++                if is_alias &&
++                    matches!(
++                        var_ty_item.alias_style(ctx),
++                        AliasVariation::NewType | AliasVariation::NewTypeDeref
++                    )
++                {
+                     val = quote! { #ty(#val) };
+                 }
+                 result.push(quote! {
+diff --git a/bindgen/options/mod.rs b/bindgen/options/mod.rs
+index baa541c..aaf73c3 100644
+--- a/bindgen/options/mod.rs
++++ b/bindgen/options/mod.rs
+@@ -645,7 +645,7 @@ options! {
+                 }
+             }
+         },
+-        as_args: "--type-alias",
++        as_args: "--normal-alias",
+     },
+     /// `typedef` patterns that will be aliased by creating a newtype.
+     new_type_alias: RegexSet {

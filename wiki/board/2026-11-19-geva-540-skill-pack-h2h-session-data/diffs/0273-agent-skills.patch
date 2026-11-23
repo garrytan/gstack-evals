@@ -1,0 +1,112 @@
+diff --git a/ooxml/XSSF/Streaming/SXSSFRow.cs b/ooxml/XSSF/Streaming/SXSSFRow.cs
+index d020cee..fa40f10 100644
+--- a/ooxml/XSSF/Streaming/SXSSFRow.cs
++++ b/ooxml/XSSF/Streaming/SXSSFRow.cs
+@@ -235,6 +235,11 @@ namespace NPOI.XSSF.Streaming
+         {
+             CheckBounds(column);
+             SXSSFCell cell = new SXSSFCell(this, type);
++            ICellStyle style = IsFormatted ? RowStyle : _sheet?.GetColumnStyle(column);
++            if (style != null && style.Index != 0)
++            {
++                cell.CellStyle = style;
++            }
+             _cells[column] = cell;
+             _sortedCellCache = null;
+             UpdateIndexWhenAdd(column);
+diff --git a/ooxml/XSSF/UserModel/XSSFRow.cs b/ooxml/XSSF/UserModel/XSSFRow.cs
+index c196e1b..89a2cf3 100644
+--- a/ooxml/XSSF/UserModel/XSSFRow.cs
++++ b/ooxml/XSSF/UserModel/XSSFRow.cs
+@@ -381,6 +381,14 @@ namespace NPOI.XSSF.UserModel
+             {
+                 xcell.CellStyle = RowStyle;
+             }
++            else
++            {
++                ICellStyle columnStyle = _sheet.GetColumn(columnIndex)?.ColumnStyle;
++                if (columnStyle != null)
++                {
++                    xcell.CellStyle = columnStyle;
++                }
++            }
+ 
+             _cells[columnIndex] = xcell;
+             UpdateCacheOnAdd(columnIndex);
+diff --git a/testcases/main/SS/UserModel/BaseTestSheet.cs b/testcases/main/SS/UserModel/BaseTestSheet.cs
+index 1f09e27..9e71685 100644
+--- a/testcases/main/SS/UserModel/BaseTestSheet.cs
++++ b/testcases/main/SS/UserModel/BaseTestSheet.cs
+@@ -44,6 +44,26 @@ namespace TestCases.SS.UserModel
+         {
+             // do nothing for Sheet base class. This will be overridden for SXSSFSheets.
+         }
++        [Test]
++        public void CreateCellUsesDefaultColumnStyle()
++        {
++            IWorkbook workbook = _testDataProvider.CreateWorkbook();
++            ISheet sheet = workbook.CreateSheet();
++            ICellStyle style = workbook.CreateCellStyle();
++            style.DataFormat = workbook.CreateDataFormat().GetFormat("#,##0");
++            short defaultStyleIndex = sheet.CreateRow(0).CreateCell(1).CellStyle.Index;
++
++            sheet.SetDefaultColumnStyle(1, style);
++            IRow row = sheet.CreateRow(1);
++            ICell styled = row.CreateCell(1);
++            ICell unstyled = row.CreateCell(2);
++
++            ClassicAssert.AreEqual(style.Index, styled.CellStyle.Index);
++            ClassicAssert.AreEqual(defaultStyleIndex, unstyled.CellStyle.Index);
++
++            workbook.Close();
++        }
++
+         [Test]
+         public void TestCreateRow()
+         {
+diff --git a/testcases/ooxml/SS/UserModel/BaseTestXSheet.cs b/testcases/ooxml/SS/UserModel/BaseTestXSheet.cs
+index f199fbd..f6c31d5 100644
+--- a/testcases/ooxml/SS/UserModel/BaseTestXSheet.cs
++++ b/testcases/ooxml/SS/UserModel/BaseTestXSheet.cs
+@@ -17,6 +17,9 @@
+ 
+ namespace TestCases.SS.UserModel
+ {
++    using NPOI.SS.UserModel;
++    using NUnit.Framework;
++    using NUnit.Framework.Legacy;
+     using TestCases.SS;
+ 
+     /**
+@@ -28,10 +31,30 @@ namespace TestCases.SS.UserModel
+      */
+     public abstract class BaseTestXSheet : BaseTestSheet
+     {
++        private readonly ITestDataProvider _testDataProvider;
++
+         protected BaseTestXSheet(ITestDataProvider testDataProvider)
+             : base(testDataProvider)
+         {
+-            
++            _testDataProvider = testDataProvider;
++        }
++
++        [Test]
++        public void CreateCellPrefersRowStyleOverDefaultColumnStyle()
++        {
++            IWorkbook workbook = _testDataProvider.CreateWorkbook();
++            ISheet sheet = workbook.CreateSheet();
++            ICellStyle colStyle = workbook.CreateCellStyle();
++            ICellStyle rowStyle = workbook.CreateCellStyle();
++
++            sheet.SetDefaultColumnStyle(0, colStyle);
++            IRow row = sheet.CreateRow(0);
++            row.RowStyle = rowStyle;
++            ICell cell = row.CreateCell(0);
++
++            ClassicAssert.AreEqual(rowStyle.Index, cell.CellStyle.Index);
++
++            workbook.Close();
+         }
+     }
+ 

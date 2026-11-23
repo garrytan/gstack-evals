@@ -1,0 +1,649 @@
+diff --git a/.changeset/quiet-timers-assign.md b/.changeset/quiet-timers-assign.md
+new file mode 100644
+index 0000000..51da6f6
+--- /dev/null
++++ b/.changeset/quiet-timers-assign.md
+@@ -0,0 +1,5 @@
++---
++"@marko/runtime-tags": patch
++---
++
++Fix "Cannot assign to constant" error when a `<let>` is both read and assigned inside a function created in an intersection (eg a `<const>` closure that reads input).
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/.name-cache.json b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/.name-cache.json
+new file mode 100644
+index 0000000..24fc106
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/.name-cache.json
+@@ -0,0 +1,21 @@
++{
++  "vars": {
++    "props": {
++      "$_$": "t",
++      "$init": "e",
++      "$$reset": "a",
++      "$$expr_input_timer": "n",
++      "$$timer": "o",
++      "$$input": "r",
++      "$$reset$if$content_effect": "i",
++      "$$reset$if$content": "u",
++      "$$setup$if$content": "c",
++      "$$count$if$content": "l",
++      "$$if_content": "s",
++      "$$if": "m",
++      "$$mounted": "f",
++      "$$count": "d",
++      "$$value": "g"
++    }
++  }
++}
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/csr-sanitized.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/csr-sanitized.expected.md
+new file mode 100644
+index 0000000..9bf76e5
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/csr-sanitized.expected.md
+@@ -0,0 +1,28 @@
++# Render
++```html
++<div>
++  <span>
++    0
++  </span>
++</div>
++```
++
++
++# Render ASYNC
++```html
++<div>
++  <span>
++    0
++  </span>
++</div>
++```
++
++
++# Render ASYNC
++```html
++<div>
++  <span>
++    1
++  </span>
++</div>
++```
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/csr.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/csr.expected.md
+new file mode 100644
+index 0000000..39700b7
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/csr.expected.md
+@@ -0,0 +1,42 @@
++# Render
++```html
++<div>
++  <span>
++    0
++  </span>
++</div>
++```
++
++# Mutations
++```
++INSERT div
++```
++
++# Render ASYNC
++```html
++<div>
++  <span>
++    0
++  </span>
++</div>
++```
++
++# Mutations
++```
++INSERT div/#text
++REMOVE #text after div/#text
++```
++
++# Render ASYNC
++```html
++<div>
++  <span>
++    1
++  </span>
++</div>
++```
++
++# Mutations
++```
++UPDATE div/span/#text "0" => "1"
++```
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/dom.expected/tags/debounce.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/dom.expected/tags/debounce.js
+new file mode 100644
+index 0000000..612afa5
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/dom.expected/tags/debounce.js
+@@ -0,0 +1,24 @@
++export const $template = "";
++export const $walks = "";
++import * as _$ from "@marko/runtime-tags/debug/dom";
++const $reset = /* @__PURE__ */_$.value("reset", _$.tagVarSignal);
++const $expr_input_timer = /* @__PURE__ */_$.intersection(3, $scope => {
++  let {
++    input,
++    timer
++  } = $scope;
++  $reset($scope, () => {
++    if (timer) {
++      clearTimeout(timer);
++    }
++    $timer($scope, timer = setTimeout(() => {
++      input.value();
++    }, input.duration));
++  });
++});
++const $timer = /* @__PURE__ */_$.state("timer/2", $expr_input_timer);
++export function $setup($scope) {
++  $timer($scope, 0);
++}
++export const $input = /* @__PURE__ */_$.value("input", $expr_input_timer);
++export default /* @__PURE__ */_$.createTemplate("__tests__/tags/debounce.marko", $template, $walks, $setup, $input);
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/dom.expected/template.hydrate.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/dom.expected/template.hydrate.js
+new file mode 100644
+index 0000000..f1014d1
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/dom.expected/template.hydrate.js
+@@ -0,0 +1,51 @@
++// size: 655 (min) 382 (brotli)
++const $reset = _$.value(4, _$.tagVarSignal),
++  $expr_input_timer = _$.intersection(3, ($scope) => {
++    let { 1: input, 2: timer } = $scope;
++    $reset($scope, () => {
++      (timer && clearTimeout(timer),
++        $timer(
++          $scope,
++          (timer = setTimeout(() => {
++            input.value();
++          }, input.duration)),
++        ));
++    });
++  }),
++  $timer = _$.state(2, $expr_input_timer);
++const $input = _$.value(1, $expr_input_timer),
++  $reset$if$content_effect = _$.effect("b1", ($scope, { 2: reset }) =>
++    _$.lifecycle($scope, 3, {
++      onMount: function () {
++        (reset(), reset());
++      },
++    }),
++  ),
++  $reset$if$content = _$.registerBoundSignal(
++    "b2",
++    _$.value(2, $reset$if$content_effect),
++  ),
++  $setup$if$content = ($scope) => {
++    (_$.setTagVar($scope, 0, $reset$if$content),
++      (function ($scope) {
++        $timer($scope, 0);
++      })($scope[0]),
++      $count$if$content._($scope));
++  },
++  $count$if$content = _$.conditionalClosure(3, 0, 0, ($scope, count) =>
++    $input($scope[0], { duration: 1, value: $value($scope) }),
++  ),
++  $if_content = _$.createRenderer("", "0&", $setup$if$content),
++  $if = _$.conditional(0, $if_content),
++  $mounted = _$.state(2, ($scope, mounted) => $if($scope, mounted ? 0 : 1)),
++  $count = _$.state(3, ($scope, count) => {
++    (_$.data($scope[1], count), $count$if$content($scope));
++  });
++function $value($scope, { _: { 3: count } } = $scope) {
++  return function () {
++    $count($scope._, ++count);
++  };
++}
++(_$.effect("b3", ($scope) => $mounted($scope, !0)),
++  _$.register("b0", $value),
++  init());
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/dom.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/dom.expected/template.js
+new file mode 100644
+index 0000000..fe1f25b
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/dom.expected/template.js
+@@ -0,0 +1,46 @@
++export const $template = "<div><!><span> </span></div>";
++export const $walks = /* next(1), replace, over(1), next(1), get, out(2) */"D%bD m";
++import { $setup as _debounce, $input as _debounce_input, $template as _debounce_template, $walks as _debounce_walks } from "./tags/debounce.marko";
++import * as _$ from "@marko/runtime-tags/debug/dom";
++const $reset$if$content_effect = _$.effect("__tests__/template.marko_1_reset", ($scope, {
++  reset
++}) => _$.lifecycle($scope, "$lifecycle", {
++  onMount: function () {
++    reset();
++    reset();
++  }
++}));
++const $reset$if$content = _$.registerBoundSignal("__tests__/template.marko_1_reset/var", /* @__PURE__ */_$.value("reset", $reset$if$content_effect));
++const $setup$if$content = $scope => {
++  _$.setTagVar($scope, "#childScope/0", $reset$if$content);
++  _debounce($scope["#childScope/0"]);
++  $count$if$content._($scope);
++};
++const $count$if$content = /* @__PURE__ */_$.conditionalClosure("count", "#text/0", 0, ($scope, count) => _debounce_input($scope["#childScope/0"], {
++  duration: 1,
++  value: $value($scope)
++}));
++const $if_content = /* @__PURE__ */_$.createRenderer(_debounce_template, /* beginChildWithVar, _debounce_walks, endChild */`0${_debounce_walks}&`, $setup$if$content);
++const $if = /* @__PURE__ */_$.conditional("#text/0", $if_content);
++const $mounted = /* @__PURE__ */_$.state("mounted/2", ($scope, mounted) => $if($scope, mounted ? 0 : 1));
++const $count = /* @__PURE__ */_$.state("count/3", ($scope, count) => {
++  _$.data($scope["#text/1"], count);
++  $count$if$content($scope);
++});
++const $setup_effect = _$.effect("__tests__/template.marko_0", $scope => $mounted($scope, true));
++export function $setup($scope) {
++  $mounted($scope, false);
++  $count($scope, 0);
++  $setup_effect($scope);
++}
++function $value($scope, {
++  _: {
++    count
++  }
++} = $scope) {
++  return function () {
++    $count($scope._, ++count)
++  };
++}
++_$.register("__tests__/template.marko_1/value", $value);
++export default /* @__PURE__ */_$.createTemplate("__tests__/template.marko", $template, $walks, $setup);
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/html.expected/tags/debounce.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/html.expected/tags/debounce.js
+new file mode 100644
+index 0000000..68800f1
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/html.expected/tags/debounce.js
+@@ -0,0 +1,23 @@
++import * as _$ from "@marko/runtime-tags/debug/html";
++export default _$.createTemplate("__tests__/tags/debounce.marko", input => {
++  const $scope0_id = _$.nextScopeId();
++  let timer = 0;
++  const reset = () => {
++    if (timer) {
++      clearTimeout(timer);
++    }
++    timer = setTimeout(() => {
++      input.value();
++    }, input.duration);
++  };
++  const $return = reset;
++  _$.writeScope($scope0_id, {
++    input,
++    timer
++  }, "__tests__/tags/debounce.marko", 0, {
++    input: 0,
++    timer: "6:6"
++  });
++  _$.resumeClosestBranch($scope0_id);
++  return $return;
++});
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/html.expected/template.js b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/html.expected/template.js
+new file mode 100644
+index 0000000..0f90d33
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/html.expected/template.js
+@@ -0,0 +1,38 @@
++import * as _$ from "@marko/runtime-tags/debug/html";
++import _debounce from "./tags/debounce.marko";
++export default _$.createTemplate("__tests__/template.marko", input => {
++  const $scope0_id = _$.nextScopeId();
++  let mounted = false;
++  let count = 0;
++  _$.write("<div>");
++  _$.resumeConditional(() => {
++    if (mounted) {
++      const $scope1_id = _$.nextScopeId();
++      const $childScope = _$.peekNextScopeId();
++      let reset = _debounce({
++        duration: 1,
++        value: _$.register(function () {
++          count++;
++        }, "__tests__/template.marko_1/value", $scope1_id)
++      });
++      _$.setTagVar($scope1_id, "#scopeOffset/1", $childScope, "__tests__/template.marko_1_reset/var");
++      _$.writeEffect($scope1_id, "__tests__/template.marko_1_reset");
++      _$.writeScope($scope1_id, {
++        reset,
++        _: _$.ensureScopeWithId($scope0_id),
++        "#childScope/0": _$.writeExistingScope($childScope)
++      }, "__tests__/template.marko", "7:4", {
++        reset: "8:15"
++      });
++      return 0;
++    }
++  }, $scope0_id, "#text/0", 1, /* state: mounted */1, 0, 1);
++  _$.write(`<span>${_$.escapeXML(count)}${_$.markResumeNode($scope0_id, "#text/1")}</span></div>`);
++  _$.writeEffect($scope0_id, "__tests__/template.marko_0");
++  _$.writeScope($scope0_id, {
++    count
++  }, "__tests__/template.marko", 0, {
++    count: "2:6"
++  });
++  _$.resumeClosestBranch($scope0_id);
++});
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/resume-sanitized.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/resume-sanitized.expected.md
+new file mode 100644
+index 0000000..9bf76e5
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/resume-sanitized.expected.md
+@@ -0,0 +1,28 @@
++# Render
++```html
++<div>
++  <span>
++    0
++  </span>
++</div>
++```
++
++
++# Render ASYNC
++```html
++<div>
++  <span>
++    0
++  </span>
++</div>
++```
++
++
++# Render ASYNC
++```html
++<div>
++  <span>
++    1
++  </span>
++</div>
++```
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/resume.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/resume.expected.md
+new file mode 100644
+index 0000000..7d01056
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/resume.expected.md
+@@ -0,0 +1,90 @@
++# Render
++```html
++<html>
++  <head />
++  <body>
++    <div>
++      <!--M_|1 #text/0-->
++      <span>
++        0
++        <!--M_*1 #text/1-->
++      </span>
++    </div>
++    <script>
++      WALKER_RUNTIME("M")("_");
++      M._.r = [_ =&gt; (_.a = [0,
++        {
++          count: 0
++        }]),
++        "__tests__/template.marko_0",
++        1
++      ];
++      M._.w()
++    </script>
++  </body>
++</html>
++```
++
++
++# Render ASYNC
++```html
++<html>
++  <head />
++  <body>
++    <div>
++      <span>
++        0
++        <!--M_*1 #text/1-->
++      </span>
++    </div>
++    <script>
++      WALKER_RUNTIME("M")("_");
++      M._.r = [_ =&gt; (_.a = [0,
++        {
++          count: 0
++        }]),
++        "__tests__/template.marko_0",
++        1
++      ];
++      M._.w()
++    </script>
++  </body>
++</html>
++```
++
++# Mutations
++```
++INSERT html/body/div/#text
++REMOVE #comment after html/body/div/#text
++```
++
++# Render ASYNC
++```html
++<html>
++  <head />
++  <body>
++    <div>
++      <span>
++        1
++        <!--M_*1 #text/1-->
++      </span>
++    </div>
++    <script>
++      WALKER_RUNTIME("M")("_");
++      M._.r = [_ =&gt; (_.a = [0,
++        {
++          count: 0
++        }]),
++        "__tests__/template.marko_0",
++        1
++      ];
++      M._.w()
++    </script>
++  </body>
++</html>
++```
++
++# Mutations
++```
++UPDATE html/body/div/span/#text "0" => "1"
++```
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/ssr-sanitized.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/ssr-sanitized.expected.md
+new file mode 100644
+index 0000000..7e53223
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/ssr-sanitized.expected.md
+@@ -0,0 +1,8 @@
++# Render End
++```html
++<div>
++  <span>
++    0
++  </span>
++</div>
++```
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/ssr.expected.md b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/ssr.expected.md
+new file mode 100644
+index 0000000..6c4a4ab
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/__snapshots__/ssr.expected.md
+@@ -0,0 +1,45 @@
++# Write
++```html
++  <div><!--M_|1 #text/0--><span>0<!--M_*1 #text/1--></span></div><script>WALKER_RUNTIME("M")("_");M._.r=[_=>(_.a=[0,{count:0}]),"__tests__/template.marko_0",1];M._.w()</script>
++```
++
++# Render End
++```html
++<html>
++  <head />
++  <body>
++    <div>
++      <!--M_|1 #text/0-->
++      <span>
++        0
++        <!--M_*1 #text/1-->
++      </span>
++    </div>
++    <script>
++      WALKER_RUNTIME("M")("_");
++      M._.r = [_ =&gt; (_.a = [0,
++        {
++          count: 0
++        }]),
++        "__tests__/template.marko_0",
++        1
++      ];
++      M._.w()
++    </script>
++  </body>
++</html>
++```
++
++# Mutations
++```
++INSERT html
++INSERT html/head
++INSERT html/body
++INSERT html/body/div
++INSERT html/body/div/#comment
++INSERT html/body/div/span
++INSERT html/body/div/span/#text
++INSERT html/body/div/span/#comment
++INSERT html/body/script
++INSERT html/body/script/#text
++```
+\ No newline at end of file
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/tags/debounce.marko b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/tags/debounce.marko
+new file mode 100644
+index 0000000..af048e6
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/tags/debounce.marko
+@@ -0,0 +1,18 @@
++export interface Input {
++  duration: number;
++  value: () => void;
++}
++
++<let/timer=(0 as unknown as ReturnType<typeof setTimeout>)>
++
++<const/reset=() => {
++  if (timer) {
++    clearTimeout(timer);
++  }
++
++  timer = setTimeout(() => {
++    input.value();
++  }, input.duration);
++}>
++
++<return=reset>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/template.marko b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/template.marko
+new file mode 100644
+index 0000000..f8cd233
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/template.marko
+@@ -0,0 +1,12 @@
++<let/mounted=false>
++<let/count=0>
++<script>
++  mounted = true;
++</script>
++<div>
++  <if=mounted>
++    <debounce/reset duration=1 value() { count++ }/>
++    <lifecycle onMount() { reset(); reset(); }/>
++  </if>
++  <span>${count}</span>
++</div>
+diff --git a/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/test.ts b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/test.ts
+new file mode 100644
+index 0000000..a036a97
+--- /dev/null
++++ b/packages/runtime-tags/src/__tests__/fixtures/let-tag-assign-in-returned-fn/test.ts
+@@ -0,0 +1,3 @@
++import { wait } from "../../utils/resolve";
++
++export const steps = [{}, wait(1), wait(10)];
+diff --git a/packages/runtime-tags/src/translator/util/signals.ts b/packages/runtime-tags/src/translator/util/signals.ts
+index 1d72221..7fdeaaf 100644
+--- a/packages/runtime-tags/src/translator/util/signals.ts
++++ b/packages/runtime-tags/src/translator/util/signals.ts
+@@ -505,12 +505,17 @@ export function getSignalFn(signal: Signal): t.Expression {
+ 
+   if (isIntersection && signal.renderReferencedBindings) {
+     signal.render.unshift(
+-      t.variableDeclaration("const", [
+-        t.variableDeclarator(
+-          createScopeReadPattern(section, signal.renderReferencedBindings),
+-          scopeIdentifier,
+-        ),
+-      ]),
++      t.variableDeclaration(
++        hasAssignmentToBindings(signal.render, signal.renderReferencedBindings)
++          ? "let"
++          : "const",
++        [
++          t.variableDeclarator(
++            createScopeReadPattern(section, signal.renderReferencedBindings),
++            scopeIdentifier,
++          ),
++        ],
++      ),
+     );
+   }
+ 
+@@ -1455,6 +1460,35 @@ function replaceAssignedNode(node: t.Node): t.Node | undefined {
+   }
+ }
+ 
++function hasAssignmentToBindings(
++  statements: t.Statement[],
++  referencedBindings: ReferencedBindings,
++) {
++  const assignedNames = new Set<string>();
++  forEach(referencedBindings, (binding) => {
++    if (binding.assignmentSections) assignedNames.add(binding.name);
++  });
++  if (!assignedNames.size) return false;
++
++  let found = false;
++  for (const statement of statements) {
++    t.traverseFast(statement, (node) => {
++      if (found) return;
++      if (node.type === "UpdateExpression") {
++        found =
++          node.argument.type === "Identifier" &&
++          assignedNames.has(node.argument.name);
++      } else if (node.type === "AssignmentExpression") {
++        forEachIdentifier(node.left, (id) => {
++          if (assignedNames.has(id.name)) found = true;
++        });
++      }
++    });
++    if (found) break;
++  }
++  return found;
++}
++
+ function getBuildAssignment(extra: AssignedBindingExtra) {
+   const { assignmentTo, assignment } = extra;
+   if (assignmentTo) {

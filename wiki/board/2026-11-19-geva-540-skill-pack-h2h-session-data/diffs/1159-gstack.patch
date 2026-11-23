@@ -1,0 +1,193 @@
+diff --git a/backend/local/local.go b/backend/local/local.go
+index 91ec9cd..2ca52f9 100644
+--- a/backend/local/local.go
++++ b/backend/local/local.go
+@@ -112,6 +112,21 @@ setuid, setgid and sticky bits are not restored by default - see the
+ 				Default:  false,
+ 				Advanced: true,
+ 			},
++			{
++				Name: "links_allow_unsafe",
++				Help: `Allow unsafe symlink targets when using --links.
++
++When translating ` + "`" + fs.LinkSuffix + "`" + ` files back into symlinks, rclone
++refuses by default to create symlinks whose target is an absolute path
++or which point outside the destination directory (e.g. via "..").
++Such links, when copied from an untrusted remote, can be used to make
++rclone write files outside the destination.
++
++Only set this flag if you trust the source, for example when restoring
++your own backup which contains absolute symlinks.`,
++				Default:  false,
++				Advanced: true,
++			},
+ 			{
+ 				Name: "skip_links",
+ 				Help: `Don't warn about skipped symlinks.
+@@ -377,6 +392,7 @@ type Options struct {
+ 	FollowSymlinks         bool                 `config:"copy_links"`
+ 	TranslateSymlinks      bool                 `config:"links"`
+ 	SkipSymlinks           bool                 `config:"skip_links"`
++	LinksAllowUnsafe       bool                 `config:"links_allow_unsafe"`
+ 	SkipSpecials           bool                 `config:"skip_specials"`
+ 	UTFNorm                bool                 `config:"unicode_normalization"`
+ 	NoCheckUpdated         bool                 `config:"no_check_updated"`
+@@ -1438,7 +1454,85 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
+ // mkdirAll makes all the directories needed to store the object
+ func (o *Object) mkdirAll() error {
+ 	dir := filepath.Dir(o.path)
+-	return file.MkdirAll(dir, 0777)
++	err := file.MkdirAll(dir, 0777)
++	if err != nil {
++		return err
++	}
++	// In --links mode symlinks in the destination are treated as
++	// links, not directories, so we must never write through one
++	// which leads outside the root.
++	if o.fs.opt.TranslateSymlinks && !o.fs.opt.LinksAllowUnsafe {
++		realRoot, err := filepath.EvalSymlinks(o.fs.root)
++		if err != nil {
++			return nil
++		}
++		realDir, err := filepath.EvalSymlinks(dir)
++		if err != nil {
++			return fmt.Errorf("failed to resolve parent directory: %w", err)
++		}
++		if !isWithin(realRoot, realDir) {
++			return fmt.Errorf("refusing to write %q: parent directory resolves to %q outside the destination", o.path, realDir)
++		}
++	}
++	return nil
++}
++
++// isWithin returns true if p is root or inside root (both cleaned OS paths)
++func isWithin(root, p string) bool {
++	rel, err := filepath.Rel(root, p)
++	if err != nil {
++		return false
++	}
++	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
++}
++
++// checkSymlinkTarget checks that the target of a symlink about to be
++// created at o.path is safe, i.e. that it is relative and does not
++// point outside the root of the Fs.
++//
++// The contents of a .rclonelink file may come from an untrusted
++// remote, so creating arbitrary symlinks could allow writing files
++// outside the destination.
++func (o *Object) checkSymlinkTarget(target string) error {
++	if o.fs.opt.LinksAllowUnsafe {
++		return nil
++	}
++	if target == "" {
++		return fmt.Errorf("refusing to create symlink with empty target")
++	}
++	if strings.ContainsRune(target, 0) {
++		return fmt.Errorf("refusing to create symlink with target containing NUL")
++	}
++	if filepath.IsAbs(target) || filepath.VolumeName(target) != "" || strings.HasPrefix(target, "/") || strings.HasPrefix(target, string(filepath.Separator)) {
++		return fmt.Errorf("refusing to create symlink with absolute target %q (use --local-links-allow-unsafe to override)", target)
++	}
++	resolved := filepath.Join(filepath.Dir(o.path), target)
++	if !isWithin(filepath.Clean(o.fs.root), resolved) {
++		return fmt.Errorf("refusing to create symlink with target %q pointing outside the destination (use --local-links-allow-unsafe to override)", target)
++	}
++	return nil
++}
++
++// checkSymlinkResolved checks that the symlink just created at o.path
++// does not physically resolve outside the root of the Fs (this can
++// happen when chaining through other symlinks).
++func (o *Object) checkSymlinkResolved() error {
++	if o.fs.opt.LinksAllowUnsafe {
++		return nil
++	}
++	realRoot, err := filepath.EvalSymlinks(o.fs.root)
++	if err != nil {
++		return nil
++	}
++	resolved, err := filepath.EvalSymlinks(o.path)
++	if err != nil {
++		// Dangling link - the lexical check has already been done
++		return nil
++	}
++	if !isWithin(realRoot, resolved) {
++		return fmt.Errorf("refusing to create symlink which resolves to %q outside the destination (use --local-links-allow-unsafe to override)", resolved)
++	}
++	return nil
+ }
+ 
+ type nopWriterCloser struct {
+@@ -1542,7 +1636,15 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 				}
+ 			}
+ 			// Use the contents for the copied object to create a symlink
+-			err = os.Symlink(symlinkData.String(), o.path)
++			target := symlinkData.String()
++			if err = o.checkSymlinkTarget(target); err == nil {
++				err = os.Symlink(target, o.path)
++				if err == nil {
++					if err = o.checkSymlinkResolved(); err != nil {
++						_ = os.Remove(o.path)
++					}
++				}
++			}
+ 		}
+ 
+ 		// only continue if symlink creation succeeded
+diff --git a/backend/local/local_internal_test.go b/backend/local/local_internal_test.go
+index f36cc17..ec08044 100644
+--- a/backend/local/local_internal_test.go
++++ b/backend/local/local_internal_test.go
+@@ -730,3 +730,50 @@ func TestCopySymlink(t *testing.T) {
+ 	want = fstest.NewItem("dst2/file.txt", "hello world", when)
+ 	fstest.CompareItems(t, []fs.DirEntry{dst}, []fstest.Item{want}, nil, f.precision, "")
+ }
++
++// Test that symlinks from untrusted .rclonelink files can't escape the root
++// See: GHSA-cf44-9pgv-m4xc
++func TestUnsafeSymlinkTarget(t *testing.T) {
++	if runtime.GOOS == "windows" {
++		t.Skip("symlinks need privileges on windows")
++	}
++	ctx := context.Background()
++	r := fstest.NewRun(t)
++	f := r.Flocal.(*Fs)
++	f.opt.TranslateSymlinks = true
++
++	outside := t.TempDir()
++	when := time.Now()
++
++	put := func(remote, contents string) error {
++		src := object.NewStaticObjectInfo(remote, when, int64(len(contents)), true, nil, nil)
++		_, err := f.Put(ctx, bytes.NewBufferString(contents), src)
++		return err
++	}
++
++	for _, target := range []string{outside, "../../../../../../../../" + outside, "..", "a/../../x"} {
++		require.Error(t, put("pwn.rclonelink", target), target)
++		_, err := os.Lstat(filepath.Join(f.root, "pwn"))
++		require.True(t, os.IsNotExist(err), target)
++	}
++
++	// Chained escape via an intermediate symlink
++	require.NoError(t, put("a/b/up.rclonelink", ".."))
++	require.Error(t, put("chain.rclonelink", "a/b/up/../.."))
++
++	// Write through a pre-planted escaping symlink must fail
++	require.NoError(t, os.Symlink(outside, filepath.Join(f.root, "planted")))
++	require.Error(t, put("planted/authorized_keys", "pwned"))
++	_, err := os.Stat(filepath.Join(outside, "authorized_keys"))
++	require.True(t, os.IsNotExist(err))
++
++	// Safe relative links still work
++	require.NoError(t, put("dir/ok.rclonelink", "../file.txt"))
++	got, err := os.Readlink(filepath.Join(f.root, "dir", "ok"))
++	require.NoError(t, err)
++	assert.Equal(t, "../file.txt", got)
++
++	// Opt-out allows absolute links
++	f.opt.LinksAllowUnsafe = true
++	require.NoError(t, put("abs.rclonelink", outside))
++}

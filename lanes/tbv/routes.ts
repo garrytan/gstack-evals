@@ -11,8 +11,8 @@ import { ARM_MODELS, type Judge, type Model, type PacketKind, type SendRequest }
 export const KEY_WRITER = { provider: "openrouter" as Provider, model: "google/gemini-4-argon" };
 /** Judge max output tokens per packet kind (review round: explicit, used by the projection). */
 export const JUDGE_MAX_TOKENS: Readonly<Record<PacketKind, number>> = { first: 16000, control: 16000, d2: 8000 };
-/** The judges and auditors: Sol on OpenAI's own Responses route, Opus on Anthropic's Messages route. */
-export const JUDGE_MODELS: Readonly<Record<Judge, { provider: "openai" | "anthropic"; id: string }>> = { sol: { provider: "openai", id: "gpt-6.1-sol" }, opus: { provider: "anthropic", id: "claude-opus-5-5" } };
+/** The judges and auditors: Sol on OpenAI's own Responses route, Opus on Anthropic's Messages route; Astra (the R78 addendum) on OpenAI's Responses route. */
+export const JUDGE_MODELS: Readonly<Record<Judge, { provider: "openai" | "anthropic"; id: string }>> = { sol: { provider: "openai", id: "gpt-6.1-sol" }, opus: { provider: "anthropic", id: "claude-opus-5-5" }, astra: { provider: "openai", id: "gpt-6.2-astra" } };
 export const JUDGE_EFFORT = JUDGE_REASONING_EFFORT;
 
 /** An arm request: the built Messages body on the model's route, streamed. Extended thinking is off at every turn, so a body that carries a thinking field is refused. */

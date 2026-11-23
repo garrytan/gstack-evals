@@ -1,0 +1,157 @@
+diff --git a/crates/obscura-cdp/src/dispatch.rs b/crates/obscura-cdp/src/dispatch.rs
+index cfeb540..6391a94 100644
+--- a/crates/obscura-cdp/src/dispatch.rs
++++ b/crates/obscura-cdp/src/dispatch.rs
+@@ -43,6 +43,12 @@ pub struct CdpContext {
+     // claims and increments from this counter so the ids real Chrome would
+     // emit (incrementing, never reused) are mirrored.
+     pub next_isolated_context_id: i64,
++    // Owning page for each isolated-world context id in `valid_context_ids`.
++    // Navigation emits Runtime.executionContextsCleared for that page, so its
++    // previous isolated contexts are pruned from `valid_context_ids` (stale ids
++    // must be rejected, and the set must not grow without bound). Default ids
++    // 1/2 are shared constants and are not tracked here.
++    pub isolated_context_owners: HashMap<i64, String>,
+     pub fetch_intercept: FetchInterceptState,
+     pub intercept_tx: Option<tokio::sync::mpsc::UnboundedSender<InterceptedRequest>>,
+     // Open IO streams for Fetch.takeResponseBodyAsStream. Each holds a response
+@@ -147,19 +153,36 @@ impl CdpContext {
+             isolated_worlds: Vec::new(),
+             valid_context_ids,
+             next_isolated_context_id: 100,
++            isolated_context_owners: HashMap::new(),
+             io_streams: crate::domains::io::IoStreamStore::default(),
+         }
+     }
+ 
+     /// Claim the next isolated-world execution context id and register it as
+-    /// valid for `Runtime.evaluate`/`callFunctionOn`. Issue #192.
+-    pub fn next_isolated_context(&mut self) -> i64 {
++    /// valid for `Runtime.evaluate`/`callFunctionOn`, owned by `page_id`.
++    /// Issue #192.
++    pub fn next_isolated_context(&mut self, page_id: &str) -> i64 {
+         let id = self.next_isolated_context_id;
+         self.next_isolated_context_id += 1;
+         self.valid_context_ids.insert(id);
++        self.isolated_context_owners.insert(id, page_id.to_string());
+         id
+     }
+ 
++    /// Invalidate every isolated-world context id owned by `page_id`. Called
++    /// when the page's contexts are cleared (navigation) or the page closes.
++    pub fn clear_isolated_contexts(&mut self, page_id: &str) {
++        let valid = &mut self.valid_context_ids;
++        self.isolated_context_owners.retain(|id, owner| {
++            if owner == page_id {
++                valid.remove(id);
++                false
++            } else {
++                true
++            }
++        });
++    }
++
+     pub fn create_page(&mut self) -> String {
+         self.page_counter += 1;
+         let page_id = format!("page-{}", self.page_counter);
+@@ -178,6 +201,7 @@ impl CdpContext {
+     }
+ 
+     pub fn remove_page(&mut self, id: &str) {
++        self.clear_isolated_contexts(id);
+         self.pages.retain(|p| p.id != id);
+         self.sessions.retain(|_, v| v != id);
+     }
+diff --git a/crates/obscura-cdp/src/domains/page.rs b/crates/obscura-cdp/src/domains/page.rs
+index dd84b5e..5c02c80 100644
+--- a/crates/obscura-cdp/src/domains/page.rs
++++ b/crates/obscura-cdp/src/domains/page.rs
+@@ -84,9 +84,12 @@ pub fn emit_navigation_events(
+     } else {
+         ctx.isolated_worlds.clone()
+     };
++    // Runtime.executionContextsCleared above tells the client every context
++    // of this page is gone; stop accepting the old isolated-world ids.
++    ctx.clear_isolated_contexts(page_id);
+     // Issue #192: fresh, monotonically increasing executionContextId per re-create.
+     for world_name in &world_names {
+-        let world_ctx_id = ctx.next_isolated_context();
++        let world_ctx_id = ctx.next_isolated_context(page_id);
+         phase1.push(CdpEvent {
+             method: "Runtime.executionContextCreated".into(),
+             params: json!({"context": {"id": world_ctx_id, "origin": page_url, "name": world_name, "uniqueId": format!("ctx-isolated-nav-{}-{}", page_id, world_ctx_id), "auxData": {"isDefault": false, "type": "isolated", "frameId": frame_id}}}),
+@@ -341,7 +344,7 @@ pub async fn handle(
+             // Reusing id 100 across navigations made Playwright's bookkeeping
+             // diverge (it expected 101 on the second nav) and Runtime.evaluate
+             // failed with "Cannot find context with specified id: 101".
+-            let context_id = ctx.next_isolated_context();
++            let context_id = ctx.next_isolated_context(&page_id);
+ 
+             ctx.pending_events.push(CdpEvent {
+                 method: "Runtime.executionContextCreated".to_string(),
+@@ -681,4 +684,65 @@ mod tests {
+         );
+         assert_eq!(info["canAccessOpener"], json!(false));
+     }
++
++    #[tokio::test]
++    async fn navigation_invalidates_cleared_isolated_contexts() {
++        // Navigation emits Runtime.executionContextsCleared; isolated-world
++        // context ids minted before it must stop validating (and the set must
++        // stay bounded), while other pages' contexts are untouched.
++        let mut ctx = CdpContext::new();
++        let page_id = ctx.create_page();
++        let session_id = format!("{}-session", page_id);
++        ctx.sessions.insert(session_id.clone(), page_id.clone());
++        let sid = Some(session_id.clone());
++        let other_page = ctx.create_page();
++
++        let created = handle(
++            "createIsolatedWorld",
++            &json!({ "worldName": "utility" }),
++            &mut ctx,
++            &sid,
++        )
++        .await
++        .expect("createIsolatedWorld should succeed");
++        let old_id = created["executionContextId"].as_i64().unwrap();
++        assert!(ctx.valid_context_ids.contains(&old_id));
++        let other_id = ctx.next_isolated_context(&other_page);
++
++        let nav = json!({ "url": "data:text/html,<p>a</p>", "waitUntil": "load" });
++        for _ in 0..5 {
++            handle("navigate", &nav, &mut ctx, &sid)
++                .await
++                .expect("navigate should succeed");
++        }
++
++        let err = crate::domains::runtime::handle(
++            "evaluate",
++            &json!({ "expression": "1 + 1", "contextId": old_id }),
++            &mut ctx,
++            &sid,
++        )
++        .await
++        .expect_err("pre-navigation context id must be rejected");
++        assert!(err.contains("Cannot find context with specified id"), "{err}");
++
++        // Only the defaults, the other page's context, and the one live
++        // isolated world from the latest navigation remain.
++        let live_id = ctx.next_isolated_context_id - 1;
++        let mut ids: Vec<i64> = ctx.valid_context_ids.iter().copied().collect();
++        ids.sort();
++        assert_eq!(ids, vec![1, 2, other_id, live_id]);
++
++        crate::domains::runtime::handle(
++            "evaluate",
++            &json!({ "expression": "1 + 1", "contextId": live_id }),
++            &mut ctx,
++            &sid,
++        )
++        .await
++        .expect("freshly minted isolated context must be accepted");
++
++        ctx.remove_page(&other_page);
++        assert!(!ctx.valid_context_ids.contains(&other_id));
++    }
+ }

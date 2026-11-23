@@ -1,0 +1,331 @@
+diff --git a/Terminal.Gui/ViewBase/Adornment/ShadowView.cs b/Terminal.Gui/ViewBase/Adornment/ShadowView.cs
+index 4048b35..356df18 100644
+--- a/Terminal.Gui/ViewBase/Adornment/ShadowView.cs
++++ b/Terminal.Gui/ViewBase/Adornment/ShadowView.cs
+@@ -179,8 +179,7 @@ internal class ShadowView : View
+         {
+             return newAttribute;
+         }
+-        List<View?> currentViewsUnderMouse = GetViewsUnderLocation (location, ViewportSettingsFlags.Transparent);
+-        View? underView = currentViewsUnderMouse.LastOrDefault ();
++        View? underView = GetViewUnderShadow (location);
+         attr = underView?.GetAttributeForRole (VisualRole.Normal) ?? Attribute.Default;
+ 
+         newAttribute = new Attribute (ShadowStyle == ShadowStyle.Opaque ? Color.Black : attr.Background.GetDimmerColor (),
+@@ -189,4 +188,68 @@ internal class ShadowView : View
+ 
+         return newAttribute;
+     }
++
++    /// <summary>
++    ///     Gets the deepest View under <paramref name="location"/> that is NOT the View casting this shadow (the
++    ///     <see cref="Adornment.Parent"/> of the <see cref="Margin"/> this shadow lives in), nor any of its adornments
++    ///     or SubViews (including this <see cref="ShadowView"/> itself).
++    /// </summary>
++    /// <remarks>
++    ///     The shadow is drawn within its caster's Frame, so a plain hit-test at <paramref name="location"/> finds the
++    ///     shadow (or its caster) itself. Using that view's attribute tints the shadow with the caster's own
++    ///     <see cref="Scheme"/> (e.g. the "Dialog" scheme), instead of reflecting what is actually beneath it.
++    /// </remarks>
++    private View? GetViewUnderShadow (Point location)
++    {
++        View? caster = (SuperView as Adornment)?.Parent;
++
++        List<View?> roots = [];
++
++        if (App?.SessionStack is { Count: > 0 } sessionStack)
++        {
++            // Topmost first
++            roots.AddRange (sessionStack.Select (r => r.Runnable as View));
++        }
++
++        if (App?.TopRunnableView is { } top && !roots.Contains (top))
++        {
++            roots.Add (top);
++        }
++
++        foreach (View? root in roots)
++        {
++            if (root is not { Visible: true })
++            {
++                continue;
++            }
++
++            View? underView = GetViewsUnderLocation (root, location, ViewportSettingsFlags.Transparent)
++                              .LastOrDefault (v => v is { } && !IsPartOf (v, caster) && !IsPartOf (v, this));
++
++            if (underView is { })
++            {
++                return underView;
++            }
++        }
++
++        return null;
++
++        static bool IsPartOf (View view, View? ancestor)
++        {
++            if (ancestor is null)
++            {
++                return false;
++            }
++
++            for (View? current = view; current is { }; current = current is Adornment adornment ? adornment.Parent : current.SuperView)
++            {
++                if (current == ancestor)
++                {
++                    return true;
++                }
++            }
++
++            return false;
++        }
++    }
+ }
+diff --git a/Terminal.Gui/Views/DialogTResult.cs b/Terminal.Gui/Views/DialogTResult.cs
+index 94f4d99..a603447 100644
+--- a/Terminal.Gui/Views/DialogTResult.cs
++++ b/Terminal.Gui/Views/DialogTResult.cs
+@@ -75,6 +75,9 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+     /// </remarks>
+     public Dialog ()
+     {
++        // The base (Runnable) constructor sets a default SchemeName; that is not an explicit set by the developer.
++        _schemeNameExplicitlySet = false;
++
+         X = Pos.Center ();
+         Y = Pos.Center ();
+ 
+@@ -91,7 +94,8 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         BorderStyle = Dialog.DefaultBorderStyle;
+         base.ShadowStyle = Dialog.DefaultShadow;
+ 
+-        SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Dialog);
++        // NOTE: SchemeName is managed by SetStyle (Base when not running, Dialog when running) unless
++        // NOTE: explicitly set by the developer. See SetStyle.
+ 
+         CommandsToBubbleUp = [Command.Accept];
+ 
+@@ -350,21 +354,60 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         }
+     }
+ 
++    // True once the developer (or a subclass) has explicitly set SchemeName. When true, SetStyle will not
++    // override the SchemeName (e.g. MessageBox.ErrorQuery sets the Error scheme before running).
++    private bool _schemeNameExplicitlySet;
++
++    // True while SetStyle is applying the default SchemeName, so OnSchemeNameChanged can tell the
++    // difference between the default being applied and an explicit set.
++    private bool _applyingDefaultSchemeName;
++
++    /// <inheritdoc/>
++    protected override void OnSchemeNameChanged (ValueChangedEventArgs<string?> args)
++    {
++        base.OnSchemeNameChanged (args);
++
++        if (!_applyingDefaultSchemeName)
++        {
++            _schemeNameExplicitlySet = true;
++        }
++    }
++
+     private void SetStyle ()
+     {
+         if (IsRunning)
+         {
++            ApplyDefaultSchemeName (Schemes.Dialog);
+             Arrangement |= ViewArrangement.Movable | ViewArrangement.Resizable | ViewArrangement.Overlapped;
+         }
+         else
+         {
+-            SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base);
++            ApplyDefaultSchemeName (Schemes.Base);
+ 
+             // strip out movable and resizable
+             Arrangement &= ~(ViewArrangement.Movable | ViewArrangement.Resizable);
+         }
+     }
+ 
++    private void ApplyDefaultSchemeName (Schemes scheme)
++    {
++        if (_schemeNameExplicitlySet)
++        {
++            return;
++        }
++
++        _applyingDefaultSchemeName = true;
++
++        try
++        {
++            SchemeName = SchemeManager.SchemesToSchemeName (scheme);
++        }
++        finally
++        {
++            _applyingDefaultSchemeName = false;
++        }
++    }
++
+     // Dialogs are Modal and Focus is indicated by their Border. _drawingText ensures the
+     // Text of the dialog (e.g. for a MessageBox) is always drawn using the Normal Attribute
+     // instead of the Focus attribute.
+diff --git a/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs b/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs
+new file mode 100644
+index 0000000..ff10d12
+--- /dev/null
++++ b/Tests/UnitTestsParallelizable/Views/DialogSchemeTests.cs
+@@ -0,0 +1,156 @@
++using UnitTests;
++
++namespace ViewsTests;
++
++/// <summary>
++///     Tests illustrating how <see cref="Dialog"/> and views using <c>SchemeName = "Dialog"</c> resolve and render
++///     their <see cref="Scheme"/>.
++/// </summary>
++public class DialogSchemeTests (ITestOutputHelper output)
++{
++    private static IApplication CreateApp (int width = 40, int height = 12)
++    {
++        IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++        app.Driver!.SetScreenSize (width, height);
++
++        return app;
++    }
++
++    [Fact]
++    public void Dialog_Not_Running_Uses_Base_SchemeName ()
++    {
++        using Dialog dialog = new ();
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Base), dialog.SchemeName);
++    }
++
++    // The documented behavior is that a Dialog "uses the Dialog color scheme when running".
++    [Fact]
++    public void Dialog_Running_Uses_Dialog_SchemeName ()
++    {
++        using IApplication app = CreateApp ();
++        using Dialog dialog = new () { Title = "T", Text = "Hello" };
++        dialog.AddButton (new Button { Title = "_OK" });
++
++        app.Begin (dialog);
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Dialog), dialog.SchemeName);
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog), dialog.GetScheme ());
++    }
++
++    [Fact]
++    public void Dialog_Running_Draws_With_Dialog_Scheme ()
++    {
++        using IApplication app = CreateApp ();
++        using Dialog dialog = new () { Title = "T", X = 0, Y = 0 };
++        dialog.Add (new Label { Text = "Hello" });
++        dialog.AddButton (new Button { Title = "_OK" });
++
++        app.Begin (dialog);
++        app.LayoutAndDraw ();
++
++        Attribute expected = SchemeManager.GetScheme (Schemes.Dialog).Normal;
++
++        // Top-left border corner and the Label's first cell (inside the border)
++        Assert.Equal (expected, app.Driver!.Contents! [0, 0].Attribute);
++        Assert.Equal ("H", app.Driver.Contents [1, 1].Grapheme);
++        Assert.Equal (expected, app.Driver.Contents [1, 1].Attribute);
++    }
++
++    [Fact]
++    public void Dialog_Subclass_Running_Uses_Dialog_SchemeName ()
++    {
++        using IApplication app = CreateApp ();
++        using Dialog<int> dialog = new () { Title = "T" };
++
++        app.Begin (dialog);
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Dialog), dialog.SchemeName);
++    }
++
++    [Fact]
++    public void Dialog_Explicit_SchemeName_Is_Preserved_When_Running ()
++    {
++        using IApplication app = CreateApp ();
++        using Dialog dialog = new () { Title = "T" };
++        dialog.SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Error);
++
++        app.Begin (dialog);
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Error), dialog.SchemeName);
++    }
++
++    [Fact]
++    public void Dialog_Explicit_SchemeName_Is_Preserved_When_Not_Running ()
++    {
++        using Dialog dialog = new () { SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Dialog) };
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Dialog), dialog.SchemeName);
++    }
++
++    /// <summary>
++    ///     A transparent shadow must be derived from what is *under* the shadow, never from the view casting it.
++    ///     The shadow's fallback used to find itself (the ShadowView) as the "view under", and so tinted the
++    ///     shadow using the casting view's own scheme (very visible with the "Dialog" scheme: a bright blue band).
++    /// </summary>
++    [Fact]
++    public void Dialog_Transparent_Shadow_Is_Not_Derived_From_Dialog_Scheme ()
++    {
++        using IApplication app = CreateApp ();
++        using Runnable top = new ();
++        top.SetScheme (new () { Normal = new (Color.White, Color.Black) });
++        app.Begin (top);
++
++        using Dialog dialog = new () { Title = "T", X = 0, Y = 0, SchemeName = "Dialog" };
++        dialog.ShadowStyle = ShadowStyle.Transparent;
++        dialog.Add (new Label { Text = "Hello" });
++        app.Begin (dialog);
++        app.LayoutAndDraw ();
++
++        AssertShadowColumnDerivedFrom (app, dialog, top.GetAttributeForRole (VisualRole.Normal), dialog.GetAttributeForRole (VisualRole.Normal));
++    }
++
++    [Fact]
++    public void View_With_Dialog_SchemeName_Transparent_Shadow_Is_Not_Derived_From_Own_Scheme ()
++    {
++        using IApplication app = CreateApp ();
++        using Runnable top = new ();
++        top.SetScheme (new () { Normal = new (Color.White, Color.Black) });
++
++        View view = new ()
++        {
++            X = 1,
++            Y = 1,
++            Width = 10,
++            Height = 4,
++            SchemeName = "Dialog",
++            BorderStyle = LineStyle.Single,
++            ShadowStyle = ShadowStyle.Transparent
++        };
++        top.Add (view);
++        app.Begin (top);
++        app.LayoutAndDraw ();
++
++        AssertShadowColumnDerivedFrom (app, view, top.GetAttributeForRole (VisualRole.Normal), view.GetAttributeForRole (VisualRole.Normal));
++    }
++
++    private void AssertShadowColumnDerivedFrom (IApplication app, View caster, Attribute under, Attribute casterNormal)
++    {
++        // The vertical shadow occupies the right-most column of the caster's frame (excluding the first row).
++        Rectangle frame = caster.FrameToScreen ();
++        int col = frame.Right - 1;
++        int row = frame.Y + 1;
++        Attribute actual = app.Driver!.Contents! [row, col].Attribute!.Value;
++
++        // ShadowView's fallback (used when the cell under the shadow has a dark background) is computed from the
++        // Normal attribute of the view under the shadow.
++        Attribute fromUnder = new (under.Background.GetDimmerColor (), under.Foreground.GetDimmerColor (0.25), under.Style);
++        Attribute fromCaster = new (casterNormal.Background.GetDimmerColor (), casterNormal.Foreground.GetDimmerColor (0.25), casterNormal.Style);
++
++        output.WriteLine ($"shadow cell [{row},{col}] = {actual}; fromUnder = {fromUnder}; fromCaster = {fromCaster}");
++
++        Assert.NotEqual (fromCaster, actual);
++        Assert.Equal (fromUnder, actual);
++    }
++}

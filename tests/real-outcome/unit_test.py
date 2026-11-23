@@ -738,6 +738,32 @@ def test_snapshot_leaves_out_excluded_dependency_folders_whatever_gitignore_says
         assert files({"exclude": ["node_modules", "pkg/node_modules"]}) == [".gitignore", "pkg/index.js"]
 
 
+def test_snapshot_keeps_an_edit_made_in_the_same_clock_tick_as_the_index():
+    """An edit that keeps a file's size and lands in the same mtime tick as the index write leaves git's stat data
+    unchanged; only the index file's own mtime tells git to compare content (racy git). SNAPSHOT copies the index with
+    its mtime, so the edit still reaches the patch. The fixture pins the file and the index to one tick a minute back and
+    turns off ctime checks, so the race happens on every run instead of whenever the copy lands in a later second."""
+    import os
+    import subprocess
+
+    with tempfile.TemporaryDirectory() as d:
+        git = ["git", "-C", d, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid"]
+        subprocess.run(git[:3] + ["init", "-q", "-b", "main"], check=True)
+        subprocess.run(git[:3] + ["config", "core.trustctime", "false"], check=True)
+        Path(d, "a.txt").write_text("one\n")
+        tick = (int(time.time()) - 60) * 10**9
+        os.utime(Path(d, "a.txt"), ns=(tick, tick))
+        subprocess.run(git + ["add", "-A"], check=True)
+        subprocess.run(git + ["commit", "-q", "-m", "base"], check=True)
+        base = subprocess.run(git[:3] + ["rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+        Path(d, "a.txt").write_text("two\n")
+        os.utime(Path(d, "a.txt"), ns=(tick, tick))
+        os.utime(Path(d, ".git/index"), ns=(tick, tick))
+        script = ra.SNAPSHOT.format(repo=d, base=base, exclude="")
+        out = subprocess.run(["sh", "-c", script], check=True, capture_output=True, text=True).stdout
+        assert re.findall(r"^diff --git a/(\S+) ", out, re.M) == ["a.txt"] and "+two" in out
+
+
 def main():
     failed = 0
     for name, fn in list(globals().items()):

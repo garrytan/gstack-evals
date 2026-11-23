@@ -1,0 +1,59 @@
+diff --git a/examples/blp_model.conf b/examples/blp_model.conf
+new file mode 100644
+index 0000000..845ccc2
+--- /dev/null
++++ b/examples/blp_model.conf
+@@ -0,0 +1,11 @@
++[request_definition]
++r = sub, sub_level, obj, obj_level, act
++
++[policy_definition]
++p = sub, obj, act
++
++[policy_effect]
++e = some(where (p.eft == allow))
++
++[matchers]
++m = (r.act == "read" && r.sub_level >= r.obj_level) || (r.act == "write" && r.sub_level <= r.obj_level)
+diff --git a/model_test.go b/model_test.go
+index 98a09e2..5ef2207 100644
+--- a/model_test.go
++++ b/model_test.go
+@@ -706,3 +706,37 @@ func TestReBACModel(t *testing.T) {
+ 	testEnforce(t, e, "bob", "doc3", "read", false)
+ 	testEnforce(t, e, "bob", "doc3", "write", false)
+ }
++
++func testEnforceBLP(t *testing.T, e *Enforcer, sub string, subLevel int, obj string, objLevel int, act string, res bool) {
++	t.Helper()
++	if myRes, err := e.Enforce(sub, subLevel, obj, objLevel, act); err != nil {
++		t.Errorf("Enforce Error: %s", err)
++	} else if myRes != res {
++		t.Errorf("%s, %d, %s, %d, %s: %t, supposed to be %t", sub, subLevel, obj, objLevel, act, myRes, res)
++	}
++}
++
++// TestBLPModel tests the Bell-LaPadula model: no read up, no write down.
++func TestBLPModel(t *testing.T) {
++	e, err := NewEnforcer("examples/blp_model.conf")
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	// Simple security property: a subject can read objects at or below its level.
++	testEnforceBLP(t, e, "alice", 3, "data1", 1, "read", true)
++	testEnforceBLP(t, e, "bob", 2, "data2", 2, "read", true)
++	testEnforceBLP(t, e, "charlie", 1, "data1", 1, "read", true)
++	testEnforceBLP(t, e, "bob", 2, "data3", 3, "read", false)
++	testEnforceBLP(t, e, "charlie", 1, "data2", 2, "read", false)
++
++	// *-property: a subject can write objects at or above its level.
++	testEnforceBLP(t, e, "alice", 3, "data3", 3, "write", true)
++	testEnforceBLP(t, e, "bob", 2, "data3", 3, "write", true)
++	testEnforceBLP(t, e, "charlie", 1, "data2", 2, "write", true)
++	testEnforceBLP(t, e, "alice", 3, "data1", 1, "write", false)
++	testEnforceBLP(t, e, "bob", 2, "data1", 1, "write", false)
++
++	// Unknown actions are denied.
++	testEnforceBLP(t, e, "alice", 3, "data1", 1, "delete", false)
++}

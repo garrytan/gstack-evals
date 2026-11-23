@@ -1,0 +1,491 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 11ccb2c..669571e 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -32,6 +32,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
+     non-MCP-first sentence.
+ 
+ ### Fixed
++- **`ctx_edit` no longer fails when `old_string` was copied from a compressed
++  `ctx_read` view.** Modes like `aggressive` strip blank lines and comments and
++  halve indentation, so the quoted text did not exist verbatim on disk. When the
++  exact, CRLF and trailing-whitespace matches all miss, `ctx_edit` now matches
++  the non-blank lines of `old_string` (whitespace-trimmed), allowing only
++  blank/comment lines in between. The match must be unique. The edit is applied
++  as a line diff onto the original span, so stripped blank lines and comments
++  are kept, and inserted lines get their indentation mapped back to the file's.
+ - **The Codex `lean-ctx -c` SessionStart hook is no longer a redundant nag (#625).**
+   Codex's `PreToolUse` hook already rewrites every rewritable Bash command to
+   `lean-ctx -c "<command>"` transparently (`permissionDecision: allow` +
+diff --git a/rust/src/tools/ctx_edit.rs b/rust/src/tools/ctx_edit.rs
+index 7aff71f..0206577 100644
+--- a/rust/src/tools/ctx_edit.rs
++++ b/rust/src/tools/ctx_edit.rs
+@@ -280,6 +280,36 @@ pub fn run_io(params: &EditParams, last_mode: &str) -> (String, CacheEffect) {
+         }
+     }
+ 
++    // Compressed ctx_read views strip blank/comment lines and normalize
++    // indentation; tolerate an old_string copied from such a view.
++    let line_sep = if uses_crlf { "\r\n" } else { "\n" };
++    match crate::tools::edit_stripped::find_stripped_match(content, old_str, new_str, line_sep) {
++        crate::tools::edit_stripped::StrippedOutcome::Found(m) => {
++            let span = &content[m.start..m.end];
++            let args = ReplaceArgs {
++                content,
++                old_str: span,
++                new_str: &m.replacement,
++                occurrences: content.matches(span).count(),
++                replace_all: false,
++                old_tokens: count_tokens(&params.old_string),
++                new_tokens: count_tokens(&params.new_string),
++            };
++            return do_replace(path, &pre, params, cap, &args);
++        }
++        crate::tools::edit_stripped::StrippedOutcome::Ambiguous(n) => {
++            return (
++                format!(
++                    "ERROR: old_string not found verbatim in {file_path}; ignoring stripped \
++                     blank/comment lines it matches {n} locations. Provide more context, or \
++                     re-read with ctx_read(mode=\"full\") and copy the exact text."
++                ),
++                CacheEffect::None,
++            );
++        }
++        crate::tools::edit_stripped::StrippedOutcome::NotFound => {}
++    }
++
+     if content.contains(new_str) {
+         return (
+             format!(
+@@ -713,6 +743,32 @@ mod tests {
+         assert_eq!(content, "ccc bbb ccc\n");
+     }
+ 
++    #[test]
++    fn old_string_from_stripped_read_view_still_applies() {
++        // ctx_read(mode="aggressive") drops blank lines and comments and halves
++        // indentation; an old_string copied from that view must still apply.
++        let f = make_temp(
++            "fn main() {\n    let a = 1;\n\n    // keep me\n    let b = 2;\n    println!(\"{a}{b}\");\n}\n",
++        );
++        let mut cache = SessionCache::new();
++        let result = handle(
++            &mut cache,
++            &mk_params(
++                f.path(),
++                "  let a = 1;\n  let b = 2;",
++                "  let a = 1;\n  let b = 3;",
++                false,
++                false,
++            ),
++        );
++        assert!(result.contains("1 replacement"), "{result}");
++        let content = std::fs::read_to_string(f.path()).unwrap();
++        assert_eq!(
++            content,
++            "fn main() {\n    let a = 1;\n\n    // keep me\n    let b = 3;\n    println!(\"{a}{b}\");\n}\n"
++        );
++    }
++
+     #[test]
+     fn not_found_error() {
+         let f = make_temp("some content\n");
+diff --git a/rust/src/tools/edit_stripped.rs b/rust/src/tools/edit_stripped.rs
+new file mode 100644
+index 0000000..445eec0
+--- /dev/null
++++ b/rust/src/tools/edit_stripped.rs
+@@ -0,0 +1,380 @@
++//! Stripped-view tolerant matching for `ctx_edit`.
++//!
++//! Compressed `ctx_read` modes (`aggressive`, `entropy`, `task`, …) drop blank
++//! lines and comment lines and may normalize indentation. An agent that copies
++//! `old_string` from such a view quotes text that no longer exists verbatim on
++//! disk, so the exact match fails even though the intended span is unambiguous.
++//!
++//! This module locates the original span by matching the non-blank lines of
++//! `old_string` (whitespace-trimmed) against the file, allowing *only* blank or
++//! comment-only lines to sit between them. The replacement is then applied as a
++//! line diff of `old_string → new_string` onto the original span, so the lines
++//! the view stripped (blank lines, comments) survive and untouched lines keep
++//! their exact on-disk bytes and indentation.
++
++use similar::{Algorithm, DiffOp, capture_diff_slices};
++
++/// Result of a successful stripped-view match.
++pub(crate) struct StrippedMatch {
++    /// Byte range of the original span in the file content.
++    pub start: usize,
++    pub end: usize,
++    /// Rebuilt replacement for that span.
++    pub replacement: String,
++}
++
++pub(crate) enum StrippedOutcome {
++    NotFound,
++    Ambiguous(usize),
++    Found(StrippedMatch),
++}
++
++/// Lines a compressed view may drop entirely.
++fn is_skippable(line: &str) -> bool {
++    let t = line.trim();
++    t.is_empty()
++        || t.starts_with("//")
++        || t.starts_with("/*")
++        || t.starts_with("*/")
++        || t.starts_with('*')
++        || t.starts_with('#')
++        || t.starts_with("--")
++        || t.starts_with("<!--")
++        || t.starts_with("-->")
++}
++
++struct Line<'a> {
++    text: &'a str,
++    start: usize,
++}
++
++fn split_lines(content: &str) -> Vec<Line<'_>> {
++    let mut out = Vec::new();
++    let mut pos = 0usize;
++    for raw in content.split_inclusive('\n') {
++        let text = raw
++            .strip_suffix('\n')
++            .map(|s| s.strip_suffix('\r').unwrap_or(s))
++            .unwrap_or(raw);
++        out.push(Line { text, start: pos });
++        pos += raw.len();
++    }
++    out
++}
++
++fn leading_ws(s: &str) -> &str {
++    &s[..s.len() - s.trim_start().len()]
++}
++
++/// Tries to match `old` against `content` tolerating stripped blank/comment
++/// lines and indentation differences, and builds the replacement span.
++pub(crate) fn find_stripped_match(
++    content: &str,
++    old: &str,
++    new: &str,
++    line_sep: &str,
++) -> StrippedOutcome {
++    let old_nb: Vec<&str> = old
++        .lines()
++        .map(|l| l.strip_suffix('\r').unwrap_or(l))
++        .filter(|l| !l.trim().is_empty())
++        .collect();
++    if old_nb.is_empty() {
++        return StrippedOutcome::NotFound;
++    }
++    let old_trim: Vec<&str> = old_nb.iter().map(|l| l.trim()).collect();
++    let file = split_lines(content);
++
++    let mut matches: Vec<Vec<usize>> = Vec::new();
++    for s in 0..file.len() {
++        if file[s].text.trim() != old_trim[0] {
++            continue;
++        }
++        let mut idx = vec![s];
++        let mut j = s;
++        let mut ok = true;
++        for want in &old_trim[1..] {
++            j += 1;
++            loop {
++                if j >= file.len() {
++                    ok = false;
++                    break;
++                }
++                let t = file[j].text.trim();
++                if t == *want {
++                    break;
++                }
++                if !is_skippable(file[j].text) {
++                    ok = false;
++                    break;
++                }
++                j += 1;
++            }
++            if !ok {
++                break;
++            }
++            idx.push(j);
++        }
++        if ok {
++            matches.push(idx);
++        }
++    }
++
++    match matches.len() {
++        0 => return StrippedOutcome::NotFound,
++        1 => {}
++        n => return StrippedOutcome::Ambiguous(n),
++    }
++    let idx = matches.pop().unwrap_or_default();
++    let first = idx[0];
++    let last = *idx.last().unwrap_or(&first);
++
++    let reindent = Reindent::infer(&old_nb, &idx, &file);
++
++    let new_lines: Vec<&str> = new
++        .lines()
++        .map(|l| l.strip_suffix('\r').unwrap_or(l))
++        .collect();
++    let new_trim: Vec<&str> = new_lines.iter().map(|l| l.trim()).collect();
++
++    let ops = capture_diff_slices(Algorithm::Myers, &old_trim, &new_trim);
++
++    let n = old_nb.len();
++    let mut deleted = vec![false; n];
++    for op in &ops {
++        if let DiffOp::Delete {
++            old_index, old_len, ..
++        } = *op
++        {
++            for d in deleted.iter_mut().skip(old_index).take(old_len) {
++                *d = true;
++            }
++        }
++    }
++
++    let mut out: Vec<String> = Vec::new();
++    let emit_gap = |k: usize, out: &mut Vec<String>| {
++        if k + 1 >= n || (deleted[k] && deleted[k + 1]) {
++            return;
++        }
++        for line in &file[idx[k] + 1..idx[k + 1]] {
++            out.push(line.text.to_string());
++        }
++    };
++    let emit_new = |ni: usize, out: &mut Vec<String>| {
++        out.push(reindent.apply(new_lines[ni]));
++    };
++
++    for op in &ops {
++        match *op {
++            DiffOp::Equal {
++                old_index,
++                new_index,
++                len,
++            } => {
++                for i in 0..len {
++                    let k = old_index + i;
++                    let ni = new_index + i;
++                    if leading_ws(new_lines[ni]) == leading_ws(old_nb[k]) {
++                        out.push(file[idx[k]].text.to_string());
++                    } else {
++                        emit_new(ni, &mut out);
++                    }
++                    emit_gap(k, &mut out);
++                }
++            }
++            DiffOp::Delete {
++                old_index, old_len, ..
++            } => {
++                for k in old_index..old_index + old_len {
++                    emit_gap(k, &mut out);
++                }
++            }
++            DiffOp::Insert {
++                new_index, new_len, ..
++            } => {
++                for ni in new_index..new_index + new_len {
++                    emit_new(ni, &mut out);
++                }
++            }
++            DiffOp::Replace {
++                old_index,
++                old_len,
++                new_index,
++                new_len,
++            } => {
++                if old_len == new_len {
++                    for i in 0..old_len {
++                        emit_new(new_index + i, &mut out);
++                        emit_gap(old_index + i, &mut out);
++                    }
++                } else {
++                    for ni in new_index..new_index + new_len {
++                        emit_new(ni, &mut out);
++                    }
++                    for k in old_index..old_index + old_len {
++                        emit_gap(k, &mut out);
++                    }
++                }
++            }
++        }
++    }
++
++    let start = file[first].start;
++    let end = file[last].start + file[last].text.len();
++    StrippedOutcome::Found(StrippedMatch {
++        start,
++        end,
++        replacement: out.join(line_sep),
++    })
++}
++
++/// Maps indentation from the stripped view back to the file's indentation.
++/// Compressed views may halve space indentation; inferred from matched pairs.
++struct Reindent {
++    factor: usize,
++    offset: isize,
++    unit: char,
++    active: bool,
++}
++
++impl Reindent {
++    fn infer(old_nb: &[&str], idx: &[usize], file: &[Line<'_>]) -> Self {
++        let pairs: Vec<(usize, usize)> = old_nb
++            .iter()
++            .zip(idx)
++            .map(|(o, &fi)| {
++                (
++                    leading_ws(o).chars().count(),
++                    leading_ws(file[fi].text).chars().count(),
++                )
++            })
++            .collect();
++        let unit = idx
++            .iter()
++            .filter_map(|&fi| leading_ws(file[fi].text).chars().next())
++            .next()
++            .unwrap_or(' ');
++        for factor in [1usize, 2] {
++            let (o0, f0) = pairs[0];
++            let offset = f0 as isize - (factor * o0) as isize;
++            if pairs
++                .iter()
++                .all(|&(o, f)| (factor * o) as isize + offset == f as isize)
++            {
++                let active = !(factor == 1 && offset == 0);
++                return Self {
++                    factor,
++                    offset,
++                    unit,
++                    active,
++                };
++            }
++        }
++        Self {
++            factor: 1,
++            offset: 0,
++            unit,
++            active: false,
++        }
++    }
++
++    fn apply(&self, line: &str) -> String {
++        let body = line.trim_start();
++        if !self.active || body.is_empty() {
++            return line.to_string();
++        }
++        let w = leading_ws(line).chars().count();
++        let target = ((self.factor * w) as isize + self.offset).max(0) as usize;
++        format!("{}{body}", self.unit.to_string().repeat(target))
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn apply(content: &str, old: &str, new: &str) -> Option<String> {
++        match find_stripped_match(content, old, new, "\n") {
++            StrippedOutcome::Found(m) => Some(format!(
++                "{}{}{}",
++                &content[..m.start],
++                m.replacement,
++                &content[m.end..]
++            )),
++            _ => None,
++        }
++    }
++
++    #[test]
++    fn matches_across_stripped_blank_lines_and_keeps_them() {
++        let content = "fn a() {\n    let x = 1;\n\n    let y = 2;\n    x + y\n}\n";
++        let old = "    let x = 1;\n    let y = 2;";
++        let new = "    let x = 10;\n    let y = 2;";
++        let out = apply(content, old, new).unwrap();
++        assert_eq!(
++            out,
++            "fn a() {\n    let x = 10;\n\n    let y = 2;\n    x + y\n}\n"
++        );
++    }
++
++    #[test]
++    fn matches_across_stripped_comments_and_keeps_them() {
++        let content = "fn a() {\n    let x = 1;\n    // important note\n    let y = 2;\n}\n";
++        let old = "let x = 1;\nlet y = 2;";
++        let new = "let x = 1;\nlet y = 3;";
++        let out = apply(content, old, new).unwrap();
++        assert_eq!(
++            out,
++            "fn a() {\n    let x = 1;\n    // important note\n    let y = 3;\n}\n"
++        );
++    }
++
++    #[test]
++    fn halved_indentation_is_restored_for_new_lines() {
++        let content = "fn a() {\n    if ok {\n        run();\n    }\n}\n";
++        // aggressive mode halves space indentation
++        let old = "  if ok {\n    run();";
++        let new = "  if ok {\n    run();\n    log();";
++        let out = apply(content, old, new).unwrap();
++        assert_eq!(
++            out,
++            "fn a() {\n    if ok {\n        run();\n        log();\n    }\n}\n"
++        );
++    }
++
++    #[test]
++    fn non_skippable_gap_does_not_match() {
++        let content = "a();\nb();\nc();\n";
++        assert!(matches!(
++            find_stripped_match(content, "a();\nc();", "x();", "\n"),
++            StrippedOutcome::NotFound
++        ));
++    }
++
++    #[test]
++    fn ambiguous_matches_are_reported() {
++        let content = "a();\n\nb();\na();\nb();\n";
++        assert!(matches!(
++            find_stripped_match(content, "a();\nb();", "x();", "\n"),
++            StrippedOutcome::Ambiguous(2)
++        ));
++    }
++
++    #[test]
++    fn crlf_content_is_handled() {
++        let content = "a();\r\n\r\nb();\r\nc();\r\n";
++        match find_stripped_match(content, "a();\nb();", "a();\nB();", "\r\n") {
++            StrippedOutcome::Found(m) => {
++                let out = format!(
++                    "{}{}{}",
++                    &content[..m.start],
++                    m.replacement,
++                    &content[m.end..]
++                );
++                assert_eq!(out, "a();\r\n\r\nB();\r\nc();\r\n");
++            }
++            _ => panic!("expected match"),
++        }
++    }
++}
+diff --git a/rust/src/tools/mod.rs b/rust/src/tools/mod.rs
+index aec9fe3..acbbf9e 100644
+--- a/rust/src/tools/mod.rs
++++ b/rust/src/tools/mod.rs
+@@ -74,6 +74,7 @@ pub mod ctx_verify;
+ pub mod ctx_workflow;
+ pub(crate) mod edit_io;
+ pub(crate) mod edit_recovery;
++pub(crate) mod edit_stripped;
+ pub(crate) mod graph_meta;
+ pub(crate) mod knowledge_shared;
+ pub(crate) mod output_format;

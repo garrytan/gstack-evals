@@ -1,0 +1,105 @@
+diff --git a/internal/tui/components/detailedit/controller.go b/internal/tui/components/detailedit/controller.go
+index d86fec5..dd5d19f 100644
+--- a/internal/tui/components/detailedit/controller.go
++++ b/internal/tui/components/detailedit/controller.go
+@@ -297,26 +297,18 @@ func (c Controller) Update(msg tea.Msg) (Controller, tea.Cmd, *Submit, bool) {
+ 			}
+ 		}
+ 
+-		var previousContext dataautocomplete.Context
+-		if c.usesAutocomplete() {
+-			previousContext = c.inputBox.CurrentAutocompleteContext()
+-		}
+-
+-		c.inputBox, taCmd = c.inputBox.Update(msg)
++		taCmd = c.updateInputBox(msg)
+ 		cmds = append(cmds, taCmd)
++		return c, tea.Batch(cmds...), nil, true
+ 
+-		if c.usesAutocomplete() {
+-			currentContext := c.inputBox.CurrentAutocompleteContext()
+-			if currentContext != previousContext {
+-				if c.hideOnEmpty && currentContext == (dataautocomplete.Context{}) {
+-					c.ac.Hide()
+-				} else {
+-					c.ac.Show(currentContext.Content, c.inputBox.AutocompleteItemsToExclude())
+-				}
+-			}
++	case tea.PasteMsg:
++		if !c.Active() {
++			return c, nil, nil, false
+ 		}
+-
+-		return c, tea.Batch(cmds...), nil, true
++		if c.showConfirmCancel {
++			c.restorePrompt()
++		}
++		return c, c.updateInputBox(msg), nil, true
+ 	}
+ 
+ 	switch msg.(type) {
+@@ -329,6 +321,31 @@ func (c Controller) Update(msg tea.Msg) (Controller, tea.Cmd, *Submit, bool) {
+ 	return c, nil, nil, false
+ }
+ 
++// updateInputBox forwards msg to the input box and refreshes the autocomplete
++// popup if the autocomplete context changed.
++func (c *Controller) updateInputBox(msg tea.Msg) tea.Cmd {
++	var previousContext dataautocomplete.Context
++	if c.usesAutocomplete() {
++		previousContext = c.inputBox.CurrentAutocompleteContext()
++	}
++
++	var cmd tea.Cmd
++	c.inputBox, cmd = c.inputBox.Update(msg)
++
++	if c.usesAutocomplete() {
++		currentContext := c.inputBox.CurrentAutocompleteContext()
++		if currentContext != previousContext {
++			if c.hideOnEmpty && currentContext == (dataautocomplete.Context{}) {
++				c.ac.Hide()
++			} else {
++				c.ac.Show(currentContext.Content, c.inputBox.AutocompleteItemsToExclude())
++			}
++		}
++	}
++
++	return cmd
++}
++
+ func (c *Controller) clearRelevantCache() {
+ 	switch c.suggestionKind {
+ 	case SuggestionUsers:
+diff --git a/internal/tui/components/detailedit/controller_test.go b/internal/tui/components/detailedit/controller_test.go
+index cafc2b7..933ff87 100644
+--- a/internal/tui/components/detailedit/controller_test.go
++++ b/internal/tui/components/detailedit/controller_test.go
+@@ -338,3 +338,28 @@ func TestUnassignModeDoesNotUseAutocomplete(t *testing.T) {
+ 
+ 	require.False(t, c.usesAutocomplete())
+ }
++
++func TestPasteInCommentModeInsertsText(t *testing.T) {
++	data.ClearUserCache()
++	c := newTestController(t)
++	c, _ = c.Enter(EnterOptions{
++		Mode:                             ModeComment,
++		Prompt:                           "comment",
++		Source:                           dataautocomplete.UserMentionSource{},
++		Repo:                             testRepo(),
++		SuggestionKind:                   SuggestionUsers,
++		EnterFetch:                       FetchNone,
++		ConfirmDiscardOnCancel:           true,
++		HideAutocompleteWhenContextEmpty: true,
++	})
++
++	c, _, _, handled := c.Update(tea.PasteMsg{Content: "this should paste into gh-dash"})
++	require.True(t, handled)
++	require.Equal(t, "this should paste into gh-dash", c.inputBox.Value())
++}
++
++func TestPasteIgnoredWhenInactive(t *testing.T) {
++	c := newTestController(t)
++	_, _, _, handled := c.Update(tea.PasteMsg{Content: "ignored"})
++	require.False(t, handled)
++}

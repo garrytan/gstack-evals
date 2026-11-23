@@ -66,6 +66,14 @@ describe("readStage2", () => {
     expect(r.models.opus.reading.fix_method).toStartWith("untested (");
     expect(r.codes).toEqual(["E_OF_SIM_AUDIT", "E_OF_JUDGE_KAPPA"]);
   });
+  test("unlabelled gold cells count against the gold re-check: 2 labelled cells of 40 fail it", () => {
+    const i = stage2Fixture({ w: helps });
+    const r = readStage2({ ...i, gold: { ...i.gold, sol: i.gold.sol.map((g, k) => ({ ...g, judged: k === 0 || k === 39 ? g.gold : null })) } });
+    expect(r.gold_kappa.sol === null || r.gold_kappa.sol < 0.6).toBe(true);
+    expect(r.models.sol.contrasts["office-hours-none"].why).toContain("gold re-check kappa");
+    expect(r.codes).toContain("E_OF_JUDGE_KAPPA");
+    expect(r.gold_kappa.opus).toBe(1);
+  });
   test("a smoke drop binds office-hours contrasts only; stage 1 stock binds every contrast of its model", () => {
     const i = stage2Fixture({ w: helps });
     const r = readStage2({ ...i, stage1: { ...i.stage1, smoke_drop: { ...i.stage1.smoke_drop, sol: true }, untested: { ...i.stage1.untested, particle: ["stock"] } } });

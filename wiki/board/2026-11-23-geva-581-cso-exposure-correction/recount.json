@@ -1,0 +1,170 @@
+{
+ "exposure": {
+  "opus": {
+   "sessions": 52,
+   "frozen_started": 39,
+   "frozen_ran": 37,
+   "written_started": 40,
+   "written_ran": 40,
+   "cut_start": 1,
+   "flagged_finish": 3,
+   "added": 3,
+   "symlink": {
+    "refused_first": 12,
+    "prefix_limit": 8,
+    "paths_refused": 6,
+    "both": 2,
+    "started_after": 0,
+    "file_command_before_start": 0
+   },
+   "table_frozen": {
+    "completeness": {
+     "partial": 23,
+     "none recorded": 28,
+     "not_assessed": 1
+    },
+    "submitted": 23,
+    "submitted_sessions": 12,
+    "host_reads": 80,
+    "host_read_sessions": 28
+   },
+   "table_written": {
+    "completeness": {
+     "partial": 23,
+     "none recorded": 28,
+     "not_assessed": 1
+    },
+    "submitted": 23,
+    "submitted_sessions": 12,
+    "host_reads": 83,
+    "host_read_sessions": 29
+   }
+  },
+  "particle": {
+   "sessions": 52,
+   "frozen_started": 43,
+   "frozen_ran": 40,
+   "written_started": 52,
+   "written_ran": 52,
+   "cut_start": 9,
+   "flagged_finish": 3,
+   "added": 12,
+   "symlink": {
+    "refused_first": 11,
+    "prefix_limit": 3,
+    "paths_refused": 7,
+    "both": 3,
+    "started_after": 11,
+    "file_command_before_start": 11
+   },
+   "table_frozen": {
+    "completeness": {
+     "partial": 39,
+     "none recorded": 13
+    },
+    "submitted": 65,
+    "submitted_sessions": 24,
+    "host_reads": 1362,
+    "host_read_sessions": 41
+   },
+   "table_written": {
+    "completeness": {
+     "partial": 49,
+     "none recorded": 3
+    },
+    "submitted": 69,
+    "submitted_sessions": 27,
+    "host_reads": 1472,
+    "host_read_sessions": 50
+   }
+  }
+ },
+ "verdicts": {
+  "frozen": [
+   {
+    "model": "opus",
+    "procedure": "37/52",
+    "row": "Skill not exercised as designed",
+    "delta": -0.17647058823529413,
+    "ci95": [
+     -0.3111111111111111,
+     -0.058823529411764705
+    ],
+    "p_holm": 0.011856943716543444,
+    "mdd_points": {
+     "at_0_025": null,
+     "at_0_05": null
+    },
+    "verdict": "FIX-METHOD",
+    "step": 1,
+    "why": "Skill not exercised as designed"
+   },
+   {
+    "model": "particle",
+    "procedure": "40/52",
+    "row": "Skill not exercised as designed",
+    "delta": -0.11538461538461539,
+    "ci95": [
+     -0.2653061224489796,
+     0.018867924528301886
+    ],
+    "p_holm": 0.10713905342030716,
+    "mdd_points": {
+     "at_0_025": null,
+     "at_0_05": null
+    },
+    "verdict": "FIX-METHOD",
+    "step": 1,
+    "why": "Skill not exercised as designed"
+   }
+  ],
+  "written": [
+   {
+    "model": "opus",
+    "procedure": "40/52",
+    "row": "Skill not exercised as designed",
+    "delta": -0.17647058823529413,
+    "ci95": [
+     -0.3111111111111111,
+     -0.058823529411764705
+    ],
+    "p_holm": 0.011856943716543444,
+    "mdd_points": {
+     "at_0_025": null,
+     "at_0_05": null
+    },
+    "verdict": "FIX-METHOD",
+    "step": 1,
+    "why": "Skill not exercised as designed"
+   },
+   {
+    "model": "particle",
+    "procedure": "52/52",
+    "row": "No difference shown",
+    "delta": -0.11538461538461539,
+    "ci95": [
+     -0.2653061224489796,
+     0.018867924528301886
+    ],
+    "p_holm": 0.10713905342030716,
+    "mdd_points": {
+     "at_0_025": 0.22,
+     "at_0_05": 0.21
+    },
+    "verdict": "CUT-CANDIDATE",
+    "step": 4,
+    "why": "no difference, and the interval at the bound favourable to cso rules out a gain of 15 points"
+   }
+  ]
+ },
+ "split": {
+  "opus ran cso": "3/40",
+  "opus ran none": "10/39",
+  "opus did not run cso": "0/12",
+  "opus did not run none": "2/12",
+  "particle ran cso": "7/52",
+  "particle ran none": "13/52",
+  "particle did not run cso": "0/0",
+  "particle did not run none": "0/0"
+ }
+}

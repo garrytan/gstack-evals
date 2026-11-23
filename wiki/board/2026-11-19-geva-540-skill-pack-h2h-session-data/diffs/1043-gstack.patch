@@ -1,0 +1,207 @@
+diff --git a/client/pull.go b/client/pull.go
+index 41d8941..0777b6c 100644
+--- a/client/pull.go
++++ b/client/pull.go
+@@ -279,7 +279,7 @@ func (c *Client) fetch(ctx context.Context, rCtx *RemoteContext, ref string, lim
+ 	}
+ 
+ 	dispatchCtx, dispatchSpan := tracing.StartSpan(ctx, tracing.Name(pullSpanPrefix, "dispatch"))
+-	err = images.Dispatch(dispatchCtx, handler, limiter, desc)
++	err = images.DispatchUnique(dispatchCtx, handler, limiter, desc)
+ 	dispatchSpan.SetStatus(err)
+ 	dispatchSpan.End()
+ 	if err != nil {
+diff --git a/core/images/handlers.go b/core/images/handlers.go
+index a60835f..6992df1 100644
+--- a/core/images/handlers.go
++++ b/core/images/handlers.go
+@@ -169,6 +169,28 @@ func WalkNotEmpty(ctx context.Context, handler Handler, descs ...ocispec.Descrip
+ // Exceeding this limit returns an error wrapping
+ // [errdefs.ErrResourceExhausted].
+ func Dispatch(ctx context.Context, handler Handler, limiter *semaphore.Weighted, descs ...ocispec.Descriptor) error {
++	return dispatch(ctx, handler, limiter, false, descs...)
++}
++
++// DispatchUnique works like Dispatch, except that each unique descriptor
++// (identified by digest, media type and size) is handled at most once per
++// call. Repeated references to the same descriptor, whether among siblings,
++// across levels of the graph or via cycles, are not handled again and their
++// children are not traversed again.
++//
++// References are still counted toward the 10,000 reference limit, including
++// duplicates, so that a crafted graph cannot cause unbounded allocation.
++func DispatchUnique(ctx context.Context, handler Handler, limiter *semaphore.Weighted, descs ...ocispec.Descriptor) error {
++	return dispatch(ctx, handler, limiter, true, descs...)
++}
++
++type descriptorKey struct {
++	digest    string
++	mediaType string
++	size      int64
++}
++
++func dispatch(ctx context.Context, handler Handler, limiter *semaphore.Weighted, unique bool, descs ...ocispec.Descriptor) error {
+ 	if len(descs) == 0 {
+ 		return nil
+ 	}
+@@ -184,7 +206,11 @@ func Dispatch(ctx context.Context, handler Handler, limiter *semaphore.Weighted,
+ 		mu             sync.Mutex
+ 		next           []ocispec.Descriptor
+ 		referenceCount int
++		seen           map[descriptorKey]struct{}
+ 	)
++	if unique {
++		seen = map[descriptorKey]struct{}{}
++	}
+ 
+ 	admit := func(descs []ocispec.Descriptor) error {
+ 		mu.Lock()
+@@ -193,7 +219,18 @@ func Dispatch(ctx context.Context, handler Handler, limiter *semaphore.Weighted,
+ 			return fmt.Errorf("too many descriptors (limit %d): %w", maxReferences, errdefs.ErrResourceExhausted)
+ 		}
+ 		referenceCount += len(descs)
+-		next = append(next, descs...)
++		if !unique {
++			next = append(next, descs...)
++			return nil
++		}
++		for _, desc := range descs {
++			key := descriptorKey{digest: desc.Digest.String(), mediaType: desc.MediaType, size: desc.Size}
++			if _, ok := seen[key]; ok {
++				continue
++			}
++			seen[key] = struct{}{}
++			next = append(next, desc)
++		}
+ 		return nil
+ 	}
+ 
+diff --git a/core/images/handlers_test.go b/core/images/handlers_test.go
+index 5c4e54e..488e7de 100644
+--- a/core/images/handlers_test.go
++++ b/core/images/handlers_test.go
+@@ -105,6 +105,12 @@ func TestDispatchRepeatedReferences(t *testing.T) {
+ 			wantTotalCalls:  5,
+ 			wantSharedCalls: 2,
+ 		},
++		{
++			name:            "DispatchUnique visits each descriptor once",
++			dispatch:        DispatchUnique,
++			wantTotalCalls:  4,
++			wantSharedCalls: 1,
++		},
+ 	}
+ 
+ 	for _, tt := range tests {
+@@ -345,6 +351,7 @@ func TestDispatchDuplicateRoots(t *testing.T) {
+ 		wantCalls int32
+ 	}{
+ 		{"Dispatch visits each root", Dispatch, 2},
++		{"DispatchUnique visits root once", DispatchUnique, 1},
+ 	}
+ 
+ 	for _, tt := range tests {
+@@ -467,3 +474,40 @@ func TestDispatchCancellationWithNoHandlerError(t *testing.T) {
+ 	err := Dispatch(ctx, handler, nil, descs...)
+ 	require.ErrorIs(t, err, context.Canceled)
+ }
++
++func TestDispatchUniqueCycleAndAmplification(t *testing.T) {
++	// Cycles terminate without revisiting.
++	a, b := newDesc("a"), newDesc("b")
++	var calls atomic.Int32
++	cyclic := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		calls.Add(1)
++		if desc.Digest == a.Digest {
++			return []ocispec.Descriptor{b}, nil
++		}
++		return []ocispec.Descriptor{a}, nil
++	})
++	require.NoError(t, DispatchUnique(context.Background(), cyclic, nil, a))
++	assert.Equal(t, int32(2), calls.Load())
++
++	// Layered fan-out of identical descriptors does not amplify work.
++	calls.Store(0)
++	nodes := make([]ocispec.Descriptor, 8)
++	for i := range nodes {
++		nodes[i] = newDesc(fmt.Sprintf("n%d", i))
++	}
++	fanout := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		calls.Add(1)
++		for i, n := range nodes[:len(nodes)-1] {
++			if n.Digest == desc.Digest {
++				children := make([]ocispec.Descriptor, 100)
++				for j := range children {
++					children[j] = nodes[i+1]
++				}
++				return children, nil
++			}
++		}
++		return nil, nil
++	})
++	require.NoError(t, DispatchUnique(context.Background(), fanout, nil, nodes[0]))
++	assert.Equal(t, int32(len(nodes)), calls.Load())
++}
+diff --git a/core/transfer/local/pull.go b/core/transfer/local/pull.go
+index 712e81e..fa76b44 100644
+--- a/core/transfer/local/pull.go
++++ b/core/transfer/local/pull.go
+@@ -233,7 +233,7 @@ func (ts *localTransferService) pull(ctx context.Context, ir transfer.ImageFetch
+ 		}
+ 	}
+ 
+-	if err := images.Dispatch(ctx, handler, nil, desc); err != nil {
++	if err := images.DispatchUnique(ctx, handler, nil, desc); err != nil {
+ 		if unpacker != nil {
+ 			// wait for unpacker to cleanup
+ 			unpacker.Wait()
+diff --git a/core/unpack/unpacker.go b/core/unpack/unpacker.go
+index 3d1f189..80ff024 100644
+--- a/core/unpack/unpacker.go
++++ b/core/unpack/unpacker.go
+@@ -273,13 +273,32 @@ func (u *Unpacker) Unpack(h images.Handler) images.Handler {
+ 				return nonLayers, nil
+ 			}
+ 
++			var fetchNow [][]ocispec.Descriptor
+ 			lock.Lock()
+ 			for _, nl := range nonLayers {
+ 				if images.IsConfigType(nl.MediaType) || configTypes[nl.MediaType] {
++					if unpacked, ok := unpackedLayers[nl.Digest]; ok {
++						// The config has already been handled, which may
++						// happen when the dispatcher deduplicates
++						// descriptors and does not revisit a shared
++						// config. Fetch this manifest's layers directly
++						// so that they reach the content store.
++						fetchNow = append(fetchNow, manifestLayers)
++						if len(unpacked) > 0 {
++							fetchNow = append(fetchNow, unpacked)
++							unpackedLayers[nl.Digest] = nil
++						}
++						continue
++					}
+ 					queuedLayers[nl.Digest] = append(queuedLayers[nl.Digest], manifestLayers)
+ 				}
+ 			}
+ 			lock.Unlock()
++			for _, layers := range fetchNow {
++				u.eg.Go(func() error {
++					return u.fetch(u.ctx, h, layers, nil)
++				})
++			}
+ 
+ 			children = nonLayers
+ 		} else if images.IsConfigType(desc.MediaType) || configTypes[desc.MediaType] {
+diff --git a/internal/cri/opts/container.go b/internal/cri/opts/container.go
+index 563d2a9..ff2379b 100644
+--- a/internal/cri/opts/container.go
++++ b/internal/cri/opts/container.go
+@@ -97,7 +97,7 @@ func unpackImage(ctx context.Context, client *containerd.Client, i containerd.Im
+ 		h = snpkg.AppendInfoHandlerWrapper(i.Name())(h)
+ 	}
+ 
+-	if err := images.Dispatch(ctx, u.Unpack(h), nil, i.Target()); err != nil {
++	if err := images.DispatchUnique(ctx, u.Unpack(h), nil, i.Target()); err != nil {
+ 		_, _ = u.Wait()
+ 		return err
+ 	}

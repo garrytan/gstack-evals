@@ -1,0 +1,73 @@
+diff --git a/lib.go b/lib.go
+index 004ef8e..abcc2ed 100644
+--- a/lib.go
++++ b/lib.go
+@@ -221,13 +221,18 @@ func ColumnNameToNumber(name string) (int, error) {
+ 	multi := 1
+ 	for i := len(name) - 1; i >= 0; i-- {
+ 		r := name[i]
++		var digit int
+ 		if r >= 'A' && r <= 'Z' {
+-			col += int(r-'A'+1) * multi
++			digit = int(r - 'A' + 1)
+ 		} else if r >= 'a' && r <= 'z' {
+-			col += int(r-'a'+1) * multi
++			digit = int(r - 'a' + 1)
+ 		} else {
+ 			return -1, newInvalidColumnNameError(name)
+ 		}
++		if col > MaxColumns {
++			continue
++		}
++		col += digit * multi
+ 		multi *= 26
+ 	}
+ 	if col > MaxColumns {
+diff --git a/lib_test.go b/lib_test.go
+index 7a9f854..6184115 100644
+--- a/lib_test.go
++++ b/lib_test.go
+@@ -81,6 +81,15 @@ func TestColumnNameToNumber_Error(t *testing.T) {
+ 	}
+ 	_, err := ColumnNameToNumber("XFE")
+ 	assert.ErrorIs(t, err, ErrColumnNumber)
++	for _, name := range []string{"VGWQHXLSDVIKWV", "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"} {
++		out, err := ColumnNameToNumber(name)
++		assert.ErrorIs(t, err, ErrColumnNumber, name)
++		assert.Equal(t, -1, out, name)
++	}
++	_, err = ColumnNameToNumber("1VGWQHXLSDVIKWV")
++	assert.EqualError(t, err, newInvalidColumnNameError("1VGWQHXLSDVIKWV").Error())
++	_, _, err = CellNameToCoordinates("VGWQHXLSDVIKWV1")
++	assert.ErrorIs(t, err, ErrColumnNumber)
+ }
+ 
+ func TestColumnNumberToName_OK(t *testing.T) {
+diff --git a/rows_test.go b/rows_test.go
+index 0f02dab..ab175e2 100644
+--- a/rows_test.go
++++ b/rows_test.go
+@@ -1042,6 +1042,23 @@ func TestCheckRow(t *testing.T) {
+ 		assert.Equal(t, "d", ws.(*xlsxWorksheet).SheetData.Row[0].C[3].V)
+ 		assert.NoError(t, f.Close())
+ 	})
++	t.Run("with_overflowed_column_name", func(t *testing.T) {
++		for row, expected := range map[string]error{
++			`<row r="0"><c r="VGWQHXLSDVIKWV1" t="inlineStr"><is><t>pwn</t></is></c></row>`: nil,
++			`<row r="1"><c r="XFD1"><v>1</v></c><c r="VGWQHXLSDVIKWV1"><v>2</v></c></row>`:  ErrColumnNumber,
++		} {
++			f := NewFile()
++			f.Sheet.Delete("xl/worksheets/sheet1.xml")
++			f.Pkg.Store("xl/worksheets/sheet1.xml", fmt.Appendf(nil, `<worksheet xmlns="%s"><sheetData>%s</sheetData></worksheet>`, NameSpaceSpreadSheet.Value, row))
++			f.checked = sync.Map{}
++			assert.NotPanics(t, func() {
++				value, err := f.GetCellValue("Sheet1", "A1")
++				assert.ErrorIs(t, err, expected, row)
++				assert.Empty(t, value, row)
++			}, row)
++			assert.NoError(t, f.Close())
++		}
++	})
+ }
+ 
+ func TestSetRowStyle(t *testing.T) {

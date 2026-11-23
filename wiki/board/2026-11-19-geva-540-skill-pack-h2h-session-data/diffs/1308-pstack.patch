@@ -1,0 +1,68 @@
+diff --git a/internal/tools/http/http.go b/internal/tools/http/http.go
+index bb317b6..f890b9a 100644
+--- a/internal/tools/http/http.go
++++ b/internal/tools/http/http.go
+@@ -195,6 +195,13 @@ func getURL(baseURL, path string, pathParams, queryParams parameters.Parameters,
+ 	if relParsedURL.Scheme != "" || relParsedURL.Host != "" || relParsedURL.User != nil {
+ 		return "", fmt.Errorf("path must be relative and cannot override base host")
+ 	}
++	// ResolveReference normalizes dot segments, and downstream servers may decode
++	// and normalize encoded ones, so either would let pathParams escape the configured path.
++	for _, segment := range strings.FieldsFunc(relParsedURL.Path, func(r rune) bool { return r == '/' || r == '\\' }) {
++		if segment == "." || segment == ".." {
++			return "", fmt.Errorf("path must not contain dot segments")
++		}
++	}
+ 
+ 	// Create URL based on BaseURL and Path
+ 	// Attach query parameters
+diff --git a/internal/tools/http/http_url_test.go b/internal/tools/http/http_url_test.go
+index c23e7fe..6f3ce5e 100644
+--- a/internal/tools/http/http_url_test.go
++++ b/internal/tools/http/http_url_test.go
+@@ -76,3 +76,45 @@ func TestGetURLHostOverride(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestGetURLPathTraversal(t *testing.T) {
++	baseURL := "https://api.good.com"
++	path := "/api/v1/users/{{.id}}"
++	pathParams := parameters.Parameters{parameters.NewStringParameter("id", "user id")}
++
++	rejected := []string{
++		"../../../admin/secrets",
++		"..",
++		".",
++		"123/../../admin",
++		"%2e%2e/%2e%2e/admin",
++		"%2E%2E%2F..%2Fadmin",
++		"..\\..\\admin",
++	}
++	for _, id := range rejected {
++		t.Run(id, func(t *testing.T) {
++			got, err := getURL(baseURL, path, pathParams, nil, nil, map[string]any{"id": id})
++			if err == nil {
++				t.Fatalf("expected traversal %q to be rejected, got URL %q", id, got)
++			}
++		})
++	}
++
++	allowed := map[string]string{
++		"123":       "https://api.good.com/api/v1/users/123",
++		"file.json": "https://api.good.com/api/v1/users/file.json",
++		"..hidden":  "https://api.good.com/api/v1/users/..hidden",
++		"a/b":       "https://api.good.com/api/v1/users/a/b",
++	}
++	for id, want := range allowed {
++		t.Run(id, func(t *testing.T) {
++			got, err := getURL(baseURL, path, pathParams, nil, nil, map[string]any{"id": id})
++			if err != nil {
++				t.Fatalf("unexpected error: %v", err)
++			}
++			if got != want {
++				t.Fatalf("expected %q, got %q", want, got)
++			}
++		})
++	}
++}

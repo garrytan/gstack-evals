@@ -1,0 +1,48 @@
+diff --git a/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs b/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs
+index b3d3920..ae46e85 100644
+--- a/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs
++++ b/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs
+@@ -39,6 +39,17 @@ namespace NAudio.Core.Tests.WaveStreams
+         }
+ 
+ 
++        [Test]
++        public void PcmFormatChunkHasNoExtraSizeField()
++        {
++            var ms = new MemoryStream();
++            using (new WaveFileWriter(new IgnoreDisposeStream(ms), new WaveFormat(44100, 16, 2))) { }
++            var bytes = ms.ToArray();
++            Assert.That(System.Text.Encoding.ASCII.GetString(bytes, 12, 4), Is.EqualTo("fmt "));
++            Assert.That(BitConverter.ToInt32(bytes, 16), Is.EqualTo(16), "fmt chunk size");
++            Assert.That(System.Text.Encoding.ASCII.GetString(bytes, 36, 4), Is.EqualTo("data"));
++        }
++
+         [Test]
+         public void FlushUpdatesHeaderEvenIfDisposeNotCalled()
+         {
+diff --git a/NAudio.Core/Wave/WaveFormats/WaveFormat.cs b/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
+index 423e1b0..ed82f73 100644
+--- a/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
++++ b/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
+@@ -302,14 +302,19 @@ namespace NAudio.Wave
+         /// <param name="writer">the output stream</param>
+         public virtual void Serialize(BinaryWriter writer)
+         {
+-            writer.Write((int)(18 + extraSize)); // wave format length
++            // PCM format chunks are a plain 16 byte WAVEFORMAT with no cbSize field
++            bool writeExtraSize = !(Encoding == WaveFormatEncoding.Pcm && extraSize == 0);
++            writer.Write((int)((writeExtraSize ? 18 : 16) + extraSize)); // wave format length
+             writer.Write((short)Encoding);
+             writer.Write((short)Channels);
+             writer.Write((int)SampleRate);
+             writer.Write((int)AverageBytesPerSecond);
+             writer.Write((short)BlockAlign);
+             writer.Write((short)BitsPerSample);
+-            writer.Write((short)extraSize);
++            if (writeExtraSize)
++            {
++                writer.Write((short)extraSize);
++            }
+         }
+ 
+         /// <summary>

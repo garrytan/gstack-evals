@@ -1,0 +1,3 @@
+https://github.com/docsifyjs/docsify at dad18d0313bfeaed65cd5b373a5014854e6e6f82
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

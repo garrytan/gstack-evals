@@ -1,0 +1,92 @@
+diff --git a/execution/rerun/rerun.go b/execution/rerun/rerun.go
+index 9ac1725..6277620 100644
+--- a/execution/rerun/rerun.go
++++ b/execution/rerun/rerun.go
+@@ -96,11 +96,45 @@ func ListenFailedScenarios(wg *sync.WaitGroup, specDirs []string) {
+ 	}()
+ }
+ 
++// lastNewlyFailed holds the item added by the most recent failed scenario attempt,
++// if it was not already present. It is removed again if a retry of that scenario passes.
++var lastNewlyFailed *failedItemKey
++
++type failedItemKey struct {
++	itemName string
++	item     string
++}
++
+ func prepareScenarioFailedMetadata(res *result.ScenarioResult, sce *gauge.Scenario, executionInfo *gauge_messages.ExecutionInfo) {
++	specPath := executionInfo.GetCurrentSpec().GetFileName()
++	failedScenario := util.RelPathToProjectRoot(specPath)
++	key := failedItemKey{itemName: specPath, item: fmt.Sprintf("%s:%v", failedScenario, sce.Span.Start)}
++	isRetry := executionInfo.GetCurrentScenario().GetRetries().GetCurrentRetry() > 0
+ 	if res.GetFailed() {
+-		specPath := executionInfo.GetCurrentSpec().GetFileName()
+-		failedScenario := util.RelPathToProjectRoot(specPath)
+-		failedMeta.addFailedItem(specPath, fmt.Sprintf("%s:%v", failedScenario, sce.Span.Start))
++		if isRetry && lastNewlyFailed != nil && *lastNewlyFailed == key {
++			return
++		}
++		alreadyPresent := failedMeta.failedItemsMap[key.itemName][key.item]
++		failedMeta.addFailedItem(key.itemName, key.item)
++		if alreadyPresent {
++			lastNewlyFailed = nil
++		} else {
++			lastNewlyFailed = &key
++		}
++		return
++	}
++	if isRetry && lastNewlyFailed != nil && *lastNewlyFailed == key {
++		failedMeta.removeFailedItem(key.itemName, key.item)
++	}
++	lastNewlyFailed = nil
++}
++
++func (m *failedMetadata) removeFailedItem(itemName string, item string) {
++	if items, ok := m.failedItemsMap[itemName]; ok {
++		delete(items, item)
++		if len(items) == 0 {
++			delete(m.failedItemsMap, itemName)
++		}
+ 	}
+ }
+ 
+diff --git a/execution/rerun/rerun_test.go b/execution/rerun/rerun_test.go
+index 922f25c..5fbfed6 100644
+--- a/execution/rerun/rerun_test.go
++++ b/execution/rerun/rerun_test.go
+@@ -33,6 +33,7 @@ func (s *MySuite) SetUpTest(c *C) {
+ 	p, _ := filepath.Abs("_testdata")
+ 	config.ProjectRoot = p
+ 	failedMeta = newFailedMetaData()
++	lastNewlyFailed = nil
+ }
+ 
+ func (s *MySuite) TestIfFailedFileIsCreated(c *C) {
+@@ -62,6 +63,26 @@ func (s *MySuite) TestGetScenarioFailedMetadata(c *C) {
+ 	c.Assert(failedMeta.failedItemsMap[spec1Abs][spec1Rel+":2"], Equals, true)
+ }
+ 
++func (s *MySuite) TestScenarioPassedOnRetryIsNotMarkedFailed(c *C) {
++	spec1Rel := filepath.Join("specs", "example1.spec")
++	spec1Abs := filepath.Join(config.ProjectRoot, spec1Rel)
++	sce := &gauge.Scenario{Span: &gauge.Span{Start: 2}}
++	failed := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_FAILED}}
++	passed := &result.ScenarioResult{ProtoScenario: &gauge_messages.ProtoScenario{ExecutionStatus: gauge_messages.ExecutionStatus_PASSED}}
++	info := func(retry int32) *gauge_messages.ExecutionInfo {
++		return &gauge_messages.ExecutionInfo{
++			CurrentSpec:     &gauge_messages.SpecInfo{FileName: spec1Abs},
++			CurrentScenario: &gauge_messages.ScenarioInfo{Retries: &gauge_messages.ScenarioRetriesInfo{MaxRetries: 2, CurrentRetry: retry}},
++		}
++	}
++
++	prepareScenarioFailedMetadata(failed, sce, info(0))
++	prepareScenarioFailedMetadata(passed, sce, info(1))
++	failedMeta.aggregateFailedItems()
++
++	c.Assert(len(failedMeta.FailedItems), Equals, 0)
++}
++
+ func (s *MySuite) TestAddSpecPreHookFailedMetadata(c *C) {
+ 	spec1Rel := filepath.Join("specs", "example1.spec")
+ 	spec1Abs := filepath.Join(config.ProjectRoot, spec1Rel)

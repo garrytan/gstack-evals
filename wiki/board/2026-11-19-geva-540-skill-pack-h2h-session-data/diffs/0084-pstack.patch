@@ -1,0 +1,68 @@
+diff --git a/src/lib/ares_process.c b/src/lib/ares_process.c
+index aebea1a..9aca0e2 100644
+--- a/src/lib/ares_process.c
++++ b/src/lib/ares_process.c
+@@ -1236,12 +1236,6 @@ static ares_conn_t *ares_fetch_connection(const ares_channel_t *channel,
+     return NULL;
+   }
+ 
+-  /* If the associated server has failures, don't use it.  It should be cleaned
+-   * up later. */
+-  if (conn->server->consec_failures > 0) {
+-    return NULL;
+-  }
+-
+   /* Used too many times */
+   if (channel->udp_max_queries > 0 &&
+       conn->total_queries >= channel->udp_max_queries) {
+diff --git a/test/ares-test-mock.cc b/test/ares-test-mock.cc
+index 5b9c15e..126d043 100644
+--- a/test/ares-test-mock.cc
++++ b/test/ares-test-mock.cc
+@@ -526,6 +526,46 @@ TEST_P(MockUDPMaxQueriesTest, GetHostByNameParallelLookups) {
+   }
+ }
+ 
++TEST_P(MockChannelTest, ReuseUDPConnectionWhenServerHasFailures) {
++  if (GetParam().second) {
++    GTEST_SKIP() << "UDP connection reuse only";
++  }
++  const int queries = 16;
++  DNSPacket servfail;
++  servfail.set_response().set_aa().set_rcode(SERVFAIL)
++    .add_question(new DNSQuestion("www.google.com", T_A));
++  DNSPacket rsp;
++  rsp.set_response().set_aa()
++    .add_question(new DNSQuestion("www.google.com", T_A))
++    .add_answer(new DNSARR("www.google.com", 100, {2, 3, 4, 5}));
++  EXPECT_CALL(server_, OnRequest("www.google.com", T_A))
++    .Times(queries)
++    .WillRepeatedly(SetReply(&server_, &rsp));
++  EXPECT_CALL(server_, OnRequest("www.google.com", T_A))
++    .Times(queries)
++    .WillRepeatedly(SetReply(&server_, &servfail))
++    .RetiresOnSaturation();
++
++  int rc = ARES_SUCCESS;
++  ares_set_socket_callback(channel_, SocketConnectCallback, &rc);
++  sock_cb_count = 0;
++
++  HostResult result[queries];
++  for (int i = 0; i < queries; i++) {
++    ares_gethostbyname(channel_, "www.google.com.", AF_INET, HostCallback,
++                       &result[i]);
++  }
++  Process();
++
++  EXPECT_GE(2, sock_cb_count);
++  for (int i = 0; i < queries; i++) {
++    std::stringstream ss;
++    EXPECT_TRUE(result[i].done_);
++    ss << result[i].host_;
++    EXPECT_EQ("{'www.google.com' aliases=[] addrs=[2.3.4.5]}", ss.str());
++  }
++}
++
+ class CacheQueriesTest
+     : public MockChannelOptsTest,
+       public ::testing::WithParamInterface<int> {

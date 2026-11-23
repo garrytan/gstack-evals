@@ -1,0 +1,30 @@
+keyless coverage at 5df6b5a8cf21: in-sample {"only":51,"first":0,"second":0,"none":9}, fresh {"only":52,"first":0,"second":0,"none":8}
+
+odds of clearing the bar (P[loads >= 39]), named at f, unnamed at 0 (and at 0.05)
+follow rate f	in-sample	fresh	in-sample, unnamed 0.05	fresh, unnamed 0.05
+100.0%	1.000	1.000	1.000	1.000
+95.0%	1.000	1.000	1.000	1.000
+87.9%	0.993	0.997	0.995	0.998
+85.0%	0.965	0.981	0.973	0.985
+80.0%	0.793	0.858	0.827	0.881
+76.5%	0.579	0.671	0.631	0.711
+75.0%	0.479	0.574	0.535	0.620
+70.0%	0.198	0.267	0.243	0.311
+
+paired against B1c project-md's published rows (39 of 60 loaded), coverage model
+follow rate f	true difference	P(hook shown above)	P(hook shown below)
+100.0%	+20.0	1.000	0.000
+95.0%	+15.7	0.849	0.000
+87.9%	+9.7	0.209	0.000
+80.0%	+3.0	0.013	0.000
+70.0%	-5.5	0.000	0.035
+uniform model: 80% power to show the hook above at 84.9% (+19.9 points), below at 41.7% (-23.3 points)
+
+paired against B1d gstack-main's published rows (32 of 60 loaded), coverage model
+follow rate f	true difference	P(hook shown above)	P(hook shown below)
+100.0%	+31.7	1.000	0.000
+95.0%	+27.4	1.000	0.000
+87.9%	+21.4	0.941	0.000
+80.0%	+14.7	0.499	0.000
+70.0%	+6.2	0.055	0.000
+uniform model: 80% power to show the hook above at 75.5% (+22.2 points), below at 30.4% (-22.9 points)

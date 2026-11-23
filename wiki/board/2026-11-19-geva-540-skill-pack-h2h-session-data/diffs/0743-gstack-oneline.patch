@@ -1,0 +1,50 @@
+diff --git a/src/BootstrapBlazor/Components/Radio/RadioList.razor.cs b/src/BootstrapBlazor/Components/Radio/RadioList.razor.cs
+index 899f1d4..f031108 100644
+--- a/src/BootstrapBlazor/Components/Radio/RadioList.razor.cs
++++ b/src/BootstrapBlazor/Components/Radio/RadioList.razor.cs
+@@ -31,6 +31,12 @@ public partial class RadioList<TValue>
+     [Parameter]
+     public bool AutoSelectFirstWhenValueIsNull { get; set; } = true;
+ 
++    /// <summary>
++    /// 获得/设置 按钮样式时是否为 Outline 模式 默认 false
++    /// </summary>
++    [Parameter]
++    public bool IsOutline { get; set; }
++
+     private string? GroupName => Id;
+ 
+     private string? ClassString => CssBuilder.Default("radio-list form-control")
+@@ -46,6 +52,7 @@ public partial class RadioList<TValue>
+         .Build();
+ 
+     private string? GetButtonItemClassString(SelectedItem item) => CssBuilder.Default("btn")
++        .AddClass($"btn-outline-{Color.ToDescriptionString()}", IsOutline)
+         .AddClass($"active bg-{Color.ToDescriptionString()}", CurrentValueAsString == item.Value)
+         .Build();
+ 
+diff --git a/src/BootstrapBlazor/Components/Radio/RadioListGeneric.razor.cs b/src/BootstrapBlazor/Components/Radio/RadioListGeneric.razor.cs
+index 833d8dd..320dc0b 100644
+--- a/src/BootstrapBlazor/Components/Radio/RadioListGeneric.razor.cs
++++ b/src/BootstrapBlazor/Components/Radio/RadioListGeneric.razor.cs
+@@ -87,6 +87,12 @@ public partial class RadioListGeneric<TValue> : IModelEqualityComparer<TValue>
+     /// <returns></returns>
+     private bool GetDisabledState(SelectedItem<TValue> item) => IsDisabled || item.IsDisabled;
+ 
++    /// <summary>
++    /// 获得/设置 按钮样式时是否为 Outline 模式 默认 false
++    /// </summary>
++    [Parameter]
++    public bool IsOutline { get; set; }
++
+     private string? GroupName => Id;
+ 
+     private string? ClassString => CssBuilder.Default("radio-list form-control")
+@@ -102,6 +108,7 @@ public partial class RadioListGeneric<TValue> : IModelEqualityComparer<TValue>
+         .Build();
+ 
+     private string? GetButtonItemClassString(SelectedItem<TValue> item) => CssBuilder.Default("btn")
++        .AddClass($"btn-outline-{Color.ToDescriptionString()}", IsOutline)
+         .AddClass($"active bg-{Color.ToDescriptionString()}", Equals(Value, item.Value))
+         .Build();
+ 

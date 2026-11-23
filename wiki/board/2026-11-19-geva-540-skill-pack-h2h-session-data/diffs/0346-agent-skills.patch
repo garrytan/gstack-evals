@@ -1,0 +1,183 @@
+diff --git a/Core/GameInstanceManager.cs b/Core/GameInstanceManager.cs
+index 98d848d..53953f6 100644
+--- a/Core/GameInstanceManager.cs
++++ b/Core/GameInstanceManager.cs
+@@ -241,7 +241,7 @@ namespace CKAN
+         /// <exception cref="InstanceNameTakenKraken">Thrown if the instance name is already in use.</exception>
+         /// <exception cref="NotGameDirKraken">Thrown by AddInstance() if created instance is not valid, e.g. if something went wrong with copying.</exception>
+         /// <exception cref="DirectoryNotFoundKraken">Thrown by CopyDirectory() if directory doesn't exist. Should never be thrown here.</exception>
+-        /// <exception cref="PathErrorKraken">Thrown by CopyDirectory() if the target folder already exists and is not empty.</exception>
++        /// <exception cref="PathErrorKraken">Thrown if the target folder is inside the existing instance, or by CopyDirectory() if the target folder already exists and is not empty.</exception>
+         /// <exception cref="IOException">Thrown by CopyDirectory() if something goes wrong during the process.</exception>
+         public void CloneInstance(GameInstance existingInstance,
+                                   string       newName,
+@@ -264,7 +264,7 @@ namespace CKAN
+         /// <exception cref="InstanceNameTakenKraken">Thrown if the instance name is already in use.</exception>
+         /// <exception cref="NotGameDirKraken">Thrown by AddInstance() if created instance is not valid, e.g. if something went wrong with copying.</exception>
+         /// <exception cref="DirectoryNotFoundKraken">Thrown by CopyDirectory() if directory doesn't exist. Should never be thrown here.</exception>
+-        /// <exception cref="PathErrorKraken">Thrown by CopyDirectory() if the target folder already exists and is not empty.</exception>
++        /// <exception cref="PathErrorKraken">Thrown if the target folder is inside the existing instance, or by CopyDirectory() if the target folder already exists and is not empty.</exception>
+         /// <exception cref="IOException">Thrown by CopyDirectory() if something goes wrong during the process.</exception>
+         public GameInstance CloneInstance(GameInstance existingInstance,
+                                           string       newName,
+@@ -281,6 +281,8 @@ namespace CKAN
+                 throw new NotGameDirKraken(existingInstance.GameDir, string.Format(
+                     Properties.Resources.GameInstanceCloneInvalid, existingInstance.Game.ShortName));
+             }
++            // Check this before the free space check so the user gets the right error
++            Utilities.ThrowIfDestinationInsideSource(existingInstance.GameDir, newPath);
+ 
+             CKANPathUtils.CheckFreeSpace(new DirectoryInfo(newPath) switch
+                                          {
+diff --git a/Core/IO/CKANPathUtils.cs b/Core/IO/CKANPathUtils.cs
+index 5d41f8e..33126e9 100644
+--- a/Core/IO/CKANPathUtils.cs
++++ b/Core/IO/CKANPathUtils.cs
+@@ -112,5 +112,21 @@ namespace CKAN.IO
+             => NormalizePath(a.FullName).Equals(NormalizePath(b.FullName),
+                                                 Platform.PathComparison);
+ 
++        /// <summary>
++        /// Check whether a path is the same as or inside another path,
++        /// after resolving relative segments like ".." and normalizing separators.
++        /// </summary>
++        /// <param name="path">The path that might be inside parent</param>
++        /// <param name="parent">The path that might contain path</param>
++        /// <returns>true if path is parent or a descendant of it, false otherwise</returns>
++        public static bool IsSameOrInside(string path, string parent)
++        {
++            var child = NormalizePath(Path.GetFullPath(path));
++            var root  = NormalizePath(Path.GetFullPath(parent));
++            return child.Equals(root, Platform.PathComparison)
++                   || child.StartsWith(root.EndsWith("/") ? root : $"{root}/",
++                                       Platform.PathComparison);
++        }
++
+     }
+ }
+diff --git a/Core/Properties/Resources.resx b/Core/Properties/Resources.resx
+index 758e638..c078e46 100644
+--- a/Core/Properties/Resources.resx
++++ b/Core/Properties/Resources.resx
+@@ -338,6 +338,7 @@ Free up space on that device or change your settings to use another location.
+   <data name="KrakenInstanceNameTaken" xml:space="preserve"><value>This instance name is already taken: {0}</value></data>
+   <data name="KrakenNoInstance" xml:space="preserve"><value>No instance with this name or at this path: {0}</value></data>
+   <data name="DirectoryNotEmpty" xml:space="preserve"><value>Directory not empty: {0}</value></data>
++  <data name="DirectoryCopyDestinationInsideSource" xml:space="preserve"><value>Can't copy {0} to {1} because the destination is inside the source</value></data>
+   <data name="RelationshipResolverConflictsWith" xml:space="preserve"><value>{0} conflicts with {1}</value></data>
+   <data name="RelationshipResolverConflictingModDescription" xml:space="preserve"><value>{0} (needed for: {1})</value></data>
+   <data name="RelationshipResolverRequiredButResolver" xml:space="preserve"><value>{0} required, but an incompatible version is in the resolver</value></data>
+diff --git a/Core/Utilities.cs b/Core/Utilities.cs
+index 215fc38..ebbaab3 100644
+--- a/Core/Utilities.cs
++++ b/Core/Utilities.cs
+@@ -86,6 +86,9 @@ namespace CKAN
+                                          string[] subFolderRelPathsToLeaveEmpty,
+                                          string[] subFolderRelPathsToForbidHardlinks)
+         {
++            // Copying a directory into itself would recurse forever,
++            // copying the copy into the copy until the disk fills up
++            ThrowIfDestinationInsideSource(sourceDirPath, destDirPath);
+             using (var transaction = CkanTransaction.CreateTransactionScope())
+             {
+                 CopyDirectory(sourceDirPath, destDirPath, new TxFileManager(),
+@@ -97,6 +100,23 @@ namespace CKAN
+             }
+         }
+ 
++        /// <summary>
++        /// Throw if a copy from source to destination would copy a directory into itself
++        /// </summary>
++        /// <param name="sourceDirPath">Source directory path</param>
++        /// <param name="destDirPath">Destination directory path</param>
++        /// <exception cref="PathErrorKraken">Thrown if destination is the same as or inside source</exception>
++        public static void ThrowIfDestinationInsideSource(string sourceDirPath,
++                                                          string destDirPath)
++        {
++            if (CKANPathUtils.IsSameOrInside(destDirPath, sourceDirPath))
++            {
++                throw new PathErrorKraken(destDirPath,
++                                          string.Format(Properties.Resources.DirectoryCopyDestinationInsideSource,
++                                                        sourceDirPath, destDirPath));
++            }
++        }
++
+         private static void CopyDirectory(string        sourceDirPath,
+                                           string        destDirPath,
+                                           TxFileManager txFileMgr,
+diff --git a/Tests/Core/GameInstanceManager.cs b/Tests/Core/GameInstanceManager.cs
+index b2e9fca..ba3a9a9 100644
+--- a/Tests/Core/GameInstanceManager.cs
++++ b/Tests/Core/GameInstanceManager.cs
+@@ -159,6 +159,18 @@ namespace Tests.Core
+             }
+         }
+ 
++        [Test]
++        public void CloneInstance_ToSubfolderOfSource_ThrowsPathErrorKraken()
++        {
++            string instanceName = "RP1";
++            var newPath = Path.Combine(tidy!.KSP.GameDir, "RP1");
++
++            Assert.Throws<PathErrorKraken>(() =>
++                manager?.CloneInstance(tidy.KSP, instanceName, newPath));
++            Assert.IsFalse(manager?.HasInstance(instanceName));
++            Assert.IsFalse(Directory.Exists(newPath));
++        }
++
+         [Test]
+         public void CloneInstance_GoodInstance_ManagerHasValidInstance()
+         {
+diff --git a/Tests/Core/UtilitiesTests.cs b/Tests/Core/UtilitiesTests.cs
+index 5e4727d..e364119 100644
+--- a/Tests/Core/UtilitiesTests.cs
++++ b/Tests/Core/UtilitiesTests.cs
+@@ -106,6 +106,48 @@ namespace Tests.Core
+             }
+         }
+ 
++        [Test]
++        public void CopyDirectory_DestInsideSource_ThrowsPathErrorKraken()
++        {
++            // Arrange
++            using (var dir = new TemporaryDirectory())
++            {
++                var source = Path.Combine(dir, "source");
++                Directory.CreateDirectory(Path.Combine(source, "GameData"));
++                File.WriteAllText(Path.Combine(source, "file.txt"), "content");
++                // Non-canonical path pointing inside the source
++                var dest = Path.Combine(source, "GameData", "..", "Clone");
++
++                // Act / Assert
++                Assert.Throws<PathErrorKraken>(() =>
++                    Utilities.CopyDirectory(source, dest,
++                                            Array.Empty<string>(), Array.Empty<string>(),
++                                            Array.Empty<string>(), Array.Empty<string>()));
++                Assert.IsFalse(Directory.Exists(Path.Combine(source, "Clone")));
++            }
++        }
++
++        [Test]
++        public void CopyDirectory_DestIsSiblingWithSourcePrefix_Copies()
++        {
++            // Arrange
++            using (var dir = new TemporaryDirectory())
++            {
++                var source = Path.Combine(dir, "KSP");
++                Directory.CreateDirectory(source);
++                File.WriteAllText(Path.Combine(source, "file.txt"), "content");
++                var dest = Path.Combine(dir, "KSP-clone");
++
++                // Act
++                Utilities.CopyDirectory(source, dest,
++                                        Array.Empty<string>(), Array.Empty<string>(),
++                                        Array.Empty<string>(), Array.Empty<string>());
++
++                // Assert
++                Assert.IsTrue(File.Exists(Path.Combine(dest, "file.txt")));
++            }
++        }
++
+         private readonly string goodKspDir = TestData.good_ksp_dir();
+     }
+ }

@@ -1,0 +1,133 @@
+diff --git a/Core/Relationships/RelationshipResolver.cs b/Core/Relationships/RelationshipResolver.cs
+index 0c1314a..fd8e4b1 100644
+--- a/Core/Relationships/RelationshipResolver.cs
++++ b/Core/Relationships/RelationshipResolver.cs
+@@ -278,10 +278,21 @@ namespace CKAN
+                     continue;
+                 }
+ 
++                // When gathering recommendations and suggestions, other optional
++                // modules are not definitely being installed, so they must not
++                // prevent us from finding a candidate that conflicts with them.
++                // Conflicts between them are handled when the user makes a selection.
++                var optionalRel = options.get_recommenders
++                                  && reason is SelectionReason.Recommended
++                                            or SelectionReason.Suggested;
++                IReadOnlyCollection<CkanModule> installing = optionalRel
++                    ? DefinitelyInstalling()
++                    : modlist.Values;
++
+                 IReadOnlyList<CkanModule>? candidates = null;
+                 try
+                 {
+-                    candidates = resolved.Candidates(descriptor, modlist.Values,
++                    candidates = resolved.Candidates(descriptor, installing,
+                                                      registry, game);
+                     log.DebugFormat("Got {0} candidates for {1}",
+                                     candidates.Count, descriptor);
+@@ -338,7 +349,7 @@ namespace CKAN
+                 // Finally, check our candidate against everything which might object
+                 // to it being installed; that's all the mods which are fixed in our
+                 // list thus far, as well as everything on the system.
+-                var fixed_mods = modlist.Values.Concat(installed_modules).ToHashSet();
++                var fixed_mods = installing.Concat(installed_modules).ToHashSet();
+ 
+                 var conflicting_mod = fixed_mods.FirstOrDefault(mod => mod.ConflictsWith(candidate));
+                 if (conflicting_mod == null)
+@@ -503,6 +514,19 @@ namespace CKAN
+                                              .Where(m => ReasonsFor(m).Any(r => r is SelectionReason.Depends dep
+                                                                                 && dep.Parent == searching)));
+ 
++        /// <summary>
++        /// The user requested modules and their (recursive) dependencies,
++        /// excluding modules that are only in the list as recommendations or suggestions
++        /// </summary>
++        private CkanModule[] DefinitelyInstalling()
++            => BreadthFirstSearch(user_requested_mods,
++                                  (searching, found) =>
++                                      modlist.Values
++                                             .Except(found)
++                                             .Where(m => ReasonsFor(m).Any(r => r is SelectionReason.Depends dep
++                                                                                && dep.Parent == searching)))
++                   .ToArray();
++
+         public IEnumerable<CkanModule> Recommendations(HashSet<CkanModule> dependencies)
+             => modlist.Values.Except(dependencies)
+                              .Where(m => ValidRecSugReasons(dependencies,
+diff --git a/Tests/Core/IO/ModuleInstallerTests.cs b/Tests/Core/IO/ModuleInstallerTests.cs
+index d7e5e99..ebaf4f3 100644
+--- a/Tests/Core/IO/ModuleInstallerTests.cs
++++ b/Tests/Core/IO/ModuleInstallerTests.cs
+@@ -897,6 +897,72 @@ namespace Tests.Core.IO
+             }
+         }
+ 
++        [Test]
++        public void FindRecommendations_MutuallyConflictingRecommendations_AllFound()
++        {
++            // Arrange
++            using (var inst     = new DisposableKSP())
++            using (var repo     = new TemporaryRepository(
++                                      Relationships.RelationshipResolverTests.MergeWithDefaults(
++                                          @"{
++                                              ""identifier"": ""InstallingMod"",
++                                              ""recommends"": [
++                                                  { ""name"": ""PlanetA"" },
++                                                  { ""name"": ""PlanetB"" },
++                                                  { ""name"": ""PlanetC"" }
++                                              ],
++                                              ""suggests"": [
++                                                  { ""name"": ""PlanetD"" }
++                                              ]
++                                          }",
++                                          @"{
++                                              ""identifier"": ""PlanetA"",
++                                              ""conflicts"": [ { ""name"": ""PlanetB"" },
++                                                               { ""name"": ""PlanetC"" },
++                                                               { ""name"": ""PlanetD"" } ]
++                                          }",
++                                          @"{
++                                              ""identifier"": ""PlanetB""
++                                          }",
++                                          @"{
++                                              ""identifier"": ""PlanetC"",
++                                              ""conflicts"": [ { ""name"": ""PlanetB"" } ]
++                                          }",
++                                          @"{
++                                              ""identifier"": ""PlanetD""
++                                          }")
++                                          .ToArray()))
++            using (var repoData = new TemporaryRepositoryData(nullUser, repo.repo))
++            using (var regMgr   = RegistryManager.Instance(inst.KSP, repoData.Manager,
++                                                           new Repository[] { repo.repo }))
++            {
++                var registry = regMgr.registry;
++                CkanModule Get(string ident)
++                    => registry.LatestAvailable(ident,
++                                                inst.KSP.StabilityToleranceConfig,
++                                                inst.KSP.VersionCriteria())!;
++                var toInstall = new CkanModule[] { Get("InstallingMod") };
++
++                // Act
++                var result = ModuleInstaller.FindRecommendations(
++                                 inst.KSP, toInstall,
++                                 Array.Empty<CkanModule>(),
++                                 Array.Empty<CkanModule>(),
++                                 Array.Empty<CkanModule>(),
++                                 registry,
++                                 out Dictionary<CkanModule, Tuple<bool, List<string>>> recommendations,
++                                 out Dictionary<CkanModule, List<string>> suggestions,
++                                 out Dictionary<CkanModule, HashSet<string>> supporters);
++
++                // Assert
++                Assert.IsTrue(result);
++                CollectionAssert.AreEquivalent(new CkanModule[] { Get("PlanetA"), Get("PlanetB"), Get("PlanetC") },
++                                               recommendations.Keys);
++                CollectionAssert.AreEquivalent(new CkanModule[] { Get("PlanetD") },
++                                               suggestions.Keys);
++            }
++        }
++
+         [Test]
+         public void FindRecommendations_ReplaceParallaxWithParallaxContinued_1ThousandRecommendationsNotIncluded()
+         {

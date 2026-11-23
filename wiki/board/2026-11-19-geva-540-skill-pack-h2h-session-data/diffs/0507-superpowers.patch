@@ -1,0 +1,212 @@
+diff --git a/Terminal.Gui/Views/DialogTResult.cs b/Terminal.Gui/Views/DialogTResult.cs
+index 94f4d99..500982c 100644
+--- a/Terminal.Gui/Views/DialogTResult.cs
++++ b/Terminal.Gui/Views/DialogTResult.cs
+@@ -75,6 +75,10 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+     /// </remarks>
+     public Dialog ()
+     {
++        // Base constructors (e.g. Runnable) may set SchemeName; that is not an explicit choice by the caller, so
++        // allow SetStyle to manage the scheme name.
++        _schemeNameExplicitlySet = false;
++
+         X = Pos.Center ();
+         Y = Pos.Center ();
+ 
+@@ -91,8 +95,6 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         BorderStyle = Dialog.DefaultBorderStyle;
+         base.ShadowStyle = Dialog.DefaultShadow;
+ 
+-        SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Dialog);
+-
+         CommandsToBubbleUp = [Command.Accept];
+ 
+         _buttonContainer = new View
+@@ -350,21 +352,59 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         }
+     }
+ 
++    // True once SchemeName has been explicitly set by a caller (e.g. MessageBox setting the Error scheme). When true,
++    // SetStyle will not override SchemeName.
++    private bool _schemeNameExplicitlySet;
++
++    // True while SetStyle is applying the automatic (Dialog vs. Base) scheme name.
++    private bool _settingStyleSchemeName;
++
++    /// <inheritdoc/>
++    protected override void OnSchemeNameChanged (ValueChangedEventArgs<string?> args)
++    {
++        if (!_settingStyleSchemeName)
++        {
++            _schemeNameExplicitlySet = true;
++        }
++
++        base.OnSchemeNameChanged (args);
++    }
++
+     private void SetStyle ()
+     {
+         if (IsRunning)
+         {
++            SetStyleSchemeName (Schemes.Dialog);
+             Arrangement |= ViewArrangement.Movable | ViewArrangement.Resizable | ViewArrangement.Overlapped;
+         }
+         else
+         {
+-            SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base);
++            SetStyleSchemeName (Schemes.Base);
+ 
+             // strip out movable and resizable
+             Arrangement &= ~(ViewArrangement.Movable | ViewArrangement.Resizable);
+         }
+     }
+ 
++    private void SetStyleSchemeName (Schemes scheme)
++    {
++        if (_schemeNameExplicitlySet)
++        {
++            return;
++        }
++
++        _settingStyleSchemeName = true;
++
++        try
++        {
++            SchemeName = SchemeManager.SchemesToSchemeName (scheme);
++        }
++        finally
++        {
++            _settingStyleSchemeName = false;
++        }
++    }
++
+     // Dialogs are Modal and Focus is indicated by their Border. _drawingText ensures the
+     // Text of the dialog (e.g. for a MessageBox) is always drawn using the Normal Attribute
+     // instead of the Focus attribute.
+diff --git a/Tests/UnitTestsParallelizable/Views/DialogTests.cs b/Tests/UnitTestsParallelizable/Views/DialogTests.cs
+index 5c64f21..7379dcd 100644
+--- a/Tests/UnitTestsParallelizable/Views/DialogTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/DialogTests.cs
+@@ -2474,4 +2474,122 @@ public class DialogTests (ITestOutputHelper output) : TestDriverBase
+     }
+ 
+     #endregion Dialog<TResult> Generic Tests
++
++    #region Scheme Tests
++
++    [Fact]
++    public void Scheme_NotRunning_Uses_Base_Scheme ()
++    {
++        using Dialog dialog = new ();
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Base), dialog.SchemeName);
++    }
++
++    [Fact]
++    public void Scheme_Running_Uses_Dialog_Scheme ()
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++
++        using Dialog dialog = new ();
++        string? schemeNameWhileRunning = null;
++        Scheme? schemeWhileRunning = null;
++
++        app.Iteration += AppOnIteration;
++        app.Run (dialog);
++        app.Iteration -= AppOnIteration;
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Dialog), schemeNameWhileRunning);
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog), schemeWhileRunning);
++
++        return;
++
++        void AppOnIteration (object? sender, EventArgs<IApplication?> e)
++        {
++            app.Iteration -= AppOnIteration;
++            schemeNameWhileRunning = dialog.SchemeName;
++            schemeWhileRunning = dialog.GetScheme ();
++            dialog.RequestStop ();
++        }
++    }
++
++    [Fact]
++    public void Scheme_Running_Generic_Dialog_Uses_Dialog_Scheme ()
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++
++        using Dialog<string> dialog = new ();
++        string? schemeNameWhileRunning = null;
++
++        app.Iteration += AppOnIteration;
++        app.Run (dialog);
++        app.Iteration -= AppOnIteration;
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Dialog), schemeNameWhileRunning);
++
++        return;
++
++        void AppOnIteration (object? sender, EventArgs<IApplication?> e)
++        {
++            app.Iteration -= AppOnIteration;
++            schemeNameWhileRunning = dialog.SchemeName;
++            dialog.RequestStop ();
++        }
++    }
++
++    [Fact]
++    public void Scheme_Running_Preserves_Explicit_SchemeName ()
++    {
++        // This mirrors what MessageBox does (sets SchemeName after construction).
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++
++        using Dialog dialog = new ();
++        dialog.SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Error);
++        string? schemeNameWhileRunning = null;
++
++        app.Iteration += AppOnIteration;
++        app.Run (dialog);
++        app.Iteration -= AppOnIteration;
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Error), schemeNameWhileRunning);
++
++        return;
++
++        void AppOnIteration (object? sender, EventArgs<IApplication?> e)
++        {
++            app.Iteration -= AppOnIteration;
++            schemeNameWhileRunning = dialog.SchemeName;
++            dialog.RequestStop ();
++        }
++    }
++
++    [Fact]
++    public void Scheme_Running_Preserves_Explicit_Base_SchemeName ()
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++
++        using Dialog dialog = new () { SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Menu) };
++        dialog.SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base);
++        string? schemeNameWhileRunning = null;
++
++        app.Iteration += AppOnIteration;
++        app.Run (dialog);
++        app.Iteration -= AppOnIteration;
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Base), schemeNameWhileRunning);
++
++        return;
++
++        void AppOnIteration (object? sender, EventArgs<IApplication?> e)
++        {
++            app.Iteration -= AppOnIteration;
++            schemeNameWhileRunning = dialog.SchemeName;
++            dialog.RequestStop ();
++        }
++    }
++
++    #endregion Scheme Tests
+ }

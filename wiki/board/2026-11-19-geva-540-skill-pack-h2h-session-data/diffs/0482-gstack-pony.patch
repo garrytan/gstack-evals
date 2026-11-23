@@ -1,0 +1,79 @@
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header/expected.out b/plugins/inputs/turbostat/testcases/repeated-header/expected.out
+new file mode 100644
+index 0000000..29cccef
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header/expected.out
+@@ -0,0 +1,4 @@
++turbostat,core=-,cpu=- usec=11,busy_percent=0.04,package_power_watt=87.38
++turbostat,core=0,cpu=0 usec=10,busy_percent=0.07
++turbostat,core=-,cpu=- usec=11,busy_percent=0.05,package_power_watt=80.5,ram_power_watt=27.8
++turbostat,core=0,cpu=0 usec=12,busy_percent=0.08
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header/input.txt b/plugins/inputs/turbostat/testcases/repeated-header/input.txt
+new file mode 100644
+index 0000000..6d87e11
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header/input.txt
+@@ -0,0 +1,6 @@
++usec	Time_Of_Day_Seconds	Core	CPU	Busy%	PkgWatt
++11	1700000000.000001	-	-	0.04	87.38
++10	1700000000.000002	0	0	0.07
++usec	Time_Of_Day_Seconds	Core	CPU	Busy%	PkgWatt	RAMWatt	
++11	1700000060.000001	-	-	0.05	80.5	27.8
++12	1700000060.000002	0	0	0.08
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header/telegraf.conf b/plugins/inputs/turbostat/testcases/repeated-header/telegraf.conf
+new file mode 100644
+index 0000000..b4d44da
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header/telegraf.conf
+@@ -0,0 +1 @@
++[[inputs.turbostat]]
+diff --git a/plugins/inputs/turbostat/turbostat.go b/plugins/inputs/turbostat/turbostat.go
+index 48671e6..81b3d6f 100644
+--- a/plugins/inputs/turbostat/turbostat.go
++++ b/plugins/inputs/turbostat/turbostat.go
+@@ -122,17 +122,21 @@ func (t *Turbostat) Start(acc telegraf.Accumulator) error {
+ 			acc.AddError(scanner.Err())
+ 			return
+ 		}
+-		header := scanner.Text()
+-		columns := make([]column, 0, 50)
+-		for _, s := range strings.Fields(header) {
+-			columns = append(columns, createColumn(s))
+-		}
++		header := strings.Fields(scanner.Text())
++		columns := createColumns(header)
+ 		for scanner.Scan() {
+-			line := scanner.Text()
+-			if line == header {
++			values := strings.Fields(scanner.Text())
++			if len(values) == 0 {
++				continue
++			}
++			// Turbostat repeats the header line, which may differ from the
++			// previous one (e.g. whitespace or the set of columns), so detect
++			// header lines by their first field and rebuild the columns.
++			if len(header) > 0 && values[0] == header[0] {
++				header = values
++				columns = createColumns(header)
+ 				continue
+ 			}
+-			values := strings.Fields(line)
+ 			acc.AddError(processValues(acc, columns, values))
+ 		}
+ 		acc.AddError(scanner.Err())
+@@ -189,6 +193,15 @@ func processValues(acc telegraf.Accumulator, columns []column, values []string)
+ 	return nil
+ }
+ 
++// Creates column structs from Turbostat column names.
++func createColumns(names []string) []column {
++	columns := make([]column, 0, len(names))
++	for _, s := range names {
++		columns = append(columns, createColumn(s))
++	}
++	return columns
++}
++
+ // Creates a column struct from a Turbostat column name.
+ func createColumn(s string) column {
+ 	// Add underscores around words known not to have delimiters.

@@ -1,0 +1,46 @@
+diff --git a/excelize.go b/excelize.go
+index c2fcf21..e6726e8 100644
+--- a/excelize.go
++++ b/excelize.go
+@@ -369,6 +369,13 @@ func (ws *xlsxWorksheet) checkSheet() error {
+ 		row    int
+ 		r0Rows []xlsxRow
+ 	)
++	if ws.Cols != nil {
++		for _, col := range ws.Cols.Col {
++			if col.Min < MinColumns || col.Max > MaxColumns {
++				return ErrColumnNumber
++			}
++		}
++	}
+ 	for i := 0; i < len(ws.SheetData.Row); i++ {
+ 		r := ws.SheetData.Row[i]
+ 		if err := checkRowNum(r.R); err != nil {
+diff --git a/excelize_test.go b/excelize_test.go
+index 403dd0d..9f08583 100644
+--- a/excelize_test.go
++++ b/excelize_test.go
+@@ -1633,6 +1633,23 @@ func TestWorkSheetReader(t *testing.T) {
+ 	f.Pkg.Store("xl/worksheets/sheet1.xml", fmt.Appendf(nil, sheetData, `<row r="1048577"><c r="A1"><v>1</v></c></row>`))
+ 	_, err = f.workSheetReader("Sheet1")
+ 	assert.Equal(t, ErrMaxRows, err)
++
++	// Test on invalid column number
++	for _, cols := range []string{
++		`<col min="1" max="2147483647" width="9"/>`,
++		`<col min="-2147483648" max="1" width="9"/>`,
++		`<col min="0" max="1" width="9"/>`,
++		`<col min="16385" max="16385" width="9"/>`,
++	} {
++		f.Sheet.Delete("xl/worksheets/sheet1.xml")
++		f.Pkg.Store("xl/worksheets/sheet1.xml", fmt.Appendf(nil, `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>%s</cols><sheetData/></worksheet>`, cols))
++		f.checked = sync.Map{}
++		assert.Equal(t, ErrColumnNumber, f.SetColWidth("Sheet1", "A", "A", 12), cols)
++	}
++	f.Sheet.Delete("xl/worksheets/sheet1.xml")
++	f.Pkg.Store("xl/worksheets/sheet1.xml", []byte(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="16384" width="9"/></cols><sheetData/></worksheet>`))
++	f.checked = sync.Map{}
++	assert.NoError(t, f.SetColWidth("Sheet1", "A", "A", 12))
+ }
+ 
+ func TestRelsReader(t *testing.T) {

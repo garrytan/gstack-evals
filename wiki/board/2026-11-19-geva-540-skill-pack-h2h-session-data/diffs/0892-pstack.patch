@@ -1,0 +1,40 @@
+diff --git a/packages/react/src/menu/popup/MenuPopup.tsx b/packages/react/src/menu/popup/MenuPopup.tsx
+index cf3d523..2b71e65 100644
+--- a/packages/react/src/menu/popup/MenuPopup.tsx
++++ b/packages/react/src/menu/popup/MenuPopup.tsx
+@@ -101,6 +101,9 @@ export const MenuPopup = React.forwardRef(function MenuPopup(
+   if (parent.type === 'menubar' && lastOpenChangeReason !== 'outside-press') {
+     returnFocus = true;
+   }
++  if (parent.type === 'menu' && lastOpenChangeReason === 'escape-key') {
++    returnFocus = true;
++  }
+ 
+   return (
+     <FloatingFocusManager
+diff --git a/packages/react/src/menu/root/MenuRoot.test.tsx b/packages/react/src/menu/root/MenuRoot.test.tsx
+index d6b697f..15fa118 100644
+--- a/packages/react/src/menu/root/MenuRoot.test.tsx
++++ b/packages/react/src/menu/root/MenuRoot.test.tsx
+@@ -782,6 +782,10 @@ describe('<Menu.Root />', () => {
+       await flushMicrotasks();
+ 
+       expect(queryByRole('menu', { hidden: false })).to.equal(null);
++
++      await waitFor(() => {
++        expect(trigger).toHaveFocus();
++      });
+     });
+ 
+     it('does not close the parent menu when the Escape key is pressed if `closeParentOnEsc=false`', async () => {
+@@ -837,6 +841,10 @@ describe('<Menu.Root />', () => {
+       });
+ 
+       expect(menus[0].id).to.equal('parent-menu');
++
++      await waitFor(() => {
++        expect(getByRole('menuitem', { name: '2' })).toHaveFocus();
++      });
+     });
+   });
+ 

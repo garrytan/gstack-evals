@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { CODEX } from "../../lanes/codex-hooks/pins.ts";
+import { CODEX_BIN } from "../../lanes/codex-hooks/c/pins.ts";
 import { CLAUDE_CLI, CODEX_CLI, HAS_CLAUDE_CLI, HAS_CODEX_CLI, REPO } from "./harness.ts";
 
 const pins = JSON.parse(readFileSync(join(REPO, "docker", "host-cli.json"), "utf8")) as Record<string, string | null>;
@@ -34,4 +36,18 @@ test("the Dockerfile installs every binary in the Codex tarball's bin directory,
   expect(dockerfile).toMatch(new RegExp("/@openai/codex/-/codex-[0-9.]+-linux-x64\\.tgz /tmp/codex\\.tgz\nRUN tar -xzf /tmp/codex\\.tgz -C /tmp package/vendor/x86_64-unknown-linux-musl/bin \\\\\n && install -m 0755 " + bin + "/\\* /usr/local/bin/ \\\\\n"));
   expect(dockerfile).toContain(" && codex-code-mode-host --help");
   if (HAS_CODEX_CLI) expect(existsSync(join(dirname(CODEX_CLI), "codex-code-mode-host"))).toBe(true);
+});
+
+// Value: protects=the trial image carries the Codex hooks eval's Codex 0.170.0 beside the default codex, from npm's linux-x64 tarball checked by sha256, at /opt/codex-0.170.0 with the binary's own sha256 checked, and host-cli.json, the Dockerfile and the eval's pins name one version and one pair of digests; fails_when=one moves without the others, or the install puts 0.170.0 on PATH in place of the default; why_new=GEVA-562 pre-run change 1, section 10; seam=docker/host-cli.json, docker/trial.Dockerfile, lanes/codex-hooks/pins.ts, lanes/codex-hooks/c/pins.ts; no_claim=the image builds, which the Docker tier covers
+test("the Codex hooks eval's Codex 0.170.0 sits beside the default codex, checked by its tarball's and its binary's sha256", () => {
+  const v = CODEX.version;
+  expect(pins.codex_hooks_eval).toBe(v);
+  expect(pins.codex).not.toBe(v);
+  expect(dockerfile).toContain("ADD --checksum=sha256:" + CODEX.tarballSha256 + " https://registry.npmjs.org/@openai/codex/-/codex-" + v + "-linux-x64.tgz /tmp/codex-" + v + ".tgz\n");
+  expect(dockerfile).toContain("tar -xzf /tmp/codex-" + v + ".tgz -C /opt/codex-" + v + " --strip-components=3 package/vendor/x86_64-unknown-linux-musl");
+  expect(dockerfile).toContain('echo "' + CODEX.binarySha256 + "  /opt/codex-" + v + '/bin/codex" | sha256sum -c -');
+  expect(dockerfile).toContain(" && /opt/codex-" + v + "/bin/codex --version");
+  expect(dockerfile).toContain(" && /opt/codex-" + v + "/bin/codex-code-mode-host --help");
+  expect(dockerfile).not.toMatch(new RegExp("ENV PATH=[^\\n]*/opt/codex-"));
+  expect(CODEX_BIN).toBe("/opt/codex-" + v + "/bin/codex");
 });

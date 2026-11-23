@@ -1,0 +1,12 @@
+draws to place 110 briefs: 175.9
+stage 1 sessions: 48 on Opus and Sol, 24 on particle-1; stage 2: 564 and 282
+1 Authoring                  central    183.24  cap   251
+2 Simulator audit            central     29.34  cap    41
+3 Stage 1                    central    109.68  cap   164
+4 Judge check                central     89.80  cap   123
+5 Stage 2, Opus and Sol      central   1188.16  cap  1620
+6 Stage 2, particle-1        central    100.58  cap   139
+7 Hosts                      central     15.28  cap    22
+Paid total                   central   1716.08  cap  2360
+agent model use 350; all-in central 2066.08, at caps 2710
+particle-1 across both stages: central 109.14, at caps 150.56

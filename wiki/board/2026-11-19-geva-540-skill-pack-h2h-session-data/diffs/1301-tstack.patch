@@ -1,0 +1,90 @@
+diff --git a/go.mod b/go.mod
+index 0f02efc..733316c 100644
+--- a/go.mod
++++ b/go.mod
+@@ -10,6 +10,7 @@ require (
+ 	github.com/fsnotify/fsnotify v1.9.0
+ 	github.com/getsentry/sentry-go v0.34.1
+ 	github.com/go-test/deep v1.1.1
++	github.com/go-viper/mapstructure/v2 v2.4.0
+ 	github.com/google/go-cmp v0.7.0
+ 	github.com/google/uuid v1.6.0
+ 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
+@@ -37,7 +38,6 @@ require (
+ 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+ 	github.com/davecgh/go-spew v1.1.1 // indirect
+ 	github.com/eapache/queue v1.1.0 // indirect
+-	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
+ 	github.com/golang/protobuf v1.5.4 // indirect
+ 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+ 	github.com/kr/text v0.2.0 // indirect
+diff --git a/pkg/packet/bgp/bgp.go b/pkg/packet/bgp/bgp.go
+index 336bb0c..0872e4a 100644
+--- a/pkg/packet/bgp/bgp.go
++++ b/pkg/packet/bgp/bgp.go
+@@ -15703,6 +15703,9 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 		if err != nil {
+ 			return err
+ 		}
++		if int(routelen) < w.Len(options...)+addpathLen {
++			return NewMessageError(eCode, eSubCode, nil, "withdrawn route length is short")
++		}
+ 		routelen -= uint16(w.Len(options...) + addpathLen)
+ 		if len(data) < w.Len(options...) {
+ 			return NewMessageError(eCode, eSubCode, nil, "Withdrawn route length is short")
+@@ -15758,8 +15761,7 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 				strongestError = e
+ 			}
+ 		}
+-		pathlen -= uint16(p.Len(options...))
+-		if len(data) < p.Len(options...) {
++		if len(data) < p.Len(options...) || int(pathlen) < p.Len(options...) {
+ 			e = NewMessageErrorWithErrorHandling(
+ 				eCode, BGP_ERROR_SUB_ATTRIBUTE_LENGTH_ERROR, data, ERROR_HANDLING_TREAT_AS_WITHDRAW, nil, "attribute length is short")
+ 			if e.(*MessageError).Stronger(strongestError) {
+@@ -15767,6 +15769,7 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 			}
+ 			return strongestError
+ 		}
++		pathlen -= uint16(p.Len(options...))
+ 		data = data[p.Len(options...):]
+ 		if e == nil || e.(*MessageError).ErrorHandling != ERROR_HANDLING_ATTRIBUTE_DISCARD {
+ 			msg.PathAttributes = append(msg.PathAttributes, p)
+diff --git a/pkg/packet/bgp/update_underflow_test.go b/pkg/packet/bgp/update_underflow_test.go
+new file mode 100644
+index 0000000..51adbd8
+--- /dev/null
++++ b/pkg/packet/bgp/update_underflow_test.go
+@@ -0,0 +1,32 @@
++package bgp
++
++import (
++	"encoding/binary"
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++)
++
++func TestBGPUpdateDecodePathAttrLenUnderflow(t *testing.T) {
++	// TotalPathAttributeLen (3) is shorter than the first attribute (4 bytes).
++	data := []byte{0, 0, 0, 3}
++	data = append(data, 0x40, 1, 1, 0) // ORIGIN, 4 bytes
++	// A large unknown attribute so the wrapped pathlen reaches 2 with no data left.
++	attrLen := 65533 - 4
++	hdr := []byte{0xd0, 0xff, 0, 0}
++	binary.BigEndian.PutUint16(hdr[2:], uint16(attrLen))
++	data = append(data, hdr...)
++	data = append(data, make([]byte, attrLen)...)
++
++	assert.NotPanics(t, func() {
++		msg := &BGPUpdate{}
++		assert.Error(t, msg.DecodeFromBytes(data))
++	})
++}
++
++func TestBGPUpdateDecodeWithdrawnLenUnderflow(t *testing.T) {
++	// WithdrawnRoutesLen (1) is shorter than the first prefix (2 bytes).
++	data := []byte{0, 1, 8, 10, 0, 0}
++	msg := &BGPUpdate{}
++	assert.Error(t, msg.DecodeFromBytes(data))
++}

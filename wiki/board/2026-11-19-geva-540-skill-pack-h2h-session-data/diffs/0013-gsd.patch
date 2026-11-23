@@ -1,0 +1,109 @@
+diff --git a/rust/src/cli/common.rs b/rust/src/cli/common.rs
+index e5492e8..5ccce75 100644
+--- a/rust/src/cli/common.rs
++++ b/rust/src/cli/common.rs
+@@ -215,7 +215,7 @@ fn expand_home(path: &str) -> String {
+ fn promote_to_git_root(path: &str) -> String {
+     let mut p = std::path::Path::new(path);
+     loop {
+-        if p.join(".git").exists() {
++        if crate::dashboard::routes::helpers::is_valid_git_boundary(&p.join(".git")) {
+             return p.to_string_lossy().to_string();
+         }
+         match p.parent() {
+diff --git a/rust/src/dashboard/routes/helpers.rs b/rust/src/dashboard/routes/helpers.rs
+index dc848c6..5912e98 100644
+--- a/rust/src/dashboard/routes/helpers.rs
++++ b/rust/src/dashboard/routes/helpers.rs
+@@ -172,10 +172,89 @@ fn promote_to_git_root(path: &str) -> String {
+ fn git_root_for(path: &str) -> Option<String> {
+     let mut p = Path::new(path);
+     loop {
+-        let git = p.join(".git");
+-        if git.exists() {
++        if is_valid_git_boundary(&p.join(".git")) {
+             return Some(p.to_string_lossy().to_string());
+         }
+         p = p.parent()?;
+     }
+ }
++
++/// A `.git` entry marks a usable checkout boundary when it is a directory, or a
++/// gitfile (worktree/submodule) whose `gitdir:` target resolves to an existing
++/// directory. Broken gitfiles (stale worktrees, deleted git dirs) are ignored so
++/// they cannot hijack root promotion to an unrelated ancestor such as `$HOME`.
++pub(crate) fn is_valid_git_boundary(git: &Path) -> bool {
++    if git.is_dir() {
++        return true;
++    }
++    if !git.is_file() {
++        return false;
++    }
++    let Ok(content) = std::fs::read_to_string(git) else {
++        return false;
++    };
++    let Some(target) = content
++        .lines()
++        .find_map(|l| l.trim().strip_prefix("gitdir:"))
++        .map(str::trim)
++        .filter(|t| !t.is_empty())
++    else {
++        return false;
++    };
++    let target = Path::new(target);
++    let resolved = if target.is_absolute() {
++        target.to_path_buf()
++    } else {
++        match git.parent() {
++            Some(base) => base.join(target),
++            None => target.to_path_buf(),
++        }
++    };
++    resolved.is_dir()
++}
++
++#[cfg(test)]
++mod git_boundary_tests {
++    use super::{git_root_for, promote_to_git_root};
++
++    #[test]
++    fn broken_ancestor_gitfile_is_not_promoted() {
++        let tmp = tempfile::tempdir().unwrap();
++        let ws = tmp.path().join("workspace");
++        let project = ws.join("project");
++        std::fs::create_dir_all(&project).unwrap();
++        std::fs::write(ws.join(".git"), "gitdir: ../missing/git-dir\n").unwrap();
++
++        let project_s = project.to_string_lossy().to_string();
++        assert_eq!(promote_to_git_root(&project_s), project_s);
++    }
++
++    #[test]
++    fn valid_gitfile_worktree_is_promoted() {
++        let tmp = tempfile::tempdir().unwrap();
++        let ws = tmp.path().join("workspace");
++        let sub = ws.join("src");
++        std::fs::create_dir_all(&sub).unwrap();
++        std::fs::create_dir_all(tmp.path().join("real-git-dir")).unwrap();
++        std::fs::write(ws.join(".git"), "gitdir: ../real-git-dir\n").unwrap();
++
++        assert_eq!(
++            git_root_for(&sub.to_string_lossy()),
++            Some(ws.to_string_lossy().to_string())
++        );
++    }
++
++    #[test]
++    fn git_directory_is_promoted() {
++        let tmp = tempfile::tempdir().unwrap();
++        let ws = tmp.path().join("repo");
++        let sub = ws.join("a/b");
++        std::fs::create_dir_all(&sub).unwrap();
++        std::fs::create_dir_all(ws.join(".git")).unwrap();
++
++        assert_eq!(
++            promote_to_git_root(&sub.to_string_lossy()),
++            ws.to_string_lossy().to_string()
++        );
++    }
++}

@@ -1,0 +1,4 @@
+pool scored 200 repositories 138 sorted sha256 693eb509673dd68aa310a5129f9816784249aca126d1d8d999910d1464c446e5
+pool calibration 40 sorted sha256 e5ba36e1c3bd8410e4ce45e0b41ca04bd0d61728d6839e231e9d0d83bec6856f
+run 60 repositories 60 sorted sha256 7f29de150b2b416732958535c3d90614bcb47b5a30ede2d85d3d74242e4ced55
+smoke 2 yt-project__unyt-628 getmoto__moto-9590

@@ -1,0 +1,210 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 34e6c10..60efea1 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -12,6 +12,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
+ 
+ - Add `ByteSlice` and `ByteSliceValue` functions for new `BYTESLICE` attribute type in `go.opentelemetry.io/otel/attribute`. (#7948)
+ 
++### Changed
++
++- `ErrorType` in `go.opentelemetry.io/otel/semconv/v1.40.0` now unwraps errors created by `fmt.Errorf` with `%w` and reports the type of the first non-wrapping error in the chain instead of `*fmt.wrapError`. (#6904)
++- The `exception.type` attribute emitted by `go.opentelemetry.io/otel/sdk/log` now unwraps errors created by `fmt.Errorf` with `%w` and reports the type of the first non-wrapping error in the chain instead of `*fmt.wrapError`. (#6904)
++
+ <!-- Released section -->
+ <!-- Don't change this section unless doing release -->
+ 
+diff --git a/sdk/log/logger.go b/sdk/log/logger.go
+index 7efb962..a046cd3 100644
+--- a/sdk/log/logger.go
++++ b/sdk/log/logger.go
+@@ -5,6 +5,8 @@ package log // import "go.opentelemetry.io/otel/sdk/log"
+ 
+ import (
+ 	"context"
++	"errors"
++	"fmt"
+ 	"reflect"
+ 	"time"
+ 
+@@ -164,7 +166,7 @@ func errorType(err error) string {
+ 		}
+ 	}
+ 
+-	t := reflect.TypeOf(err)
++	t := reflect.TypeOf(unwrapFmt(err))
+ 	if t == nil {
+ 		return ""
+ 	}
+@@ -174,12 +176,45 @@ func errorType(err error) string {
+ 		return pkg + "." + name
+ 	}
+ 
+-	// The type has no package path or name (predeclared, not-defined,
+-	// or alias for a not-defined type).
+-	//
+ 	// The type has no package path or name (predeclared, not-defined,
+ 	// or alias for a not-defined type).
+ 	//
+ 	// This is not guaranteed to be unique, but is a best effort.
+ 	return t.String()
+ }
++
++var (
++	fmtWrapErrorType  = reflect.TypeOf(fmt.Errorf("%w", errors.New("")))
++	fmtWrapErrorsType = reflect.TypeOf(fmt.Errorf("%w %w", errors.New(""), errors.New("")))
++)
++
++// unwrapFmt returns the first error in the chain of err that is not a wrapping
++// error created by [fmt.Errorf]. Errors wrapping multiple errors are only
++// unwrapped if they wrap exactly one non-nil error.
++func unwrapFmt(err error) error {
++	for err != nil {
++		var next error
++		switch reflect.TypeOf(err) {
++		case fmtWrapErrorType:
++			next = errors.Unwrap(err)
++		case fmtWrapErrorsType:
++			if u, ok := err.(interface{ Unwrap() []error }); ok {
++				var n int
++				for _, e := range u.Unwrap() {
++					if e != nil {
++						next = e
++						n++
++					}
++				}
++				if n != 1 {
++					next = nil
++				}
++			}
++		}
++		if next == nil {
++			return err
++		}
++		err = next
++	}
++	return err
++}
+diff --git a/sdk/log/logger_test.go b/sdk/log/logger_test.go
+index 99eb381..d50f32f 100644
+--- a/sdk/log/logger_test.go
++++ b/sdk/log/logger_test.go
+@@ -6,6 +6,7 @@ package log // import "go.opentelemetry.io/otel/sdk/log"
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"strconv"
+ 	"testing"
+ 	"time"
+@@ -396,6 +397,11 @@ func TestErrorType(t *testing.T) {
+ 		assert.Equal(t, "go.opentelemetry.io/otel/sdk/log.errWithType", errorType(err))
+ 	})
+ 
++	t.Run("UnwrapsFmtWrapError", func(t *testing.T) {
++		err := fmt.Errorf("ctx: %w", fmt.Errorf("more: %w", errWithType{msg: "boom"}))
++		assert.Equal(t, "go.opentelemetry.io/otel/sdk/log.errWithType", errorType(err))
++	})
++
+ 	t.Run("NilError", func(t *testing.T) {
+ 		assert.Empty(t, errorType(nil))
+ 	})
+diff --git a/semconv/v1.40.0/error_type.go b/semconv/v1.40.0/error_type.go
+index 6d26e52..30d5b5c 100644
+--- a/semconv/v1.40.0/error_type.go
++++ b/semconv/v1.40.0/error_type.go
+@@ -5,6 +5,7 @@ package semconv // import "go.opentelemetry.io/otel/semconv/v1.40.0"
+ 
+ import (
+ 	"errors"
++	"fmt"
+ 	"reflect"
+ 
+ 	"go.opentelemetry.io/otel/attribute"
+@@ -22,7 +23,10 @@ import (
+ // the returned attribute has that method's return value. If multiple errors in
+ // the chain implement this method, the value from the first match found by
+ // [errors.As] is used. Otherwise, the returned attribute has a value derived
+-// from the concrete type of err.
++// from the concrete type of err. Errors created by [fmt.Errorf] that only wrap
++// another error (i.e. those using the %w verb) are unwrapped so the value is
++// derived from the concrete type of the first error in the chain that is not
++// such a wrapper.
+ //
+ // The key of the returned attribute is [ErrorTypeKey].
+ func ErrorType(err error) attribute.KeyValue {
+@@ -50,7 +54,7 @@ func errorType(err error) string {
+ 		// Fallback to reflection if the ErrorType method is not supported or
+ 		// returns an empty value.
+ 
+-		t := reflect.TypeOf(err)
++		t := reflect.TypeOf(unwrapFmt(err))
+ 		pkg, name := t.PkgPath(), t.Name()
+ 		if pkg != "" && name != "" {
+ 			s = pkg + "." + name
+@@ -64,3 +68,39 @@ func errorType(err error) string {
+ 	}
+ 	return s
+ }
++
++var (
++	fmtWrapErrorType  = reflect.TypeOf(fmt.Errorf("%w", errors.New("")))
++	fmtWrapErrorsType = reflect.TypeOf(fmt.Errorf("%w %w", errors.New(""), errors.New("")))
++)
++
++// unwrapFmt returns the first error in the chain of err that is not a wrapping
++// error created by [fmt.Errorf]. Errors wrapping multiple errors are only
++// unwrapped if they wrap exactly one non-nil error.
++func unwrapFmt(err error) error {
++	for err != nil {
++		var next error
++		switch reflect.TypeOf(err) {
++		case fmtWrapErrorType:
++			next = errors.Unwrap(err)
++		case fmtWrapErrorsType:
++			if u, ok := err.(interface{ Unwrap() []error }); ok {
++				var n int
++				for _, e := range u.Unwrap() {
++					if e != nil {
++						next = e
++						n++
++					}
++				}
++				if n != 1 {
++					next = nil
++				}
++			}
++		}
++		if next == nil {
++			return err
++		}
++		err = next
++	}
++	return err
++}
+diff --git a/semconv/v1.40.0/error_type_test.go b/semconv/v1.40.0/error_type_test.go
+index b01ea79..2d8cc7f 100644
+--- a/semconv/v1.40.0/error_type_test.go
++++ b/semconv/v1.40.0/error_type_test.go
+@@ -5,6 +5,7 @@ package semconv // import "go.opentelemetry.io/otel/semconv/v1.40.0"
+ 
+ import (
+ 	"errors"
++	"fmt"
+ 	"testing"
+ )
+ 
+@@ -18,6 +19,13 @@ func TestErrorType(t *testing.T) {
+ 	check(t, custom(""), pkg+".ErrCustomType")                     // empty ErrorType, use concrete type.
+ 	check(t, wrapped(custom("wrapped-aborted")), "wrapped-aborted")
+ 	check(t, wrapped(custom("")), pkg+".wrappedErr") // empty ErrorType in chain, use concrete top-level type.
++	check(t, fmt.Errorf("ctx: %w", errors.New("msg")), "*errors.errorString")
++	check(t, fmt.Errorf("a: %w", fmt.Errorf("b: %w", wrapped(errors.New("msg")))), pkg+".wrappedErr")
++	check(t, fmt.Errorf("ctx: %w", custom("")), pkg+".ErrCustomType")
++	check(t, fmt.Errorf("ctx: %w", custom("aborted")), "aborted")
++	check(t, fmt.Errorf("ctx: %w %w", errors.New("a"), nil), "*errors.errorString")
++	check(t, fmt.Errorf("ctx: %w %w", errors.New("a"), errors.New("b")), "*fmt.wrapErrors")
++	check(t, fmt.Errorf("no wrap: %v", errors.New("a")), "*errors.errorString")
+ }
+ 
+ func check(t *testing.T, err error, want string) {

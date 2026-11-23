@@ -1,0 +1,90 @@
+diff --git a/.changeset/quiet-beds-bind.md b/.changeset/quiet-beds-bind.md
+new file mode 100644
+index 0000000..96ce747
+--- /dev/null
++++ b/.changeset/quiet-beds-bind.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: update focused input when a function binding's getter returns a stale value
+diff --git a/packages/svelte/src/internal/client/dom/elements/bindings/input.js b/packages/svelte/src/internal/client/dom/elements/bindings/input.js
+index 67e6ff1..24f0d58 100644
+--- a/packages/svelte/src/internal/client/dom/elements/bindings/input.js
++++ b/packages/svelte/src/internal/client/dom/elements/bindings/input.js
+@@ -32,10 +32,6 @@ export function bind_value(input, get, set = get) {
+ 		value = is_numberlike_input(input) ? to_number(value) : value;
+ 		set(value);
+ 
+-		if (current_batch !== null) {
+-			batches.add(current_batch);
+-		}
+-
+ 		// In runes mode, respect any validation in accessors (doesn't apply in legacy mode,
+ 		// because we use mutable state which ensures the render effect always runs)
+ 		if (runes && value !== (value = get())) {
+@@ -50,6 +46,12 @@ export function bind_value(input, get, set = get) {
+ 				input.selectionStart = start;
+ 				input.selectionEnd = Math.min(end, input.value.length);
+ 			}
++		} else if (current_batch !== null) {
++			// The input reflects the latest value, so the resulting render effect must not
++			// overwrite it while focused. If we did reset it above (e.g. because the getter
++			// returned a stale value, as can happen inside an each block), we must allow the
++			// render effect to update the input once the new value is available.
++			batches.add(current_batch);
+ 		}
+ 	});
+ 
+diff --git a/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each/_config.js b/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each/_config.js
+new file mode 100644
+index 0000000..c0d356e
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each/_config.js
+@@ -0,0 +1,23 @@
++import { flushSync } from 'svelte';
++import { test } from '../../test';
++
++export default test({
++	async test({ assert, target }) {
++		const input = /** @type {HTMLInputElement} */ (target.querySelector('input'));
++		input.focus();
++
++		input.value = 'valuex';
++		input.dispatchEvent(new window.Event('input'));
++		flushSync();
++
++		assert.equal(input.value, 'valuex');
++		assert.htmlEqual(target.innerHTML, `<div>valuex</div><input />`);
++
++		input.value = 'valuexy';
++		input.dispatchEvent(new window.Event('input'));
++		flushSync();
++
++		assert.equal(input.value, 'valuexy');
++		assert.htmlEqual(target.innerHTML, `<div>valuexy</div><input />`);
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each/main.svelte b/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each/main.svelte
+new file mode 100644
+index 0000000..d89815b
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/bind-getter-setter-each/main.svelte
+@@ -0,0 +1,16 @@
++<script>
++	class MyStore {
++		arrayOfComplexObjects = $state([{ value: 'value' }]);
++
++		updateObject = (x) => {
++			this.arrayOfComplexObjects = this.arrayOfComplexObjects.map((_) => ({ value: x }));
++		};
++	}
++
++	const myStore = new MyStore();
++</script>
++
++{#each myStore.arrayOfComplexObjects as obj}
++	<div>{obj.value}</div>
++	<input bind:value={() => obj.value, (x) => myStore.updateObject(x)} />
++{/each}

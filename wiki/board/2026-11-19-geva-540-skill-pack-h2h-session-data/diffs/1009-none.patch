@@ -1,0 +1,132 @@
+diff --git a/index.js b/index.js
+index 3d32523..5304f68 100644
+--- a/index.js
++++ b/index.js
+@@ -114,11 +114,6 @@ function RedirectableRequest(options, responseCallback) {
+     }
+   };
+ 
+-  // Create filter for sensitive HTTP headers
+-  this._headerFilter = new RegExp("^(?:" +
+-      sensitiveHeaders.concat(options.sensitiveHeaders).map(escapeRegex).join("|") +
+-    ")$", "i");
+-
+   // Perform the first request
+   this._performRequest();
+ }
+@@ -297,6 +292,14 @@ RedirectableRequest.prototype.setTimeout = function (msecs, callback) {
+   });
+ });
+ 
++// Creates a filter for sensitive HTTP headers from the current options
++RedirectableRequest.prototype._getHeaderFilter = function () {
++  var extra = this._options.sensitiveHeaders;
++  return new RegExp("^(?:" +
++      sensitiveHeaders.concat(isArray(extra) ? extra : []).map(escapeRegex).join("|") +
++    ")$", "i");
++};
++
+ RedirectableRequest.prototype._sanitizeOptions = function (options) {
+   // Ensure headers are always present
+   if (!options.headers) {
+@@ -483,11 +486,12 @@ RedirectableRequest.prototype._processResponse = function (response) {
+ 
+   // Drop confidential headers when redirecting to a less secure protocol
+   // or to a different domain that is not a superdomain
+-  if (redirectUrl.protocol !== currentUrlParts.protocol &&
++  var crossesBoundary = redirectUrl.protocol !== currentUrlParts.protocol &&
+      redirectUrl.protocol !== "https:" ||
+      redirectUrl.host !== currentHost &&
+-     !isSubdomain(redirectUrl.host, currentHost)) {
+-    removeMatchingHeaders(this._headerFilter, this._options.headers);
++     !isSubdomain(redirectUrl.host, currentHost);
++  if (crossesBoundary) {
++    removeMatchingHeaders(this._getHeaderFilter(), this._options.headers);
+   }
+ 
+   // Evaluate the beforeRedirect callback
+@@ -501,8 +505,20 @@ RedirectableRequest.prototype._processResponse = function (response) {
+       method: method,
+       headers: requestHeaders,
+     };
++    var previousSensitive = this._options.sensitiveHeaders.slice();
+     beforeRedirect(this._options, responseDetails, requestDetails);
+     this._sanitizeOptions(this._options);
++
++    // Honor sensitive headers that were declared inside the callback
++    if (crossesBoundary) {
++      var addedSensitive = this._options.sensitiveHeaders.filter(function (name) {
++        return previousSensitive.indexOf(name) === -1;
++      });
++      if (addedSensitive.length) {
++        removeMatchingHeaders(new RegExp("^(?:" +
++          addedSensitive.map(escapeRegex).join("|") + ")$", "i"), this._options.headers);
++      }
++    }
+   }
+ 
+   // Perform the redirected request
+@@ -700,8 +716,8 @@ function isURL(value) {
+   return URL && value instanceof URL;
+ }
+ 
+-function escapeRegex(regex) {
+-  return regex.replace(/[\]\\/()*+?.$]/g, "\\$&");
++function escapeRegex(str) {
++  return String(str).replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+ }
+ 
+ // Exports
+diff --git a/test/test.js b/test/test.js
+index b33e7e3..60baf08 100644
+--- a/test/test.js
++++ b/test/test.js
+@@ -1538,10 +1538,15 @@ describe("follow-redirects", function () {
+     "SENSITIVE-A",
+     "X-Sensitive-B",
+     "x-sensitive-b",
++    "X-Api^Key",
++    "x-api^key",
++    "X-Token|Secret",
+   ].forEach(function (header) {
+     var sensitiveHeaders = [
+       "Sensitive-A",
+       "x-sensitive-b",
++      "X-Api^Key",
++      "X-Token|Secret",
+     ];
+ 
+     describe("when the client passes an header named " + header, function () {
+@@ -2221,6 +2226,32 @@ describe("follow-redirects", function () {
+         });
+     });
+ 
++    it("strips sensitive headers declared inside beforeRedirect", function () {
++      app.get("/a", redirectsTo(302, "http://localhost:3600/b"));
++      app.get("/b", function (req, res) {
++        res.end(JSON.stringify(req.headers));
++      });
++
++      var opts = url.parse("http://127.0.0.1:3600/a");
++      opts.headers = { "X-Late": "late value", "X-Kept": "kept value" };
++      opts.beforeRedirect = function (options) {
++        options.sensitiveHeaders.push("X-Late");
++      };
++
++      return server.start(app)
++        .then(asPromise(function (resolve, reject) {
++          http.get(opts, resolve).on("error", reject);
++        }))
++        .then(asPromise(function (resolve, reject, res) {
++          res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
++        }))
++        .then(function (str) {
++          var body = JSON.parse(str);
++          assert.equal(body["x-late"], undefined);
++          assert.equal(body["x-kept"], "kept value");
++        });
++    });
++
+     it("append new header with every redirect", function () {
+       app.get("/a", redirectsTo("/b"));
+       app.get("/b", redirectsTo("/c"));

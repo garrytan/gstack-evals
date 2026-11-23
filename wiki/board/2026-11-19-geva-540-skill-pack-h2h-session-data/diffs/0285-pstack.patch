@@ -1,0 +1,182 @@
+diff --git a/packages/core/src/utils/EntityComparator.ts b/packages/core/src/utils/EntityComparator.ts
+index 7b81203..c6ec5bb 100644
+--- a/packages/core/src/utils/EntityComparator.ts
++++ b/packages/core/src/utils/EntityComparator.ts
+@@ -634,21 +634,29 @@ export class EntityComparator {
+     if (object) {
+       ret += `${padding}if (${nullCond}) ret${dataKey} = null;\n`;
+     } else {
+-      ret += `${padding}if (${nullCond}) {\n`;
+-      ret +=
++      const nullChildren = (parent: EntityProperty<T>, parentDataKey: string): string[] =>
+         meta.props
+           .filter(
+             p =>
+-              p.embedded?.[0] === prop.name &&
++              p.embedded?.[0] === parent.name &&
+               // object for JSON embeddable
+               (p.object || p.persist !== false),
+           )
+-          .map(childProp => {
++          .flatMap(childProp => {
+             const childDataKey =
+-              meta.embeddable || prop.object ? dataKey + this.wrap(childProp.embedded![1]) : this.wrap(childProp.name);
+-            return `${padding}  ret${childDataKey} = null;`;
+-          })
+-          .join('\n') + `\n`;
++              meta.embeddable || parent.object
++                ? parentDataKey + this.wrap(childProp.embedded![1])
++                : this.wrap(childProp.name);
++
++            if (childProp.kind === ReferenceKind.EMBEDDED && !childProp.object && !meta.embeddable) {
++              return nullChildren(childProp, childDataKey);
++            }
++
++            return [`${padding}  ret${childDataKey} = null;`];
++          });
++
++      ret += `${padding}if (${nullCond}) {\n`;
++      ret += nullChildren(prop, dataKey).join('\n') + `\n`;
+       ret += `${padding}}\n`;
+     }
+ 
+diff --git a/tests/features/embeddables/__snapshots__/entities-in-embeddables.mongo.test.ts.snap b/tests/features/embeddables/__snapshots__/entities-in-embeddables.mongo.test.ts.snap
+index 784de9d..2257552 100644
+--- a/tests/features/embeddables/__snapshots__/entities-in-embeddables.mongo.test.ts.snap
++++ b/tests/features/embeddables/__snapshots__/entities-in-embeddables.mongo.test.ts.snap
+@@ -13,7 +13,12 @@ exports[`embedded entities in mongo > diffing 1`] = `
+ 
+   if (entity.profile1 === null) {
+     ret.profile1_username = null;
+-    ret.profile1_identity = null;
++    ret.profile1_identity_email = null;
++    ret.profile1_identity_meta_foo = null;
++    ret.profile1_identity_meta_bar = null;
++    ret.profile1_identity_meta_source = null;
++    ret.profile1_identity_links = null;
++    ret.profile1_identity_source = null;
+     ret.profile1_source = null;
+   }
+   if (entity.profile1 != null) {
+@@ -21,7 +26,9 @@ exports[`embedded entities in mongo > diffing 1`] = `
+ 
+     if (entity.profile1.identity === null) {
+       ret.profile1_identity_email = null;
+-      ret.profile1_identity_meta = null;
++      ret.profile1_identity_meta_foo = null;
++      ret.profile1_identity_meta_bar = null;
++      ret.profile1_identity_meta_source = null;
+       ret.profile1_identity_links = null;
+       ret.profile1_identity_source = null;
+     }
+diff --git a/tests/features/embeddables/__snapshots__/nested-embeddables.mongo.test.ts.snap b/tests/features/embeddables/__snapshots__/nested-embeddables.mongo.test.ts.snap
+index fcf5e80..523d1b1 100644
+--- a/tests/features/embeddables/__snapshots__/nested-embeddables.mongo.test.ts.snap
++++ b/tests/features/embeddables/__snapshots__/nested-embeddables.mongo.test.ts.snap
+@@ -13,14 +13,17 @@ exports[`embedded entities in mongo > diffing 1`] = `
+ 
+   if (entity.profile1 === null) {
+     ret.profile1_username = null;
+-    ret.profile1_identity = null;
++    ret.profile1_identity_email = null;
++    ret.profile1_identity_meta_foo = null;
++    ret.profile1_identity_meta_bar = null;
+   }
+   if (entity.profile1 != null) {
+     if (typeof entity.profile1.username !== 'undefined') ret.profile1_username = clone(entity.profile1.username);
+ 
+     if (entity.profile1.identity === null) {
+       ret.profile1_identity_email = null;
+-      ret.profile1_identity_meta = null;
++      ret.profile1_identity_meta_foo = null;
++      ret.profile1_identity_meta_bar = null;
+     }
+     if (entity.profile1.identity != null) {
+       if (typeof entity.profile1.identity.email !== 'undefined') ret.profile1_identity_email = clone(entity.profile1.identity.email);
+diff --git a/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap b/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap
+index 6001207..63b03c7 100644
+--- a/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap
++++ b/tests/features/embeddables/__snapshots__/polymorphic-embedded-entities.sqlite.test.ts.snap
+@@ -602,7 +602,8 @@ exports[`polymorphic embeddables in sqlite > diffing 2`] = `
+     ret.pet_type = null;
+     ret.pet_name = null;
+     ret.pet_canMeow = null;
+-    ret.pet_food = null;
++    ret.pet_food_cats = null;
++    ret.pet_food_mice = null;
+   }
+   if (entity.pet != null) {
+     if (typeof entity.pet.canBark !== 'undefined') ret.pet_canBark = clone(entity.pet.canBark);
+diff --git a/tests/features/embeddables/nested-inline-null-parent.test.ts b/tests/features/embeddables/nested-inline-null-parent.test.ts
+new file mode 100644
+index 0000000..c85c851
+--- /dev/null
++++ b/tests/features/embeddables/nested-inline-null-parent.test.ts
+@@ -0,0 +1,67 @@
++import { MikroORM } from '@mikro-orm/sqlite';
++import {
++  Embeddable,
++  Embedded,
++  Entity,
++  PrimaryKey,
++  Property,
++  ReflectMetadataProvider,
++} from '@mikro-orm/decorators/legacy';
++
++@Embeddable()
++class Inner {
++  @Property({ nullable: true })
++  value?: string;
++}
++
++@Embeddable()
++class Outer {
++  @Property({ nullable: true })
++  label?: string;
++
++  @Embedded(() => Inner, { nullable: true })
++  inner?: Inner | null;
++}
++
++@Entity()
++class Holder {
++  @PrimaryKey()
++  id!: number;
++
++  @Embedded(() => Outer, { nullable: true })
++  outer?: Outer | null;
++}
++
++let orm: MikroORM;
++
++beforeAll(async () => {
++  orm = await MikroORM.init({
++    entities: [Holder],
++    dbName: ':memory:',
++    metadataProvider: ReflectMetadataProvider,
++  });
++  await orm.schema.create();
++});
++
++afterAll(() => orm.close(true));
++
++test('nested inline embeddable columns are nulled when parent is set to null', async () => {
++  const outer = new Outer();
++  outer.label = 'a';
++  outer.inner = new Inner();
++  outer.inner.value = 'b';
++  const h = orm.em.create(Holder, { id: 1, outer });
++  await orm.em.flush();
++
++  h.outer = null;
++  await orm.em.flush();
++  orm.em.clear();
++
++  const h1 = await orm.em.findOneOrFail(Holder, 1);
++  expect(h1.outer).toBeNull();
++
++  const h2 = orm.em.create(Holder, { id: 2, outer: null });
++  await orm.em.flush();
++  orm.em.clear();
++  expect((await orm.em.findOneOrFail(Holder, 2)).outer).toBeNull();
++});

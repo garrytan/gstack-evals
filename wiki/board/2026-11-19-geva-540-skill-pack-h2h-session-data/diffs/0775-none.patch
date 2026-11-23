@@ -1,0 +1,366 @@
+diff --git a/compiler-core/src/erlang/tests/inlining.rs b/compiler-core/src/erlang/tests/inlining.rs
+index df9ef86..a005177 100644
+--- a/compiler-core/src/erlang/tests/inlining.rs
++++ b/compiler-core/src/erlang/tests/inlining.rs
+@@ -312,3 +312,44 @@ fn divide(a, b) {
+ "
+     );
+ }
++
++#[test]
++fn parameters_used_in_case_guards_are_not_inlined() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub type Ssl {
++  SslEnabled
++  SslDisabled
++}
++
++pub fn main(ssl) {
++  use ssl <- result.map(ssl)
++  case Nil {
++    _ if ssl == SslEnabled -> 1
++    _ -> 2
++  }
++}
++"
++    );
++}
++
++#[test]
++fn parameters_used_in_bit_array_pattern_sizes_are_not_inlined() {
++    assert_erl!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub fn main(size, bits) {
++  use size <- result.map(size)
++  case bits {
++    <<x:size(size)>> -> x
++    _ -> 2
++  }
++}
++"
++    );
++}
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameters_used_in_bit_array_pattern_sizes_are_not_inlined.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameters_used_in_bit_array_pattern_sizes_are_not_inlined.snap
+new file mode 100644
+index 0000000..62ac675
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameters_used_in_bit_array_pattern_sizes_are_not_inlined.snap
+@@ -0,0 +1,46 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++assertion_line: 341
++expression: "\nimport gleam/result\n\npub fn main(size, bits) {\n  use size <- result.map(size)\n  case bits {\n    <<x:size(size)>> -> x\n    _ -> 2\n  }\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub fn main(size, bits) {
++  use size <- result.map(size)
++  case bits {
++    <<x:size(size)>> -> x
++    _ -> 2
++  }
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/2]).
++
++-file("project/test/my/mod.gleam", 4).
++-spec main({ok, integer()} | {error, AT}, bitstring()) -> {ok, integer()} |
++    {error, AT}.
++main(Size, Bits) ->
++    case Size of
++        {ok, Value} ->
++            {ok,
++                begin
++                    Size@1 = Value,
++                    case Bits of
++                        <<X:Size@1>> ->
++                            X;
++
++                        _ ->
++                            2
++                    end
++                end};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameters_used_in_case_guards_are_not_inlined.snap b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameters_used_in_case_guards_are_not_inlined.snap
+new file mode 100644
+index 0000000..19f7bea
+--- /dev/null
++++ b/compiler-core/src/erlang/tests/snapshots/gleam_core__erlang__tests__inlining__parameters_used_in_case_guards_are_not_inlined.snap
+@@ -0,0 +1,53 @@
++---
++source: compiler-core/src/erlang/tests/inlining.rs
++assertion_line: 318
++expression: "\nimport gleam/result\n\npub type Ssl {\n  SslEnabled\n  SslDisabled\n}\n\npub fn main(ssl) {\n  use ssl <- result.map(ssl)\n  case Nil {\n    _ if ssl == SslEnabled -> 1\n    _ -> 2\n  }\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub type Ssl {
++  SslEnabled
++  SslDisabled
++}
++
++pub fn main(ssl) {
++  use ssl <- result.map(ssl)
++  case Nil {
++    _ if ssl == SslEnabled -> 1
++    _ -> 2
++  }
++}
++
++
++----- COMPILED ERLANG
++-module(my@mod).
++-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
++-define(FILEPATH, "project/test/my/mod.gleam").
++-export([main/1]).
++-export_type([ssl/0]).
++
++-type ssl() :: ssl_enabled | ssl_disabled.
++
++-file("project/test/my/mod.gleam", 9).
++-spec main({ok, ssl()} | {error, AS}) -> {ok, integer()} | {error, AS}.
++main(Ssl) ->
++    case Ssl of
++        {ok, Value} ->
++            {ok,
++                begin
++                    Ssl@1 = Value,
++                    case nil of
++                        _ when Ssl@1 =:= ssl_enabled ->
++                            1;
++
++                        _ ->
++                            2
++                    end
++                end};
++
++        {error, Error} ->
++            {error, Error}
++    end.
+diff --git a/compiler-core/src/inline.rs b/compiler-core/src/inline.rs
+index 81df9e9..0471f4c 100644
+--- a/compiler-core/src/inline.rs
++++ b/compiler-core/src/inline.rs
+@@ -960,6 +960,13 @@ enum FunctionPosition {
+ }
+ 
+ impl FindInlinableParameters {
++    /// Marks a parameter as not inlinable. This is used for references in
++    /// positions where we cannot substitute an arbitrary expression, such as
++    /// clause guards and bit array pattern sizes.
++    fn register_non_inlinable_reference(&mut self, name: &EcoString, location: SrcSpan) {
++        _ = self.parameters.remove(&(name.clone(), location));
++    }
++
+     fn register_reference(&mut self, name: &EcoString, location: SrcSpan) {
+         let key = (name.clone(), location);
+ 
+@@ -1004,7 +1011,10 @@ impl<'ast> Visit<'ast> for FindInlinableParameters {
+         _type_: &'ast Arc<Type>,
+         location: &'ast SrcSpan,
+     ) {
+-        self.register_reference(name, *location);
++        // Guards are not rewritten when inlining, so parameters referenced
++        // in them must not be inlined, otherwise the reference would point
++        // to a variable which no longer exists.
++        self.register_non_inlinable_reference(name, *location);
+     }
+ 
+     fn visit_typed_bit_array_size_variable(
+@@ -1019,7 +1029,9 @@ impl<'ast> Visit<'ast> for FindInlinableParameters {
+             None => return,
+         };
+         if let ValueConstructorVariant::LocalVariable { location, .. } = variant {
+-            self.register_reference(name, *location);
++            // Patterns are not rewritten when inlining, so the same applies
++            // here as for clause guards.
++            self.register_non_inlinable_reference(name, *location);
+         }
+     }
+ 
+@@ -1364,6 +1376,12 @@ impl FunctionToInlinable {
+     }
+ 
+     fn clause(&mut self, clause: &TypedClause) -> Option<InlinableClause> {
++        // Guards and alternative patterns are not supported by the inlinable
++        // representation, so we cannot inline functions which use them.
++        if clause.guard.is_some() || !clause.alternative_patterns.is_empty() {
++            return None;
++        }
++
+         let pattern = clause
+             .pattern
+             .iter()
+diff --git a/compiler-core/src/javascript/tests/inlining.rs b/compiler-core/src/javascript/tests/inlining.rs
+index 3b691ce..666e079 100644
+--- a/compiler-core/src/javascript/tests/inlining.rs
++++ b/compiler-core/src/javascript/tests/inlining.rs
+@@ -312,3 +312,44 @@ fn divide(a, b) {
+ "
+     );
+ }
++
++#[test]
++fn parameters_used_in_case_guards_are_not_inlined() {
++    assert_js!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub type Ssl {
++  SslEnabled
++  SslDisabled
++}
++
++pub fn main(ssl) {
++  use ssl <- result.map(ssl)
++  case Nil {
++    _ if ssl == SslEnabled -> 1
++    _ -> 2
++  }
++}
++"
++    );
++}
++
++#[test]
++fn parameters_used_in_bit_array_pattern_sizes_are_not_inlined() {
++    assert_js!(
++        ("gleam_stdlib", "gleam/result", RESULT_MODULE),
++        "
++import gleam/result
++
++pub fn main(size, bits) {
++  use size <- result.map(size)
++  case bits {
++    <<x:size(size)>> -> x
++    _ -> 2
++  }
++}
++"
++    );
++}
+diff --git a/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__parameters_used_in_bit_array_pattern_sizes_are_not_inlined.snap b/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__parameters_used_in_bit_array_pattern_sizes_are_not_inlined.snap
+new file mode 100644
+index 0000000..d6b8f26
+--- /dev/null
++++ b/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__parameters_used_in_bit_array_pattern_sizes_are_not_inlined.snap
+@@ -0,0 +1,41 @@
++---
++source: compiler-core/src/javascript/tests/inlining.rs
++assertion_line: 341
++expression: "\nimport gleam/result\n\npub fn main(size, bits) {\n  use size <- result.map(size)\n  case bits {\n    <<x:size(size)>> -> x\n    _ -> 2\n  }\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub fn main(size, bits) {
++  use size <- result.map(size)
++  case bits {
++    <<x:size(size)>> -> x
++    _ -> 2
++  }
++}
++
++
++----- COMPILED JAVASCRIPT
++import * as $result from "../../gleam_stdlib/gleam/result.mjs";
++import { Ok, bitArraySliceToInt } from "../gleam.mjs";
++
++export function main(size, bits) {
++  if (size instanceof Ok) {
++    let value = size[0];
++    return new Ok(
++      (() => {
++        let size$1 = value;
++        if (size$1 >= 0 && bits.bitSize === size$1) {
++          let x = bitArraySliceToInt(bits, 0, size$1, true, false);
++          return x;
++        } else {
++          return 2;
++        }
++      })(),
++    );
++  } else {
++    return size;
++  }
++}
+diff --git a/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__parameters_used_in_case_guards_are_not_inlined.snap b/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__parameters_used_in_case_guards_are_not_inlined.snap
+new file mode 100644
+index 0000000..2a8a9ee
+--- /dev/null
++++ b/compiler-core/src/javascript/tests/snapshots/gleam_core__javascript__tests__inlining__parameters_used_in_case_guards_are_not_inlined.snap
+@@ -0,0 +1,50 @@
++---
++source: compiler-core/src/javascript/tests/inlining.rs
++assertion_line: 318
++expression: "\nimport gleam/result\n\npub type Ssl {\n  SslEnabled\n  SslDisabled\n}\n\npub fn main(ssl) {\n  use ssl <- result.map(ssl)\n  case Nil {\n    _ if ssl == SslEnabled -> 1\n    _ -> 2\n  }\n}\n"
++snapshot_kind: text
++---
++----- SOURCE CODE
++
++import gleam/result
++
++pub type Ssl {
++  SslEnabled
++  SslDisabled
++}
++
++pub fn main(ssl) {
++  use ssl <- result.map(ssl)
++  case Nil {
++    _ if ssl == SslEnabled -> 1
++    _ -> 2
++  }
++}
++
++
++----- COMPILED JAVASCRIPT
++import * as $result from "../../gleam_stdlib/gleam/result.mjs";
++import { Ok, CustomType as $CustomType, isEqual } from "../gleam.mjs";
++
++export class SslEnabled extends $CustomType {}
++
++export class SslDisabled extends $CustomType {}
++
++export function main(ssl) {
++  if (ssl instanceof Ok) {
++    let value = ssl[0];
++    return new Ok(
++      (() => {
++        let ssl$1 = value;
++        let $ = undefined;
++        if (isEqual(ssl$1, new SslEnabled())) {
++          return 1;
++        } else {
++          return 2;
++        }
++      })(),
++    );
++  } else {
++    return ssl;
++  }
++}

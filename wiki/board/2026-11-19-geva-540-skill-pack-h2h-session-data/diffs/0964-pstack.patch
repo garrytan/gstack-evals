@@ -1,0 +1,103 @@
+diff --git a/index.js b/index.js
+index f7058ef..a6dc41d 100644
+--- a/index.js
++++ b/index.js
+@@ -302,6 +302,9 @@ RedirectableRequest.prototype._sanitizeOptions = function (options) {
+   if (!options.headers) {
+     options.headers = {};
+   }
++  else if (isArray(options.headers)) {
++    options.headers = headersArrayToObject(options.headers);
++  }
+   if (!isArray(options.sensitiveHeaders)) {
+     options.sensitiveHeaders = [];
+   }
+@@ -627,6 +630,21 @@ function spreadUrlObject(urlObject, target) {
+   return spread;
+ }
+ 
++function headersArrayToObject(headers) {
++  var object = {};
++  for (var i = 0; i + 1 < headers.length; i += 2) {
++    var name = headers[i];
++    var value = headers[i + 1];
++    if (Object.prototype.hasOwnProperty.call(object, name)) {
++      object[name] = [].concat(object[name], value);
++    }
++    else {
++      object[name] = value;
++    }
++  }
++  return object;
++}
++
+ function removeMatchingHeaders(regex, headers) {
+   var lastValue;
+   for (var header in headers) {
+diff --git a/test/test.js b/test/test.js
+index 474110e..f459068 100644
+--- a/test/test.js
++++ b/test/test.js
+@@ -1432,6 +1432,62 @@ describe("follow-redirects", function () {
+     });
+   });
+ 
++  describe("when headers are passed in array form", function () {
++    function requestHeadersAfterRedirect(location, headers, extraOptions) {
++      app.get("/a", redirectsTo(302, location));
++      app.get("/b", function (req, res) {
++        res.end(JSON.stringify({ headers: req.headers, raw: req.rawHeaders }));
++      });
++
++      return server.start(app)
++        .then(asPromise(function (resolve, reject) {
++          var opts = url.parse("http://127.0.0.1:3600/a");
++          opts.headers = headers;
++          Object.assign(opts, extraOptions);
++          http.get(opts, resolve).on("error", reject);
++        }))
++        .then(asPromise(function (resolve, reject, res) {
++          assert.equal(res.statusCode, 200);
++          res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
++        }))
++        .then(JSON.parse);
++    }
++
++    it("drops credential and host headers across hosts", function () {
++      return requestHeadersAfterRedirect("http://localhost:3600/b", [
++        "Host", "127.0.0.1:3600",
++        "Authorization", "Bearer secret",
++        "Cookie", "session=secret",
++        "Proxy-Authorization", "Basic secret",
++        "X-Api-Key", "secret",
++        "X-Custom", "kept",
++      ], { sensitiveHeaders: ["X-Api-Key"] })
++        .then(function (body) {
++          assert.equal(body.headers.host, "localhost:3600");
++          assert.equal(body.headers.authorization, undefined);
++          assert.equal(body.headers.cookie, undefined);
++          assert.equal(body.headers["proxy-authorization"], undefined);
++          assert.equal(body.headers["x-api-key"], undefined);
++          assert.equal(body.headers["x-custom"], "kept");
++        });
++    });
++
++    it("keeps credentials and repeated headers on the same host", function () {
++      return requestHeadersAfterRedirect("/b", [
++        "Authorization", "Bearer token",
++        "X-Repeat", "one",
++        "X-Repeat", "two",
++      ])
++        .then(function (body) {
++          assert.equal(body.headers.authorization, "Bearer token");
++          var repeats = body.raw.filter(function (value, i) {
++            return i % 2 === 1 && body.raw[i - 1].toLowerCase() === "x-repeat";
++          });
++          assert.deepEqual(repeats, ["one", "two"]);
++        });
++    });
++  });
++
+   describe("when redirecting to a different host while the host header is set", function () {
+     it("uses the new host header if redirect host is different", function () {
+       app.get("/a", redirectsTo(302, "http://localhost:3600/b"));

@@ -1,0 +1,98 @@
+diff --git a/pkg/proxy/httputil/proxy.go b/pkg/proxy/httputil/proxy.go
+index 3cd7211..cb9a858 100644
+--- a/pkg/proxy/httputil/proxy.go
++++ b/pkg/proxy/httputil/proxy.go
+@@ -67,6 +67,8 @@ func buildSingleHostProxy(target *url.URL, passHostHeader bool, preservePath boo
+ func rewriteRequestBuilder(target *url.URL, passHostHeader bool, preservePath bool) func(*httputil.ProxyRequest) {
+ 	return func(pr *httputil.ProxyRequest) {
+ 		copyForwardedHeader(pr.Out.Header, pr.In.Header)
++		stripTrailerValues(pr.Out)
++
+ 		if !ShouldNotAppendXFF(pr.In.Context()) {
+ 			if clientIP, _, err := net.SplitHostPort(pr.In.RemoteAddr); err == nil {
+ 				// If we aren't the first proxy retain prior
+@@ -128,6 +130,23 @@ func rewriteRequestBuilder(target *url.URL, passHostHeader bool, preservePath bo
+ 	}
+ }
+ 
++// stripTrailerValues keeps only the declared request trailer names.
++// Trailer values arrive after routing and header sanitization have run, and a
++// body-buffering middleware can populate them before the proxy clones the request.
++// A fresh map also detaches the outgoing trailers from the inbound map that net/http
++// fills at body EOF.
++func stripTrailerValues(req *http.Request) {
++	if req.Trailer == nil {
++		return
++	}
++
++	names := make(http.Header, len(req.Trailer))
++	for name := range req.Trailer {
++		names[name] = nil
++	}
++	req.Trailer = names
++}
++
+ // copyForwardedHeader copies header that are removed by the reverseProxy when a rewriteRequest is used.
+ func copyForwardedHeader(dst, src http.Header) {
+ 	prior, ok := src["X-Forwarded-For"]
+diff --git a/pkg/proxy/httputil/trailer_test.go b/pkg/proxy/httputil/trailer_test.go
+index aa2ba1f..36facbe 100644
+--- a/pkg/proxy/httputil/trailer_test.go
++++ b/pkg/proxy/httputil/trailer_test.go
+@@ -1,6 +1,7 @@
+ package httputil
+ 
+ import (
++	"bytes"
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+@@ -18,7 +19,27 @@ import (
+ // This is a deliberate behavior: trailers arrive after the body, once routing and
+ // security decisions have already been made, so forwarding them could raise security
+ // concerns in Traefik. This test locks the current behavior to catch any regression.
++// The buffered case covers middlewares (retry, buffering) that drain the body, and
++// thereby populate the trailer values, before the proxy clones the request.
+ func TestRequestTrailersNotForwardedToBackend(t *testing.T) {
++	testCases := []struct {
++		desc     string
++		buffered bool
++	}{
++		{desc: "bare proxy"},
++		{desc: "body read before proxy", buffered: true},
++	}
++
++	for _, test := range testCases {
++		t.Run(test.desc, func(t *testing.T) {
++			testRequestTrailersNotForwarded(t, test.buffered)
++		})
++	}
++}
++
++func testRequestTrailersNotForwarded(t *testing.T, buffered bool) {
++	t.Helper()
++
+ 	var backendTrailer http.Header
+ 
+ 	backend := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+@@ -48,7 +69,19 @@ func TestRequestTrailersNotForwardedToBackend(t *testing.T) {
+ 	err = lb.UpsertServer(backendURL)
+ 	require.NoError(t, err)
+ 
+-	proxy := httptest.NewServer(lb)
++	var handler http.Handler = lb
++	if buffered {
++		handler = http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
++			body, err := io.ReadAll(req.Body)
++			require.NoError(t, err)
++			require.Equal(t, "trailer-value", req.Trailer.Get("X-Test-Trailer"))
++
++			req.Body = io.NopCloser(bytes.NewReader(body))
++			lb.ServeHTTP(rw, req)
++		})
++	}
++
++	proxy := httptest.NewServer(handler)
+ 	t.Cleanup(proxy.Close)
+ 
+ 	pr, pw := io.Pipe()

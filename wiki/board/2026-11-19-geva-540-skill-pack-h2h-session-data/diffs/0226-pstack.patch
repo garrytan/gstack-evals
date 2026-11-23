@@ -1,0 +1,110 @@
+diff --git a/src/BootstrapBlazor/Components/Table/Table.razor b/src/BootstrapBlazor/Components/Table/Table.razor
+index 5c2bf9c..4e19696 100644
+--- a/src/BootstrapBlazor/Components/Table/Table.razor
++++ b/src/BootstrapBlazor/Components/Table/Table.razor
+@@ -332,7 +332,7 @@
+                                 }
+                                 else if (col.ShowHeaderTooltip)
+                                 {
+-                                    <Tooltip class="@GetHeaderCellClassString(col)" style="@GetColWidthString(col.Width)"
++                                    <Tooltip class="@GetHeaderCellClassString(col)" style="@GetColWidthString(GetColumnWidth(col))"
+                                              Title="@GetHeaderTooltipText(col.HeaderTextTooltip, displayName)" Trigger="hover">
+                                         <span>@displayName</span>
+                                     </Tooltip>
+@@ -345,7 +345,7 @@
+                                 }
+                                 else
+                                 {
+-                                    <span class="@GetHeaderCellClassString(col)" style="@GetColWidthString(col.Width)">@displayName</span>
++                                    <span class="@GetHeaderCellClassString(col)" style="@GetColWidthString(GetColumnWidth(col))">@displayName</span>
+                                 }
+                                 @if (col.GetFilterable() && !ShowFilterHeader)
+                                 {
+diff --git a/src/BootstrapBlazor/Components/Table/Table.razor.Sort.cs b/src/BootstrapBlazor/Components/Table/Table.razor.Sort.cs
+index ea6ca48..1578579 100644
+--- a/src/BootstrapBlazor/Components/Table/Table.razor.Sort.cs
++++ b/src/BootstrapBlazor/Components/Table/Table.razor.Sort.cs
+@@ -358,7 +358,7 @@ public partial class Table<TItem>
+     private string? GetLeftStyle(ITableColumn col)
+     {
+         var columns = GetVisibleColumns();
+-        var defaultWidth = 200;
++        var defaultWidth = DefaultFixedColumnWidth;
+         var width = 0;
+         var start = 0;
+         var index = columns.IndexOf(col);
+diff --git a/src/BootstrapBlazor/Components/Table/Table.razor.cs b/src/BootstrapBlazor/Components/Table/Table.razor.cs
+index 9665366..fb04128 100644
+--- a/src/BootstrapBlazor/Components/Table/Table.razor.cs
++++ b/src/BootstrapBlazor/Components/Table/Table.razor.cs
+@@ -204,6 +204,8 @@ public partial class Table<TItem> : ITable, IModelEqualityComparer<TItem> where
+ 
+     private string PageInfoLabelString => Localizer[nameof(PageInfoText), PageStartIndex, (PageIndex - 1) * _pageItems + Rows.Count, TotalCount];
+ 
++    private int? GetColumnWidth(ITableColumn col) => col.Width ?? (col.Fixed ? DefaultFixedColumnWidth : null);
++
+     private static string? GetColWidthString(int? width) => (width.HasValue && width.Value > 0) ? $"width: {width.Value}px;" : null;
+ 
+     /// <summary>
+@@ -1448,7 +1450,7 @@ public partial class Table<TItem> : ITable, IModelEqualityComparer<TItem> where
+     {
+         DisplayName = col.GetDisplayName(),
+         Name = col.GetFieldName(),
+-        Width = col.Width,
++        Width = GetColumnWidth(col),
+         Visible = col.GetVisible(_screenSize)
+     };
+ 
+diff --git a/test/UnitTest/Components/TableTest.cs b/test/UnitTest/Components/TableTest.cs
+index 4652c53..24a3627 100644
+--- a/test/UnitTest/Components/TableTest.cs
++++ b/test/UnitTest/Components/TableTest.cs
+@@ -1782,6 +1782,48 @@ public class TableTest : BootstrapBlazorTestBase
+         }
+     }
+ 
++    [Fact]
++    public void DefaultFixedColumnWidth_Ok()
++    {
++        var localizer = Context.Services.GetRequiredService<IStringLocalizer<Foo>>();
++        var cut = Context.Render<BootstrapBlazorRoot>(pb =>
++        {
++            pb.AddChildContent<Table<Foo>>(pb =>
++            {
++                pb.Add(a => a.RenderMode, TableRenderMode.Table);
++                pb.Add(a => a.Items, Foo.GenerateFoo(localizer, 2));
++                pb.Add(a => a.DefaultFixedColumnWidth, 150);
++                pb.Add(a => a.TableColumns, foo => builder =>
++                {
++                    builder.OpenComponent<TableColumn<Foo, string>>(0);
++                    builder.AddAttribute(1, "Field", foo.Name);
++                    builder.AddAttribute(2, "FieldExpression", Utility.GenerateValueExpression(foo, "Name", typeof(string)));
++                    builder.AddAttribute(3, nameof(TableColumn<Foo, string>.Fixed), true);
++                    builder.CloseComponent();
++
++                    builder.OpenComponent<TableColumn<Foo, int>>(4);
++                    builder.AddAttribute(5, "Field", foo.Count);
++                    builder.AddAttribute(6, "FieldExpression", Utility.GenerateValueExpression(foo, "Count", typeof(int)));
++                    builder.AddAttribute(7, nameof(TableColumn<Foo, int>.Fixed), true);
++                    builder.CloseComponent();
++
++                    builder.OpenComponent<TableColumn<Foo, string>>(8);
++                    builder.AddAttribute(9, "Field", foo.Address);
++                    builder.AddAttribute(10, "FieldExpression", Utility.GenerateValueExpression(foo, nameof(foo.Address), typeof(string)));
++                    builder.CloseComponent();
++                });
++            });
++        });
++
++        var cols = cut.FindAll("colgroup col");
++        Assert.Equal("width: 150px;", cols[0].GetAttribute("style"));
++        Assert.Equal("width: 150px;", cols[1].GetAttribute("style"));
++        Assert.Null(cols[2].GetAttribute("style"));
++        cut.Contains("left: 0px;");
++        cut.Contains("left: 150px;");
++        cut.DoesNotContain("left: 200px;");
++    }
++
+     [Theory]
+     [InlineData(true, true)]
+     [InlineData(false, true)]

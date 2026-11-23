@@ -1,0 +1,68 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java b/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
+index fcc4c74..4b59e80 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
++++ b/src/main/java/io/github/hectorvent/floci/services/cognito/CognitoJsonHandler.java
+@@ -152,7 +152,7 @@ public class CognitoJsonHandler {
+         List<UserPoolClient> clients = service.listUserPoolClients(request.path("UserPoolId").asText());
+         ObjectNode response = objectMapper.createObjectNode();
+         ArrayNode items = response.putArray("UserPoolClients");
+-        clients.forEach(c -> items.add(clientToNode(c)));
++        clients.forEach(c -> items.add(clientDescriptionToNode(c)));
+         return Response.ok(response).build();
+     }
+ 
+@@ -465,6 +465,14 @@ public class CognitoJsonHandler {
+         return node;
+     }
+ 
++    private ObjectNode clientDescriptionToNode(UserPoolClient c) {
++        ObjectNode node = objectMapper.createObjectNode();
++        node.put("ClientId", c.getClientId());
++        node.put("UserPoolId", c.getUserPoolId());
++        node.put("ClientName", c.getClientName());
++        return node;
++    }
++
+     private ObjectNode clientToNode(UserPoolClient c) {
+         ObjectNode node = objectMapper.createObjectNode();
+         node.put("ClientId", c.getClientId());
+diff --git a/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoIntegrationTest.java b/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoIntegrationTest.java
+index b7bc724..9e3b30c 100644
+--- a/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoIntegrationTest.java
++++ b/src/test/java/io/github/hectorvent/floci/services/cognito/CognitoIntegrationTest.java
+@@ -18,6 +18,8 @@ import java.security.PublicKey;
+ import java.security.Signature;
+ import java.security.spec.RSAPublicKeySpec;
+ import java.util.Base64;
++import java.util.HashSet;
++import java.util.Set;
+ import java.util.UUID;
+ 
+ import static io.restassured.RestAssured.given;
+@@ -84,6 +86,26 @@ class CognitoIntegrationTest {
+                 .statusCode(200);
+     }
+ 
++    @Test
++    @Order(5)
++    void listUserPoolClientsReturnsOnlyDescriptionFields() throws Exception {
++        JsonNode response = cognitoJson("ListUserPoolClients", """
++                {
++                  "UserPoolId": "%s"
++                }
++                """.formatted(poolId));
++
++        JsonNode clients = response.path("UserPoolClients");
++        assertEquals(1, clients.size());
++        JsonNode client = clients.get(0);
++        Set<String> fields = new HashSet<>();
++        client.fieldNames().forEachRemaining(fields::add);
++        assertEquals(Set.of("ClientId", "ClientName", "UserPoolId"), fields);
++        assertEquals(clientId, client.path("ClientId").asText());
++        assertEquals("jwt-client", client.path("ClientName").asText());
++        assertEquals(poolId, client.path("UserPoolId").asText());
++    }
++
+     @Test
+     @Order(2)
+     void initiateAuthReturnsAuthenticationResult() {

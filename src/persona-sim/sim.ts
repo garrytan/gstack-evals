@@ -13,7 +13,7 @@
 //   the sheet, and the reply must be at most MAX_REPLY_WORDS words. Duplicate ids are dropped.
 // - A turn that fails a check is sent again once with the same input and a fixed note, naming each failed check, added to
 //   the end of the system prompt. A second failure returns check-failed with the checks. A call that fails (the caller's
-//   allowance, a provider error or a provider drift) returns call-failed at once and is never retried here.
+//   allowance, a provider error, a provider drift or the ledger's cap) returns call-failed at once and is never retried here.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -56,7 +56,7 @@ export interface SimRequest {
   messages: ChatMessage[];
 }
 
-export type CallFailure = { kind: "call-failed"; reason: "allowance" | "provider" | "drift"; detail: string };
+export type CallFailure = { kind: "call-failed"; reason: "allowance" | "provider" | "drift" | "cap"; detail: string };
 
 /** The injected model call: the model's text, or why the call failed. */
 export type SimCall = (req: SimRequest) => Promise<{ kind: "text"; text: string } | CallFailure>;

@@ -15,7 +15,9 @@
 // - Each session takes at most two attempts (J1). attemptOutcome reads one attempt under C1 and settle applies the retry
 //   rule. An attempt's marker (attempt.json) is written before its launch, so a later launch that finds a marker with no
 //   row reconciles that attempt first, against the ledger's meter for it, the proxy journal's lines for it and its
-//   session log, writes reconcile.json, and counts it as an infrastructure failure on that attempt.
+//   session log, writes reconcile.json, and counts it as an infrastructure failure on that attempt. A torn last line in
+//   rows.ndjson (recorded in torn.ndjson) or in the session log (recorded in reconcile.json) is dropped, so a crash
+//   mid-write still resumes; a line that does not parse anywhere else fails the launch.
 // - A halt (a provider drift, a containment departure, rejected credentials) writes the session's row as missing and
 //   stops the launch for the Captain; a halt or a cap stop lets sessions already running finish and starts no other.
 // - dockerLaunch is one attempt on the rig: a proxy slot at the session's allowance, the arm's sandbox wrapped by the
@@ -42,8 +44,8 @@ import { INTERIM, interimStops } from "../read/stage2.ts";
 import { AGENT_TURNS_PER_REPLY, MODEL_KEYS, PRE_SMOKE_ALLOWANCE, PRE_SMOKE_SIM_ALLOWANCE, SESSION_MINUTES, SYSTEM_PROMPT } from "../frozen.ts";
 import type { ArmId, ManifestEntry, ModelId, Sheet, UnitMeta } from "../types.ts";
 import { departures, gstackReads, probed, TASK, workRepo, type Probe } from "./contain.ts";
-import { cellEntries, cellProblem, cellRounds, entryId, freezeManifest, loadUnits, type Cell, type Manifest } from "./manifest.ts";
-import { readRows, sessionRow, type RowLine } from "./rows.ts";
+import { cellEntries, cellProblem, cellRounds, contentDigest, entryId, freezeManifest, loadUnits, type Cell, type Manifest } from "./manifest.ts";
+import { ndjson, readRows, sessionRow, type RowLine } from "./rows.ts";
 import { attemptOutcome, firstUserMessage, founderLimit, founderLoop, settle, type AttemptRead, type FounderTurnFn, type Outcome, type PersonSheet, type Repair } from "./session.ts";
 
 /** Session allowances in dollars: per arm and model, and the simulator's per session. The reference takes the none arm's. */
@@ -87,6 +89,8 @@ export interface RunInput {
   models: readonly ModelId[];
   arms: readonly ArmId[];
   repairs: readonly Repair[];
+  /** The sha256 of the simulator rules the founder turns run under (sim/founder.ts rulesSha256); the manifest freezes it. */
+  simRules: string;
   allowances: Allowances;
   /** Micro-dollars this launch may spend on the runs item and on the simulator item. */
   cap: number;
@@ -195,8 +199,9 @@ function reconcile(dir: string, ledger: string | null): AttemptRead {
       local.close();
     }
   }
-  const log = existsSync(join(dir, "host", "transcript.ndjson")) ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8").trim().split("\n") : [];
-  const record = { meter_id: meter?.meter_id ?? null, lease_id: meter?.lease_id ?? null, journal_lines: lines.length, ledger_micros: spent, session_log_lines: log.length, last_message: log.length ? (JSON.parse(log.at(-1)!) as { type?: string }).type ?? null : null };
+  const transcript = join(dir, "host", "transcript.ndjson");
+  const log = existsSync(transcript) ? ndjson<{ type?: string }>(readFileSync(transcript, "utf8"), transcript) : { lines: [], torn: null };
+  const record = { meter_id: meter?.meter_id ?? null, lease_id: meter?.lease_id ?? null, journal_lines: lines.length, ledger_micros: spent, session_log_lines: log.lines.length, last_message: log.lines.at(-1)?.type ?? null, torn_last_line: log.torn?.text ?? null };
   writeFileSync(join(dir, "reconcile.json"), JSON.stringify(record, null, 2) + "\n");
   return { termination: { kind: "infra", incident: "an unknown outcome, reconciled: " + JSON.stringify(record) }, loop: founderLoop(0, async () => ({ kind: "call-failed", reason: "provider", detail: "" })).state, web: 0, gstack_reads: [], contained: [], overflow: false, micros: spent ?? 0, sim_micros: 0 };
 }
@@ -228,7 +233,7 @@ export async function runCells<C>(o: RunInput, deps: RunDeps<C>): Promise<RunRes
 export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] }, deps: RunDeps<C>): Promise<RunResult> {
   const entries = o.entries;
   const meta = new Map<string, UnitMeta>(loadUnits(o.unitsDir).map((u) => [u.id, u]));
-  const manifest: Manifest = { schema: 1, cell: o.cell, models: [...o.models], arms: [...o.arms], repairs: [...o.repairs], units: Object.fromEntries([...new Set(entries.map((e) => e.unit))].sort().map((id) => [id, meta.get(id)!.digest])), entries };
+  const manifest: Manifest = { schema: 1, cell: o.cell, models: [...o.models], arms: [...o.arms], repairs: [...o.repairs], units: Object.fromEntries([...new Set(entries.map((e) => e.unit))].sort().map((id) => [id, contentDigest(o.unitsDir, id)])), sim_rules: o.simRules, entries };
   mkdirSync(o.out, { recursive: true });
   const stopsFile = join(o.out, "stops.json");
   const before = existsSync(stopsFile) ? (JSON.parse(readFileSync(stopsFile, "utf8")) as { stops: RunResult["stops"]; earlier?: RunResult["stops"] }) : null;
@@ -236,7 +241,12 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
   const earlier = [...(before?.earlier ?? []), ...(before?.stops ?? [])];
   const frozen = freezeManifest(join(o.out, "manifest.json"), manifest);
   if ("problem" in frozen) throw new Error("E_USAGE " + frozen.problem);
-  const done = readRows(o.out);
+  const done = readRows(o.out, (torn) => {
+    const file = join(o.out, "rows.ndjson");
+    appendFileSync(join(o.out, "torn.ndjson"), JSON.stringify({ file, at: torn.at, text: torn.text, dropped_at: new Date().toISOString() }) + "\n");
+    writeFileSync(file, readFileSync(file, "utf8").slice(0, torn.at));
+    o.log("rows.ndjson: dropped a torn last line of " + torn.text.length + " characters, recorded in torn.ndjson; its session reconciles from its attempt marker");
+  });
   const result: RunResult = { manifest_sha256: frozen.sha256, rows: [], stops: [], unrun: [], interim: null, spent_micros: 0, sim_micros: 0, closed: null };
   const interimIds = o.cell === "stage2" ? cellRounds(o.cell, entries).flat().filter((e) => e.model === "opus" && e.arm === "office-hours").map(entryId) : [];
   const exposedBy = new Map<string, boolean | null>();
@@ -338,8 +348,11 @@ export async function runSchedule<C>(o: RunInput & { entries: ManifestEntry[] },
     const ran = new Set([...done.keys(), ...result.rows.map((r) => r.id), ...result.unrun.map((u) => u.id)]);
     result.unrun.push(...entries.map(entryId).filter((id) => !ran.has(id)).map((id) => ({ id, how: "unstarted" as const })));
   } finally {
-    result.closed = await rig.close();
-    writeFileSync(stopsFile, JSON.stringify({ stops: result.stops, unrun: result.unrun, ...(earlier.length ? { earlier } : {}), ...(o.cell === "stage2" ? { interim: result.interim } : {}) }, null, 2) + "\n");
+    try {
+      result.closed = await rig.close();
+    } finally {
+      writeFileSync(stopsFile, JSON.stringify({ stops: result.stops, unrun: result.unrun, ...(earlier.length ? { earlier } : {}), ...(o.cell === "stage2" ? { interim: result.interim } : {}) }, null, 2) + "\n");
+    }
   }
   return result;
 }

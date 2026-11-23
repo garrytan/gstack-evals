@@ -1,0 +1,395 @@
+#!/usr/bin/env python3
+# Packet builder for the /ship review panel judged sample (GEVA-559, prereg 2026-11-19-geva-559-ship-panel-judged-sample-prereg,
+# section 4). Keyless: local bare clones, the phase 1 rows and the PR dumps. Public packets go to <out>/public/, private ones to
+# <out>/private/ (never into the repository). Usage:
+#   packets.py <bundle-dir> <clones> <now-clones> <rows> <private-repos.json> <pr-dumps> <out> [roles...]
+import collections, hashlib, json, re, subprocess, sys
+from datetime import datetime, timedelta
+from pathlib import Path
+
+CAP, LATER_CAP, ENTRY_CAP, DESC_CAP = 60000, 12000, 3000, 2000
+EXCL = re.compile(r"(^|/)(bun\.lockb?|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|VERSION|CHANGELOG\.md|INDEX\.md|errors\.md)$|(^|/)changelog\.d/|\.snap$|\.lock$")
+TRAILER = re.compile(r"^Review-Finding:\s*(\S+)(.*)$", re.M)
+
+
+def git(d, *a):
+    return subprocess.run(["git", "-C", str(d), *a], capture_output=True, text=True, errors="replace").stdout
+
+
+def ts(s):
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def load(bundle, clones, rows_dir, private_path, dumps):
+    sys.path.insert(0, str(bundle))
+    import draw
+    private = json.load(open(private_path))
+    draw.REPOS.update(private["repos"]); draw.NOT_SENT.update(private["not_sent"])
+    R = draw.rows(rows_dir)
+    items = draw.trailer_items(clones, R)
+    prs = {}
+    for f in sorted(Path(dumps).glob("*.jsonl")):
+        for line in open(f):
+            p = json.loads(line)
+            prs[("/".join(p["url"].split("/")[3:5]), p["number"])] = p
+    bodies = {k: p.get("body") or "" for k, p in prs.items()}
+    _, _, complete = draw.complete_prs(clones, items, bodies)
+    return draw, R, items, prs, complete
+
+
+def clone_of(draw, root, repo):
+    name = next(n for n, r in draw.REPOS.items() if r == repo)
+    return Path(root) / f"{name}.git"
+
+
+def mask_re(draw, readers):
+    words = ["red team", "red-team", "adversarial", "outside voice", "outside-voice", "second-model", "second model", "cross-family",
+             "specialist", "batched", "Codex", "Sol", "GPT", "Opus", "Claude", "Gemini", "Astra"]
+    words += [r for r in readers if r not in ("core", "testing", "security", "?")]
+    words = sorted(set(words), key=len, reverse=True)
+    return re.compile(r"(?<![\w-])(" + "|".join(re.escape(w).replace(r"\ ", r"[\s-]") for w in words) + r")(?![\w-])", re.I)
+
+
+def masker(draw, readers):
+    rx = mask_re(draw, readers)
+    def mask(text):
+        text = draw.FINDING_ID.sub(lambda m: "[id]" if (m.group(2) in readers or m.group(2).split("/")[-1] in readers) else m.group(0), text)
+        text = re.sub(r"reader=\S+", "reader=[reviewer]", text)
+        return rx.sub("[reviewer]", text)
+    return mask
+
+
+def strip_trailers(msg):
+    tr = subprocess.run(["git", "interpret-trailers", "--only-trailers"], input=msg, capture_output=True, text=True).stdout
+    drop = {l.strip() for l in tr.split("\n") if l.strip()}
+    return "\n".join(l for l in msg.split("\n") if l.strip() not in drop).strip()
+
+
+def head_commits(g, number, squash):
+    out = git(g, "log", "--reverse", f"refs/pull/{number}/head", "--not", f"{squash}^", "--format=%H%x1f%B%x1e")
+    res = []
+    for rec in out.split("\x1e"):
+        rec = rec.strip("\n")
+        if not rec:
+            continue
+        sha, msg = rec.split("\x1f", 1)
+        res.append({"sha": sha, "msg": msg.strip(), "trailers": [m.group(1) for m in TRAILER.finditer(msg)]})
+    return res
+
+
+def desc_lines(body, fid):
+    rx = re.compile(r"(?<![\w/#-])" + re.escape(fid) + r"(?!\d)")
+    return [l for l in body.split("\n") if rx.search(l)]
+
+
+def split_diff(diff):
+    files, cur = [], None
+    for l in diff.split("\n"):
+        if l.startswith("diff --git "):
+            cur = {"head": [l], "hunks": [], "path": l.split(" b/", 1)[-1]}
+            files.append(cur)
+        elif cur is None:
+            continue
+        elif l.startswith("@@"):
+            cur["hunks"].append([l])
+        elif cur["hunks"]:
+            cur["hunks"][-1].append(l)
+        else:
+            cur["head"].append(l)
+    return files
+
+
+def capped(files, named, cap):
+    def changed(f):
+        return sum(1 for h in f["hunks"] for l in h[1:] if l[:1] in "+-")
+    order = sorted(files, key=lambda f: (f["path"] not in named, -changed(f)))
+    out, used, cut = [], 0, 0
+    for f in order:
+        block = "\n".join(f["head"])
+        if used + len(block) + 1 > cap:
+            cut += len(block) + sum(len("\n".join(h)) + 1 for h in f["hunks"]); continue
+        out.append(block); used += len(block) + 1
+        for h in f["hunks"]:
+            t = "\n".join(h)
+            if used + len(t) + 1 > cap:
+                cut += len(t) + 1; continue
+            out.append(t); used += len(t) + 1
+    if cut:
+        out.append(f"[cut: {cut} more characters of diff left out at hunk boundaries]")
+    return "\n".join(out)
+
+
+def added_ranges(g, parent, commit, files_filter=None):
+    diff = git(g, "diff", "-U0", "--no-color", "-M", parent, commit)
+    files, cur = {}, None
+    for l in diff.split("\n"):
+        if l.startswith("+++ "):
+            cur = None if l[4:] == "/dev/null" else l[6:]
+            if cur is not None:
+                files.setdefault(cur, [])
+        elif l.startswith("@@") and cur is not None:
+            m = re.match(r"@@ -\S+ \+(\d+)(?:,(\d+))? @@", l)
+            if m:
+                a = int(m.group(1)); c = int(m.group(2)) if m.group(2) is not None else 1
+                if c > 0:
+                    files[cur].append((a, a + c - 1))
+    return {f: r for f, r in files.items() if not EXCL.search(f) and sum(b - a + 1 for a, b in r) <= 1500 and (files_filter is None or f in files_filter)}
+
+
+_FP = {}
+
+
+def first_parent(g, branch):
+    if (str(g), branch) not in _FP:
+        fp = [l.split() for l in git(g, "log", "--first-parent", "--format=%H %ct", branch).split("\n") if l]
+        fp.reverse()
+        _FP[(str(g), branch)] = (fp, {h: i for i, (h, _) in enumerate(fp)})
+    return _FP[(str(g), branch)]
+
+
+def branch_for(g, M):
+    head = git(g, "symbolic-ref", "--short", "HEAD").strip()
+    others = [b for b in git(g, "for-each-ref", "--format=%(refname:short)", "refs/heads").split() if b != head]
+    for b in [head] + others:
+        if b and M in first_parent(g, b)[1]:
+            return b
+    return head
+
+
+def changed_lines(g, M, days, ranges, branch=None):
+    """Reverse blame of the given line ranges of M up to the last first-parent commit within <days>: for each changer
+    commit, the file, the line numbers at M and the line numbers in the changer's parent."""
+    fp, idx = first_parent(g, branch or branch_for(g, M))
+    if M not in idx:
+        return None, {}
+    i = idx[M]; end = int(fp[i][1]) + days * 86400; Ti = i
+    while Ti + 1 < len(fp) and int(fp[Ti + 1][1]) <= end:
+        Ti += 1
+    T = fp[Ti][0]
+    hits = collections.defaultdict(list)
+    if Ti == i:
+        return T, hits
+    for f, rg in ranges.items():
+        for k in range(0, len(rg), 150):
+            args = ["blame", "--reverse", f"{M}..{T}", "--first-parent", "--porcelain"]
+            for a, b in rg[k:k + 150]:
+                args += ["-L", f"{a},{b}"]
+            for l in git(g, *args, "--", f).split("\n"):
+                m = re.match(r"^([0-9a-f]{40}) (\d+) (\d+)", l)
+                if not m or m.group(1) == T:
+                    continue
+                j = idx.get(m.group(1))
+                if j is None or j + 1 >= len(fp):
+                    continue
+                hits[fp[j + 1][0]].append((f, int(m.group(3)), int(m.group(2)), m.group(1)))
+    return T, hits
+
+
+def hunks_on(g, parent, ch, f, lines_at_parent):
+    want = set(lines_at_parent)
+    files = split_diff(git(g, "diff", "-U3", "--no-color", "-M", parent, ch, "--", f))
+    out = []
+    for fl in files:
+        for h in fl["hunks"]:
+            m = re.match(r"@@ -(\d+)(?:,(\d+))?", h[0])
+            if not m:
+                continue
+            a = int(m.group(1)); c = int(m.group(2)) if m.group(2) is not None else 1
+            if any(a <= x <= a + max(c, 1) - 1 for x in want):
+                out.append("\n".join(h))
+        if out:
+            out.insert(0, "\n".join(fl["head"]))
+    return "\n".join(out)
+
+
+def pr_of(g, ch, oid2pr):
+    p = oid2pr.get(ch)
+    if p:
+        return p["number"], p.get("title") or "", p
+    s = git(g, "log", "-1", "--format=%s", ch).strip()
+    m = re.search(r"\(#(\d+)\)\s*$", s) or re.search(r"#(\d+)", s)
+    return (int(m.group(1)) if m else None), s, None
+
+
+def build_a(draw, item, R, items, prs, clones, now, readers, mask):
+    repo, n, fid = item["repo"], item["number"], item["finding"]
+    g = clone_of(draw, clones, repo)
+    body = prs[(repo, n)].get("body") or ""
+    title = prs[(repo, n)].get("title") or ""
+    heads = head_commits(g, n, item["squash"])
+    fixers = [c for c in heads if fid in c["trailers"]]
+    lines = desc_lines(body, fid)
+    finding = "\n".join(lines) if lines else "\n\n".join(strip_trailers(c["msg"]) for c in fixers)
+    named = {p for p in re.findall(r"[\w./-]+\.\w+", finding)}
+    if fixers:
+        diff = "\n".join(git(g, "show", "--format=", "--no-color", "-M", c["sha"]) for c in fixers)
+    else:
+        sq = git(g, "diff", "--no-color", "-M", item["squash"] + "^1", item["squash"])
+        files = split_diff(sq)
+        hit = [f for f in files if f["path"] in named]
+        diff = sq if not hit else "\n".join("\n".join(f["head"] + ["\n".join(h) for h in f["hunks"]]) for f in hit)
+    fix = capped(split_diff(diff), named, CAP)
+    a1 = f"ITEM: {item['id']}\n\nTITLE: {title}\n\nFINDING:\n{mask(finding)}\n\nFIX:\n{fix}\n"
+    # A2: the finding unmasked, its fix commits with every trailer, and the PR's other findings in two lists
+    pr_items = [i for i in items if (i["repo"], i["number"]) == (repo, n)]
+    trailer_ids = {i["finding"]: i["reader"] for i in pr_items}
+    toks = set()
+    for m in draw.FINDING_ID.finditer(body):
+        if m.group(2) in readers or m.group(2).split("/")[-1] in readers:
+            toks.add(m.group(1))
+    ids = dict(trailer_ids)
+    for t in sorted(toks, key=lambda t: (-len(t), t)):
+        if not any(t == i or t.endswith("/" + i) or i.endswith("/" + t) for i in ids):
+            r = draw.FINDING_ID.match(t).group(2)
+            ids[t] = r if r in readers else r.split("/")[-1]
+    def entry(i):
+        ls = desc_lines(body, i)
+        if ls:
+            txt = "\n".join(ls)
+        else:
+            cs = [c for c in heads if i in c["trailers"]]
+            txt = "\n\n".join(c["msg"] for c in cs) if cs else "(no text shown)"
+        if len(txt) > ENTRY_CAP:
+            txt = txt[:ENTRY_CAP] + f"\n[cut: {len(txt) - ENTRY_CAP} more characters]"
+        return f"- {i} (trailer: {'yes' if i in trailer_ids else 'no'}):\n{txt}"
+    alias = lambda i: i == fid or i.endswith("/" + fid) or fid.endswith("/" + i)
+    first = [i for i, r in sorted(ids.items()) if draw.STRATA.get(r) == "FR" and not alias(i)]
+    later = [i for i, r in sorted(ids.items()) if draw.STRATA.get(r) in ("RT", "AD", "SM") and not alias(i)]
+    fixmsgs = "\n\n".join(f"commit {c['sha'][:12]}\n{c['msg']}" for c in fixers) or "(no head commit carries this finding's trailer)"
+    a2 = (f"ITEM: {item['id']}\n\nFINDING ({fid}):\n{finding}\n\nFIX COMMITS:\n{fixmsgs}\n\n"
+          f"FIRST PASS:\n" + ("\n".join(entry(i) for i in first) or "(none)") + "\n\nLATER VOICES:\n" + ("\n".join(entry(i) for i in later) or "(none)") + "\n")
+    # Labellers' LATER: PRs merged within 30 days that changed lines the FIX added or changed (fresh clone for public repos)
+    gn = clone_of(draw, now, repo) if (Path(now) / clone_of(draw, now, repo).name).exists() else g
+    fix_added = collections.defaultdict(set)
+    for c in fixers:
+        cur = None
+        for l in git(g, "show", "--format=", "--no-color", "-M", "-U0", c["sha"]).split("\n"):
+            if l.startswith("+++ "):
+                cur = None if l[4:] == "/dev/null" else l[6:]
+            elif cur and l.startswith("+") and not l.startswith("+++"):
+                fix_added[cur].add(l[1:])
+    M = item["squash"]
+    rng = {}
+    if fix_added:
+        for f, r in added_ranges(gn, M + "^1", M, set(fix_added)).items():
+            content = git(gn, "show", f"{M}:{f}").split("\n")
+            keep = [(x, x) for a, b in r for x in range(a, b + 1) if x - 1 < len(content) and content[x - 1] in fix_added[f]]
+            if keep:
+                rng[f] = keep
+    else:
+        rng = added_ranges(gn, M + "^1", M, named or None)
+    T, hits = changed_lines(gn, M, 30, rng) if rng else (None, {})
+    oid2pr = {p["mergeCommit"]["oid"]: p for (r_, _), p in prs.items() if r_ == repo and p.get("mergeCommit")}
+    parts = []
+    for ch, hs in hits.items():
+        num, ttl, _ = pr_of(gn, ch, oid2pr)
+        par = git(gn, "rev-parse", ch + "^1").strip()
+        by_file = collections.defaultdict(list)
+        for f, _, at_parent, _ in hs:
+            by_file[f].append(at_parent)
+        hk = "\n".join(hunks_on(gn, par, ch, f, ls) for f, ls in by_file.items())
+        parts.append(f"PR #{num}: {mask(ttl)}\n{hk}")
+    later_txt = "\n\n".join(parts) or "(no later pull request changed these lines in the window the clone holds)"
+    if len(later_txt) > LATER_CAP:
+        later_txt = later_txt[:LATER_CAP] + f"\n[cut: {len(later_txt) - LATER_CAP} more characters]"
+    meta = {"window_end": T, "later_prs": sorted({pr_of(gn, ch, oid2pr)[0] or 0 for ch in hits}), "fixers": [c["sha"] for c in fixers],
+            "finding_source": "description" if lines else "commit", "first_pass": first, "later_voices": later,
+            "trailer_group": {i: (i in trailer_ids) for i in first + later}}
+    return {"a1": a1, "a1_lab": a1 + f"\nLATER:\n{later_txt}\n", "a2": a2, "a2_lab": a2 + f"\nLATER:\n{later_txt}\n", "meta": meta}
+
+
+def build_b(draw, c, R, items, prs, clones, readers):
+    repo, n = c["repo"], c["number"]
+    g = clone_of(draw, clones, repo)
+    p = prs[(repo, n)]
+    M = p["mergeCommit"]["oid"]
+    rng = added_ranges(g, M + "^1", M)
+    T, hits = changed_lines(g, M, 7, rng)
+    oid2pr = {q["mergeCommit"]["oid"]: q for (r_, _), q in prs.items() if r_ == repo and q.get("mergeCommit")}
+    later_set = set(c["later"])
+    blocks, laters, msgs, changed_at_M = [], [], [], collections.defaultdict(set)
+    for ch, hs in sorted(hits.items(), key=lambda kv: kv[0]):
+        num, ttl, q = pr_of(g, ch, oid2pr)
+        if num not in later_set:
+            continue
+        par = git(g, "rev-parse", ch + "^1").strip()
+        by_file = collections.defaultdict(list)
+        for f, at_M, at_parent, _ in hs:
+            by_file[f].append(at_parent); changed_at_M[f].add(at_M)
+        hk = "\n".join(hunks_on(g, par, ch, f, ls) for f, ls in by_file.items())
+        desc = ((q or {}).get("body") or "")[:DESC_CAP]
+        laters.append({"num": num, "text": f"PR #{num}: {ttl}\nDESCRIPTION (first {DESC_CAP} characters):\n{desc}\nHUNKS:\n{hk}"})
+        msgs.append(f"PR #{num} commit message:\n" + git(g, "log", "-1", "--format=%B", ch).strip())
+    for f, ls in sorted(changed_at_M.items()):
+        content = git(g, "show", f"{M}:{f}").split("\n")
+        lo, hi = max(1, min(ls) - 20), min(len(content), max(ls) + 20)
+        rows = [("> " if x in ls else "  ") + f"{x:5d} " + content[x - 1] for x in range(lo, hi + 1)]
+        blocks.append(f"--- {f} at the earlier merge (lines marked > were changed later)\n" + "\n".join(rows))
+    # findings of the earlier PR: squash-commit trailers and description tokens, all readers
+    body = p.get("body") or ""
+    sq_msg = git(g, "log", "-1", "--format=%B", M)
+    tr = {m.group(1) for m in TRAILER.finditer(sq_msg)}
+    toks = {m.group(1) for m in draw.FINDING_ID.finditer(body) if m.group(2) in readers or m.group(2).split("/")[-1] in readers}
+    ids = set(tr)
+    for t in sorted(toks, key=lambda t: (-len(t), t)):
+        if not any(t == i or t.endswith("/" + i) or i.endswith("/" + t) for i in ids):
+            ids.add(t)
+    fl = []
+    for i in sorted(ids):
+        ls = desc_lines(body, i)
+        txt = "\n".join(ls) if ls else "(no text in the description)"
+        if len(txt) > ENTRY_CAP:
+            txt = txt[:ENTRY_CAP] + f"\n[cut: {len(txt) - ENTRY_CAP} more characters]"
+        fl.append(f"- {i} (fixed: {'yes' if i in tr else 'no'}):\n{txt}")
+    findings = "\n".join(fl) if fl else "no list"
+    earlier = "\n\n".join(blocks)
+    later = "\n\n".join(x["text"] for x in laters)
+    pkt = f"ITEM: {c['id']}\n\nEARLIER PR TITLE: {p.get('title') or ''}\n\nEARLIER:\n{earlier}\n\nLATER:\n{later}\n\nFINDINGS:\n{findings}\n"
+    if len(pkt) > CAP:
+        room = CAP - len(pkt) + len(earlier) + len(later)
+        e_keep = min(len(earlier), room // 2)
+        l_keep = room - e_keep
+        pkt = (f"ITEM: {c['id']}\n\nEARLIER PR TITLE: {p.get('title') or ''}\n\nEARLIER:\n{earlier[:e_keep]}\n[cut: {len(earlier) - e_keep} more characters]\n\n"
+               f"LATER:\n{later[:l_keep]}\n[cut: {max(0, len(later) - l_keep)} more characters]\n\nFINDINGS:\n{findings}\n")
+    lab = pkt + "\nLATER COMMIT MESSAGES:\n" + "\n\n".join(msgs) + "\n"
+    meta = {"window_end": T, "later_found": [x["num"] for x in laters], "later_expected": sorted(later_set), "changed_lines": sum(len(v) for v in changed_at_M.values()), "findings": len(fl)}
+    return {"b": pkt, "b_lab": lab, "meta": meta}
+
+
+def main(bundle, clones, now, rows_dir, private_path, dumps, out, *roles):
+    roles = set(roles or ["gold", "batch"])
+    draw, R, items, prs, complete = load(bundle, clones, rows_dir, private_path, dumps)
+    readers = {i["reader"] for i in items}
+    mask = masker(draw, readers)
+    A = draw.draw_a(items, complete)
+    B = draw.draw_b(R)
+    out = Path(out)
+    (out / "public").mkdir(parents=True, exist_ok=True); (out / "private").mkdir(parents=True, exist_ok=True)
+    index = []
+    for it in A:
+        if it["role"] not in roles:
+            continue
+        pk = build_a(draw, it, R, items, prs, clones, now, readers, mask)
+        d = out / "public" / it["id"]
+        d.mkdir(exist_ok=True)
+        for k in ("a1", "a1_lab", "a2", "a2_lab"):
+            (d / f"{k}.txt").write_text(pk[k])
+        (d / "meta.json").write_text(json.dumps(dict({k: it[k] for k in ("stratum", "order", "role", "repo", "number", "finding", "reader", "tier", "id", "squash")}, **pk["meta"]), indent=1))
+        index.append({"part": "A", "id": it["id"], "stratum": it["stratum"], "order": it["order"], "role": it["role"], "public": True, "dir": str(d)})
+    for c in B:
+        if c["role"] not in roles:
+            continue
+        pk = build_b(draw, c, R, items, prs, clones, readers)
+        d = out / ("public" if c["public"] else "private") / c["id"]
+        d.mkdir(exist_ok=True)
+        (d / "b.txt").write_text(pk["b"]); (d / "b_lab.txt").write_text(pk["b_lab"])
+        (d / "meta.json").write_text(json.dumps(dict({k: c[k] for k in ("repo", "number", "tier", "later", "public", "id", "order", "role")}, **pk["meta"]), indent=1))
+        index.append({"part": "B", "id": c["id"], "order": c["order"], "role": c["role"], "public": c["public"], "dir": str(d)})
+    pub = [x for x in index if x["public"]]
+    (out / "public" / "index.json").write_text(json.dumps(pub, indent=1))
+    (out / "private" / "index.json").write_text(json.dumps([x for x in index if not x["public"]], indent=1))
+    print(f"packets: {len(index)} items ({sum(1 for x in index if x['part']=='A')} part A, {sum(1 for x in index if x['part']=='B')} part B, {sum(1 for x in index if not x['public'])} private)")
+
+
+if __name__ == "__main__":
+    main(*sys.argv[1:])

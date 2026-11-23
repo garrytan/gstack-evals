@@ -1,0 +1,112 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+index d9e438d..742db18 100644
+--- a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -255,7 +255,13 @@ public class BeanDeserializerFactory
+          *   probably won't work and needs to be added elsewhere.
+          */
+         try {
+-            valueInstantiator = findValueInstantiator(ctxt, beanDescRef);
++            // Local/anonymous classes cannot be instantiated by us: but we can still
++            // update existing instances, so use a no-Creators instantiator
++            if (ClassUtil.isLocalType(type.getRawClass(), true) != null) {
++                valueInstantiator = new ValueInstantiator.Base(type);
++            } else {
++                valueInstantiator = findValueInstantiator(ctxt, beanDescRef);
++            }
+         } catch (NoClassDefFoundError error) {
+             return new ErrorThrowingDeserializer(error);
+         } catch (IllegalArgumentException e0) {
+@@ -1048,12 +1054,9 @@ ClassUtil.name(name), ((AnnotatedParameter) m).getIndex());
+         if (ClassUtil.isProxyType(type)) {
+             throw new IllegalArgumentException("Cannot deserialize Proxy class "+type.getName()+" as a Bean");
+         }
+-        // also: can't deserialize some local classes: static are ok; in-method not;
+-        // other non-static inner classes are ok
+-        typeStr = ClassUtil.isLocalType(type, true);
+-        if (typeStr != null) {
+-            throw new IllegalArgumentException("Cannot deserialize Class "+type.getName()+" (of type "+typeStr+") as a Bean");
+-        }
++        // NOTE: local/anonymous classes cannot be instantiated, but existing
++        // instances may still be updated (see "readerForUpdating()"), so
++        // failure for those is deferred until instantiation is attempted
+         return true;
+     }
+ 
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+index 98a4aad..affb9d1 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+@@ -1608,6 +1608,13 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+         //   inner classes -- with one and only one exception; that of default constructor!
+         //   -- so let's indicate it
+         Class<?> raw = _beanType.getRawClass();
++        // Local/anonymous classes can only be updated, never instantiated
++        String localType = ClassUtil.isLocalType(raw, true);
++        if (localType != null) {
++            return ctxt.handleMissingInstantiator(raw, null, p, String.format(
++"cannot deserialize Class %s (of type %s) as a Bean: only existing instances can be updated",
++                    raw.getName(), localType));
++        }
+         if (ClassUtil.isNonStaticInnerClass(raw)) {
+             return ctxt.handleMissingInstantiator(raw, null, p,
+ "non-static inner classes like this can only by instantiated using default, no-argument constructor");
+diff --git a/src/test/java/tools/jackson/databind/deser/merge/UpdateLocalClassTest.java b/src/test/java/tools/jackson/databind/deser/merge/UpdateLocalClassTest.java
+new file mode 100644
+index 0000000..d6ff9e0
+--- /dev/null
++++ b/src/test/java/tools/jackson/databind/deser/merge/UpdateLocalClassTest.java
+@@ -0,0 +1,53 @@
++package tools.jackson.databind.deser.merge;
++
++import org.junit.jupiter.api.Test;
++
++import tools.jackson.databind.*;
++import tools.jackson.databind.exc.InvalidDefinitionException;
++import tools.jackson.databind.testutil.DatabindTestUtil;
++
++import static org.junit.jupiter.api.Assertions.*;
++
++// Updating existing instances of local/anonymous classes should work since
++// no instantiation is needed; creating new instances should still fail.
++public class UpdateLocalClassTest extends DatabindTestUtil
++{
++    private final ObjectMapper MAPPER = newJsonMapper();
++
++    @Test
++    public void testUpdateAnonymousClassInstance() throws Exception
++    {
++        Object bean = new Object() {
++            public int value;
++            @Override public String toString() { return String.valueOf(value); }
++        };
++        Object result = MAPPER.readerForUpdating(bean).readValue("{\"value\": 2}");
++        assertSame(bean, result);
++        assertEquals("2", bean.toString());
++    }
++
++    @Test
++    public void testUpdateLocalClassInstance() throws Exception
++    {
++        class Local {
++            public int value;
++            public String name;
++        }
++        Local bean = new Local();
++        Local result = MAPPER.readerForUpdating(bean).readValue("{\"value\": 3, \"name\":\"x\"}");
++        assertSame(bean, result);
++        assertEquals(3, bean.value);
++        assertEquals("x", bean.name);
++    }
++
++    @Test
++    public void testCreateLocalClassInstanceFails() throws Exception
++    {
++        class Local {
++            public int value;
++        }
++        InvalidDefinitionException e = assertThrows(InvalidDefinitionException.class,
++                () -> MAPPER.readValue("{\"value\": 3}", Local.class));
++        verifyException(e, "local/anonymous");
++    }
++}

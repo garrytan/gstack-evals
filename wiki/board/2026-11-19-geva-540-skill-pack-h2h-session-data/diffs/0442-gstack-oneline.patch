@@ -1,0 +1,99 @@
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+index 86cfc96..5ee7812 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+@@ -27,8 +27,11 @@ import org.verapdf.wcag.algorithms.semanticalgorithms.utils.ListUtils;
+ import org.verapdf.wcag.algorithms.semanticalgorithms.utils.TextChunkUtils;
+ 
+ import java.util.ArrayList;
++import java.util.Collections;
+ import java.util.Comparator;
++import java.util.IdentityHashMap;
+ import java.util.List;
++import java.util.Set;
+ 
+ public class TextLineProcessor {
+ 
+@@ -40,12 +43,22 @@ public class TextLineProcessor {
+         List<IObject> newContents = new ArrayList<>();
+         TextLine previousLine = new TextLine(new TextChunk(""));
+         boolean isSeparateLine = false;
++        boolean precededByWhiteSpace = false;
++        Set<TextChunk> chunksAfterWhiteSpace = Collections.newSetFromMap(new IdentityHashMap<>());
+         for (IObject content : contents) {
+             if (content instanceof TextChunk) {
+                 TextChunk textChunk = (TextChunk) content;
+-                if (textChunk.isWhiteSpaceChunk() || textChunk.isEmpty()) {
++                if (textChunk.isWhiteSpaceChunk()) {
++                    precededByWhiteSpace = true;
+                     continue;
+                 }
++                if (textChunk.isEmpty()) {
++                    continue;
++                }
++                if (precededByWhiteSpace) {
++                    chunksAfterWhiteSpace.add(textChunk);
++                    precededByWhiteSpace = false;
++                }
+                 TextLine currentLine = new TextLine(textChunk);
+                 double oneLineProbability = ChunksMergeUtils.countOneLineProbability(new SemanticTextNode(), previousLine, currentLine);
+                 isSeparateLine |= (oneLineProbability < ONE_LINE_PROBABILITY) || previousLine.isHiddenText() != currentLine.isHiddenText();
+@@ -70,14 +83,15 @@ public class TextLineProcessor {
+                 TextLine textLine = (TextLine) content;
+                 textLine.getTextChunks().sort(TEXT_CHUNK_COMPARATOR);
+                 double threshold = textLine.getFontSize() * TextChunkUtils.TEXT_LINE_SPACE_RATIO;
+-                newContents.set(i, getTextLineWithSpaces(textLine, threshold));
++                newContents.set(i, getTextLineWithSpaces(textLine, threshold, chunksAfterWhiteSpace));
+             }
+         }
+         linkTextLinesWithConnectedLineArtBullet(newContents);
+         return newContents;
+     }
+ 
+-    private static TextLine getTextLineWithSpaces(TextLine textLine, double threshold) {
++    private static TextLine getTextLineWithSpaces(TextLine textLine, double threshold,
++                                                  Set<TextChunk> chunksAfterWhiteSpace) {
+         List<TextChunk> textChunks = textLine.getTextChunks();
+         TextChunk currentTextChunk = textChunks.get(0);
+         double previousEnd = currentTextChunk.getBoundingBox().getRightX();
+@@ -86,10 +100,10 @@ public class TextLineProcessor {
+         for (int i = 1; i < textChunks.size(); i++) {
+             currentTextChunk = textChunks.get(i);
+             double currentStart = currentTextChunk.getBoundingBox().getLeftX();
+-            if (currentStart - previousEnd > threshold) {
++            if (currentStart - previousEnd > threshold || chunksAfterWhiteSpace.contains(currentTextChunk)) {
+                 BoundingBox spaceBBox = new BoundingBox(currentTextChunk.getBoundingBox());
+-                spaceBBox.setLeftX(previousEnd);
+-                spaceBBox.setRightX(currentStart);
++                spaceBBox.setLeftX(Math.min(previousEnd, currentStart));
++                spaceBBox.setRightX(Math.max(previousEnd, currentStart));
+                 TextChunk spaceChunk = new TextChunk(spaceBBox, " ", textLine.getFontSize(), textLine.getBaseLine());
+                 newLine.add(spaceChunk);
+             }
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+index 855aa82..9c2def0 100644
+--- a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+@@ -47,6 +47,22 @@ public class TextLineProcessorTest {
+         Assertions.assertEquals("test", ((TextLine) contents.get(1)).getValue());
+     }
+ 
++    @Test
++    public void testProcessTextLinesKeepsExplicitWhiteSpaceChunks() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        List<IObject> contents = new ArrayList<>();
++        contents.add(new TextChunk(new BoundingBox(0, 10.0, 30.0, 40.0, 40.0),
++            "Evolution", 10, 30.0));
++        contents.add(new TextChunk(new BoundingBox(0, 40.0, 30.0, 41.0, 40.0),
++            " ", 10, 30.0));
++        contents.add(new TextChunk(new BoundingBox(0, 40.5, 30.0, 50.0, 40.0),
++            "Of", 10, 30.0));
++        contents = TextLineProcessor.processTextLines(contents);
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("Evolution Of", ((TextLine) contents.get(0)).getValue());
++    }
++
+     /**
+      * Regression test for issue #150: text chunks on the same line should be sorted by leftX.
+      *

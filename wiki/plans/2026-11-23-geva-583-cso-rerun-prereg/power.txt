@@ -1,0 +1,25 @@
+Power for the /cso rerun (2026-11-23-geva-583-cso-rerun-prereg).
+
+Method: the parent's analysis function mdd() in lanes/outcome-skills/h2h/analysis/power.ts, unchanged: simulation
+of the exact two-sided McNemar test, 80% power, 4,000 simulations per step, design effect 1.2, seed 20261115. It is
+the TypeScript copy of the head-to-head's power.py and prints the parent's power.txt byte for byte. alpha 0.025 is
+the stricter Holm step of each two-contrast family; 0.05 is the last step.
+
+Command, run 2026-11-23 from the repository root at main ed66b17:
+  bun -e 'import { mdd } from "./lanes/outcome-skills/h2h/analysis/power.ts"; for (const n of [51, 52]) for (const s of [0.15, 0.2, 0.25, 0.3, 0.35, 0.4]) { const f = (x) => x === null ? "none" : String(Math.round(x * 100)); console.log(n + " | " + s + " | " + f(mdd(n, s, 0.025)) + " | " + f(mdd(n, s, 0.05))); }'
+
+MDD in percentage points of the named rate. "none" means no difference up to the discordant share reaches 80% power.
+
+n units | discordant share | MDD a=0.025 | MDD a=0.05
+51 | 0.15 | none | none
+51 | 0.2 | none | 19
+51 | 0.25 | 23 | 22
+51 | 0.3 | 25 | 24
+51 | 0.35 | 28 | 26
+51 | 0.4 | 30 | 28
+52 | 0.15 | none | none
+52 | 0.2 | none | 19
+52 | 0.25 | 23 | 22
+52 | 0.3 | 25 | 24
+52 | 0.35 | 28 | 26
+52 | 0.4 | 30 | 28

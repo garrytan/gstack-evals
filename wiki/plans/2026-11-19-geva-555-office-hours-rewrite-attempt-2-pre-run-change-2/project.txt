@@ -1,0 +1,30 @@
+project.py: Sol in Codex CLI, stage 1 ($220 approved) and stage 2 ($1406 approved); everything but Sol held at cost.py's figures
+first request, o200k tokens: Codex none 11268, current 30995, new 31025; Claude Code none 13855, current 26019, new 26043
+extra prefix a skill-arm request carries in Codex: current 4976, new 4982; none -2587
+
+planning figure, Claude Code (as approved)
+  Sol a session: current $2.000, new $2.000, none $0.30
+  stage 1  central $  109.68   1.35x $  148.07   cap $220   fits
+  stage 2  central $ 1011.20   1.35x $ 1365.12   cap $1406   fits; with a round's $40 held at open $1405.12, fits
+  paid     central $ 1619.91   1.35x $ 2186.88
+  all-in   central $ 2009.91   1.35x $ 2576.88   line $2737   fits; at the approved caps $2737, unchanged
+central: 22 requests a session, 90% of the carried prefix read from cache
+  Sol a session: current $2.040, new $2.040, none $0.30
+  stage 1  central $  110.32   1.35x $  148.94   cap $220   fits
+  stage 2  central $ 1017.64   1.35x $ 1373.82   cap $1406   fits; with a round's $40 held at open $1413.82, over the cap
+  paid     central $ 1627.00   1.35x $ 2196.45
+  all-in   central $ 2017.00   1.35x $ 2586.45   line $2737   fits; at the approved caps $2737, unchanged
+22 requests a session, no cache hits
+  Sol a session: current $2.219, new $2.219, none $0.30
+  stage 1  central $  113.19   1.35x $  152.80   cap $220   fits
+  stage 2  central $ 1046.25   1.35x $ 1412.44   cap $1406   DOES NOT FIT; with a round's $40 held at open $1452.44, over the cap
+  paid     central $ 1658.47   1.35x $ 2238.93
+  all-in   central $ 2048.47   1.35x $ 2628.93   line $2737   fits; at the approved caps $2737, unchanged
+bound: the whole planning figure scales with the first request
+  Sol a session: current $2.382, new $2.383, none $0.30
+  stage 1  central $  115.80   1.35x $  156.33   cap $220   fits
+  stage 2  central $ 1072.41   1.35x $ 1447.75   cap $1406   DOES NOT FIT; with a round's $40 held at open $1487.75, over the cap
+  paid     central $ 1687.24   1.35x $ 2277.77
+  all-in   central $ 2077.24   1.35x $ 2667.77   line $2737   fits; at the approved caps $2737, unchanged
+
+room per Sol skill session, none held at $0.30: stage 1 at 1.35x within $220: $3.330; stage 2 at 1.35x within $1406: $0.189; stage 2 with a round's $40 held: $0.0041

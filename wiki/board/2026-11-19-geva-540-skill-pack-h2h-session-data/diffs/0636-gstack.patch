@@ -1,0 +1,103 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 973f4a9..6beb53b 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -140,6 +140,9 @@ is based on [Keep a Changelog](https://keepachangelog.com).
+ 
+ ### Fixed
+ 
++- Calling `quit` from a message handler in an actor shell (e.g., in the error
++  handler of a request that timed out) no longer triggers an assertion. The
++  actor shell now stops processing messages once its mailbox has been closed.
+ - Errors that arise during the `with` DSL setup of servers and clients now
+   properly call `on_error` (#2026).
+ - Fix UBSan finding regarding non-aligned memory allocation when spawning
+diff --git a/libcaf_net/caf/net/abstract_actor_shell.cpp b/libcaf_net/caf/net/abstract_actor_shell.cpp
+index 22cbf81..770198c 100644
+--- a/libcaf_net/caf/net/abstract_actor_shell.cpp
++++ b/libcaf_net/caf/net/abstract_actor_shell.cpp
+@@ -27,7 +27,9 @@ abstract_actor_shell::abstract_actor_shell(actor_config& cfg,
+   mailbox_.try_block();
+   resume_ = make_action([this] {
+     for (;;) {
+-      if (!consume_message() && try_block_mailbox())
++      // Note: consume_message() may call quit(), which closes the mailbox. We
++      //       must not access a closed mailbox again.
++      if (terminated() || (!consume_message() && try_block_mailbox()))
+         return;
+     }
+   });
+@@ -52,12 +54,14 @@ void abstract_actor_shell::quit(error reason) {
+ // -- mailbox access -----------------------------------------------------------
+ 
+ mailbox_element_ptr abstract_actor_shell::next_message() {
+-  if (!mailbox_.blocked())
++  if (!mailbox_.closed() && !mailbox_.blocked())
+     return mailbox_.pop_front();
+   return nullptr;
+ }
+ 
+ bool abstract_actor_shell::try_block_mailbox() {
++  if (mailbox_.closed())
++    return false;
+   return mailbox_.try_block();
+ }
+ 
+diff --git a/libcaf_net/caf/net/actor_shell.test.cpp b/libcaf_net/caf/net/actor_shell.test.cpp
+index 6270752..daae98b 100644
+--- a/libcaf_net/caf/net/actor_shell.test.cpp
++++ b/libcaf_net/caf/net/actor_shell.test.cpp
+@@ -18,6 +18,7 @@
+ #include "caf/anon_mail.hpp"
+ #include "caf/byte_span.hpp"
+ #include "caf/callback.hpp"
++#include "caf/event_based_actor.hpp"
+ #include "caf/flow/observable.hpp"
+ #include "caf/flow/single.hpp"
+ #include "caf/scheduled_actor/flow.hpp"
+@@ -235,4 +236,45 @@ TEST("actor shells can use flows") {
+   check_eq(to_string_view(buf), msg);
+ }
+ 
++TEST("actor shells may call quit from a request error handler") {
++  scoped_actor self{sys};
++  // Actor that never responds to the request.
++  auto dummy = sys.spawn([](event_based_actor* dself) -> behavior {
++    return {
++      [dself](get_atom) {
++        auto rp = dself->make_response_promise<std::string>();
++        return rp;
++      },
++    };
++  });
++  auto cb = [dummy](app_t* app) {
++    app->self->mail(get_atom_v)
++      .request(dummy, 10ms)
++      .then([](const std::string&) {},
++            [app](const error& err) {
++              auto* down = app->down;
++              down->begin_output();
++              auto& buf = down->output_buffer();
++              auto msg = "timeout"s;
++              auto bytes = as_bytes(std::span{msg});
++              buf.insert(buf.end(), bytes.begin(), bytes.end());
++              down->end_output();
++              app->self->quit(err);
++            });
++  };
++  auto& mpx = sys.network_manager().mpx();
++  auto app = app_t::make(actor{self}, cb);
++  auto transport = net::octet_stream::transport::make(fd1, std::move(app));
++  auto mgr = net::socket_manager::make(&mpx, std::move(transport));
++  require(mpx.start(mgr));
++  fd1.id = net::invalid_socket_id;
++  auto msg = "timeout"s;
++  byte_buffer buf;
++  buf.resize(msg.size());
++  auto n = net::read(fd2, buf);
++  check_eq(n, static_cast<ptrdiff_t>(msg.size()));
++  check_eq(to_string_view(buf), msg);
++  self->send_exit(dummy, exit_reason::user_shutdown);
++}
++
+ } // WITH_FIXTURE(fixture)

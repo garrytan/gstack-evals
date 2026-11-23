@@ -1,0 +1,13 @@
+diff --git a/middleware/proxy/proxy.go b/middleware/proxy/proxy.go
+index 2883ff5..57733a5 100644
+--- a/middleware/proxy/proxy.go
++++ b/middleware/proxy/proxy.go
+@@ -279,7 +279,7 @@ func BalancerForward(servers []string, clients ...*fasthttp.Client) fiber.Handle
+ 		if !strings.HasPrefix(server, "http") {
+ 			server = "http://" + server
+ 		}
+-		c.Request().Header.Add("X-Real-IP", c.IP())
++		c.Request().Header.Set("X-Real-IP", c.IP())
+ 		return Do(c, server+c.OriginalURL(), clients...)
+ 	}
+ }

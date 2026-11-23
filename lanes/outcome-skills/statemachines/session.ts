@@ -85,7 +85,9 @@ export interface SessionRecord {
   /** A first stage's scope rule: "folder" (scope.dir) or "file" (every file the fix patch touches, section 12's retry); null on a follow-on. */
   scope: "folder" | "file" | null;
   questions: { ask_user_question: number; prose: number }; runtime_id: string; disallowed_tools: string[]; env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" };
-  strip: { removed: string[] }; memory_loaded: string[]; tree_patch: { path: string; sha256: string } | null; transcript: string;
+  /** removed: the unit's base strip. first_stage: what section 4's strip removed from the first stage's tree before a
+   *  follow-on's commit two ([] on a first stage or S0; absent on records from before the follow-on strip). */
+  strip: { removed: string[]; first_stage?: string[] }; memory_loaded: string[]; tree_patch: { path: string; sha256: string } | null; transcript: string;
   /** A3 only: the file digest of the /qa home the image build copied into /root (image.ts qaHomeCopy); null in every other arm. */
   qa_home_sha256: string | null;
   exposure: Record<string, unknown>; reads: { inputs: number; gstack: number; drive: number };

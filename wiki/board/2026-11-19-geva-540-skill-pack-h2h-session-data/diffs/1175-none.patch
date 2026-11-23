@@ -1,0 +1,68 @@
+diff --git a/pkg/oci/artifact.go b/pkg/oci/artifact.go
+index f021f9b..5a693cf 100644
+--- a/pkg/oci/artifact.go
++++ b/pkg/oci/artifact.go
+@@ -6,6 +6,7 @@ import (
+ 	"io"
+ 	"os"
+ 	"path/filepath"
++	"strings"
+ 	"sync"
+ 
+ 	"github.com/cheggaaa/pb/v3"
+@@ -159,6 +160,10 @@ func (a *Artifact) Download(ctx context.Context, dir string, opt DownloadOption)
+ }
+ 
+ func (a *Artifact) download(ctx context.Context, layer v1.Layer, fileName, dir string, quiet bool) error {
++	if err := validateFileName(fileName); err != nil {
++		return xerrors.Errorf("invalid file name: %w", err)
++	}
++
+ 	size, err := layer.Size()
+ 	if err != nil {
+ 		return xerrors.Errorf("size error: %w", err)
+@@ -207,6 +212,18 @@ func (a *Artifact) download(ctx context.Context, layer v1.Layer, fileName, dir s
+ 	return nil
+ }
+ 
++// validateFileName ensures the file name doesn't contain path separators or
++// traversal sequences, so that it cannot escape the destination directory.
++func validateFileName(fileName string) error {
++	if fileName == "" || fileName == "." || fileName == ".." ||
++		strings.ContainsAny(fileName, `/\`) || strings.ContainsRune(fileName, 0) ||
++		filepath.IsAbs(fileName) || filepath.VolumeName(fileName) != "" ||
++		filepath.Base(fileName) != fileName {
++		return xerrors.Errorf("%q must be a plain file name", fileName)
++	}
++	return nil
++}
++
+ func (a *Artifact) Digest(ctx context.Context) (string, error) {
+ 	if err := a.populate(ctx, a.RegistryOptions); err != nil {
+ 		return "", err
+diff --git a/pkg/oci/artifact_test.go b/pkg/oci/artifact_test.go
+index 7faf17e..754b0dd 100644
+--- a/pkg/oci/artifact_test.go
++++ b/pkg/oci/artifact_test.go
+@@ -134,3 +134,12 @@ func TestArtifact_Download(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestValidateFileName(t *testing.T) {
++	for _, name := range []string{"db.tar.gz", "bundle.tar.gz", "javadb.tar.gz"} {
++		assert.NoError(t, oci.ValidateFileName(name), name)
++	}
++	for _, name := range []string{"", ".", "..", "../evil", "../../tmp/x", "/etc/passwd", `..\evil`, "a/b", "a\x00b"} {
++		assert.Error(t, oci.ValidateFileName(name), name)
++	}
++}
+diff --git a/pkg/oci/export_test.go b/pkg/oci/export_test.go
+new file mode 100644
+index 0000000..8a6ad68
+--- /dev/null
++++ b/pkg/oci/export_test.go
+@@ -0,0 +1,3 @@
++package oci
++
++var ValidateFileName = validateFileName

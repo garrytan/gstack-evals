@@ -1,0 +1,77 @@
+diff --git a/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs b/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs
+index df7465d..d9a8752 100644
+--- a/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs
++++ b/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs
+@@ -222,7 +222,10 @@ public class WaveBuffer : IWaveBuffer
+     /// </summary>
+     public void Copy(Array destinationArray)
+     {
+-        Array.Copy(byteBuffer, destinationArray, numberOfBytes);
++        // Raw byte copy: Array.Copy would widen each byte into a separate element when the
++        // destination is float[]/short[]/int[], and on .NET Core the aliased typed views report
++        // the byte element size, so element-based copies move only a fraction of the data.
++        Buffer.BlockCopy(byteBuffer, 0, destinationArray, 0, numberOfBytes);
+     }
+ 
+     /// <summary>
+diff --git a/tests/NAudio.Core.Tests/WaveStreams/WaveBufferTests.cs b/tests/NAudio.Core.Tests/WaveStreams/WaveBufferTests.cs
+new file mode 100644
+index 0000000..6a5307a
+--- /dev/null
++++ b/tests/NAudio.Core.Tests/WaveStreams/WaveBufferTests.cs
+@@ -0,0 +1,24 @@
++using NAudio.Wave;
++using NUnit.Framework;
++
++namespace NAudio.Core.Tests.WaveStreams;
++
++[TestFixture]
++public class WaveBufferTests
++{
++    [Test]
++    public void CopyToFloatArrayCopiesRawSamples()
++    {
++#pragma warning disable CS0618 // WaveBuffer is obsolete but still public
++        var waveBuffer = new WaveBuffer(16);
++        var source = new[] { 0.25f, -0.5f, 0.75f, 1f };
++        System.Buffer.BlockCopy(source, 0, waveBuffer.ByteBuffer, 0, 16);
++        waveBuffer.ByteBufferCount = 16;
++#pragma warning restore CS0618
++
++        var dest = new float[4];
++        waveBuffer.Copy(dest);
++
++        Assert.That(dest, Is.EqualTo(source));
++    }
++}
+diff --git a/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs b/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
+index 9eb350e..d56cafd 100644
+--- a/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
++++ b/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
+@@ -47,6 +47,26 @@ public class AudioFileReaderTests
+         }
+     }
+ 
++    [Test]
++    public void MonoFileCopyToProducesFullLength()
++    {
++        // Mono WAV -> AudioFileReader -> Stream.CopyTo (issue: output was truncated to 1/4 on .NET Core)
++        var tmp = Path.Combine(Path.GetTempPath(), "naudio-copyto-test-" + Guid.NewGuid() + ".wav");
++        File.WriteAllBytes(tmp, Build16BitMonoPcmWav(sampleCount: 8000 * 16, sampleRate: 8000));
++        try
++        {
++            using var reader = new AudioFileReader(tmp);
++            var output = new MemoryStream();
++            reader.CopyTo(output);
++            Assert.That(output.Length, Is.EqualTo(8000 * 16 * 4));
++            Assert.That(output.Length, Is.EqualTo(reader.Length));
++        }
++        finally
++        {
++            File.Delete(tmp);
++        }
++    }
++
+     /// <summary>
+     /// Build a 1kHz sine-in-WAV byte array we can feed to the reader.
+     /// </summary>

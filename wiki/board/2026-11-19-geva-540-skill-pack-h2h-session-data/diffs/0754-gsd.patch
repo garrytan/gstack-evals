@@ -1,0 +1,117 @@
+diff --git a/internal/fsext/dotstar_ignore_test.go b/internal/fsext/dotstar_ignore_test.go
+new file mode 100644
+index 0000000..60dfb9f
+--- /dev/null
++++ b/internal/fsext/dotstar_ignore_test.go
+@@ -0,0 +1,60 @@
++package fsext
++
++import (
++	"os"
++	"path/filepath"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func setupDotStarRepo(t *testing.T) string {
++	t.Helper()
++	dir := t.TempDir()
++	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".*\n"), 0o644))
++	require.NoError(t, os.WriteFile(filepath.Join(dir, "example.txt"), []byte("test content"), 0o644))
++	require.NoError(t, os.WriteFile(filepath.Join(dir, "another.go"), []byte("more content"), 0o644))
++	require.NoError(t, os.WriteFile(filepath.Join(dir, ".hidden"), []byte("hidden"), 0o644))
++	return dir
++}
++
++func TestListDirectoryDotStarGitignore(t *testing.T) {
++	dir := setupDotStarRepo(t)
++
++	t.Run("absolute root", func(t *testing.T) {
++		files, _, err := ListDirectory(dir, nil, 0)
++		require.NoError(t, err)
++		require.ElementsMatch(t, []string{
++			filepath.Join(dir, "example.txt"),
++			filepath.Join(dir, "another.go"),
++		}, files)
++	})
++
++	t.Run("dot root", func(t *testing.T) {
++		oldWd, err := os.Getwd()
++		require.NoError(t, err)
++		require.NoError(t, os.Chdir(dir))
++		t.Cleanup(func() { _ = os.Chdir(oldWd) })
++
++		files, _, err := ListDirectory(".", nil, 0)
++		require.NoError(t, err)
++		require.ElementsMatch(t, []string{"./example.txt", "./another.go"}, files)
++	})
++
++	t.Run("user ignore pattern", func(t *testing.T) {
++		files, _, err := ListDirectory(dir, []string{".*"}, 0)
++		require.NoError(t, err)
++		require.Len(t, files, 2)
++	})
++}
++
++func TestGlobWithDoubleStarDotStarGitignore(t *testing.T) {
++	dir := setupDotStarRepo(t)
++
++	matches, _, err := GlobWithDoubleStar("**/*", dir, 0)
++	require.NoError(t, err)
++	require.ElementsMatch(t, []string{
++		filepath.Join(dir, "example.txt"),
++		filepath.Join(dir, "another.go"),
++	}, matches)
++}
+diff --git a/internal/fsext/fileutil.go b/internal/fsext/fileutil.go
+index e688884..2b97521 100644
+--- a/internal/fsext/fileutil.go
++++ b/internal/fsext/fileutil.go
+@@ -98,6 +98,12 @@ func (w *FastGlobWalker) ShouldSkip(path string) bool {
+ 		return false
+ 	}
+ 
++	// Never skip the root directory itself: patterns like ".*" would
++	// otherwise match "." and cause the whole walk to be skipped.
++	if relPath == "." {
++		return false
++	}
++
+ 	if w.gitignore != nil {
+ 		if w.gitignore.MatchesPath(relPath) {
+ 			return true
+diff --git a/internal/fsext/ls.go b/internal/fsext/ls.go
+index e691c14..6838c5f 100644
+--- a/internal/fsext/ls.go
++++ b/internal/fsext/ls.go
+@@ -116,6 +116,17 @@ func NewDirectoryLister(rootPath string) *directoryLister {
+ // ~/.gitignore
+ // ~/.config/crush/ignore
+ func (dl *directoryLister) shouldIgnore(path string, ignorePatterns []string) bool {
++	relPath, err := filepath.Rel(dl.rootPath, path)
++	if err != nil {
++		relPath = path
++	}
++
++	// Never ignore the root directory itself: patterns like ".*" would
++	// otherwise match "." and cause the whole walk to be skipped.
++	if relPath == "." {
++		return false
++	}
++
+ 	if len(ignorePatterns) > 0 {
+ 		base := filepath.Base(path)
+ 		for _, pattern := range ignorePatterns {
+@@ -125,11 +136,6 @@ func (dl *directoryLister) shouldIgnore(path string, ignorePatterns []string) bo
+ 		}
+ 	}
+ 
+-	relPath, err := filepath.Rel(dl.rootPath, path)
+-	if err != nil {
+-		relPath = path
+-	}
+-
+ 	if commonIgnorePatterns().MatchesPath(relPath) {
+ 		slog.Debug("ingoring common pattern", "path", relPath)
+ 		return true

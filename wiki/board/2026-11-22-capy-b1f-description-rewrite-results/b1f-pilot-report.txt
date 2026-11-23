@@ -1,0 +1,15 @@
+== B1f pilot: aallan__vera-662_interface on the four gstack arms, and 10 supply tasks
+  hook: followed 0/1 0.0% [0.0, 79.3]; loaded 1/1 100.0% [20.7, 100.0], 1 at the first call; gaps 0, cap stops 0, safety stops 0, audit 0, passes 1 (descriptive), cost $1.00
+  own: followed 0/1 0.0% [0.0, 79.3]; loaded 0/1 0.0% [0.0, 79.3], 0 at the first call; gaps 0, cap stops 0, safety stops 0, audit 0, passes 1 (descriptive), cost $0.87
+  long: followed 0/1 0.0% [0.0, 79.3]; loaded 0/1 0.0% [0.0, 79.3], 0 at the first call; gaps 0, cap stops 0, safety stops 0, audit 0, passes 1 (descriptive), cost $0.71
+  required: followed 0/1 0.0% [0.0, 79.3]; loaded 1/1 100.0% [20.7, 100.0], 1 at the first call; gaps 0, cap stops 0, safety stops 0, audit 0, passes 1 (descriptive), cost $1.12
+  pilot PASS hook
+  pilot PASS own
+  pilot PASS long
+  pilot PASS required
+  pilot supply: 10 of 10 supply tasks counted
+  pilot loads read: 6 (required via Skill at call 1, hook via Skill at call 1, hook via Skill at call 1, required via Skill at call 1, required via Skill at call 1, hook via Skill at call 1)
+  pilot spend hook: settled $1.71 of its $14.28 pilot cap (README section 11)
+  pilot spend own: settled $1.05 of its $7.14 pilot cap (README section 11)
+  pilot spend long: settled $1.97 of its $14.28 pilot cap (README section 11)
+  pilot spend required: settled $1.90 of its $14.28 pilot cap (README section 11)

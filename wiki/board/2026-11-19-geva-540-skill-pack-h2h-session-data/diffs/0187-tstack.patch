@@ -1,0 +1,109 @@
+diff --git a/src/execution/physical_plan/plan_window.cpp b/src/execution/physical_plan/plan_window.cpp
+index a85dbcb..9db423b 100644
+--- a/src/execution/physical_plan/plan_window.cpp
++++ b/src/execution/physical_plan/plan_window.cpp
+@@ -113,8 +113,9 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
+ 			}
+ 
+ 			// CSE Elimination: Search for a previous match
++			// Volatile expressions (e.g. using random()) must be evaluated independently
+ 			bool cse = false;
+-			for (idx_t i = 0; i < matching.size(); ++i) {
++			for (idx_t i = 0; i < matching.size() && !wexpr.IsVolatile(); ++i) {
+ 				const auto match_idx = matching[i];
+ 				auto &match_expr = op.expressions[match_idx]->Cast<BoundWindowExpression>();
+ 				if (wexpr.Equals(match_expr)) {
+diff --git a/src/optimizer/common_aggregate_optimizer.cpp b/src/optimizer/common_aggregate_optimizer.cpp
+index d351ccb..16c232e 100644
+--- a/src/optimizer/common_aggregate_optimizer.cpp
++++ b/src/optimizer/common_aggregate_optimizer.cpp
+@@ -50,10 +50,14 @@ void CommonAggregateOptimizer::ExtractCommonAggregates(LogicalAggregate &aggr) {
+ 	for (idx_t i = 0; i < aggr.expressions.size(); i++) {
+ 		ProjectionIndex original_index(i + total_erased);
+ 		ProjectionIndex new_index(i);
+-		auto entry = aggregate_remap.find(*aggr.expressions[i]);
++		// volatile aggregates (e.g. sum(random())) are never deduplicated
++		const bool is_volatile = aggr.expressions[i]->IsVolatile();
++		auto entry = is_volatile ? aggregate_remap.end() : aggregate_remap.find(*aggr.expressions[i]);
+ 		if (entry == aggregate_remap.end()) {
+ 			// aggregate does not exist yet: add it to the map
+-			aggregate_remap[*aggr.expressions[i]] = new_index;
++			if (!is_volatile) {
++				aggregate_remap[*aggr.expressions[i]] = new_index;
++			}
+ 			if (new_index != original_index) {
+ 				// this aggregate is not erased, however an aggregate BEFORE it has been erased
+ 				// so we need to remap this aggregate
+diff --git a/src/planner/binder/expression/bind_aggregate_expression.cpp b/src/planner/binder/expression/bind_aggregate_expression.cpp
+index 55c92b7..4a84b09 100644
+--- a/src/planner/binder/expression/bind_aggregate_expression.cpp
++++ b/src/planner/binder/expression/bind_aggregate_expression.cpp
+@@ -331,12 +331,16 @@ BindResult BaseSelectBinder::BindAggregate(FunctionExpression &aggr, AggregateFu
+ 
+ 	// check for all the aggregates if this aggregate already exists
+ 	ProjectionIndex aggr_index;
+-	auto entry = node.aggregate_map.find(*aggregate);
++	// volatile aggregates (e.g. sum(random())) must never be deduplicated: each occurrence is evaluated independently
++	const bool is_volatile = aggregate->IsVolatile();
++	auto entry = is_volatile ? node.aggregate_map.end() : node.aggregate_map.find(*aggregate);
+ 	if (entry == node.aggregate_map.end()) {
+ 		// new aggregate: insert into aggregate list
+ 		auto &aggr_ref = *aggregate;
+ 		aggr_index = ColumnBinding::PushExpression(node.aggregates, std::move(aggregate));
+-		node.aggregate_map[aggr_ref] = aggr_index;
++		if (!is_volatile) {
++			node.aggregate_map[aggr_ref] = aggr_index;
++		}
+ 	} else {
+ 		// duplicate aggregate: simplify refer to this aggregate
+ 		aggr_index = entry->second;
+diff --git a/test/sql/optimizer/test_volatile_aggregate_window_cse.test b/test/sql/optimizer/test_volatile_aggregate_window_cse.test
+new file mode 100644
+index 0000000..9ba9e6c
+--- /dev/null
++++ b/test/sql/optimizer/test_volatile_aggregate_window_cse.test
+@@ -0,0 +1,44 @@
++# name: test/sql/optimizer/test_volatile_aggregate_window_cse.test
++# description: Identical aggregate/window calls over volatile functions must not be deduplicated
++# group: [optimizer]
++
++statement ok
++PRAGMA enable_verification
++
++# window functions
++query II
++select g, any_value(uuid()::varchar) over (partition by g) = any_value(uuid()::varchar) over (partition by g)
++from (values (1),(1),(2),(2)) t(g) order by g;
++----
++1	false
++1	false
++2	false
++2	false
++
++# grouped aggregates
++query II
++select g, any_value(uuid()::varchar) = any_value(uuid()::varchar)
++from (values (1),(1),(2),(2)) t(g) group by g order by g;
++----
++1	false
++2	false
++
++# ungrouped aggregates
++query I
++select any_value(gen_random_uuid()) = any_value(gen_random_uuid()) from range(3);
++----
++false
++
++# with the optimizer disabled as well
++statement ok
++PRAGMA disable_optimizer
++
++query I
++select any_value(uuid()) = any_value(uuid()) from range(3);
++----
++false
++
++query I
++select count(*) from (select any_value(uuid()) over () = any_value(uuid()) over () as eq from range(3)) where eq;
++----
++0

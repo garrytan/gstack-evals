@@ -27,15 +27,15 @@ import { PIECE_G_ARMS, PRIMARY_ARMS, type H2hArm } from "../types.ts";
 import { H2H_STAGES } from "./driver.ts";
 import { NEEDLE } from "./dryrun.ts";
 import { sessionRunner } from "./rerunner.ts";
+import { dropKeyEnv } from "../../../../src/trial/env.ts";
 
-const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 const MARK = "h2h-e2e-apply";
 const ID = () => "toolu_" + crypto.randomUUID().replace(/-/g, "").slice(0, 20);
 
 export async function main(argv: string[]): Promise<number> {
   const arg = (k: string) => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : undefined);
   const need = (k: string) => arg(k) ?? (console.error("E_USAGE missing " + k + "; usage: e2e --units <dir> --unit <id> --homes <dir> [--pins <file>] [--arms <a,b>] [--out <dir>] [--harbor <bin>]"), process.exit(2));
-  for (const k of Object.keys(process.env)) if (KEYS.test(k)) delete process.env[k];
+  dropKeyEnv();
   const P = readPrereg();
   const units = need("--units");
   const id = need("--unit");

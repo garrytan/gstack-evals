@@ -1,0 +1,176 @@
+diff --git a/internal/web/events.go b/internal/web/events.go
+index 676b25c..ebebe60 100644
+--- a/internal/web/events.go
++++ b/internal/web/events.go
+@@ -38,6 +38,31 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 
+ 	allContainers, errors := h.hostService.ListAllContainers(userLabels)
+ 
++	// When label filters are in effect, only forward stats and events for
++	// containers the caller is allowed to see. visible maps container ID to host.
++	filtered := userLabels.Exists()
++	visible := make(map[string]string, len(allContainers))
++	for _, c := range allContainers {
++		visible[c.ID] = c.Host
++	}
++	isVisible := func(id string) bool {
++		if !filtered {
++			return true
++		}
++		_, ok := visible[id]
++		return ok
++	}
++	refreshHost := func(host string, containers []container.Container) {
++		for id, h := range visible {
++			if h == host {
++				delete(visible, id)
++			}
++		}
++		for _, c := range containers {
++			visible[c.ID] = c.Host
++		}
++	}
++
+ 	for _, err := range errors {
+ 		log.Warn().Err(err).Msg("error listing containers")
+ 		if hostNotAvailableError, ok := err.(*docker_support.HostUnavailableError); ok {
+@@ -61,6 +86,9 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 				return
+ 			}
+ 		case stat := <-stats:
++			if !isVisible(stat.ID) {
++				continue
++			}
+ 			if err := sseWriter.Event("container-stat", stat); err != nil {
+ 				log.Error().Err(err).Msg("error writing event to event stream")
+ 				return
+@@ -70,11 +98,15 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 				return
+ 			}
+ 			log.Trace().Str("event", event.Name).Str("id", event.ActorID).Msg("container event from store")
++			if filtered && event.Name != "start" && event.Name != "rename" && !isVisible(event.ActorID) {
++				continue
++			}
+ 			switch event.Name {
+ 			case "start", "die", "destroy", "rename", "pause", "unpause":
+ 				if event.Name == "start" || event.Name == "rename" {
+ 					if containers, err := h.hostService.ListContainersForHost(event.Host, userLabels); err == nil {
+ 						log.Debug().Str("host", event.Host).Int("count", len(containers)).Msg("updating containers for host")
++						refreshHost(event.Host, containers)
+ 						if err := sseWriter.Event("containers-changed", containers); err != nil {
+ 							log.Error().Err(err).Msg("error writing containers to event stream")
+ 							return
+@@ -82,6 +114,10 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
+ 					}
+ 				}
+ 
++				if !isVisible(event.ActorID) {
++					continue
++				}
++
+ 				if err := sseWriter.Event("container-event", event); err != nil {
+ 					log.Error().Err(err).Msg("error writing event to event stream")
+ 					return
+diff --git a/internal/web/events_filter_test.go b/internal/web/events_filter_test.go
+new file mode 100644
+index 0000000..a47392e
+--- /dev/null
++++ b/internal/web/events_filter_test.go
+@@ -0,0 +1,97 @@
++package web
++
++import (
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/amir20/dozzle/internal/container"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++type filterTestHostService struct {
++	HostService
++	cancel context.CancelFunc
++}
++
++var filterTestContainers = []container.Container{
++	{ID: "visible00001", Name: "dz_visible", Host: "localhost", Labels: map[string]string{"visible": "yes"}},
++	{ID: "secret000001", Name: "dz_secret", Host: "localhost", Labels: map[string]string{"secretproject": "acme-payroll"}},
++}
++
++func (f *filterTestHostService) list(labels container.ContainerLabels) []container.Container {
++	result := []container.Container{}
++	for _, c := range filterTestContainers {
++		if !labels.Exists() || c.Labels["visible"] == "yes" {
++			result = append(result, c)
++		}
++	}
++	return result
++}
++
++func (f *filterTestHostService) ListAllContainers(labels container.ContainerLabels) ([]container.Container, []error) {
++	return f.list(labels), nil
++}
++
++func (f *filterTestHostService) ListContainersForHost(host string, labels container.ContainerLabels) ([]container.Container, error) {
++	return f.list(labels), nil
++}
++
++func (f *filterTestHostService) SubscribeAvailableHosts(ctx context.Context, hosts chan<- container.Host) {}
++
++func (f *filterTestHostService) SubscribeEventsAndStats(ctx context.Context, events chan<- container.ContainerEvent, stats chan<- container.ContainerStat) {
++	go func() {
++		time.Sleep(20 * time.Millisecond)
++		for _, id := range []string{"secret000001", "visible00001"} {
++			stats <- container.ContainerStat{ID: id, CPUPercent: 1}
++		}
++		for _, name := range []string{"die", "start", "pause", "destroy"} {
++			for _, id := range []string{"secret000001", "visible00001"} {
++				events <- container.ContainerEvent{Name: name, Host: "localhost", ActorID: id, ActorAttributes: map[string]string{"name": id}}
++			}
++		}
++		for _, id := range []string{"secret000001", "visible00001"} {
++			events <- container.ContainerEvent{Name: "health_status: healthy", Host: "localhost", ActorID: id}
++			c := container.Container{ID: id, Host: "localhost"}
++			events <- container.ContainerEvent{Name: "update", Host: "localhost", ActorID: id, Container: &c}
++		}
++		time.Sleep(20 * time.Millisecond)
++		f.cancel()
++	}()
++}
++
++func runFilterStream(t *testing.T, labels container.ContainerLabels) string {
++	ctx, cancel := context.WithCancel(context.Background())
++	req, err := http.NewRequestWithContext(ctx, "GET", "/api/events/stream", nil)
++	require.NoError(t, err)
++	h := &handler{
++		hostService: &filterTestHostService{cancel: cancel},
++		config:      &Config{Base: "/", Labels: labels, NoAnalytics: true, Authorization: Authorization{Provider: NONE}},
++	}
++	rr := httptest.NewRecorder()
++	h.streamEvents(rr, req)
++	return rr.Body.String()
++}
++
++func Test_streamEvents_labelFilterRestrictsStatsAndEvents(t *testing.T) {
++	body := runFilterStream(t, container.ContainerLabels{"visible": {"yes"}})
++	assert.NotContains(t, body, "secret000001")
++	assert.NotContains(t, body, "dz_secret")
++	assert.Contains(t, body, "event: container-stat")
++	assert.Contains(t, body, "event: container-event")
++	assert.Contains(t, body, "event: container-health")
++	assert.Contains(t, body, "event: container-updated")
++	assert.Equal(t, 1, strings.Count(body, "event: container-stat"))
++	// die, start, pause, destroy for the visible container only
++	assert.Equal(t, 4, strings.Count(body, "event: container-event"))
++}
++
++func Test_streamEvents_noFilterForwardsAll(t *testing.T) {
++	body := runFilterStream(t, container.ContainerLabels{})
++	assert.Equal(t, 2, strings.Count(body, "event: container-stat"))
++	assert.Equal(t, 8, strings.Count(body, "event: container-event"))
++}

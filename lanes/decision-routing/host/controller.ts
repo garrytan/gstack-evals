@@ -39,6 +39,7 @@ import { ledgerPath, recordPath } from "../../../src/runner/ledger/paths.ts";
 import { LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
 import { plantCanary, taskMarkers, type Pristine } from "../labels/markers.ts";
 import { isTrialNetworkHost, MeteringProxy, reconcileJournal, UPSTREAM, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
+import { keylessEnv } from "../../../src/trial/env.ts";
 
 export const SEED = 20261110;
 export const CONCURRENCY = 6;
@@ -58,7 +59,6 @@ export const PROXY_PORT_COUNT = 8;
 /** How long a lease on a real record waits for record-out --confirm (vm.sh) before DR_LEASE_UNRECORDED. */
 export const LEASE_CONFIRM_MS = 30 * 60_000;
 const LANE = resolve(import.meta.dir, "..");
-const PROVIDER_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "UBICLOUD_API_KEY"];
 
 export interface PlanRow {
   task: string;
@@ -229,10 +229,9 @@ export function harborJob(row: PlanRow, o: JobInputs, markersFile?: string) {
   };
 }
 
-/** Harbor's process env: the controller's env without any provider or cloud key, with telemetry off and the proxy's management socket and token. */
+/** Harbor's process env: the controller's env without any key name (keylessEnv), with telemetry off and the proxy's management socket and token. */
 export function harborEnv(env: Record<string, string | undefined>, proxy: { socket: string; token: string; base: string }, agentPath: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(env)) if (v !== undefined && !PROVIDER_KEYS.includes(k) && !/_API_KEY$/.test(k)) out[k] = v;
+  const out = keylessEnv(env);
   return { ...out, HARBOR_TELEMETRY: "0", DR_MGMT_SOCKET: proxy.socket, DR_MGMT_TOKEN: proxy.token, DR_PROXY_BASE: proxy.base, PYTHONPATH: [agentPath, out.PYTHONPATH].filter(Boolean).join(":") };
 }
 

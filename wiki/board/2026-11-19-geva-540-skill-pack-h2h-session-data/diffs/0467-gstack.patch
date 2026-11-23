@@ -1,0 +1,112 @@
+diff --git a/internal/chezmoi/format.go b/internal/chezmoi/format.go
+index 341ac66..258b1d5 100644
+--- a/internal/chezmoi/format.go
++++ b/internal/chezmoi/format.go
+@@ -10,6 +10,7 @@ import (
+ 	"slices"
+ 	"strings"
+ 
++	burntsushitoml "github.com/BurntSushi/toml"
+ 	"github.com/goccy/go-yaml"
+ 	"github.com/pelletier/go-toml/v2"
+ 	"github.com/tailscale/hujson"
+@@ -159,7 +160,33 @@ func (formatTOML) Name() string {
+ 
+ // Unmarshal implements Format.Unmarshal.
+ func (formatTOML) Unmarshal(data []byte, value any) error {
+-	decoder := toml.NewDecoder(bytes.NewReader(data))
++	// github.com/pelletier/go-toml/v2 only supports TOML v1.0.0, so parse the
++	// document with github.com/BurntSushi/toml, which supports TOML v1.1.0.
++	switch value := value.(type) {
++	case *map[string]any:
++		_, err := burntsushitoml.NewDecoder(bytes.NewReader(data)).Decode(value)
++		return err
++	case *any:
++		var m map[string]any
++		if _, err := burntsushitoml.NewDecoder(bytes.NewReader(data)).Decode(&m); err != nil {
++			return err
++		}
++		*value = m
++		return nil
++	}
++
++	// For other types, parse the document into a generic value, re-encode it
++	// as TOML v1.0.0, and decode it strictly so that unknown fields are
++	// still reported.
++	var m map[string]any
++	if _, err := burntsushitoml.NewDecoder(bytes.NewReader(data)).Decode(&m); err != nil {
++		return err
++	}
++	normalizedData, err := toml.Marshal(m)
++	if err != nil {
++		return err
++	}
++	decoder := toml.NewDecoder(bytes.NewReader(normalizedData))
+ 	decoder.DisallowUnknownFields()
+ 	return decoder.Decode(value)
+ }
+diff --git a/internal/chezmoi/format_test.go b/internal/chezmoi/format_test.go
+index f212c26..7cc1df3 100644
+--- a/internal/chezmoi/format_test.go
++++ b/internal/chezmoi/format_test.go
+@@ -168,7 +168,7 @@ func TestFormatEdgeCases(t *testing.T) {
+ 			name:        "toml_unexpected_eof",
+ 			format:      FormatTOML,
+ 			data:        `[`,
+-			expectedErr: "expected key but found none",
++			expectedErr: "unexpected end of table name",
+ 		},
+ 		{
+ 			name:   "toml_whitespace",
+@@ -222,3 +222,38 @@ func TestFormatEdgeCases(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestFormatTOMLV110(t *testing.T) {
++	data := []byte("a = {\n  b = 1,\n  c = 2,\n}\nd = \"\\e\\x41\"\n")
++
++	var actualMap map[string]any
++	assert.NoError(t, FormatTOML.Unmarshal(data, &actualMap))
++	assert.Equal(t, map[string]any{
++		"a": map[string]any{
++			"b": int64(1),
++			"c": int64(2),
++		},
++		"d": "\x1bA",
++	}, actualMap)
++
++	var actualAny any
++	assert.NoError(t, FormatTOML.Unmarshal(data, &actualAny))
++	assert.Equal(t, any(actualMap), actualAny)
++
++	type structA struct {
++		B int `toml:"b"`
++		C int `toml:"c"`
++	}
++	var actualStruct struct {
++		A structA `toml:"a"`
++		D string  `toml:"d"`
++	}
++	assert.NoError(t, FormatTOML.Unmarshal(data, &actualStruct))
++	assert.Equal(t, structA{B: 1, C: 2}, actualStruct.A)
++	assert.Equal(t, "\x1bA", actualStruct.D)
++
++	var unknownFieldStruct struct {
++		D string `toml:"d"`
++	}
++	assert.Error(t, FormatTOML.Unmarshal(data, &unknownFieldStruct))
++}
+diff --git a/internal/cmd/testdata/scripts/init.txtar b/internal/cmd/testdata/scripts/init.txtar
+index ebb0413..9e0c3e4 100644
+--- a/internal/cmd/testdata/scripts/init.txtar
++++ b/internal/cmd/testdata/scripts/init.txtar
+@@ -73,7 +73,7 @@ chhome home8/user
+ # test that chezmoi init fails if the generated config is not valid
+ mkgitconfig
+ ! exec chezmoi init
+-stderr 'toml: expected character ='
++stderr 'toml: line 2 \(last key "diff"\): expected'
+ ! exists .config/chezmoi
+ 
+ chhome home/user

@@ -1,0 +1,153 @@
+diff --git a/pkg/kube/proxy.go b/pkg/kube/proxy.go
+index c346704..82e6e8f 100644
+--- a/pkg/kube/proxy.go
++++ b/pkg/kube/proxy.go
+@@ -6,6 +6,7 @@ import (
+ 	"io"
+ 	"net/http"
+ 	"net/url"
++	"strings"
+ 
+ 	"github.com/gin-gonic/gin"
+ 	"k8s.io/client-go/rest"
+@@ -60,11 +61,68 @@ func HandleProxy(c *gin.Context, client *K8sClient, kind, namespace, name, proxy
+ 	}
+ }
+ 
++var errInvalidProxyPath = errors.New("invalid proxy path")
++
++// isUnsafeSegment reports whether a single path segment could alter the
++// resolved upstream path (dot segments, embedded separators), checking both
++// the raw value and its percent-decoded forms.
++func isUnsafeSegment(seg string) bool {
++	for i := 0; i < 3; i++ {
++		if seg == "." || seg == ".." || strings.ContainsAny(seg, "/\\") {
++			return true
++		}
++		decoded, err := url.PathUnescape(seg)
++		if err != nil {
++			return true
++		}
++		if decoded == seg {
++			return false
++		}
++		seg = decoded
++	}
++	return true
++}
++
++func validateResourceSegment(v string) error {
++	if v == "" || isUnsafeSegment(v) {
++		return errInvalidProxyPath
++	}
++	return nil
++}
++
++func validateProxySubPath(p string) error {
++	for _, seg := range strings.Split(p, "/") {
++		if seg == "" {
++			continue
++		}
++		if isUnsafeSegment(seg) {
++			return errInvalidProxyPath
++		}
++	}
++	return nil
++}
++
+ func buildProxyURL(host, kind, namespace, name, path, rawQuery string) (string, error) {
+-	path, err := url.JoinPath(host, "api/v1/namespaces", namespace, kind, name, "proxy", path)
++	for _, v := range []string{kind, namespace, name} {
++		if err := validateResourceSegment(v); err != nil {
++			return "", err
++		}
++	}
++	if err := validateProxySubPath(path); err != nil {
++		return "", err
++	}
++
++	base, err := url.JoinPath(host, "api/v1/namespaces", namespace, kind, name, "proxy")
++	if err != nil {
++		return "", err
++	}
++	path, err = url.JoinPath(base, path)
+ 	if err != nil {
+ 		return "", err
+ 	}
++	if path != base && !strings.HasPrefix(path, base+"/") {
++		return "", errInvalidProxyPath
++	}
+ 
+ 	query, err := url.ParseQuery(rawQuery)
+ 	if err != nil {
+diff --git a/pkg/kube/proxy_test.go b/pkg/kube/proxy_test.go
+index 617963d..8dc1c61 100644
+--- a/pkg/kube/proxy_test.go
++++ b/pkg/kube/proxy_test.go
+@@ -30,6 +30,66 @@ func TestBuildProxyURL(t *testing.T) {
+ 			rawQuery:  "b=2&a=1",
+ 			want:      "https://example.com/api/v1/namespaces/default/pods/nginx/proxy/logs/?a=1&b=2",
+ 		},
++		{
++			name:      "rejects dot segment traversal in path",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "nginx",
++			path:      "/../../../../kube-system/secrets",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects encoded dot segment traversal in path",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "nginx",
++			path:      "/%2e%2e/%2e%2e/%2e%2e/%2e%2e/kube-system/secrets",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects encoded slash in path",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "nginx",
++			path:      "/..%2f..%2fsecrets",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects traversal in resource name",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "../../kube-system/secrets",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects encoded traversal in resource name",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "%2e%2e%2f%2e%2e%2fsecrets",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects dot namespace",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "..",
++			resource:  "nginx",
++			wantErr:   true,
++		},
++		{
++			name:      "allows service port name",
++			host:      "https://example.com",
++			kind:      "services",
++			namespace: "default",
++			resource:  "web:http",
++			path:      "/metrics",
++			want:      "https://example.com/api/v1/namespaces/default/services/web:http/proxy/metrics",
++		},
+ 		{
+ 			name:      "rejects invalid query",
+ 			host:      "https://example.com",

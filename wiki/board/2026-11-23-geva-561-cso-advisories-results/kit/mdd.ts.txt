@@ -1,0 +1,3 @@
+import { mdd } from "./lanes/outcome-skills/h2h/analysis/power.ts";
+const cells = [["opus", 51, 0.21568627450980393], ["particle", 52, 0.23076923076923078], ["opus_bound_up", 52, 0.21153846153846154], ["opus_bound_down", 52, 0.23076923076923078]];
+for (const [m, n, s] of cells) console.log(m, n, s, "a025", mdd(n, s, 0.025), "a05", mdd(n, s, 0.05));

@@ -14,7 +14,7 @@ The metered client (lanes/product-value/meter.ts) gained four optional request f
 
 1. Open the simulator item's meter with `maxOutputTokens` of at least 1,200 and its cache on tmpfs.
 2. For each session attempt, make one `SimSession` with the simulator's allowance in micros (`PRE_SMOKE_SIM_ALLOWANCE` before the smoke) and pass it to `founderCall`. Its `spent_micros` is the session's simulator spend.
-3. After each assistant reply with no block, call `founderTurn({ sheet, transcript: visibleTranscript(replies, founderTurns), call })`. A `reply` becomes the next user message and a `FounderTurn` record. A `check-failed` makes the session missing (E_OF_SIM_TURN). A `call-failed` with reason `allowance` or `provider` makes it missing. A `drift` stops the simulator's items for the Captain (E_OF_PROVIDER_DRIFT).
+3. After each assistant reply with no block, call `founderTurn({ sheet, transcript: visibleTranscript(replies, founderTurns), call })`. A `reply` becomes the next user message and a `FounderTurn` record. A `check-failed` makes the session missing (E_OF_SIM_TURN). A `call-failed` with reason `allowance` or `provider` makes it missing. A `cap` (a metered 402 that is not E_ALLOWANCE, the ledger refusing the reserve) is a cap stop: the launch ends incomplete (CAP_STOP). A `drift` stops the simulator's items for the Captain (E_OF_PROVIDER_DRIFT).
 4. After a stage, call `drawAudit(stage, sessions)`, then `runAudit` with each drawn turn's sheet, advisor message and reply and the two auditor calls (Astra and Opus at effort `max`), then `auditOutcome`.
 
 ## Build-time choices

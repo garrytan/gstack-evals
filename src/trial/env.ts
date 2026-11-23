@@ -30,13 +30,35 @@ export const SESSION_ENV: readonly string[] = ["ANTHROPIC_BASE_URL", "ANTHROPIC_
 export const HOST_ENV: readonly string[] = [
   "ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
   "CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_MAX_OUTPUT_TOKENS", "CLAUDE_CODE_MAX_RETRIES", "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "CLAUDE_CODE_DISABLE_1M_CONTEXT", "CLAUDE_CONFIG_DIR", "DISABLE_AUTOUPDATER", "DISABLE_TELEMETRY",
-  "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "GSTACK_SESSION_KIND", "GSTACK_SKILL_GATE_DEADLINE_MS",
+  "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "GSTACK_SESSION_KIND", "GSTACK_SKILL_GATE_DEADLINE_MS", "GSTACK_CODEX_NO_SANDBOX",
 ];
 
 /** The proxy container's names: provider keys and the management credential. */
 export const PROXY_ENV: readonly string[] = ["PATH", "HOME", "LANG", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GSTACK_EVALS_PROXY_TOKEN"];
 
 export const PROVIDER_KEY_ENV: readonly string[] = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"];
+
+/** Every secret name set on our machines and runner VMs: model providers, cloud, web search and AgentRun. AgentRun's base URL
+ *  names a private host, so it counts as one. A Harbor process or a session's env never carries any of them (keylessEnv). */
+export const KNOWN_KEY_ENV: readonly string[] = [
+  "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "XAI_API_KEY", "DEEPSEEK_API_KEY",
+  "UBICLOUD_API_KEY", "EXA_API_KEY", "AGENTRUN_API_KEY", "AGENTRUN_BASE_URL",
+];
+
+/** A name shaped like a secret, whoever issued it: anything ending in KEY, TOKEN, SECRET or PASSWORD, and any AGENTRUN_ setting. */
+const KEY_SHAPE = /(KEY|TOKEN|SECRET|PASSWORD)$|^AGENTRUN_/i;
+
+/** Whether a Harbor process or a session must not carry this name: a known key, or one shaped like a secret. */
+export const isKeyEnv = (name: string): boolean => KNOWN_KEY_ENV.includes(name) || KEY_SHAPE.test(name);
+
+/** The lanes' Harbor process env: the caller's env without any key name (isKeyEnv). Sessions inside the container get only the names their agent forwards. */
+export const keylessEnv = (env: Record<string, string | undefined> = process.env): Record<string, string> =>
+  Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined && !isKeyEnv(e[0])));
+
+/** Removes every key name from env in place: the dry runs and end-to-end checks that must run keyless. */
+export function dropKeyEnv(env: Record<string, string | undefined> = process.env): void {
+  for (const k of Object.keys(env)) if (isKeyEnv(k)) delete env[k];
+}
 
 export const ROLE_ENV: Record<EnvRole, readonly string[]> = {
   setup: [...TRIAL_BASE_ENV, FIXTURES_VAR],

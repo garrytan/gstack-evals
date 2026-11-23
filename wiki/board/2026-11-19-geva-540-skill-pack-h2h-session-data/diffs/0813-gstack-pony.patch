@@ -1,0 +1,47 @@
+diff --git a/lib/dispatcher/client-h2.js b/lib/dispatcher/client-h2.js
+index 3fc6384..23ddcf0 100644
+--- a/lib/dispatcher/client-h2.js
++++ b/lib/dispatcher/client-h2.js
+@@ -292,7 +292,11 @@ function writeH2 (client, request) {
+     const key = reqHeaders[n + 0]
+     const val = reqHeaders[n + 1]
+ 
+-    if (Array.isArray(val)) {
++    // RFC 9113 8.2.3: cookie pairs must not be comma-joined; send separate
++    // cookie fields (node:http2 emits one field per array element).
++    if (key.toLowerCase() === 'cookie') {
++      headers[key] = (headers[key] ?? []).concat(val)
++    } else if (Array.isArray(val)) {
+       for (let i = 0; i < val.length; i++) {
+         if (headers[key]) {
+           headers[key] += `, ${val[i]}`
+diff --git a/test/http2.js b/test/http2.js
+index 83e1422..44d1dff 100644
+--- a/test/http2.js
++++ b/test/http2.js
+@@ -127,6 +127,7 @@ test('Should support H2 connection (headers as array)', async t => {
+     t.strictEqual(headers['x-my-header'], 'foo, bar')
+     t.strictEqual(headers['x-my-drink'], 'coffee, tea, water')
+     t.strictEqual(headers['x-other'], 'value')
++    t.strictEqual(headers.cookie, 'a=b; c=d; e=f')
+     t.strictEqual(headers[':method'], 'GET')
+     stream.respond({
+       'content-type': 'text/plain; charset=utf-8',
+@@ -146,7 +147,7 @@ test('Should support H2 connection (headers as array)', async t => {
+     allowH2: true
+   })
+ 
+-  t = tspl(t, { plan: 8 })
++  t = tspl(t, { plan: 9 })
+   after(() => server.close())
+   after(() => client.close())
+ 
+@@ -155,6 +156,8 @@ test('Should support H2 connection (headers as array)', async t => {
+     method: 'GET',
+     headers: [
+       'x-my-header', 'foo',
++      'cookie', ['a=b', 'c=d'],
++      'Cookie', 'e=f',
+       'x-my-drink', ['coffee', 'tea'],
+       'x-my-drink', 'water',
+       'X-My-Header', 'bar',

@@ -1,0 +1,94 @@
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header/expected.out b/plugins/inputs/turbostat/testcases/repeated-header/expected.out
+new file mode 100644
+index 0000000..da20d9c
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header/expected.out
+@@ -0,0 +1,6 @@
++turbostat,apic=-,core=-,cpu=-,x2apic=- average_frequency_mhz=41,busy_frequency_mhz=3431,busy_percent=1.2,c1=2836,c1_percent=0.33,c2=10698,c2_percent=5.55,c3=15564,c3_percent=93.03,core_power_watt=1.12,ipc=0.98,irq=30422,package_power_watt=24.55,poll=1412,poll_percent=0.04,tsc_frequency_mhz=3793,usec=966
++turbostat,apic=0,core=0,cpu=0,x2apic=0 average_frequency_mhz=34,busy_frequency_mhz=3083,busy_percent=1.09,c1=102,c1_percent=0.57,c2=785,c2_percent=6.81,c3=1282,c3_percent=91.68,core_power_watt=0.14,ipc=0.92,irq=2306,package_power_watt=24.55,poll=63,poll_percent=0.04,tsc_frequency_mhz=3793,usec=54
++turbostat,apic=1,core=0,cpu=8,x2apic=1 average_frequency_mhz=27,busy_frequency_mhz=3522,busy_percent=0.77,c1=293,c1_percent=0.37,c2=899,c2_percent=5.49,c3=668,c3_percent=93.47,ipc=1.11,irq=1781,poll=78,poll_percent=0.03,tsc_frequency_mhz=3793,usec=30
++turbostat,apic=-,core=-,cpu=-,x2apic=- average_frequency_mhz=41,busy_frequency_mhz=3431,busy_percent=1.2,c1=2836,c1_percent=0.33,c2=10698,c2_percent=5.55,c3=15564,c3_percent=93.03,core_power_watt=1.12,ipc=0.98,irq=30422,package_power_watt=24.55,poll=1412,poll_percent=0.04,tsc_frequency_mhz=3793,usec=966
++turbostat,apic=0,core=0,cpu=0,x2apic=0 average_frequency_mhz=34,busy_frequency_mhz=3083,busy_percent=1.09,c1=102,c1_percent=0.57,c2=785,c2_percent=6.81,c3=1282,c3_percent=91.68,core_power_watt=0.14,ipc=0.92,irq=2306,package_power_watt=24.55,poll=63,poll_percent=0.04,tsc_frequency_mhz=3793,usec=54
++turbostat,apic=1,core=0,cpu=8,x2apic=1 average_frequency_mhz=27,busy_frequency_mhz=3522,busy_percent=0.77,c1=293,c1_percent=0.37,c2=899,c2_percent=5.49,c3=668,c3_percent=93.47,ipc=1.11,irq=1781,poll=78,poll_percent=0.03,tsc_frequency_mhz=3793,usec=30
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header/input.txt b/plugins/inputs/turbostat/testcases/repeated-header/input.txt
+new file mode 100644
+index 0000000..8674ec8
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header/input.txt
+@@ -0,0 +1,8 @@
++usec    Time_Of_Day_Seconds     Core    CPU     APIC    X2APIC  Avg_MHz Busy%   Bzy_MHz TSC_MHz IPC     IRQ     POLL    C1      C2      C3      POLL%   C1%     C2%     C3%     CorWatt PkgWatt
++  966   1745932475.967756       -       -       -       -       41      1.20    3431    3793    0.98    30422   1412    2836    10698   15564   0.04    0.33    5.55    93.03   1.12    24.55
++   54   1745932475.966844       0       0       0       0       34      1.09    3083    3793    0.92    2306    63      102     785     1282    0.04    0.57    6.81    91.68   0.14    24.55
++   30   1745932475.966883       0       8       1       1       27      0.77    3522    3793    1.11    1781    78      293     899     668     0.03    0.37    5.49    93.47
++  usec	Time_Of_Day_Seconds	 Core	CPU	 APIC	X2APIC  Avg_MHz Busy%   Bzy_MHz TSC_MHz IPC	 IRQ	 POLL	C1	  C2	  C3	  POLL%   C1%	 C2%	 C3%	 CorWatt PkgWatt	
++  966   1745932475.967756       -       -       -       -       41      1.20    3431    3793    0.98    30422   1412    2836    10698   15564   0.04    0.33    5.55    93.03   1.12    24.55
++   54   1745932475.966844       0       0       0       0       34      1.09    3083    3793    0.92    2306    63      102     785     1282    0.04    0.57    6.81    91.68   0.14    24.55
++   30   1745932475.966883       0       8       1       1       27      0.77    3522    3793    1.11    1781    78      293     899     668     0.03    0.37    5.49    93.47
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header/telegraf.conf b/plugins/inputs/turbostat/testcases/repeated-header/telegraf.conf
+new file mode 100644
+index 0000000..b4d44da
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header/telegraf.conf
+@@ -0,0 +1 @@
++[[inputs.turbostat]]
+diff --git a/plugins/inputs/turbostat/turbostat.go b/plugins/inputs/turbostat/turbostat.go
+index 48671e6..53399a6 100644
+--- a/plugins/inputs/turbostat/turbostat.go
++++ b/plugins/inputs/turbostat/turbostat.go
+@@ -10,6 +10,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"regexp"
++	"slices"
+ 	"strconv"
+ 	"strings"
+ 	"time"
+@@ -122,17 +123,24 @@ func (t *Turbostat) Start(acc telegraf.Accumulator) error {
+ 			acc.AddError(scanner.Err())
+ 			return
+ 		}
+-		header := scanner.Text()
+-		columns := make([]column, 0, 50)
+-		for _, s := range strings.Fields(header) {
+-			columns = append(columns, createColumn(s))
+-		}
++		header := strings.Fields(scanner.Text())
++		columns := parseHeader(header)
+ 		for scanner.Scan() {
+-			line := scanner.Text()
+-			if line == header {
++			values := strings.Fields(scanner.Text())
++			if len(values) == 0 {
++				continue
++			}
++			// Turbostat periodically repeats the header line, possibly with
++			// different whitespace or even a different set of columns.
++			// Detect header lines by their first token and (re-)parse them
++			// instead of treating them as values.
++			if len(header) > 0 && values[0] == header[0] {
++				if !slices.Equal(values, header) {
++					header = values
++					columns = parseHeader(header)
++				}
+ 				continue
+ 			}
+-			values := strings.Fields(line)
+ 			acc.AddError(processValues(acc, columns, values))
+ 		}
+ 		acc.AddError(scanner.Err())
+@@ -155,6 +163,15 @@ func (*Turbostat) Gather(telegraf.Accumulator) error {
+ 	return nil
+ }
+ 
++// Creates the columns from the tokens of a Turbostat header line.
++func parseHeader(header []string) []column {
++	columns := make([]column, 0, len(header))
++	for _, s := range header {
++		columns = append(columns, createColumn(s))
++	}
++	return columns
++}
++
+ // Creates a metric from columns and values, and adds it to an accumulator.
+ func processValues(acc telegraf.Accumulator, columns []column, values []string) error {
+ 	if len(values) > len(columns) {

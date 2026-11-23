@@ -1,0 +1,163 @@
+diff --git a/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs b/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
+index c17514d..9de500e 100644
+--- a/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
++++ b/src/Finbuckle.MultiTenant/DependencyInjection/ServiceCollectionExtensions.cs
+@@ -59,69 +59,75 @@ public static class FinbuckleServiceCollectionExtensions
+         return services.AddMultiTenant<TTenantInfo>(_ => { });
+     }
+ 
+-    // TODO: better document and extract
++    /// <summary>
++    /// Decorates all existing non-keyed registrations of <typeparamref name="TService"/> with
++    /// <typeparamref name="TImpl"/>. Each registration is replaced in place (preserving order and lifetime)
++    /// by a registration that resolves the original implementation and passes it as the first constructor
++    /// argument to <typeparamref name="TImpl"/>.
++    /// </summary>
++    /// <typeparam name="TService">The service type to decorate.</typeparam>
++    /// <typeparam name="TImpl">The decorator implementation type.</typeparam>
++    /// <param name="services">The <see cref="IServiceCollection"/> containing the registrations.</param>
++    /// <param name="parameters">Additional constructor arguments for the decorator.</param>
++    /// <returns><c>true</c> if at least one registration was decorated.</returns>
++    /// <exception cref="ArgumentException">Thrown if no registration of <typeparamref name="TService"/> exists.</exception>
+     public static bool DecorateService<TService, TImpl>(this IServiceCollection services, params object[] parameters)
+     {
+-        var existingService = services.SingleOrDefault(s => s.ServiceType == typeof(TService));
+-        if (existingService is null)
+-            throw new ArgumentException($"No service of type {typeof(TService).Name} found.");
++        var existingServices = services
++            .Where(s => s.ServiceType == typeof(TService) && !s.IsKeyedService)
++            .ToList();
+ 
+-        ServiceDescriptor? newService;
++        if (existingServices.Count == 0)
++            throw new ArgumentException($"No service of type {typeof(TService).Name} found.");
+ 
+-        if (existingService.ImplementationType is not null)
++        foreach (var existingService in existingServices)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
+-                sp =>
+-                {
+-                    TService inner =
+-                        (TService)ActivatorUtilities.CreateInstance(sp, existingService.ImplementationType);
++            var newService = CreateDecoratedDescriptor<TService, TImpl>(existingService, parameters);
++            var index = services.IndexOf(existingService);
++            services[index] = newService;
++        }
+ 
+-                    if (inner is null)
+-                        throw new Exception(
+-                            $"Unable to instantiate decorated type via implementation type {existingService.ImplementationType.Name}.");
++        return true;
++    }
+ 
+-                    var parameters2 = new object[parameters.Length + 1];
+-                    Array.Copy(parameters, 0, parameters2, 1, parameters.Length);
+-                    parameters2[0] = inner;
++    private static ServiceDescriptor CreateDecoratedDescriptor<TService, TImpl>(ServiceDescriptor existingService,
++        object[] parameters)
++    {
++        Func<IServiceProvider, object> innerFactory;
+ 
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, parameters2)!;
+-                },
+-                existingService.Lifetime);
++        if (existingService.ImplementationType is not null)
++        {
++            var implementationType = existingService.ImplementationType;
++            innerFactory = sp => ActivatorUtilities.CreateInstance(sp, implementationType) ??
++                                 throw new Exception(
++                                     $"Unable to instantiate decorated type via implementation type {implementationType.Name}.");
+         }
+         else if (existingService.ImplementationInstance is not null)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
+-                sp =>
+-                {
+-                    TService inner = (TService)existingService.ImplementationInstance;
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, inner, parameters)!;
+-                },
+-                existingService.Lifetime);
++            var instance = existingService.ImplementationInstance;
++            innerFactory = _ => instance;
+         }
+         else if (existingService.ImplementationFactory is not null)
+         {
+-            newService = new ServiceDescriptor(existingService.ServiceType,
+-                sp =>
+-                {
+-                    TService inner = (TService)existingService.ImplementationFactory(sp);
+-                    if (inner is null)
+-                        throw new Exception(
+-                            "Unable to instantiate decorated type via implementation factory.");
+-
+-                    return ActivatorUtilities.CreateInstance<TImpl>(sp, inner, parameters)!;
+-                },
+-                existingService.Lifetime);
++            var factory = existingService.ImplementationFactory;
++            innerFactory = sp => factory(sp) ??
++                                 throw new Exception("Unable to instantiate decorated type via implementation factory.");
+         }
+         else
+         {
+-            throw new Exception(
+-                "Unable to instantiate decorated type.");
++            throw new Exception("Unable to instantiate decorated type.");
+         }
+ 
+-        services.Remove(existingService);
+-        services.Add(newService);
+-
+-        return true;
++        return new ServiceDescriptor(existingService.ServiceType,
++            sp =>
++            {
++                var inner = (TService)innerFactory(sp);
++                var args = new object[parameters.Length + 1];
++                args[0] = inner!;
++                Array.Copy(parameters, 0, args, 1, parameters.Length);
++                return ActivatorUtilities.CreateInstance<TImpl>(sp, args)!;
++            },
++            existingService.Lifetime);
+     }
+ 
+     /// <summary>
+diff --git a/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs b/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
+index 78157f3..c404c76 100644
+--- a/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
++++ b/test/Finbuckle.MultiTenant.AspNetCore.Test/Extensions/MultiTenantBuilderExtensionsShould.cs
+@@ -322,6 +322,34 @@ public class MultiTenantBuilderExtensionsShould
+             Assert.IsType<MultiTenantAuthenticationSchemeProvider>(schemeProvider);
+         }
+ 
++    private class AdditionalAuthenticationSchemeProvider(IOptions<AuthenticationOptions> options)
++        : AuthenticationSchemeProvider(options);
++
++    [Fact]
++    public void ConfigurePerTenantAuthenticationCore_DecorateMultipleSchemeProviderRegistrations()
++    {
++        var services = new ServiceCollection();
++        services.AddAuthentication();
++        services.AddLogging();
++        // Simulates libraries such as Duende.BFF v4 which register an additional scheme provider.
++        services.AddTransient<IAuthenticationSchemeProvider, AdditionalAuthenticationSchemeProvider>();
++        services.AddMultiTenant<TestTenantInfo>()
++            .WithPerTenantAuthenticationCore();
++
++        Assert.Equal(2, services.Count(s => s.ServiceType == typeof(IAuthenticationSchemeProvider)));
++        Assert.Contains(services, s => s.ServiceType == typeof(IAuthenticationSchemeProvider) &&
++                                       s.Lifetime == ServiceLifetime.Transient);
++
++        var sp = services.BuildServiceProvider();
++
++        var schemeProviders = sp.GetServices<IAuthenticationSchemeProvider>().ToList();
++        Assert.Equal(2, schemeProviders.Count);
++        Assert.All(schemeProviders, p => Assert.IsType<MultiTenantAuthenticationSchemeProvider>(p));
++
++        var schemeProvider = sp.GetRequiredService<IAuthenticationSchemeProvider>();
++        Assert.IsType<MultiTenantAuthenticationSchemeProvider>(schemeProvider);
++    }
++
+     [Fact]
+     public void AddRemoteAuthenticationCallbackStrategy()
+     {

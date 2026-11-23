@@ -1,0 +1,18 @@
+{
+ "model": "claude-opus-5-5",
+ "messages": [
+  {
+   "role": "user",
+   "content": [
+    {
+     "type": "text",
+     "text": "<system-reminder>\nCodebase and user instructions are shown below. Be sure to adhere to these instructions. IMPORTANT: These instructions OVERRIDE any default behavior and you MUST follow them exactly as written.\n\nContents of /root/.claude/CLAUDE.md (user's private global instructions for all projects):\n\n## gstack\n\nUse the /browse skill from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.\n[excerpt ends]"
+    },
+    {
+     "type": "text",
+     "text": "Fix the crash when app.py runs with no arguments.\n\nMake the smallest change that fixes the issue, and nothing more."
+    }
+   ]
+  }
+ ]
+}

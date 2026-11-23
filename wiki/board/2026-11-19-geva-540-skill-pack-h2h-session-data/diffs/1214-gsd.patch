@@ -1,0 +1,122 @@
+diff --git a/content/file/file.go b/content/file/file.go
+index cacf199..1942485 100644
+--- a/content/file/file.go
++++ b/content/file/file.go
+@@ -625,6 +625,12 @@ func (s *Store) resolveWritePath(name string) (string, error) {
+ 		if strings.HasPrefix(rel, "../") || rel == ".." {
+ 			return "", ErrPathTraversalDisallowed
+ 		}
++		// the lexical check above does not account for symlinks; reject any
++		// existing symlink in the path components under the working directory
++		// so that writes cannot be redirected outside of it.
++		if err := ensureNoSymlink(base, filepath.FromSlash(rel)); err != nil {
++			return "", err
++		}
+ 	}
+ 	if s.DisableOverwrite {
+ 		if _, err := os.Stat(path); err == nil {
+@@ -636,6 +642,34 @@ func (s *Store) resolveWritePath(name string) (string, error) {
+ 	return path, nil
+ }
+ 
++// ensureNoSymlink walks each component of rel under base and returns
++// ErrPathTraversalDisallowed if any existing component is a symlink.
++// Walking stops at the first non-existent component, since the remaining
++// components will be created as regular directories / files.
++func ensureNoSymlink(base, rel string) error {
++	if rel == "." || rel == "" {
++		return nil
++	}
++	current := base
++	for _, part := range strings.Split(rel, string(filepath.Separator)) {
++		if part == "" || part == "." {
++			continue
++		}
++		current = filepath.Join(current, part)
++		fi, err := os.Lstat(current)
++		if err != nil {
++			if os.IsNotExist(err) {
++				return nil
++			}
++			return err
++		}
++		if fi.Mode()&os.ModeSymlink != 0 {
++			return fmt.Errorf("%s: %w", current, ErrPathTraversalDisallowed)
++		}
++	}
++	return nil
++}
++
+ // status returns the nameStatus for the given name.
+ func (s *Store) status(name string) *nameStatus {
+ 	v, _ := s.nameToStatus.LoadOrStore(name, &nameStatus{sync.RWMutex{}, false})
+diff --git a/content/file/file_symlink_test.go b/content/file/file_symlink_test.go
+new file mode 100644
+index 0000000..8d1ea2f
+--- /dev/null
++++ b/content/file/file_symlink_test.go
+@@ -0,0 +1,64 @@
++//go:build !windows
++
++package file
++
++import (
++	"bytes"
++	"context"
++	"errors"
++	"os"
++	"path/filepath"
++	"testing"
++
++	"github.com/opencontainers/go-digest"
++	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
++)
++
++func TestStore_Push_DisallowSymlinkTraversal(t *testing.T) {
++	root := t.TempDir()
++	workingDir := filepath.Join(root, "work")
++	outside := filepath.Join(root, "outside")
++	if err := os.MkdirAll(workingDir, 0777); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.MkdirAll(outside, 0777); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.Symlink(outside, filepath.Join(workingDir, "out")); err != nil {
++		t.Fatal(err)
++	}
++
++	s, err := New(workingDir)
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer s.Close()
++
++	content := []byte("pwned")
++	for _, name := range []string{"out/pwn.txt", "out"} {
++		desc := ocispec.Descriptor{
++			MediaType:   "test",
++			Digest:      digest.FromBytes(content),
++			Size:        int64(len(content)),
++			Annotations: map[string]string{ocispec.AnnotationTitle: name},
++		}
++		err = s.Push(context.Background(), desc, bytes.NewReader(content))
++		if !errors.Is(err, ErrPathTraversalDisallowed) {
++			t.Errorf("Push(%q) error = %v, want %v", name, err, ErrPathTraversalDisallowed)
++		}
++	}
++	if _, err := os.Stat(filepath.Join(outside, "pwn.txt")); !os.IsNotExist(err) {
++		t.Fatalf("file written outside working dir: %v", err)
++	}
++
++	// control: normal nested path still works
++	desc := ocispec.Descriptor{
++		MediaType:   "test",
++		Digest:      digest.FromBytes(content),
++		Size:        int64(len(content)),
++		Annotations: map[string]string{ocispec.AnnotationTitle: "in/ok.txt"},
++	}
++	if err := s.Push(context.Background(), desc, bytes.NewReader(content)); err != nil {
++		t.Fatalf("Push() error = %v", err)
++	}
++}

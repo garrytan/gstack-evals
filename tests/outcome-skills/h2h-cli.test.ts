@@ -51,7 +51,7 @@ const runner = (o: Partial<RerunRunner> & { outcomes?: Awaited<ReturnType<RerunR
 
 describe("h2h dispatcher", () => {
   test("loads every part's commands and refuses a name two parts export", async () => {
-    expect(Object.keys(await loadCommands()).sort()).toEqual(["analyze", "audit", "browser-check", "contain-home", "draw", "dryrun", "exposure", "image-build", "image-store", "install", "label-packet", "ledger-dryrun", "mine-b1", "mine-b2", "o-frame", "oracle-b", "pins", "power-table", "readout", "rerun", "runtimes", "score", "session-plan", "session-run"]);
+    expect(Object.keys(await loadCommands()).sort()).toEqual(["analyze", "audit", "browser-check", "contain-home", "draw", "dryrun", "exposure", "image-build", "image-store", "install", "label-packet", "label-send", "ledger-dryrun", "mine-b1", "mine-b2", "o-frame", "oracle-b", "pins", "power-table", "readout", "rerun", "runtimes", "score", "session-plan", "session-run", "x-analyze", "x-ledger-dryrun", "x-look", "x-power-table", "x-run"]);
     expect(RERUN_RUNNER).not.toBeNull();
     expect(loadCommands(["./score/commands.ts", "./score/commands.ts"])).rejects.toThrow(/^E_USAGE /);
   });

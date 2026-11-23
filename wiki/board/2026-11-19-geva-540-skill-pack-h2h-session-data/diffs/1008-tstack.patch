@@ -1,0 +1,63 @@
+diff --git a/index.js b/index.js
+index 3d32523..2c19e14 100644
+--- a/index.js
++++ b/index.js
+@@ -114,11 +114,6 @@ function RedirectableRequest(options, responseCallback) {
+     }
+   };
+ 
+-  // Create filter for sensitive HTTP headers
+-  this._headerFilter = new RegExp("^(?:" +
+-      sensitiveHeaders.concat(options.sensitiveHeaders).map(escapeRegex).join("|") +
+-    ")$", "i");
+-
+   // Perform the first request
+   this._performRequest();
+ }
+@@ -487,7 +482,8 @@ RedirectableRequest.prototype._processResponse = function (response) {
+      redirectUrl.protocol !== "https:" ||
+      redirectUrl.host !== currentHost &&
+      !isSubdomain(redirectUrl.host, currentHost)) {
+-    removeMatchingHeaders(this._headerFilter, this._options.headers);
++    var headerFilter = createHeaderFilter(this._options.sensitiveHeaders);
++    removeMatchingHeaders(headerFilter, this._options.headers);
+   }
+ 
+   // Evaluate the beforeRedirect callback
+@@ -700,8 +696,14 @@ function isURL(value) {
+   return URL && value instanceof URL;
+ }
+ 
++function createHeaderFilter(extraHeaders) {
++  return new RegExp("^(?:" +
++      sensitiveHeaders.concat(extraHeaders || []).map(escapeRegex).join("|") +
++    ")$", "i");
++}
++
+ function escapeRegex(regex) {
+-  return regex.replace(/[\]\\/()*+?.$]/g, "\\$&");
++  return regex.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+ }
+ 
+ // Exports
+diff --git a/test/test.js b/test/test.js
+index b33e7e3..d23d870 100644
+--- a/test/test.js
++++ b/test/test.js
+@@ -1538,10 +1538,16 @@ describe("follow-redirects", function () {
+     "SENSITIVE-A",
+     "X-Sensitive-B",
+     "x-sensitive-b",
++    "X-Api^Key",
++    "x-api^key",
++    "X-Token|Secret",
++    "x-token|secret",
+   ].forEach(function (header) {
+     var sensitiveHeaders = [
+       "Sensitive-A",
+       "x-sensitive-b",
++      "X-Api^Key",
++      "X-Token|Secret",
+     ];
+ 
+     describe("when the client passes an header named " + header, function () {

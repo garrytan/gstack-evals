@@ -1,0 +1,3 @@
+https://github.com/nodejs/undici at f7f38935ab91d116ce2764d538f8af71fe631ee6
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

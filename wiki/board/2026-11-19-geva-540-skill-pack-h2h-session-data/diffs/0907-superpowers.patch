@@ -1,0 +1,115 @@
+diff --git a/lib/vm.js b/lib/vm.js
+index 8e985ca..abffa47 100644
+--- a/lib/vm.js
++++ b/lib/vm.js
+@@ -72,10 +72,52 @@ function checkAsync(allow) {
+ 	if (!allow) throw new VMError('Async not available');
+ }
+ 
++/**
++ * Strip the host-realm stack from an error before it is handed to the sandbox.
++ *
++ * SECURITY (GHSA-x6m4-chr9-cg97): errors thrown by the host-side transformer
++ * (e.g. SyntaxError from `eval("@@@")` / `new Function("@@@")`) or by
++ * checkAsync are host-realm errors. Their `.stack` is formatted by the host
++ * prepareStackTrace and contains absolute host paths (vm2 lib files, Node
++ * internals, the embedding application). The sandbox-side redaction never
++ * runs on host errors, so replace the stack with just `name: message`.
++ *
++ * @private
++ */
++function stripHostStack(e) {
++	if (e === null || (typeof e !== 'object' && typeof e !== 'function')) return e;
++	let header;
++	try {
++		const name = e.name;
++		const message = e.message;
++		const nameStr = typeof name === 'string' ? name : 'Error';
++		const messageStr = typeof message === 'string' ? message : '';
++		header = messageStr ? `${nameStr}: ${messageStr}` : nameStr;
++	} catch (ex) {
++		header = 'Error';
++	}
++	try {
++		Object.defineProperty(e, 'stack', {
++			__proto__: null,
++			value: header,
++			writable: true,
++			enumerable: false,
++			configurable: true,
++		});
++	} catch (ex) {
++		return new VMError(header);
++	}
++	return e;
++}
++
+ function transformAndCheck(args, code, isAsync, isGenerator, allowAsync) {
+-	const ret = transformer(args, code, isAsync, isGenerator, undefined);
+-	checkAsync(allowAsync || !ret.hasAsync);
+-	return ret.code;
++	try {
++		const ret = transformer(args, code, isAsync, isGenerator, undefined);
++		checkAsync(allowAsync || !ret.hasAsync);
++		return ret.code;
++	} catch (e) {
++		throw stripHostStack(e);
++	}
+ }
+ 
+ /**
+diff --git a/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+new file mode 100644
+index 0000000..43aaf6e
+--- /dev/null
++++ b/test/ghsa/GHSA-x6m4-chr9-cg97/repro.js
+@@ -0,0 +1,49 @@
++'use strict';
++
++/**
++ * GHSA-x6m4-chr9-cg97 — Host path disclosure via transformer SyntaxError stack
++ *
++ * `eval("@@@")` / `new Function("@@@")` inside the sandbox makes the
++ * host-side transformer throw a host-realm SyntaxError. Reading `.stack`
++ * through the bridge used the host formatter, leaking absolute host paths.
++ *
++ * Fix: `transformAndCheck` (lib/vm.js) replaces the stack of any error it
++ * throws with just `name: message` before it reaches the sandbox.
++ */
++
++const assert = require('assert');
++const path = require('path');
++const { VM, NodeVM } = require('../../../lib/main.js');
++
++const libDir = path.resolve(__dirname, '../../../lib');
++
++function assertNoLeak(stack) {
++	assert.strictEqual(typeof stack, 'string');
++	assert.ok(!stack.includes(libDir), `stack leaks host path: ${stack}`);
++	assert.ok(!/transformer\.js|setup-sandbox\.js|vm\.js:\d|node:/.test(stack), `stack leaks host frames: ${stack}`);
++}
++
++describe('GHSA-x6m4-chr9-cg97 (transformer error stack leaks host paths)', () => {
++	it('eval syntax error in VM', () => {
++		const r = new VM().run('var s; try { eval("@@@ catch") } catch (e) { s = [e instanceof SyntaxError, e.message, e.stack] } s;');
++		assert.strictEqual(r[0], true);
++		assert.strictEqual(r[1], "Unexpected character '@'");
++		assertNoLeak(r[2]);
++	});
++
++	it('Function constructor syntax error in VM', () => {
++		const s = new VM().run('var s; try { new Function("@@@ catch") } catch (e) { s = e.stack } s;');
++		assertNoLeak(s);
++	});
++
++	it('async not available error in VM', () => {
++		const s = new VM({ allowAsync: false }).run('var s; try { eval("async () => 1") } catch (e) { s = e.stack } s;');
++		assert.ok(s.includes('Async not available'));
++		assertNoLeak(s);
++	});
++
++	it('eval syntax error in NodeVM', () => {
++		const s = new NodeVM().run('try { eval("@@@ catch") } catch (e) { module.exports = e.stack }');
++		assertNoLeak(s);
++	});
++});

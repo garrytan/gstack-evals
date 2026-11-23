@@ -187,8 +187,14 @@ export interface ClaudeCodeOptions {
   stopHook?: (transcript: string) => string | null;
   /** Plugin roots in the agent's HOME, loaded for the session as plugin directories. */
   plugins?: string[];
-  /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs. */
-  codex?: { provider: CodexProvider; model: string };
+  /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs, and, when set, the voice's own proxy slot and bearer in place of the session's. */
+  codex?: { provider: CodexProvider; model: string; proxy?: { slot: string; token: string } };
+  /** MCP servers the session gets, by name: HTTP servers only, such as a browser container's Playwright server. */
+  mcpServers?: Record<string, { type: "http"; url: string }>;
+  /** When set, canUseTool denies every tool not named here (AskUserQuestion keeps its own rule), and ToolSearch is disallowed unless named, so the CLI declares every MCP tool up front instead of deferring it behind a search the session may not call. */
+  onlyTools?: readonly string[];
+  /** GSTACK_CODEX_NO_SANDBOX=1 for the agent env: gstack runs the Codex voice without Codex's own sandbox, which cannot start in the trial container, so the container is the sandbox. Only with codex. */
+  codexNoSandbox?: boolean;
 }
 
 /** What nextUser returns: the next user message, the session's end, or a termination that ends it. */
@@ -196,12 +202,16 @@ export type NextUser = { reply: string } | { end: true } | { stop: Termination }
 
 // The slice of the Agent SDK this adapter uses, typed loosely so a test can stand one in.
 type SdkMessage = Record<string, any>;
+
+/** One assistant message's text as nextUser and the turn's text read it: its text blocks joined with nothing between them. */
+export const assistantText = (m: SdkMessage): string => (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
 type QueryFn = (args: { prompt: AsyncIterable<SdkMessage>; options: Record<string, unknown> }) => AsyncIterable<SdkMessage>;
 
 /** The agent env the adapter adds: proxy, bearer, model purity and host settings. Every name is on U9's agent allowlist. */
-export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex" | "sessionKind" | "skillGateDeadlineMs" | "disable1mContext">): Record<string, string> {
+export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex" | "sessionKind" | "skillGateDeadlineMs" | "disable1mContext" | "codexNoSandbox">): Record<string, string> {
   return {
-    ...(o.codex ? { OPENAI_API_KEY: o.proxy.token } : {}),
+    ...(o.codex ? { OPENAI_API_KEY: (o.codex.proxy ?? o.proxy).token } : {}),
+    ...(o.codex && o.codexNoSandbox ? { GSTACK_CODEX_NO_SANDBOX: "1" } : {}),
     ANTHROPIC_BASE_URL: o.proxy.baseUrl.replace(/\/+$/, "") + "/" + o.proxy.slot + "/" + o.provider,
     ANTHROPIC_AUTH_TOKEN: o.proxy.token,
     ANTHROPIC_MODEL: o.model,
@@ -373,7 +383,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         return without(INFRA);
       }
       if (o.codex) {
-        const wrote = session.exec(codexConfigCommand(o.codex, o.proxy), 30_000);
+        const wrote = session.exec(codexConfigCommand(o.codex, o.codex.proxy ? { ...o.proxy, ...o.codex.proxy } : o.proxy), 30_000);
         if (wrote.exitCode !== 0) {
           log("adapter: the Codex config step exited " + wrote.exitCode + ": " + (wrote.stdout + wrote.stderr).trim().slice(-500) + "\n");
           return without({ kind: "missing", code: "E_CODEX_CONFIG" });
@@ -510,6 +520,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       const hooked = new Set<string>();
       const canUseTool = async (name: string, input: Record<string, unknown>, options?: { toolUseID?: string }) => {
         if (options?.toolUseID) approved.add(options.toolUseID);
+        if (name !== "AskUserQuestion" && o.onlyTools && !o.onlyTools.includes(name)) return { behavior: "deny", message: "That tool is not available in this session." };
         if (name !== "AskUserQuestion") return { behavior: "allow", updatedInput: input };
         let r: Awaited<ReturnType<UserSim["answerAsk"]>>;
         try {
@@ -536,9 +547,10 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             permissionMode: "default",
             settingSources: ["user", "project", "local"],
             ...(settings ? { settings } : {}),
-            disallowedTools: o.denyAsk ? [...DISALLOWED_TOOLS, "AskUserQuestion"] : DISALLOWED_TOOLS,
+            disallowedTools: [...DISALLOWED_TOOLS, ...(o.denyAsk ? ["AskUserQuestion"] : []), ...(o.onlyTools && !o.onlyTools.includes("ToolSearch") ? ["ToolSearch"] : [])],
             ...(o.systemPrompt === "claude-code-preset" ? { systemPrompt: { type: "preset", preset: "claude_code" } } : {}),
             ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
+            ...(o.mcpServers ? { mcpServers: o.mcpServers, strictMcpConfig: true } : {}),
             abortController: abort,
             canUseTool,
             hooks: {
@@ -597,7 +609,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               if (scheduled && r?.stopped === true) wakeup = null;
               else if (scheduled && typeof r?.scheduledFor === "number") wakeup = { set_at: new Date().toISOString(), delay_s: typeof r.clampedDelaySeconds === "number" ? r.clampedDelaySeconds : Math.round((r.scheduledFor - Date.now()) / 1000), fires_at: new Date(r.scheduledFor).toISOString(), running: running() };
             } else if (m.type === "assistant") {
-              const text = (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
+              const text = assistantText(m);
               if (!m.parent_tool_use_id && idleSince !== null) {
                 waited += performance.now() - idleSince;
                 idleSince = null;

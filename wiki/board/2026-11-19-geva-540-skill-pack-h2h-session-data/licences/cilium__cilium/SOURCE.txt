@@ -1,0 +1,3 @@
+https://github.com/cilium/cilium at 503e08bcaa87a3370f7c974202450d52376bbb49
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): Apache-2.0
+Root licence and notice files at that commit: LICENSE

@@ -24,13 +24,26 @@ function readJson(path: string, what: string): any {
   }
 }
 
-/** Every .json file under dir, at any depth, in byte order of the path. */
-function jsonFiles(dir: string): string[] {
+/** Every .json file under dir, at any depth, in byte order of the path. A broken link or an entry it cannot read fails
+ * with a reason code and no path, since a held-out path names its task. */
+function jsonFiles(dir: string, what: string): string[] {
   const out: string[] = [];
   const walk = (d: string) => {
-    for (const name of readdirSync(d)) {
+    let names: string[];
+    try {
+      names = readdirSync(d);
+    } catch {
+      return fail("E_TBV_INPUT", "an entry under " + what + " is a broken link or cannot be read");
+    }
+    for (const name of names) {
       const p = join(d, name);
-      if (statSync(p).isDirectory()) walk(p);
+      let dir: boolean;
+      try {
+        dir = statSync(p).isDirectory();
+      } catch {
+        return fail("E_TBV_INPUT", "an entry under " + what + " is a broken link or cannot be read");
+      }
+      if (dir) walk(p);
       else if (name.endsWith(".json")) out.push(p);
     }
   };
@@ -42,24 +55,24 @@ function jsonFiles(dir: string): string[] {
 export async function run(argv: string[], io: Io): Promise<number> {
   const f = flags(argv, ["--tasks", "--shapes", "--splices", "--turns", "--cwd", "--date"]);
   const tasksDir = need(f, "--tasks");
-  const files = jsonFiles(tasksDir);
-  if (!files.length) fail("E_TBV_INPUT", "no tbv-history.v1 file under " + tasksDir);
+  const files = jsonFiles(tasksDir, "--tasks");
+  if (!files.length) fail("E_TBV_INPUT", "no tbv-history.v1 file under --tasks");
   const histories: History[] = files.map((p, i) => {
     const h = readJson(p, "file " + (i + 1) + " of " + files.length + " under --tasks");
     if (h?.schema !== "tbv-history.v1" || !Array.isArray(h.events)) fail("E_TBV_INPUT", "file " + (i + 1) + " of " + files.length + " under --tasks is not a tbv-history.v1 history");
     return h as History;
   });
   const shapes = new Map<Arm, Shape>();
-  for (const p of jsonFiles(need(f, "--shapes"))) {
+  for (const p of jsonFiles(need(f, "--shapes"), "--shapes")) {
     const s = readJson(p, "a shape file") as Shape;
-    if (s?.schema !== "tbv-shape.v1" || !ARMS.includes(s.arm)) fail("E_TBV_INPUT", "a file in " + f["--shapes"] + " is not a tbv-shape.v1 shape");
-    if (shapes.has(s.arm)) fail("E_TBV_INPUT", "two shapes in " + f["--shapes"] + " have the " + s.arm + " arm");
+    if (s?.schema !== "tbv-shape.v1" || !ARMS.includes(s.arm)) fail("E_TBV_INPUT", "a file in --shapes is not a tbv-shape.v1 shape");
+    if (shapes.has(s.arm)) fail("E_TBV_INPUT", "two shapes in --shapes have the " + s.arm + " arm");
     shapes.set(s.arm, s);
   }
-  if (!shapes.size) fail("E_TBV_INPUT", "no tbv-shape.v1 file in " + f["--shapes"]);
+  if (!shapes.size) fail("E_TBV_INPUT", "no tbv-shape.v1 file in --shapes");
   const arms = ARMS.filter((a) => shapes.has(a));
   const models = Object.keys(ARM_MODELS) as Model[];
-  const splice = spliceBy(jsonFiles(need(f, "--splices")).map((p) => readJson(p, "a splice file") as SpliceSet), (arm) => shapes.get(arm)!.pin, f["--splices"]!);
+  const splice = spliceBy(jsonFiles(need(f, "--splices"), "--splices").map((p) => readJson(p, "a splice file") as SpliceSet), (arm) => shapes.get(arm)!.pin, "--splices");
   const turns = readTurns(need(f, "--turns"));
   const fields = { cwd: need(f, "--cwd"), date: need(f, "--date") };
 

@@ -1,0 +1,106 @@
+diff --git a/pkg/kube/proxy.go b/pkg/kube/proxy.go
+index c346704..9f6de03 100644
+--- a/pkg/kube/proxy.go
++++ b/pkg/kube/proxy.go
+@@ -6,6 +6,7 @@ import (
+ 	"io"
+ 	"net/http"
+ 	"net/url"
++	"strings"
+ 
+ 	"github.com/gin-gonic/gin"
+ 	"k8s.io/client-go/rest"
+@@ -60,8 +61,35 @@ func HandleProxy(c *gin.Context, client *K8sClient, kind, namespace, name, proxy
+ 	}
+ }
+ 
++func validProxySegment(s string) bool {
++	return s != "" && s != "." && s != ".." && !strings.ContainsAny(s, "/\\")
++}
++
++func hasDotSegment(p string) bool {
++	for _, seg := range strings.FieldsFunc(p, func(r rune) bool { return r == '/' || r == '\\' }) {
++		if seg == "." || seg == ".." {
++			return true
++		}
++	}
++	return false
++}
++
+ func buildProxyURL(host, kind, namespace, name, path, rawQuery string) (string, error) {
+-	path, err := url.JoinPath(host, "api/v1/namespaces", namespace, kind, name, "proxy", path)
++	if !validProxySegment(kind) || !validProxySegment(namespace) || !validProxySegment(name) {
++		return "", errors.New("invalid proxy target")
++	}
++	if hasDotSegment(path) {
++		return "", errors.New("invalid proxy path")
++	}
++	base, err := url.JoinPath(host, "api/v1/namespaces", namespace, kind, name, "proxy")
++	if err != nil {
++		return "", err
++	}
++	baseURL, err := url.Parse(base)
++	if err != nil {
++		return "", err
++	}
++	path, err = url.JoinPath(base, path)
+ 	if err != nil {
+ 		return "", err
+ 	}
+@@ -74,6 +102,9 @@ func buildProxyURL(host, kind, namespace, name, path, rawQuery string) (string,
+ 	if err != nil {
+ 		return "", err
+ 	}
++	if u.Path != baseURL.Path && !strings.HasPrefix(u.Path, baseURL.Path+"/") {
++		return "", errors.New("invalid proxy path")
++	}
+ 	u.RawQuery = query.Encode()
+ 	return u.String(), nil
+ }
+diff --git a/pkg/kube/proxy_test.go b/pkg/kube/proxy_test.go
+index 617963d..dd58826 100644
+--- a/pkg/kube/proxy_test.go
++++ b/pkg/kube/proxy_test.go
+@@ -30,6 +30,42 @@ func TestBuildProxyURL(t *testing.T) {
+ 			rawQuery:  "b=2&a=1",
+ 			want:      "https://example.com/api/v1/namespaces/default/pods/nginx/proxy/logs/?a=1&b=2",
+ 		},
++		{
++			name:      "rejects traversal in proxy path",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "nginx",
++			path:      "/../../../../kube-system/secrets",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects traversal in resource name",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "../../../kube-system/secrets",
++			path:      "",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects dot resource name",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "default",
++			resource:  "..",
++			path:      "/x",
++			wantErr:   true,
++		},
++		{
++			name:      "rejects traversal in namespace",
++			host:      "https://example.com",
++			kind:      "pods",
++			namespace: "../secrets",
++			resource:  "nginx",
++			path:      "",
++			wantErr:   true,
++		},
+ 		{
+ 			name:      "rejects invalid query",
+ 			host:      "https://example.com",

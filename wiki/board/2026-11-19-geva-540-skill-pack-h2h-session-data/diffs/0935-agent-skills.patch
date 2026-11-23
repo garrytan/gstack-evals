@@ -1,0 +1,58 @@
+diff --git a/cipher/cbc_hmac.go b/cipher/cbc_hmac.go
+index 00e794d..d927c79 100644
+--- a/cipher/cbc_hmac.go
++++ b/cipher/cbc_hmac.go
+@@ -118,7 +118,7 @@ func (ctx *cbcAEAD) Open(dst, nonce, ciphertext, data []byte) ([]byte, error) {
+ 	// Make copy of ciphertext buffer, don't want to modify in place
+ 	buffer := append([]byte{}, ciphertext[:offset]...)
+ 
+-	if len(buffer)%ctx.blockCipher.BlockSize() > 0 {
++	if len(buffer) == 0 || len(buffer)%ctx.blockCipher.BlockSize() > 0 {
+ 		return nil, errors.New("go-jose/go-jose: invalid ciphertext (invalid length)")
+ 	}
+ 
+@@ -178,7 +178,7 @@ func padBuffer(buffer []byte, blockSize int) []byte {
+ 
+ // Remove padding
+ func unpadBuffer(buffer []byte, blockSize int) ([]byte, error) {
+-	if len(buffer)%blockSize != 0 {
++	if len(buffer) == 0 || len(buffer)%blockSize != 0 {
+ 		return nil, errors.New("go-jose/go-jose: invalid padding")
+ 	}
+ 
+diff --git a/cipher/cbc_hmac_test.go b/cipher/cbc_hmac_test.go
+index 88b2145..a6d90f7 100644
+--- a/cipher/cbc_hmac_test.go
++++ b/cipher/cbc_hmac_test.go
+@@ -301,6 +301,31 @@ func TestTruncatedCiphertext(t *testing.T) {
+ 	}
+ }
+ 
++func TestEmptyCiphertextWithValidTag(t *testing.T) {
++	key := make([]byte, 32)
++	nonce := make([]byte, 16)
++
++	aead, err := NewCBCHMAC(key, aes.NewCipher)
++	if err != nil {
++		t.Fatal(err)
++	}
++	ctx := aead.(*cbcAEAD)
++
++	// Ciphertext consisting solely of a valid auth tag over empty ciphertext.
++	ct := ctx.computeAuthTag(nil, nonce, nil)
++
++	_, err = aead.Open(nil, nonce, ct, nil)
++	if err == nil {
++		t.Error("open on empty ciphertext should fail")
++	}
++}
++
++func TestUnpadEmptyBuffer(t *testing.T) {
++	if _, err := unpadBuffer([]byte{}, aes.BlockSize); err == nil {
++		t.Error("unpad of empty buffer should fail")
++	}
++}
++
+ func TestInvalidPaddingOpen(t *testing.T) {
+ 	key := make([]byte, 32)
+ 	nonce := make([]byte, 16)

@@ -1,0 +1,180 @@
+diff --git a/internal/chezmoi/format.go b/internal/chezmoi/format.go
+index 341ac66..6ac9d51 100644
+--- a/internal/chezmoi/format.go
++++ b/internal/chezmoi/format.go
+@@ -7,9 +7,11 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"maps"
++	"reflect"
+ 	"slices"
+ 	"strings"
+ 
++	burntsushitoml "github.com/BurntSushi/toml"
+ 	"github.com/goccy/go-yaml"
+ 	"github.com/pelletier/go-toml/v2"
+ 	"github.com/tailscale/hujson"
+@@ -157,11 +159,94 @@ func (formatTOML) Name() string {
+ 	return "toml"
+ }
+ 
+-// Unmarshal implements Format.Unmarshal.
++// Unmarshal implements Format.Unmarshal. It uses github.com/BurntSushi/toml
++// as it supports TOML v1.1.0.
+ func (formatTOML) Unmarshal(data []byte, value any) error {
+-	decoder := toml.NewDecoder(bytes.NewReader(data))
+-	decoder.DisallowUnknownFields()
+-	return decoder.Decode(value)
++	metaData, err := burntsushitoml.Decode(string(data), value)
++	if err != nil {
++		return err
++	}
++	// BurntSushi/toml reports keys decoded into interface values as
++	// undecoded, so only report keys that do not correspond to a field.
++	var unknownKeys []string
++	for _, key := range metaData.Undecoded() {
++		if !tomlKeyIsKnown(reflect.TypeOf(value), key) {
++			unknownKeys = append(unknownKeys, key.String())
++		}
++	}
++	if len(unknownKeys) > 0 {
++		return fmt.Errorf("unknown fields: %s", strings.Join(unknownKeys, ", "))
++	}
++	return nil
++}
++
++// tomlKeyIsKnown returns whether key can be decoded into a value of type t.
++func tomlKeyIsKnown(t reflect.Type, key burntsushitoml.Key) bool {
++	for _, part := range key {
++	FOR:
++		for {
++			switch t.Kind() {
++			case reflect.Interface:
++				return true
++			case reflect.Pointer, reflect.Slice, reflect.Array:
++				t = t.Elem()
++			default:
++				break FOR
++			}
++		}
++		switch t.Kind() {
++		case reflect.Map:
++			t = t.Elem()
++		case reflect.Struct:
++			field, ok := tomlStructField(t, part)
++			if !ok {
++				return false
++			}
++			t = field.Type
++		default:
++			return false
++		}
++	}
++	return t.Kind() == reflect.Interface
++}
++
++// tomlStructField returns the field of struct type t that corresponds to the
++// TOML key name, using the same rules as github.com/BurntSushi/toml.
++func tomlStructField(t reflect.Type, name string) (reflect.StructField, bool) {
++	var caseInsensitiveField reflect.StructField
++	caseInsensitiveMatch := false
++	for i := range t.NumField() {
++		field := t.Field(i)
++		if field.Anonymous && field.Tag.Get("toml") == "" {
++			fieldType := field.Type
++			if fieldType.Kind() == reflect.Pointer {
++				fieldType = fieldType.Elem()
++			}
++			if fieldType.Kind() == reflect.Struct {
++				if f, ok := tomlStructField(fieldType, name); ok {
++					return f, true
++				}
++			}
++			continue
++		}
++		if !field.IsExported() {
++			continue
++		}
++		fieldName, _, _ := strings.Cut(field.Tag.Get("toml"), ",")
++		if fieldName == "-" {
++			continue
++		}
++		if fieldName == "" {
++			fieldName = field.Name
++		}
++		if fieldName == name {
++			return field, true
++		}
++		if !caseInsensitiveMatch && strings.EqualFold(fieldName, name) {
++			caseInsensitiveField, caseInsensitiveMatch = field, true
++		}
++	}
++	return caseInsensitiveField, caseInsensitiveMatch
+ }
+ 
+ // Name implements Format.Name.
+diff --git a/internal/chezmoi/format_test.go b/internal/chezmoi/format_test.go
+index f212c26..f55c7f1 100644
+--- a/internal/chezmoi/format_test.go
++++ b/internal/chezmoi/format_test.go
+@@ -162,13 +162,13 @@ func TestFormatEdgeCases(t *testing.T) {
+ 			name:        "toml_unknown_field",
+ 			format:      FormatTOML,
+ 			data:        `unknown = "value"`,
+-			expectedErr: "strict mode: fields in the document are missing in the target struct",
++			expectedErr: "unknown fields: unknown",
+ 		},
+ 		{
+ 			name:        "toml_unexpected_eof",
+ 			format:      FormatTOML,
+ 			data:        `[`,
+-			expectedErr: "expected key but found none",
++			expectedErr: "unexpected end of table name",
+ 		},
+ 		{
+ 			name:   "toml_whitespace",
+@@ -222,3 +222,31 @@ func TestFormatEdgeCases(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestFormatTOMLV1_1_0(t *testing.T) {
++	data := "abbr = {\n  g = \"git\",\n  k = \"kubectl\",\n}\nesc = \"\\e[0m\"\n"
++	var actual map[string]any
++	assert.NoError(t, FormatTOML.Unmarshal([]byte(data), &actual))
++	assert.Equal(t, map[string]any{
++		"abbr": map[string]any{
++			"g": "git",
++			"k": "kubectl",
++		},
++		"esc": "\x1b[0m",
++	}, actual)
++}
++
++func TestFormatTOMLUnknownFields(t *testing.T) {
++	var value struct {
++		Any    any
++		Object map[string]any
++	}
++	assert.NoError(t, FormatTOML.Unmarshal([]byte("Any = {a = 1}\n[Object]\nb = {c = 2}\n"), &value))
++	assert.Equal[any](t, map[string]any{"a": int64(1)}, value.Any)
++	assert.Equal(t, map[string]any{"b": map[string]any{"c": int64(2)}}, value.Object)
++
++	var externals map[string]External
++	err := FormatTOML.Unmarshal([]byte("[a]\ntype = \"file\"\n[a.clone]\nunknown = 1\n"), &externals)
++	assert.Error(t, err)
++	assert.Contains(t, err.Error(), "unknown fields: a.clone.unknown")
++}
+diff --git a/internal/cmd/testdata/scripts/init.txtar b/internal/cmd/testdata/scripts/init.txtar
+index ebb0413..4bdf44b 100644
+--- a/internal/cmd/testdata/scripts/init.txtar
++++ b/internal/cmd/testdata/scripts/init.txtar
+@@ -73,7 +73,7 @@ chhome home8/user
+ # test that chezmoi init fails if the generated config is not valid
+ mkgitconfig
+ ! exec chezmoi init
+-stderr 'toml: expected character ='
++stderr 'toml: line 2 \(last key "diff"\): expected .\.. or .=.'
+ ! exists .config/chezmoi
+ 
+ chhome home/user

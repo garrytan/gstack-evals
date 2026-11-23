@@ -1,0 +1,120 @@
+diff --git a/slatedb/src/bytes_range.rs b/slatedb/src/bytes_range.rs
+index f05936b..47e841c 100644
+--- a/slatedb/src/bytes_range.rs
++++ b/slatedb/src/bytes_range.rs
+@@ -43,23 +43,14 @@ impl RangeBounds<Bytes> for BytesRange {
+     }
+ }
+ 
+-fn is_bound_non_empty(bound: &Bound<Bytes>) -> bool {
+-    match bound {
+-        Included(b) | Excluded(b) => !b.is_empty(),
+-        Unbounded => true,
+-    }
+-}
+-
+ impl BytesRange {
++    /// Keys are never empty, so an empty start bound (included or excluded) is
++    /// equivalent to `Unbounded`. An empty end bound is kept as is and matches no keys.
+     pub(crate) fn new(start_bound: Bound<Bytes>, end_bound: Bound<Bytes>) -> Self {
+-        assert!(
+-            is_bound_non_empty(&start_bound),
+-            "Start bound must be non-empty"
+-        );
+-        assert!(
+-            is_bound_non_empty(&end_bound),
+-            "End bound must be non-empty"
+-        );
++        let start_bound = match start_bound {
++            Included(b) | Excluded(b) if b.is_empty() => Unbounded,
++            bound => bound,
++        };
+         let inner = ComparableRange::new(start_bound, end_bound);
+         assert!(inner.non_empty(), "Range must be non-empty");
+         Self { inner }
+@@ -224,6 +215,24 @@ pub(crate) mod tests {
+         assert_eq!(range.end_bound(), Bound::Unbounded);
+     }
+ 
++    #[test]
++    fn test_empty_start_bound_is_unbounded() {
++        for start in [Bound::Included(Bytes::new()), Bound::Excluded(Bytes::new())] {
++            let range = BytesRange::new(start, Bound::Included(Bytes::from_static(b"a")));
++            assert_eq!(range.start_bound(), Bound::Unbounded);
++            assert!(range.contains(&Bytes::from_static(b"\0")));
++            assert!(range.contains(&Bytes::from_static(b"a")));
++        }
++    }
++
++    #[test]
++    fn test_empty_end_bound_contains_no_keys() {
++        for end in [Bound::Included(Bytes::new()), Bound::Excluded(Bytes::new())] {
++            let range = BytesRange::new(Bound::Included(Bytes::new()), end);
++            assert!(!range.contains(&Bytes::from_static(b"\0")));
++        }
++    }
++
+     #[test]
+     fn test_from_prefix_contains_all_prefixed_keys() {
+         proptest!(|(
+diff --git a/slatedb/src/db.rs b/slatedb/src/db.rs
+index 1bde64f..9f2e49c 100644
+--- a/slatedb/src/db.rs
++++ b/slatedb/src/db.rs
+@@ -2078,6 +2078,56 @@ mod tests {
+         kv_store.close().await.unwrap();
+     }
+ 
++    #[tokio::test]
++    async fn test_scan_with_empty_bounds() {
++        use std::ops::Bound::{self, Excluded, Included, Unbounded};
++        let object_store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
++        let kv_store = Db::builder("/tmp/test_scan_with_empty_bounds", object_store)
++            .with_settings(test_db_options(0, 1024, None))
++            .build()
++            .await
++            .unwrap();
++
++        kv_store.put(b"a", b"v0").await.unwrap();
++        kv_store.put(b"b", b"v1").await.unwrap();
++        kv_store.flush().await.unwrap();
++        kv_store.put(b"c", b"v2").await.unwrap();
++
++        let empty = Bytes::new();
++        let c = Bytes::from_static(b"c");
++        let cases: Vec<((Bound<Bytes>, Bound<Bytes>), Vec<&[u8]>)> = vec![
++            ((Included(empty.clone()), Unbounded), vec![b"a", b"b", b"c"]),
++            ((Excluded(empty.clone()), Unbounded), vec![b"a", b"b", b"c"]),
++            ((Included(empty.clone()), Excluded(c.clone())), vec![b"a", b"b"]),
++            ((Excluded(empty.clone()), Included(c.clone())), vec![b"a", b"b", b"c"]),
++            ((Unbounded, Excluded(empty.clone())), vec![]),
++            ((Unbounded, Included(empty.clone())), vec![]),
++            ((Included(empty.clone()), Excluded(empty.clone())), vec![]),
++            ((Included(empty.clone()), Included(empty.clone())), vec![]),
++        ];
++
++        for order in [IterationOrder::Ascending, IterationOrder::Descending] {
++            let scan_options = ScanOptions::default().with_order(order);
++            for (range, expected) in &cases {
++                let mut iter = kv_store
++                    .scan_with_options(range.clone(), &scan_options)
++                    .await
++                    .unwrap();
++                let mut keys = Vec::new();
++                while let Some(kv) = iter.next().await.unwrap() {
++                    keys.push(kv.key);
++                }
++                let mut expected: Vec<&[u8]> = expected.clone();
++                if matches!(order, IterationOrder::Descending) {
++                    expected.reverse();
++                }
++                assert_eq!(keys, expected, "range {range:?} order {order:?}");
++            }
++        }
++
++        kv_store.close().await.unwrap();
++    }
++
+     #[tokio::test]
+     async fn test_scan_descending_skips_deleted_keys() {
+         let object_store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());

@@ -220,6 +220,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PV_EXPOSURE_FALLBACK](#e_pv_exposure_fallback) | warning | U20 |
 | [E_PV_EXPOSURE_STOP](#e_pv_exposure_stop) | warning | U20 |
 | [E_PV_LEAK_EXPOSED](#e_pv_leak_exposed) | warning | U20 |
+| [E_PV_EMPTY_REPLIES](#e_pv_empty_replies) | 2 | U20 |
 | [E_PV_PROVIDER_DRIFT](#e_pv_provider_drift) | 2 | U20 |
 | [E_PV_STREAM_ERROR](#e_pv_stream_error) | 2 | U20 |
 | [E_PV_SUPPLY_SHORT](#e_pv_supply_short) | 2 | U20 |
@@ -310,6 +311,24 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OF_PROVIDER_DRIFT](#e_of_provider_drift) | 2 | U20 |
 | [E_OF_SUPPLY_SHORT](#e_of_supply_short) | 2 | U20 |
 | [E_OF_DRYRUN_FAIL](#e_of_dryrun_fail) | 2 | U20 |
+| [E_H2HX_PREREG](#e_h2hx_prereg) | 2 | U20 |
+| [E_H2HX_INPUT](#e_h2hx_input) | 2 | U20 |
+| [E_H2HX_RUN](#e_h2hx_run) | 2 | U20 |
+| [E_H2HX_CODEX_RUNTIME](#e_h2hx_codex_runtime) | 2 | U20 |
+| [E_H2HX_CODEX_CONFIG](#e_h2hx_codex_config) | 2 | U20 |
+| [E_H2HX_CODEX_INSTALL](#e_h2hx_codex_install) | 2 | U20 |
+| [E_H2HX_CODEX_EXPOSURE](#e_h2hx_codex_exposure) | 2 | U20 |
+| [E_H2HX_UNITS_INPUT](#e_h2hx_units_input) | 2 | U20 |
+| [E_H2HX_UNITS_RECIPE](#e_h2hx_units_recipe) | 2 | U20 |
+| [E_H2HX_UNITS_ORACLE](#e_h2hx_units_oracle) | 2 | U20 |
+| [E_H2HX_UNITS_CONTAIN](#e_h2hx_units_contain) | 2 | U20 |
+| [E_H2HX_UNITS_POOL](#e_h2hx_units_pool) | 2 | U20 |
+| [E_H2HX_UNITS_PENDING](#e_h2hx_units_pending) | 2 | U20 |
+| [E_H2HX_UNITS_SHORT](#e_h2hx_units_short) | 2 | U20 |
+| [E_H2HX_ROUTE_CONFIG](#e_h2hx_route_config) | 2 | U20 |
+| [E_H2HX_ROUTE_PROVIDER](#e_h2hx_route_provider) | 2 | U20 |
+| [E_H2HX_ROUTE_RECORD](#e_h2hx_route_record) | 2 | U20 |
+| [E_H2HX_ANALYSIS_INPUT](#e_h2hx_analysis_input) | 2 | U20 |
 | [E_H2H_PREREG](#e_h2h_prereg) | 2 | U20 |
 | [E_H2H_INSTALL](#e_h2h_install) | 2 | U20 |
 | [E_H2H_PIN](#e_h2h_pin) | 2 | U20 |
@@ -340,6 +359,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_H2H_B_BROWSER](#e_h2h_b_browser) | 2 | U20 |
 | [E_H2H_B_LABEL](#e_h2h_b_label) | 2 | U20 |
 | [E_H2H_B_INFEASIBLE](#e_h2h_b_infeasible) | 2 | U20 |
+| [E_H2H_LABEL_INPUT](#e_h2h_label_input) | 2 | U20 |
 | [E_H2H_O_SOURCE](#e_h2h_o_source) | 2 | U20 |
 | [E_H2H_O_LICENCE](#e_h2h_o_licence) | 2 | U20 |
 | [E_H2H_O_EXCLUDED](#e_h2h_o_excluded) | 2 | U20 |
@@ -392,6 +412,140 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_EP_REPROJECT](#e_ep_reproject) | 2 | U20 |
 | [E_EP_JUDGE_CHECK](#e_ep_judge_check) | 2 | U20 |
 | [E_EP_DRYRUN_FAIL](#e_ep_dryrun_fail) | 2 | U20 |
+| [E_DAYONE_OWNER](#e_dayone_owner) | 2 | U20 |
+| [E_DAYONE_APP](#e_dayone_app) | 2 | U20 |
+| [E_DAYONE_BACKGROUND](#e_dayone_background) | 2 | U20 |
+| [E_DAYONE_GAP](#e_dayone_gap) | 2 | U20 |
+| [E_DAYONE_LEAK](#e_dayone_leak) | 2 | U20 |
+| [E_DAYONE_CONTAMINATED](#e_dayone_contaminated) | 2 | U20 |
+| [E_DAYONE_NO_PLAN](#e_dayone_no_plan) | 2 | U20 |
+| [E_DAYONE_VERDICT](#e_dayone_verdict) | 2 | U20 |
+| [E_DAYONE_VOICE](#e_dayone_voice) | 2 | U20 |
+| [E_DAYONE_EXPOSURE](#e_dayone_exposure) | 2 | U20 |
+| [E_DAYONE_JUDGE](#e_dayone_judge) | 2 | U20 |
+| [E_DAYONE_GOLD](#e_dayone_gold) | 2 | U20 |
+| [E_DAYONE_FIXTURE](#e_dayone_fixture) | 2 | U20 |
+| [E_DAYONE_DRYRUN](#e_dayone_dryrun) | 2 | U20 |
+| [E_DAYONE_ADMISSION](#e_dayone_admission) | 2 | U20 |
+| [E_DAYONE_VALIDATION](#e_dayone_validation) | 2 | U20 |
+| [E_DAYONE_CONTROLS](#e_dayone_controls) | 2 | U20 |
+| [E_B1_PIN](#e_b1_pin) | 2 | U20 |
+| [E_B1_INPUT](#e_b1_input) | 2 | U20 |
+| [E_B1_LAUNCH](#e_b1_launch) | 2 | U20 |
+| [E_B1_AS_MERGED_UNREAD](#e_b1_as_merged_unread) | 2 | U20 |
+| [E_OHR_READ_INPUT](#e_ohr_read_input) | 2 | U20 |
+| [E_OHR_READ_POWER](#e_ohr_read_power) | 2 | U20 |
+| [E_OHR_PACKET_INPUT](#e_ohr_packet_input) | 2 | U20 |
+| [E_OHR_ID_CLASH](#e_ohr_id_clash) | 2 | U20 |
+| [E_OHR_JUDGE_INPUT](#e_ohr_judge_input) | 2 | U20 |
+| [E_OHR_LABEL_MISSING](#e_ohr_label_missing) | warning | U20 |
+| [E_OHR_JUDGE_CHECK_FAIL](#e_ohr_judge_check_fail) | 3 | U20 |
+| [E_OHR_JUDGE_CHECK_NO_READ](#e_ohr_judge_check_no_read) | 3 | U20 |
+| [E_OHR_MARKERS](#e_ohr_markers) | 2 | U20 |
+| [E_OHR_SCORE_INPUT](#e_ohr_score_input) | 2 | U20 |
+| [E_OHR_PILOT_STOP](#e_ohr_pilot_stop) | 2 | U20 |
+| [E_OHR_PILOT_OPEN](#e_ohr_pilot_open) | 2 | U20 |
+| [E_OHR_SUPPLY_SHORT](#e_ohr_supply_short) | 2 | U20 |
+| [E_OHR_RESUME](#e_ohr_resume) | 2 | U20 |
+| [E_OHR_REUSE](#e_ohr_reuse) | 2 | U20 |
+| [E_OHR_CUSTODY](#e_ohr_custody) | 2 | U20 |
+| [E_OHR_SIM_RULES](#e_ohr_sim_rules) | 2 | U20 |
+| [E_OHR_SIM_GUARD](#e_ohr_sim_guard) | 2 | U20 |
+| [E_OHR_SIM_CHECK](#e_ohr_sim_check) | 2 | U20 |
+| [E_OHR_SIM_CALL](#e_ohr_sim_call) | 2 | U20 |
+| [E_OHR_SIM_AUDIT](#e_ohr_sim_audit) | 2 | U20 |
+| [E_OHR_NO_READ](#e_ohr_no_read) | 2 | U20 |
+| [E_OHR_PIN_MISMATCH](#e_ohr_pin_mismatch) | 2 | U20 |
+| [E_OHR_NEW_PIN_UNSET](#e_ohr_new_pin_unset) | 2 | U20 |
+| [E_OHR_SAFETY_STOP](#e_ohr_safety_stop) | 2 | U20 |
+| [E_OHR_GSTACK_READ](#e_ohr_gstack_read) | 2 | U20 |
+| [E_OHR_NO_BLOCK](#e_ohr_no_block) | 2 | U20 |
+| [E_OHR_ARM_STOP](#e_ohr_arm_stop) | 2 | U20 |
+| [E_OHR_SESSION_KIND](#e_ohr_session_kind) | 2 | U20 |
+| [E_OHR_ROLLOUT_UNREADABLE](#e_ohr_rollout_unreadable) | 2 | U20 |
+| [E_OHR_INFRA_MISSING](#e_ohr_infra_missing) | 2 | U20 |
+| [E_OHR_UNRUN](#e_ohr_unrun) | 2 | U20 |
+| [E_OHR_T8_SEED](#e_ohr_t8_seed) | 2 | U20 |
+| [E_OHR_MANIFEST](#e_ohr_manifest) | 2 | U20 |
+| [E_OHR_RESERVE](#e_ohr_reserve) | 2 | U20 |
+| [E_OHR_CAP_LINE](#e_ohr_cap_line) | 2 | U20 |
+| [E_OHR_BUILD_COMMIT](#e_ohr_build_commit) | 2 | U20 |
+| [E_OHR_E2E_FAIL](#e_ohr_e2e_fail) | 2 | U20 |
+| [E_OHR_DRYRUN_FAIL](#e_ohr_dryrun_fail) | 2 | U20 |
+| [E_OHR_PREFLIGHT_FAIL](#e_ohr_preflight_fail) | 2 | U20 |
+| [E_OHR_MODEL_DRIFT](#e_ohr_model_drift) | 2 | U20 |
+| [E_CSO_PREREG](#e_cso_prereg) | 2 | U20 |
+| [E_CSO_UNIT_IDS](#e_cso_unit_ids) | 2 | U20 |
+| [E_CSO_UNIT_FRAME](#e_cso_unit_frame) | 2 | U20 |
+| [E_CSO_ADVISORY](#e_cso_advisory) | 2 | U20 |
+| [E_CSO_DROP_FIX_DATE](#e_cso_drop_fix_date) | 2 | U20 |
+| [E_CSO_DROP_FETCH_LAZY](#e_cso_drop_fetch_lazy) | 2 | U20 |
+| [E_CSO_DROP_SCAN](#e_cso_drop_scan) | 2 | U20 |
+| [E_CSO_DROP_FETCH](#e_cso_drop_fetch) | 2 | U20 |
+| [E_CSO_DROP_SAME_FIX](#e_cso_drop_same_fix) | 2 | U20 |
+| [E_CSO_DROP_CWE](#e_cso_drop_cwe) | 2 | U20 |
+| [E_CSO_DROP_ANSWER_KEY](#e_cso_drop_answer_key) | 2 | U20 |
+| [E_CSO_DROP_CONTAINMENT](#e_cso_drop_containment) | 2 | U20 |
+| [E_CSO_SUPPLY](#e_cso_supply) | 2 | U20 |
+| [E_CSO_DRAW](#e_cso_draw) | 2 | U20 |
+| [E_CSO_ARM](#e_cso_arm) | 2 | U20 |
+| [E_CSO_SESSION](#e_cso_session) | 2 | U20 |
+| [E_CSO_CAP_STOP](#e_cso_cap_stop) | 2 | U20 |
+| [E_CSO_STOP_SAFETY](#e_cso_stop_safety) | 2 | U20 |
+| [E_CSO_STOP_LIMIT](#e_cso_stop_limit) | 2 | U20 |
+| [E_CSO_GAP_UPSTREAM](#e_cso_gap_upstream) | 2 | U20 |
+| [E_CSO_GAP_INFRA](#e_cso_gap_infra) | 2 | U20 |
+| [E_CSO_RERUN_PRECONDITION](#e_cso_rerun_precondition) | 2 | U20 |
+| [E_CSO_RERUN_UNWIRED](#e_cso_rerun_unwired) | 2 | U20 |
+| [E_CSO_FINALIZE_HALT](#e_cso_finalize_halt) | 2 | U20 |
+| [E_CSO_E2E_FAIL](#e_cso_e2e_fail) | 2 | U20 |
+| [E_CSO_SCAN](#e_cso_scan) | 2 | U20 |
+| [E_CSO_DROP_INSTALL_ID](#e_cso_drop_install_id) | 2 | U20 |
+| [E_CSO_DROP_INSTALL_DEP](#e_cso_drop_install_dep) | 2 | U20 |
+| [E_CSO_RELEASE](#e_cso_release) | 2 | U20 |
+| [E_CSO_SCORE_INPUT](#e_cso_score_input) | 2 | U20 |
+| [E_CSO_JUDGE_ROUTE](#e_cso_judge_route) | 2 | U20 |
+| [E_CSO_JUDGE_TRANSPORT](#e_cso_judge_transport) | 2 | U20 |
+| [E_CSO_PACKET](#e_cso_packet) | 2 | U20 |
+| [E_CSO_CHECK_INPUT](#e_cso_check_input) | 2 | U20 |
+| [E_CSO_ANCHOR](#e_cso_anchor) | 2 | U20 |
+| [E_CSO_ANALYSIS_INPUT](#e_cso_analysis_input) | 2 | U20 |
+| [E_CSO_READOUT_KEY](#e_cso_readout_key) | 2 | U20 |
+| [E_CSO_READOUT_OUT](#e_cso_readout_out) | 2 | U20 |
+| [E_CSO_PROVIDER_DRIFT](#e_cso_provider_drift) | 2 | U20 |
+| [E_CSO_EXPORT](#e_cso_export) | 2 | U20 |
+| [E_OHR_TAP](#e_ohr_tap) | 2 | U20 |
+| [E_CODEX_CAPTURE](#e_codex_capture) | 2 | U20 |
+| [E_CODEX_C_NO_ROLLOUT](#e_codex_c_no_rollout) | 2 | U20 |
+| [E_CODEX_C_NO_RESPONSE](#e_codex_c_no_response) | 2 | U20 |
+| [E_CODEX_C_DRIFT](#e_codex_c_drift) | 2 | U20 |
+| [E_CH_C_STATES](#e_ch_c_states) | 2 | U20 |
+| [E_CH_C_BLIND](#e_ch_c_blind) | 2 | U20 |
+| [E_CH_C_REPLY](#e_ch_c_reply) | 2 | U20 |
+| [E_CH_C_FROZEN](#e_ch_c_frozen) | 2 | U20 |
+| [E_CH_C_CHECK](#e_ch_c_check) | 2 | U20 |
+| [E_CH_C_NO_RECORD](#e_ch_c_no_record) | 2 | U20 |
+| [E_CH_C_JUDGE_GAP](#e_ch_c_judge_gap) | 2 | U20 |
+| [E_CODEX_R_PIN](#e_codex_r_pin) | 2 | U20 |
+| [E_CODEX_R_ARMS](#e_codex_r_arms) | 2 | U20 |
+| [E_CODEX_R_PREPARE](#e_codex_r_prepare) | 2 | U20 |
+| [E_CODEX_R_TABLE](#e_codex_r_table) | 2 | U20 |
+| [E_CODEX_R_MONEY](#e_codex_r_money) | 2 | U20 |
+| [E_CH_ALL_IN](#e_ch_all_in) | 2 | U20 |
+| [E_CODEX_R_LAUNCH](#e_codex_r_launch) | 2 | U20 |
+| [E_WEEKLY_PIN](#e_weekly_pin) | 2 | U20 |
+| [E_WEEKLY_LAUNCH](#e_weekly_launch) | 2 | U20 |
+| [E_WEEKLY_BUILD](#e_weekly_build) | 2 | U20 |
+| [E_B2_INPUT](#e_b2_input) | 2 | U20 |
+| [E_B2_ARMS](#e_b2_arms) | 2 | U20 |
+| [E_B2_PREPARE](#e_b2_prepare) | 2 | U20 |
+| [E_B2_MONEY](#e_b2_money) | 2 | U20 |
+| [E_B2_LAUNCH](#e_b2_launch) | 2 | U20 |
+| [E_B2_IMAGES](#e_b2_images) | 2 | U20 |
+| [E_B2_TABLE](#e_b2_table) | 2 | U20 |
+| [E_B2_LOOK](#e_b2_look) | 2 | U20 |
+| [E_B2_SESSIONS](#e_b2_sessions) | 2 | U20 |
+| [E_B2_SCORER](#e_b2_scorer) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -871,9 +1025,9 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_INTERACTIVE_HOST
 
-A task declared interactive was sent to --host codex, which runs only non-interactive tasks in v1.
+A task declared interactive was sent to --host codex with a model the pinned Codex offers no request_user_input_async. Codex answers its own request_user_input itself, so that model's questions would never reach the user simulator.
 
-Fix: Use --host claude, or --tasks-only with the other ids. The message names the interactive task ids. Do not --resume.
+Fix: Use --host claude, a Codex model in the adapter's ASYNC_QUESTION_MODELS list, or --tasks-only the non-interactive tasks. Do not --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U7.
 
@@ -935,7 +1089,7 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_CACHE_STALE
 
-A cached session's key no longer matches (arm tree, task, fixture, check or verifier scripts, image, model, host version, adapter, isolation, timeout, passthrough env, judge model or policy).
+A cached session's key no longer matches (arm tree, task, fixture, check or verifier scripts, image, model, host version, adapter, isolation, timeout, passthrough env or policy).
 
 Fix: Read which key parts changed, then rerun the affected cells with --repair "&lt;named repair>", which writes a new verdict id.
 
@@ -1869,6 +2023,14 @@ Fix: Remove the STOP file once the reason for it is dealt with, then relaunch th
 
 Exit 2. Side effects: Partial: sessions that ran keep their spend and results; every lease is settled. Retry safe: yes. Resumable: yes. Owner: U6.
 
+### E_PV_EMPTY_REPLIES
+
+A metered run whose meter sets a bound on empty replies got too many: replies with status 200 and no answer (an error body, an empty reply or a cut-off one), three in a row or more than 1% of the run's calls over at least 100 calls in the office-hours rewrite eval (pre-run change 5). The command stops.
+
+Fix: Bring the counts in the message to the Captain. Paid replies stay in the run's reply cache, so a resume on the same run replays them at no cost once the Captain rules.
+
+Exit 2. Side effects: Calls already sent on the lease stay on its journal and its spend; empty replies are not cached. Retry safe: no. Resumable: yes. Owner: U20.
+
 ### E_PV_PROVIDER_DRIFT
 
 Product-value eval (section 17, rule 6): a call through OpenRouter was served by a provider other than the one its route pins (OpenAI for GPT-6.1 Sol, the recorded serving provider for particle-1 and Gemini), or the provider's recorded terms changed. That model's items stop for the Captain.
@@ -1935,7 +2097,7 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 
 ### E_SM_STRIP
 
-A state machines session saw instructions the strip rule removes: a CLAUDE.md, CLAUDE.local.md or AGENTS.md, or a file under .claude/, inside the repository, in the session's tree or its loaded memory; or an A3 (qa:told) session whose loaded memory lacks gstack's installed instructions. The session is not scored.
+A state machines session saw instructions the strip rule removes: a CLAUDE.md, CLAUDE.local.md or AGENTS.md, or a file under .claude/, inside the repository, in the session's tree or its loaded memory; a follow-on whose first-stage patch writes a CLAUDE.md or CLAUDE.local.md from an existing file (renamed, copied or edited) or as binary, so the strip can't read every @import it names; or an A3 (qa:told) session whose loaded memory lacks gstack's installed instructions. The session is not scored.
 
 Fix: Prepare the unit's base tree again with the strip (gstack-evals outcome sm convert), check nothing in the arm setup writes into the repository, and for A3 check the install went into the container's home after the strip.
 
@@ -1967,7 +2129,7 @@ Exit 2. Side effects: The session spent what its lease's ledger meter holds; the
 
 ### E_SM_CONTAIN
 
-A state machines session image fails the containment check that runs before any session (statemachines/contain.ts, sh/contain.sh): a ref, pseudo-ref or packed-refs line names a commit past the base, a commit object in the store is not the base or one of its ancestors, the repo has alternates, a .gitmodules or a nested .git, another git object store exists on the image's filesystem, with or without a HEAD file (A3's gstack checkout at the /qa pin is the one exception), a file outside the repo or a file in the repo that the base commit does not hold byte for byte (untracked, ignored, staged but never committed, or tracked with a working copy that differs from the base commit's) holds a hidden test name or a test-side marker, or a git listing, find or grep inside the check failed (an error finding). Findings name refs, commits, paths and sha256s, never the test text. A file or dir the check can't read is listed, never failed.
+A state machines session image fails the containment check that runs before any session (statemachines/contain.ts, sh/contain.sh): a ref, pseudo-ref or packed-refs line names a commit past the base, a commit object in the store is not the base or one of its ancestors, the repo has alternates, a .gitmodules or a nested .git, another git object store exists on the image's filesystem, with or without a HEAD file, other than A3's gstack checkout at the /qa pin and an outside store that holds none of the post-base blob ids (the blobs the oracle's fixed-run patches make over the base) and none of whose objects holds a hidden test name the base tree lacks, a file outside the repo or a file in the repo that the base commit does not hold byte for byte (untracked, ignored, staged but never committed, or tracked with a working copy that differs from the base commit's) holds a hidden test name or a test-side marker, or a git listing, find or grep inside the check failed (an error finding). Findings name refs, commits, paths and sha256s, never the test text. A file or dir the check can't read is listed, never failed.
 
 Fix: Bring the unit and the failed checks to the Captain. The unit halts and is not dropped. Fix the image or the setup step (strip every ref and object past the base, as GEVA-503's D7 does) test-first, and repin only between parts; then rerun sm contain on the unit.
 
@@ -2373,6 +2535,150 @@ Fix: Read the FAIL line, fix the rule's code, and run the dry run again before a
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
+### E_H2HX_PREREG
+
+The skill-pack head-to-head extension (Sol in Codex, particle-1, the smallest-change sentence) found no usable preregistration: its prereg.json is missing, is not h2h-ext-prereg.v1, lacks a seed, lists other arms for a part than the lane's, or lacks an entry, model, limits, gstack pin, pilot cap or item.
+
+Fix: Change the extension's prereg.json only through its preregistration's own pull request. Nothing runs on values chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_INPUT
+
+An extension command got input it can't use: an unknown part, stage or arm, a unit listed twice, a B1 unit, a non-O unit in part L, or an empty problem statement.
+
+Fix: Pass the part's own units and arms, each once, as the extension's preregistration lists them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_RUN
+
+h2h x-run stopped an extension stage: a precondition failed before anything opened (the part's environment, Docker, Harbor, the driver, a unit dir or tree volume), its plan.json holds another plan, a session dir exists with no session.json or holds another session, or an arm's home holds a confirmed answer-key hit for the unit.
+
+Fix: Meet a named precondition and run again. Otherwise bring the stage's out dir to the Captain: a stopped session is ruled on before the stage goes on, and a unit with an answer-key hit drops for every arm by the frozen rule.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_RUNTIME
+
+Part S's Codex runtime is not its pin: the platform tarball's sha256 differs from prereg.json, the binary does not print codex-cli 0.170.0, the runtime volume reads another version or digest or holds a file named codex on PATH, or a session's sol-agent link reads another version.
+
+Fix: Rebuild the runtime volume from the pinned tarball (ext/runtimes.ts buildExtRuntimeVolume). Change the pin only through the extension's preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_CONFIG
+
+A part S session's Codex config could not be made: the pack's own config.toml and the harness's settings do not make one TOML file, the pack sets a harness key (model, provider, effort, approvals, sandbox, update check, analytics, web search, bundled skills) to another value, or the file could not be written.
+
+Fix: Read the arm's installed config.toml. A pack that sets a harness key needs a dated change to the plan before its sessions run; never edit the pack's config by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_INSTALL
+
+A part S arm's Codex install did not build or does not match its pin: a clone is at another commit, a recipe step failed, the installed home holds a file the arm's rule refuses (a global AGENTS.md in s-gstack, other bytes than prereg.json's in s-gstack-line), or the home's tree hash is not its recorded pin.
+
+Fix: Rebuild the arm's home from its recipe (ext/codex-arms.ts) and read the step's output. A pin changes only through the extension's preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_H2HX_CODEX_EXPOSURE
+
+A part S session's exposure could not be read from its Codex rollouts: no rollout was copied out, a rollout line is not JSON, or the arm is not a part S arm.
+
+Fix: Read the session's codex-sessions/ folder and h2h-summary.json; a session whose exposure can't be read is never read as not exercised.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_INPUT
+
+The extension's unit builder got records it can't use: a frozen file is missing or has another schema, a count does not match the head-to-head's (100 O and 60 B2 stage 2 units, 12 and 12 stage 1 units), a unit is listed twice or has no recipe input, or a draw position does not follow the frozen order.
+
+Fix: Build from the head-to-head's committed frames, orders and session data and the run's exported records, unchanged. A record that disagrees with the frozen files goes to the Captain; nothing is filled in by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_RECIPE
+
+A rebuilt unit is not the unit the head-to-head ran: its recipe did not build, or a payload file it wrote (fix.patch, test.patch, issue.md, parser.py) hashes differently from the original. The unit drops for every arm of parts S and P.
+
+Fix: None inside the run: the unit is listed with its reason. Check the recipe pins (dataset revision, advisory commit, fix commit) before rebuilding anything else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_ORACLE
+
+A rebuilt or fresh unit failed the base plan's oracle: its verdict was not kept, or it did not run 3 base and 3 fixed runs. A rebuilt unit drops for every arm of parts S and P; a part L candidate drops at that position.
+
+Fix: None inside the run: the unit is listed with the oracle's verdict. Infrastructure faults are not drops; they leave the unit pending for a rerun.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_CONTAIN
+
+A unit failed containment: a ref or commit object past the base, an alternate or another object store, a nested .git, or a hidden test name or marker outside the repository or in an arm's home. The unit drops for every arm of its part (both parts S and P for a rebuilt unit).
+
+Fix: None inside the run: the unit is listed with the failed check. Never patch an image to pass containment.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_POOL
+
+Part L's frame is not complete: a pool's ids could not all be recovered from the surviving records, so its seeded order is provisional and no walk may use it.
+
+Fix: Recover the missing ids from a record that holds them (the head-to-head's walk logs) or change the plan's pool by a dated change before the walk. Never fill a pool by guessing.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_UNITS_PENDING
+
+Part L's walk stopped at a candidate whose gate has no result yet (a licence read, row text, oracle or containment reading); positions after it are not drawn.
+
+Fix: Run the named gate on the named unit, then walk again. The walk never skips a pending unit.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_H2HX_UNITS_SHORT
+
+Part L's walk ran out of candidates before it filled its 6 pilot units, 100 counted units and 5 reserves. The counted units are what is left after the pilot and the reserves; under 60 makes part L underpowered.
+
+Fix: Report the restated counts and MDDs as the plan's section 5 says. Under 60 counted units, part L is descriptive only and goes back to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ROUTE_CONFIG
+
+Part P's particle-1 route in the extension's prereg.json does not match the metering proxy's: it goes somewhere other than OpenRouter, pins a provider with no known OpenRouter slug, or pins providers, fallbacks or data collection other than the proxy's price row sends.
+
+Fix: Make the price row in src/runner/pricing/prices.ts and prereg.json's parts.P.route agree, through a dated plan change if prereg.json is the one that moves. No particle-1 session runs until they do.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ROUTE_PROVIDER
+
+A particle-1 answer was served by a provider other than the one part P pins (OpenRouter's generation record names another provider_name).
+
+Fix: Part P's items stop. Bring the session, its answer id and the generation record to the Captain; nothing is retried to get another provider.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ROUTE_RECORD
+
+A particle-1 answer has no readable OpenRouter generation record, so the provider that served it is unknown: the answer id is malformed, the proxy recorded no X-Generation-Id for it (its reply had none, or the proxy never served it), the lookup did not answer 200, or the record names another id or no provider.
+
+Fix: Part P's items stop. Read the generation record by hand through the proxy's free route and bring it to the Captain before any more particle-1 sessions open.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2HX_ANALYSIS_INPUT
+
+The extension's analysis or its interim look got records it can't use: a unit listed twice or of a kind the part does not run, a record for an unknown unit or for an arm that does not run on that unit, two records for one session, a record of another schema, or a scored session with no tests-added record.
+
+Fix: Pass the part's own units, sessions, scores and tests-added records, one of each per session, as the scorer and the tests-added module wrote them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
 ### E_H2H_PREREG
 
 The skill-pack head-to-head found no usable preregistration: its prereg.json is missing, is not h2h-prereg.v1, lacks an unsigned 32-bit integer draw_seed, order_seed or bootstrap_seed, lists other arms than the lane's, or lacks a text, entry, list or continuation cap.
@@ -2612,6 +2918,14 @@ B1 ended under 20 usable units after section 6's fallbacks (the 2025-06-01 widen
 Fix: None: this is the frozen outcome. Report it as the Infeasible row state.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_H2H_LABEL_INPUT
+
+h2h label-send refused its units before anything was opened: the --units file is missing or lists no unit dir, a dir is not a B1 unit (source h2h-b1), a unit id can't name a file, a unit is listed twice, or a unit's label packet differs from the packet one of its calls was sent, so its two answers would not read one packet.
+
+Fix: Fix the units file. A unit whose packet changed after a call was sent goes back to the dir that call read, or leaves --units; its sent call is never sent again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_H2H_O_SOURCE
 
@@ -2989,6 +3303,1054 @@ Fix: Read the FAIL line, fix the rule's code, and run the dry run again before a
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
+### E_DAYONE_OWNER
+
+Day-one eval (section 5): the owner responder's metered call failed, on the session's responder allowance or at the provider. A provider failure is an infrastructure failure that gets the session's one retry; an allowance refusal leaves the session missing.
+
+Fix: Nothing to change: the run applies the retry rule. A high rate goes to the Captain with the failing calls.
+
+Exit 2. Side effects: The responder's metered spend stays on its lease. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_APP
+
+Day-one eval (section 6): the browser container or the node volume could not be set up (docker failed, or the MCP server never answered). It is an infrastructure failure of the checklist run, never a build that does not start.
+
+Fix: Read the line's docker output, fix the host, and run the stage again with --resume.
+
+Exit 2. Side effects: No spend: the checker's session has not started. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_BACKGROUND
+
+Day-one eval (section 7, item B, of the first pin change): a planning session held open for background work it started (a background Bash or Agent task, or a pending ScheduleWakeup) reached its time limit with that work still running on its last attempt, so its cell is a recorded gap with that cause. Its first attempt ended the same way or in an upstream or infrastructure failure, and either one gets the single retry. Every arm's planning sessions hold the same way, at most the stage's minutes; builds and checks do not hold.
+
+Fix: Nothing to retry: report the gap beside the arm's result. The session's host/cli-stderr.log names the work still out.
+
+Exit 2. Side effects: The session's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_GAP
+
+Day-one eval (section 7): a session ended in an upstream or infrastructure failure on both of its attempts, so its cell is a recorded gap and the stages after it do not run for that cell.
+
+Fix: Nothing to retry: report the gap beside the arm's result. A comparison left with fewer than 12 briefs reads undecided (section 10), and that goes to the Captain.
+
+Exit 2. Side effects: The attempts' metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_LEAK
+
+Day-one eval (section 7): the containment probe found a departure in a session's container: a key-like env name other than the session's bearers, a mount outside the work dir, HOME and the node volume, or open egress. The run halts for the Captain.
+
+Fix: Find how the departure got in, fix the rig, and bring it to the Captain before any further session.
+
+Exit 2. Side effects: The session's metered spend stays on the lease; no further session starts. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_CONTAMINATED
+
+Day-one eval (section 7): a session used a web tool, or a session on an arm with no gstack read a gstack file. Its plan is contaminated: reported, never scored as that arm's result.
+
+Fix: Nothing to retry: report it beside the arm's result.
+
+Exit 2. Side effects: The session's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_NO_PLAN
+
+Day-one eval (section 4): a planning session ended with no non-empty plan.md (and, on a gstack arm, no autoplan active plan). On the base plan it is an arm stop that gets the session's one retry; on a review arm, or on the retry, the arm's plan is empty and its build is scored as doing nothing.
+
+Fix: Nothing to retry beyond the rule: report it beside the arm's result.
+
+Exit 2. Side effects: The session's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_VERDICT
+
+Day-one eval (section 6): the checker's last reply held no parsable verdicts block (every task id exactly once, each with a boolean done) on both attempts, so the build is unscored, a gap rather than a zero.
+
+Fix: Nothing to retry: report the gap. A high rate goes to the Captain with the replies.
+
+Exit 2. Side effects: The checker's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_VOICE
+
+Day-one eval (C2): a gstack arm session ran without its GPT-6 Astra voice (no Astra call on the voice slot, or autoplan recorded its outside voice as unavailable or failed). The session is logged as voice fallback, never swapped silently.
+
+Fix: Nothing to retry: report the fallback beside the arm's result, with the phase records.
+
+Exit 2. Side effects: The session's metered spend stays on the lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_EXPOSURE
+
+Day-one eval (section 8): a gstack arm session did not reach autoplan's exposure bar (CEO and Eng closed, Design closed or skipped by scope, both voices bound or the outside voice recorded, the gate answered). It is reported as not exposed, never scored as a loss.
+
+Fix: Nothing to retry: report the exposure rate beside every verdict.
+
+Exit 2. Side effects: No extra spend. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_JUDGE
+
+Day-one eval (section 9): the plan judge's answer for a packet missed or garbled a cell on both sends, so those plan-check pairs stay unlabelled.
+
+Fix: Nothing to retry beyond the one resend: report the missing pairs.
+
+Exit 2. Side effects: The judge's metered spend stays on its lease. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_GOLD
+
+Day-one eval (section 9): the gold set holds fewer than 40 pairs, or the judge's kappa against gold is under 0.6 on covered or usable, so no judge number counts.
+
+Fix: Report it and stop the judge's counted use; bring a gold fix to the Captain.
+
+Exit 2. Side effects: No extra spend. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_DAYONE_FIXTURE
+
+Day-one eval (section 6): a checker fixture failed: the placeholder app scored a task done, or the reference app missed one, with the scripted checker (keyless) or the real checker (the smoke's step). No paid build may start.
+
+Fix: Keyless: fix the checklist runner or the fixture, then run both fixtures again. With the real checker: the wave stops and the receipt goes to the Captain.
+
+Exit 2. Side effects: Keyless runs spend nothing; the real-checker run's sessions stay on the smoke's lease. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_DRYRUN
+
+Day-one eval (section 11): a dry-run case printed FAIL: a frozen rule did not hold on its fixtures, or the driven launch failed on the keyless path. The line names the case.
+
+Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
+
+Exit 2. Side effects: No spend: the dry run is keyless. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_ADMISSION
+
+Day-one eval (section 7): a round's worst case (twice each session's allowance, and the voice's and the responder's) does not fit what the launch may still spend, so nothing in that round ran.
+
+Fix: Relaunch the same stage with a smaller --parallel; cells that ended stay ended. If a single cell does not fit, the line is short: take the figure to the Captain.
+
+Exit 2. Side effects: None for the refused round; earlier rounds' spend stays on the lease. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_VALIDATION
+
+Day-one eval (section 6, R78): the checker validation drew fewer than 40 task verdicts, or the checker's kappa on done against the hand labels is under 0.6, or an arm has fewer than 3 labelled builds. No category 2 number counts.
+
+Fix: Under 40 verdicts: draw again with a larger --count into a new --dest and --key, and label the new builds. A low kappa goes to the Captain; the checker is not tuned after the fact.
+
+Exit 2. Side effects: Writes validation.json in the out dir with admitted false; no spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_DAYONE_CONTROLS
+
+Day-one eval (section 9): a judge control failed: the stock plan is covered on more than 5% of the primary checks, or padded plans agree with their base plans on covered in under 90% of pairs. No judge number counts.
+
+Fix: Report it beside the judge's numbers and take it to the Captain; the judge's prompt is frozen and is not tuned after the fact.
+
+Exit 2. Side effects: None: the controls read labels already paid for. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B1_PIN
+
+A delivery route pin does not hold (lanes/delivery-route): an agent-skills or gstack checkout given to arms.ts sources is not at its pinned commit or holds another blob, a wrapper substitution does not match the pinned text the expected number of times, a treated arm's file does not hold the step text exactly once, a tar build failed, a scripted session's assertion failed (sessions.ts), or the stub model did not start.
+
+Fix: Point arms.ts at checkouts of the pinned commits, or read the named assertion in the session's capture and fix the arm or the code. Never edit a pinned file, a manifest or a fixture to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B1_INPUT
+
+A delivery route input does not hold (lanes/delivery-route): a prereg attachment is not at its front-matter sha256, tasks.txt does not hold 60 run tasks from 60 repositories and the preregistered smoke tasks, a task is not in the SWE-rebench list, a recorded cap is not the cap formula's, or config/proxy.json has no route for a smoke part's model.
+
+Fix: Fix the named input and run the command again. Never edit a frozen file to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B1_LAUNCH
+
+A delivery route launch was refused before it started (lanes/delivery-route/money.ts launchGuard): the item's projection (its spend so far, its parts still to run at the planning rates, its parallel allowances and its host and part-VM reserves) would pass its cap, every item's projection plus the crew file's counter would pass the all-in stop, or the item is marked done. The message says what doesn't fit.
+
+Fix: Take the line to the Captain before launching. A cap raise needs the Captain's record and a new approval row; nothing launches until the guard passes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B1_AS_MERGED_UNREAD
+
+The delivery route report's as-merged table (lanes/delivery-route/analyze.ts asMerged) was given a session row whose detection has no followed_as_merged field, such as a row written before deviation D1. The table refuses it rather than count the row as not followed. The message names the trial.
+
+Fix: Rescore the named session with lanes/delivery-route/detect.ts so its row carries followed_as_merged, then read the report again. Never fill the field by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_READ_INPUT
+
+Office-hours rewrite eval (lanes/office-hours-rewrite/read): the readings refused their input. Two scored rows share a stage, brief, model and arm; one brief's rows disagree on its kind, cluster, set or traction flag; a G1 hand read names a session that is not a new-arm builder session or a detector hit has no hand read; an admission or decision input is missing a flag; or a statistic was asked for outside its range. The message names the row or flag.
+
+Fix: Fix the scorer's output or the named flag and run the reading again. Never edit a row by hand to make it read.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_READ_POWER
+
+Office-hours rewrite eval (lanes/office-hours-rewrite/read/reread.ts): the rerun of the preregistration's power.py at stage 1's observed control rates (section 9) failed or printed something other than its JSON result.
+
+Fix: Run the printed command by hand (uv with power.py's pinned numpy and scipy), fix the environment, and rerun. power.py itself is frozen and is never edited.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_PACKET_INPUT
+
+Office-hours rewrite eval (section 5): a packet build was refused before any judge call. A session row or answer names a brief outside the briefs, a brief's twin is missing, an unpaired brief has no wrong call for its near-miss row, two sessions of one arm share a brief and model, a scripted block does not parse, or a packets folder or map path sits inside the repository or the map sits inside the packets folder.
+
+Fix: Fix the named input or path and build again into a new folder. Never edit a sealed key to make it fit.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_ID_CLASH
+
+Office-hours rewrite eval (section 5): a packet id or block id appears twice across the packet maps a stage uses, so a label could be joined to the wrong block.
+
+Fix: Rebuild the later map passing the earlier maps as taken, so its seeded ids skip every id they hold.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_JUDGE_INPUT
+
+Office-hours rewrite eval (sections 5 and 12): a judge run or a judge check was refused. The judge prompt does not match its pinned sha256, a label map was asked for an effort other than medium, a packet in the map is missing from the folder, or the judge check got another judge's labels, labels at the wrong effort, labels for blocks its map does not hold, duplicate labels or a map that is not a check map.
+
+Fix: Run the command with the frozen prompt, the map's own effort and the judge's own labels. Never edit the prompt to match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_MARKERS
+
+Office-hours rewrite eval (sections 7, 11 and 12): a detector marker set was refused. Its pin is not current or new, its sha is not a full commit sha, a pattern list is empty, a pattern is not a string or does not compile, or a list holds an empty entry.
+
+Fix: Fix the marker file under lanes/office-hours-rewrite/score/markers. After stage 1 freezes the markers, a change needs a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SCORE_INPUT
+
+Office-hours rewrite eval (sections 5 and 8): the scorer was refused. A row names a brief outside the briefs, a block row has no label packet or carries no block, a session sits in two label packets or has two labels, a label came from a judge other than frozen.JUDGE_FOR or at an effort other than medium, or a map is not a label map.
+
+Fix: Score with the stage's label maps and the routed judge's medium-effort labels. A block row the packets left out means the packets were built from other rows; rebuild them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_PILOT_STOP
+
+Office-hours rewrite eval (pre-run change 1 item 4d): the authoring pilot stops authoring. Either the second-twin yield's 90% Wilson upper bound is below the line recomputed from the pilot's cost per draw and first-pass rate, or the first twins and unpaired briefs alone would use up the authoring cap at those figures, so there is no line. The message gives the counts, the reads, the line and its inputs.
+
+Fix: Take the numbers to the Captain. Any change to the author prompts or screens voids the pilot's briefs and needs a dated change to the plan.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; the pilot's drafts and summary are written under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_PILOT_OPEN
+
+Office-hours rewrite eval (pre-run change 1 item 4d): after 32 second-twin draws the authoring pilot's yield interval still straddles the line, so it can neither continue nor stop on its own. The message gives the counts, both reads, the line and its inputs.
+
+Fix: Take the numbers to the Captain, who decides whether authoring continues.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; the pilot's drafts and summary are written under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_SUPPLY_SHORT
+
+Office-hours rewrite eval (prereg section 3, Supply): authoring stopped (its cap, its draft bound or a pilot cap stop) before all 110 briefs were placed. The set is never shrunk quietly; the message gives the count placed per set, the comparison founder briefs and the MDD there.
+
+Fix: Take the shortfall and its MDD to the Captain before stage 1.
+
+Exit 2. Side effects: Spend so far stays on the authoring lease; every placed brief and every draft's outcome are written under custody. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_RESUME
+
+Office-hours rewrite eval, second attempt (its section 5.2): ohr author --resume cannot rebuild the run from its sealed checkpoint and draft records. The file is not a checkpoint, its log does not match its name, a draft record after it is missing, a record sits out of place, a brief's files no longer match its digest, a checkpoint or record carries no run id or names another run, or the --meter dir or checkpoints folder's run.json names another run than the checkpoint. It also refuses a run that ended on a cap stop, which is final; a checkpoint whose ledger item is not --item; and a checkpoints folder another ohr author process holds locked.
+
+Fix: A run that ended on a cap stop reads INCOMPLETE and is not resumed. Otherwise pass the --item its checkpoint names, and wait for the process that holds the folder to exit. Point --resume at a checkpoint-&lt;drafts>.age in the run's checkpoints folder with every draft-&lt;seq>.age sealed after it beside it. A missing record would pay for a settled draft twice, so restore it from custody rather than resuming without it. Pass --meter only with the same run's meter dir, or leave it out: the resume continues the checkpoint's run id on the ledger item either way.
+
+Exit 2. Side effects: None: the decrypted checkpoint and records are deleted from /dev/shm before the refusal, and no call is made. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_REUSE
+
+Office-hours rewrite eval, second attempt (its section 4): authoring was handed reused briefs that are not one whole brief or pair in one of the 13 reused slots. ohr author --reuse checks each first-attempt brief against its recorded digest and slot and drafts a failing one again, so this is a bug in what was passed to the run.
+
+Fix: Pass the first attempt's sealed authoring output to --reuse and let readReuse check it; never hand-place a brief.
+
+Exit 2. Side effects: None: the run stops before any draft. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_CUSTODY
+
+Office-hours rewrite eval (prereg section 3, Sealing): a custody path was refused or sealing failed. Briefs are written only into a fresh work directory under /dev/shm, sealed with age to an output outside the repository that does not exist yet, and decrypted only into /dev/shm.
+
+Fix: Pass a work directory under /dev/shm and a sealed output path outside the repository, or fix the age recipients file; then start a new run.
+
+Exit 2. Side effects: None when a path is refused. When sealing fails the plaintext work directory stays in /dev/shm: delete it before anything else. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SIM_RULES
+
+The office-hours rewrite eval's simulator rules text (pre-run change 1, item 4e) does not match frozen.SIM_RULES_SHA256 for the brief's kind, so no simulator call was sent.
+
+Fix: Restore sim-rules-founder.txt or sim-rules-builder.txt to the bytes pre-run change 1 attaches. Never edit the digest to match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SIM_GUARD
+
+Office-hours rewrite eval (pre-run change 1, item 4b): a simulator turn still listed more than two revealed facts on its third model call. It is a guard failure: in an arm session the session takes its one retry and then scores missing; in the audit it counts as failed.
+
+Fix: Nothing to retry by hand. A high rate goes to the Captain with the failing turns.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SIM_CHECK
+
+Office-hours rewrite eval (pre-run change 1, item 4b): a simulator turn failed the json, ids or words check on its third model call (a missing or non-boolean done fails the json check). In an arm session the session takes its one retry and then scores missing.
+
+Fix: Nothing to retry by hand. A high rate goes to the Captain with the failing checks.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SIM_CALL
+
+Office-hours rewrite eval: a simulator call failed on the session's simulator allowance or at the provider. The session takes its one retry and then scores missing (section 8).
+
+Fix: Read the call's detail. A steady provider failure goes to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SIM_AUDIT
+
+Office-hours rewrite eval (section 12 stage 3, pre-run change 1, item 4b): the fixed-script simulator audit failed: more than 5% of audited turns were marked by both auditors or failed their guard or checks, or guard failures passed 5% of all script turns. Admission A3 fails.
+
+Fix: Make the one admission repair by a dated change to the plan, or end the eval with FIX-METHOD on the instrument.
+
+Exit 2. Side effects: The run finished and its spend is settled in the ledger. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_NO_READ
+
+Office-hours rewrite eval (section 12 stage 3): the fixed-script simulator audit has fewer than 40 auditable turns, so it reads NO READ and admission A3 fails.
+
+Fix: Take the counts to the Captain. Never rerun the audit to change the read.
+
+Exit 2. Side effects: The run finished and its spend is settled in the ledger. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_PIN_MISMATCH
+
+Office-hours rewrite eval (section 2, pre-run change 1, item 1): a skill arm's installed gstack tree does not hold the pin's VERSION or a file whose sha256 the pin freezes. The launch is refused, or, found inside a container, the launch halts.
+
+Fix: Install gstack at the pin's sha from a full clone under the state directory's sources/ and launch again. Never edit a pin to match a tree.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_NEW_PIN_UNSET
+
+Office-hours rewrite eval (pre-run change 1, items 1 and 6): the manifest holds a session on the new arm, and frozen.PINS.new is null until a later pre-run change pins the content change's ready head.
+
+Fix: Wait for the pre-run change that pins the new arm, then launch again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_SAFETY_STOP
+
+Office-hours rewrite eval (section 8): the provider stopped the session with a safety filter (a main-agent reply with stop_reason refusal or content_filter, or Claude Code's model_refusal_no_fallback or model_refusal_fallback notice). The session scores R = 0 and is counted as its own outcome.
+
+Fix: Nothing to retry: a safety stop is a result. Report the count beside the verdict.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_GSTACK_READ
+
+Office-hours rewrite eval (section 8): a none-arm session's tool calls read a gstack file. The session is contaminated, scored missing and counted toward the 2% contamination limit.
+
+Fix: Nothing to retry. A rate past 2% makes the run INCOMPLETE.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_NO_BLOCK
+
+Office-hours rewrite eval (section 4 step 4): the replies to two closing messages held no DECISION, NEXT ACTION and WHY block. The session scores R = 0.
+
+Fix: Nothing to retry: no block is a result.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_ARM_STOP
+
+Office-hours rewrite eval: the arm's own limit (60 agent turns a reply, 120 minutes, the session allowance or the context window) stopped the session on its retry, before a block. The session scores as no block (R = 0).
+
+Fix: Nothing to retry: the arm's own stop is a result.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_SESSION_KIND
+
+Office-hours rewrite eval (section 4 step 2, admission A7): a skill session printed a SESSION_KIND other than interactive, a harness fault. The session takes its one retry and then scores missing.
+
+Fix: Check that the arm environment leaves GSTACK_SESSION_KIND, OPENCLAW_SESSION, GSTACK_HEADLESS, CI and GITHUB_ACTIONS unset.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_ROLLOUT_UNREADABLE
+
+Office-hours rewrite eval (pre-run change 5, F1): Codex's rollout of a Sol session could not be read after a turn or copied out after the session, on both attempts. The session scores missing, and the report lists it by name apart from other infra misses.
+
+Fix: Read host/codex/cli-stderr.log and host/codex/home-watch.ndjson in the attempt's directory. A steady failure goes to the eval's owner.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_INFRA_MISSING
+
+Office-hours rewrite eval (section 8): an upstream, provider or harness failure ended the session after its one retry, or the ledger never admitted it. The session scores missing.
+
+Fix: Read the attempts in rows.ndjson. A steady failure goes to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_OHR_UNRUN
+
+Office-hours rewrite eval (section 8): the launch's frozen manifest schedules a session that has no row in rows.ndjson, because a stop ended the launch before the session ran or the launch never finished. ohr score sessions scores it missing, so the missing limits count it.
+
+Fix: Read the launch's stops.json. A launch that ended in a cap stop is incomplete and is never resumed.
+
+Exit 2. Side effects: None: the missing row exists only in the scored output. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_T8_SEED
+
+Office-hours rewrite eval (section 4 step 6): a T8 brief's prior session cannot seed the skill arm's state root: prior.json is missing or malformed, or its test date falls after the session's UTC day.
+
+Fix: Fix the brief's prior.json in custody and record the brief's new digest. Never move the session's date.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_MANIFEST
+
+Office-hours rewrite eval (section 12 stages 4 and 5, pre-run change 1, item 5): the launch's manifest cannot freeze or does not match the one frozen in its out dir byte for byte (stage, models, arms, brief digests, pins, simulator rules digests, build commit or entries), or the briefs cannot fill the stage.
+
+Fix: Launch with the same briefs, pins and build commit, or start a new out dir after a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_RESERVE
+
+Office-hours rewrite eval (section 3): a dropped comparison brief cannot be replaced: a stage 2 session already ran on it, or no reserve of the same kind (a pair only by a pair) is left in draw order.
+
+Fix: Take the shortfall to the Captain with the MDD at the count that can fill.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_CAP_LINE
+
+Office-hours rewrite eval (section 13, pre-run change 1, item 4a): the launch's arm and simulator spend caps together pass the frozen cap of its ledger line, or name a line the stage does not use.
+
+Fix: Pass caps whose sum fits the line in frozen.CAPS.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_BUILD_COMMIT
+
+Office-hours rewrite eval: the launch cannot name the build commit it runs (no git checkout, or tracked files changed since HEAD), so it cannot freeze a manifest that pins it.
+
+Fix: Commit or discard the change and launch from a clean checkout of the build commit.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_E2E_FAIL
+
+Office-hours rewrite eval: a check in the run area's keyless end to end failed. The message names each failed check.
+
+Fix: Read the FAIL lines, fix the code and run the end to end again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_DRYRUN_FAIL
+
+Office-hours rewrite eval: a dry-run check printed FAIL or SKIP: a frozen rule did not hold on its fixtures, the ledger split does not fit an approved cap, or a ledger lease did not open and settle. A SKIP is never a pass.
+
+Fix: Read the FAIL or SKIP line, fix the rule's code or give the container seams Docker, and run the dry run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_PREFLIGHT_FAIL
+
+Office-hours rewrite eval: the no-model preflight (prereg section 12, step 1) found a missing pin commit, no Docker, a key variable set, or a failed dry run or end to end.
+
+Fix: Read the FAIL lines, fix what they name and run gstack-evals ohr preflight again. The preflight never calls a model.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_OHR_MODEL_DRIFT
+
+Office-hours rewrite eval (pre-run change 4): a reply named a model other than the one its call pinned, or a dated snapshot of it. A judge, auditor or simulator reply stops its command; an arm session whose assistant messages name another model halts its launch and reads missing, so it is never counted.
+
+Fix: Keep the journal and the transcript that show the reported model, and send the question to the Captain. Never retry the item on another model or route.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_PREREG
+
+The /cso real-advisory eval found no usable preregistration: its prereg.json is missing, is not cso-advisories-prereg.v1, lacks an unsigned 32-bit integer seed, or lacks a text or a unit list.
+
+Fix: prereg.json changes only through a dated pre-data change post. Nothing runs on values chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_UNIT_IDS
+
+A /cso eval unit's containment ids are malformed: its GHSA id, a CVE id of its advisory at the pinned advisory database, or its fix commit (40 hex characters) has the wrong shape, so a scan for it would find nothing by construction.
+
+Fix: Rebuild the unit's record from the pinned advisory database and b2-frame.json; never scan with a hand-typed id.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_UNIT_FRAME
+
+The /cso eval's candidate list does not match its frame: b2-frame.json's sha256 differs from prereg.json's frame pin, or a unit id in part1_h2h or part2_added has no row there.
+
+Fix: Restore b2-frame.json at the pinned sha256. The candidate order changes only through a dated pre-data change post.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ADVISORY
+
+A /cso eval advisory record could not be read at the pinned advisory-database commit: the fetch failed, the reply was not JSON, or its id differs from the frame row's GHSA id.
+
+Fix: Read it again from raw.githubusercontent.com at the pinned commit (or a checkout at that commit). A unit never builds from an advisory read anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_FIX_DATE
+
+Section 3, gate 1: the fix commit's committer date (UTC) is before 2026-07-01, so the unit could sit inside a model's training data. The unit is not usable and takes no position.
+
+Fix: None for the unit: it is dropped by rule. Report it in the gate table.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_FETCH_LAZY
+
+Section 3, gate 2's named repair: the session tree's checkout failed in the blobless clone (a lazy blob fetch from the promisor remote), and failed again after one full re-clone of that repository. The unit is not usable and takes no position.
+
+Fix: None for the unit. The build records the drop and goes on; read both failures in the gate row's reason.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_SCAN
+
+Section 3, gate 6, failing closed for one unit: the id scan of the unit's session tree did not finish (a git object store under it that git cannot read, or a tool that failed), so the tree can't be shown free of the unit's ids. The unit is not usable and takes no position.
+
+Fix: None for the unit. The build records the drop and goes on; the gate row's reason names the step that failed. A scan of an arm's installed home that does not finish still refuses (E_CSO_SCAN).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_FETCH
+
+Section 3, gate 2: the repository did not clone, or the fix commit or its first parent is missing from it, or the frame's parent is not the fix's first parent. The unit is not usable and takes no position.
+
+Fix: None for the unit when the repository or commit is gone. A network failure is retried before the gate records the drop.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_SAME_FIX
+
+Section 3, gate 3: an earlier usable unit has the same fix commit or the same parent tree, so the two units would audit one tree. The later unit is not usable.
+
+Fix: None: it is dropped by rule. The earlier unit keeps its position.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_CWE
+
+Section 3, gate 4: the advisory lists no CWE id at the pinned advisory-database commit, so the class rule has nothing to match. The unit is not usable.
+
+Fix: None: it is dropped by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_ANSWER_KEY
+
+Section 3, gate 5: no non-test source file of the fix exists at the parent with a changed line of code (it only adds files, or its source changes are only whitespace, blank lines or comment lines), so the location rule has no pre-fix hunk to test. The unit is not usable.
+
+Fix: None: it is dropped by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_CONTAINMENT
+
+Section 3, gate 6: the unit's one-commit session tree holds its GHSA id, a CVE id of its advisory or its fix commit's first 12 hex characters (in a file, a git object store or an archive two levels deep). The unit is not usable; the record names the path.
+
+Fix: None: it is dropped by rule.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_SUPPLY
+
+The /cso eval's unit build ran out of candidates before it filled every position the plan can use (stage 0, stage 1, one re-pilot block, stage 2 up to its cap and the reserves). The message gives the count filled and the count needed.
+
+Fix: Send the count to the Captain before any paid call (section 12's supply rule). Never widen the candidate list by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DRAW
+
+A /cso eval draw was asked for something the plan does not allow: n2 outside 48 to 100 or not a multiple of 4, a re-pilot restriction other than floor or ceiling, or more positions than the built units fill.
+
+Fix: Read section 12's cost and headroom rules and ask for a draw they allow.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ARM
+
+A /cso eval arm is not the frozen one: a gstack home lacks a pinned file or holds it at another sha256, the clean-room home holds a gstack checkout, the home's tree hash differs from its install record, or a Codex arm was asked to run at latest or with no recorded model or CLI version.
+
+Fix: Reinstall the arm with its recipe at prereg.json's pin and verify it again. A Codex arm takes its model and CLI version from the session record.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_SESSION
+
+A /cso eval session was asked to run on inputs the plan does not allow: an arm or model with no route or entry, an allowance other than the model's or twice it, or a transcript with no init record naming the model and Claude Code version.
+
+Fix: Run the session from the plan's arms, models and limits; read the model id and harness version from the session's own init record.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_CAP_STOP
+
+A /cso eval session's slot was refused at its item's cap. The item ends incomplete and the session is not retried; the record names every unit left unpaired, since sessions from more than one unit can be in flight when the stop lands.
+
+Fix: Report the item as incomplete. A cap stop is never retried to change a verdict; a new line needs the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_STOP_SAFETY
+
+Section 9: a provider's safety system ended a /cso eval session (Anthropic's refusal stop, Claude Code's refusal fallback refused at the proxy, or OpenAI's cyber-policy refusal on Sol). It is a result: the session is scored on the assistant text before the stop and counted per arm.
+
+Fix: None: report it per arm as its own outcome, apart from model failures.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_STOP_LIMIT
+
+Section 9: a /cso eval session reached its wall time (2,700 seconds), its 200 turns or its allowance. It is scored on the assistant text it has.
+
+Fix: None: report limit counts per cell.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_GAP_UPSTREAM
+
+Section 9: a /cso eval session ended on a provider or proxy error twice (the first got one whole-session retry from a fresh container). The session is a gap: the unit leaves that contrast's complete-pair estimate and the gap bounds fill it.
+
+Fix: Report it per cell. More than 10% of a cell's units with gaps makes the cell incomplete.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_GAP_INFRA
+
+Section 9: a /cso eval session failed on infrastructure twice (the first got one rerun), or its capture failed. The session is a gap.
+
+Fix: Read the attempt's harbor.log and summary, name the harness repair, and report the gap per cell.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_RERUN_PRECONDITION
+
+gstack-evals cso rerun refused a precondition before any spend (exit 3): the units file is missing, unreadable or holds no unit ids, or the arm does not run on that model in any stage (untold runs on Opus in stages 0 and 1 only).
+
+Fix: Fix the named input and run again; --dry-run checks it without spending.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_RERUN_UNWIRED
+
+gstack-evals cso rerun has no session runner wired yet, so only --dry-run works.
+
+Fix: Wire the Harbor session runner into lanes/outcome-skills/cso/cli.ts before a real run; until then use --dry-run.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_FINALIZE_HALT
+
+A /cso eval session closed with its metering proxy's finalize failed, or its attempt opened a slot and left no summary, so its allowance stops and spend are unknown. The driver halts the item: nothing more opens on it, and the session gets no retry and no record.
+
+Fix: Bring the proxy journal the message names to the Captain. Once the Captain rules on the session, relaunch the driver with --lift-halt &lt;session>.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_E2E_FAIL
+
+A line of the /cso lane's keyless end-to-end run printed FAIL: on a fixture tree in Harbor containers against a fake provider, a session did not end completed with DONE, its slot did not close finalized, a runtime was not on PATH, its record lacks the reported model or Claude Code version, its exposure read wrong for its arm, or the driver did not stop clean.
+
+Fix: Read the FAIL line and the session dir it names, fix the cause, and run the end-to-end run again before any spend.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CSO_SCAN
+
+A /cso eval id scan did not finish: the tree is missing, a find, grep or git cat-file step failed, or the scan script exited non-zero. Containment fails closed, so no unit counts as clean on that tree.
+
+Fix: Read the failed step in the message, repair the tree or the tool, and scan again from the start. A store git cannot read is never skipped.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_INSTALL_ID
+
+Deviation (a): a /cso eval unit's GHSA id, a CVE id of its advisory or its fix commit's first 12 hex characters appears in an arm's installed gstack tree (a file, a git object or an archive two levels deep). The unit drops from every cell, so pairing holds; the record names the arm, the path and the id.
+
+Fix: None for the unit: it is dropped by rule and the draw moves to the next usable position. Report the drop per arm in the results.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_DROP_INSTALL_DEP
+
+Deviation (c): an arm's installed gstack tree holds a /cso eval unit's affected package at or past its fixed version (in bun.lock, package-lock.json, yarn.lock, pnpm-lock.yaml, an installed node_modules package.json, Cargo.lock or go.sum), so that arm carries the fixed code of the library under audit. The unit drops from every cell; the 16 such units at gstack's pin drop by name before the draw.
+
+Fix: None for the unit: it is dropped by rule and the draw moves to the next usable position. Report the drop per arm, with the file and version behind it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_RELEASE
+
+Deviation (b): a /cso eval stage 1 release was asked to carry a judge-check field beyond whether each gold minimum was met and whether each gate passed (a count, a kappa value, a rate or a per-class figure), or lacked a minimum or gate the plan names.
+
+Fix: Release only the booleans deviation (b) allows; everything else stays in the sealed file until stage 2's analysis opens it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_SCORE_INPUT
+
+The /cso eval scorer was handed input it can't score: prereg.json lacks a scoring constant or its redaction list is malformed, a session was scored against another unit, a session with assistant text came with no judge result, or the labels don't match the counted findings one for one.
+
+Fix: Score each session against its own unit record and its own pass A and pass B results; never fill a missing label by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_JUDGE_ROUTE
+
+A /cso eval judge or labeller route names a model with no client, a price row that is missing or not pinned to google-vertex, or a gold pair that is not two labellers.
+
+Fix: Judge routes come from prereg.json judge.production, gold_labellers and fallback through JUDGE_MODELS (lanes/outcome-skills/cso/judge/client.ts); add a model there only with a dated plan change.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_JUDGE_TRANSPORT
+
+A /cso eval judge or labeller call came back with an HTTP status other than 200 from its transport, so it has no reply to parse.
+
+Fix: Read the metering proxy's log for that call. A malformed reply is retried once and then is a judge gap; a transport failure is the run driver's to retry or stop.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_PACKET
+
+A /cso eval pass B packet could not be built: prereg.json lacks scoring.excerpt_lines or judge.max_input_tokens.
+
+Fix: prereg.json changes only through a dated pre-data change post.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_CHECK_INPUT
+
+A /cso eval judge check set is malformed: a report id is listed twice, or anchors are more than anchor_share_max of the check set as sent.
+
+Fix: Build the check set once from the stage 0 and stage 1 reports and at most the anchors the share cap allows.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ANCHOR
+
+A /cso eval anchor or format variant can't be written for a unit: no pre-fix hunk lies in a file of the audited tree, no weakness family is free of the advisory's CWE ids, or no line of the fix file sits 30 lines from every hunk.
+
+Fix: Use another stage 1 unit for the format variants, in check_seed order, and record the unit that couldn't host one.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_ANALYSIS_INPUT
+
+The /cso eval analysis or stage 1 readout was handed input it can't use: a unit listed twice, two scores for one unit, arm and model, a score for a unit outside the stage, a cell with no stage 1 cost, or a prereg.json analysis, headroom, limits or interim-look constant missing.
+
+Fix: Feed the analysis one score per unit, arm and model from the scorer, with the stage's own unit list; prereg.json changes only through a dated pre-data change post.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_READOUT_KEY
+
+The /cso eval stage 1 readout key is unusable: missing, inside this repository or a git work tree, readable by group or others, the wrong length, or not the key the sealed file was written with.
+
+Fix: Mint a fresh 32-byte key in the sealed store outside any work tree, mode 0600, before the readout runs; keep it until stage 2's analysis opens the file.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_READOUT_OUT
+
+The /cso eval sealed stage 1 file can't be written or opened: it already exists, can't be created, is not a cso-sealed.v1 file, or doesn't match the sha256 the run record holds.
+
+Fix: A sealed file is written once and never overwritten. Open it only with the recorded sha256 after stage 2's analysis.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_PROVIDER_DRIFT
+
+A /cso eval judge or labeller call through OpenRouter (Gemini 4 Carbon or Argon) was served by a provider other than google-vertex, the route prereg.json pins.
+
+Fix: Stop the judge send and ask the Captain. Never accept a reply from another provider, and never unpin the route.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CSO_EXPORT
+
+The /cso eval export refused: --run is not a directory, --out already exists or overlaps --run, the readout key sits under --run, a file in the run holds the key's bytes, or a run file would collide with MANIFEST.sha256 or scored-texts.jsonl.
+
+Fix: Export a finished run dir to a new dir outside it, with the readout key kept in the sealed store outside the run; move any file that holds the key out of the run first.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OHR_TAP
+
+Office-hours rewrite eval (pre-run change 2): the model tap between the Sol arms' Codex CLI and the metering proxy did not start, or did not print TAP_READY within 30 seconds. No Sol session starts without it, because Codex records no reported model of its own.
+
+Fix: Read the tap container's docker logs and &lt;out>/tap/tap.json, fix the image or the rig network, and open the rig again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CODEX_CAPTURE
+
+review-units --host codex: an arm's keyless model-input capture (codex debug prompt-input in the arm's own image, before the first session) failed or printed nothing, so the run has no digest of what that arm's model receives. No session started and nothing was spent.
+
+Fix: Read the capture's error in the message, check the codex-arms file's bin and the arm's install, and run again with --resume.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CODEX_C_NO_ROLLOUT
+
+Codex hooks eval part C (prereg section 5.8): no root rollout was copied out of the session, so it is not scored. It is an infrastructure failure: it reruns once as attempt 2, and a second failure is a gap.
+
+Fix: Run codex-hooks c rerun for the item, then run its phase again. Never rerun a cell twice.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CODEX_C_NO_RESPONSE
+
+Codex hooks eval part C (prereg section 5.8): no model response reached the agent (the root rollout holds no assistant message and no tool call), so the session is not scored. It is an infrastructure failure: it reruns once as attempt 2, and a second failure is a gap.
+
+Fix: Run codex-hooks c rerun for the item, then run its phase again. Never rerun a cell twice.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CODEX_C_DRIFT
+
+Codex hooks eval part C (prereg section 2, pre-run change 1 section 10): the session's own record breaks the pin. Its root thread ran a model other than gpt-6.1-sol, a rollout names a Codex version other than 0.170.0, a request in the proxy's journal names a model no thread ran or carries another effort than the arm's, or the journal holds no request for the session. It is an infrastructure gap: it reruns once as attempt 2, and a second failure is a gap.
+
+Fix: Read the row's reasons in outcomes.jsonl. Rerun once with codex-hooks c rerun only when the image and the codex-arms file are the frozen ones; if the record still drifts, take the rows to the Captain before any further spend.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_STATES
+
+Codex hooks eval, part C analysis: the states file breaks the record contract in lanes/codex-hooks/c/analysis/record.ts. A line is not JSON, names a unit or arm the run does not cover, disagrees with its session's other line, or has findings the review parser would not give; or the judgments name a state the states file does not have.
+
+Fix: Read the listed lines, fix the rig's writer and write the states file again. Judge and score the same states file.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_BLIND
+
+Codex hooks eval, part C judging: a batch would break blinding or its binding. A packet would name an arm, a state or the contract's hold; the key would sit inside the batch; the batch directory or key already exists; or a key, packet or batch.json changed since the batch was written, or was built from another states file.
+
+Fix: For a leak, the Captain decides how the text is masked. Otherwise write the batch again into a new directory with a new key path, from the states file the run scores.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_REPLY
+
+Codex hooks eval, part C judging: a judge reply file does not fit its batch. It names another batch or digest, answers a packet twice, leaves items the join needs unanswered, answers items it should not, or a second or third read comes from a judge that already read.
+
+Fix: Use the reply files the run wrote for this batch. Never edit a reply by hand; judge again into a fresh directory if a file is lost.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_FROZEN
+
+Codex hooks eval, part C analysis: a frozen input does not match the preregistration. The suite, #108's judge brief or R2's severity map hashes to another digest, or a contrast has more clusters than the frozen sign-flip limit.
+
+Fix: Restore the file from main at the digest the preregistration names. A real change goes through a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_CHECK
+
+Codex hooks eval, part C judging: the judge check or confirmation check cannot be read as asked. Gold labels need two replies from two labellers, or the route that passed is not the route judged.json was judged on.
+
+Fix: Run the gold step once for the batch so both labellers' replies exist, and analyze the judgments of the route that passed both checks.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_C_NO_RECORD
+
+Codex hooks eval, part C analysis: an arm, unit and pass the run covers has no line in the states file. The analysis counts it as a session not scored, and more than 7 of an arm's 66 make that arm INCOMPLETE.
+
+Fix: Nothing to retry in the analysis. The rig's record says why the session is missing.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CH_C_JUDGE_GAP
+
+Codex hooks eval, part C analysis: a judge refused a state's packet twice (extraction or the primary's matching), so the state has no judgment. The analysis counts its session as not scored, toward the rule that more than 7 of an arm's 66 make that arm INCOMPLETE.
+
+Fix: Nothing to retry: the run's one retry was spent. The unjudged.json beside the replies names the packet and the reason.
+
+Exit 2. Side effects: The run finished and its spend is settled in the ledger. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_CODEX_R_PIN
+
+A part R frozen value does not hold (lanes/codex-hooks/r/pins.ts): prove-it on Codex is not built from B1's skill at its digests, the committed route table is not change 1's bytes, or the route table's first four covered candidates are not change 1's pilot tasks.
+
+Fix: Fix the input that changed and run the command again. Never edit a frozen file to make it match; a changed value needs a dated change to the preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CODEX_R_ARMS
+
+Part R's arm build or check failed (lanes/codex-hooks/r/arms.ts): gstack did not check out at its pin, the docker build failed, the builder's Codex is not 0.170.0, a gstack arm lacks prove-it at its digest, a listing of it in Codex's start capture or a switch as the arm sets it, the no-gstack arm holds a file, or a run's tar is not its committed manifest's.
+
+Fix: Read the named problem. Rebuild with bun lanes/codex-hooks/cli.ts r arms build, and register new manifests only through a pull request before any paid session.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CODEX_R_PREPARE
+
+Part R's prepare step (lanes/codex-hooks/r/prepare-run.ts) found a job agent it cannot turn into the Codex agent: an arm that is not part R's, or a kwarg the Codex agent does not take.
+
+Fix: Prepare the part with part R's own profile (bun lanes/codex-hooks/cli.ts r prepare) and arm specs, then run it again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CODEX_R_TABLE
+
+Part R's session table (lanes/codex-hooks/r/table.ts) found a Codex trial whose arm is not one of r-on, r-off and r-none.
+
+Fix: Point the table config at part R's pulled jobs only, then run it again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CODEX_R_MONEY
+
+A part R ledger step was refused (lanes/codex-hooks/r/money.ts): an approval at an amount other than the item's recorded cap or on a ledger that already holds rows, a ledger with no approval row for its item, a done mark while a reservation is open, a plan whose sessions or cap rule differ from section 11, or a dry run whose ledger did not read back as approved, settled and done.
+
+Fix: Use the recorded cap and a fresh ledger, settle open reservations first, and take a cap or plan change to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CH_ALL_IN
+
+Codex hooks eval: a part C step or a judge run was refused before it spent (lanes/codex-hooks/allin.ts): every item of both parts and the judge item, each at its spend once done and otherwise at the larger of its spend and its projection, plus the crew file's counter, would pass the all-in stop the Captain set, or an item was missing from the count.
+
+Fix: Take the all-in lines to the Captain. Nothing in either part or the judge item spends until the Captain moves the stop or the count falls inside it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_CODEX_R_LAUNCH
+
+A part R launch was refused before it started (lanes/codex-hooks/r/money.ts launchGuard): the item's projection would pass its cap, every item's projection plus the crew file's counter would pass the all-in stop the Captain set, the item is marked done, or r-main was asked to start before r-pilot was marked done.
+
+Fix: Take the guard's lines to the Captain before launching. A cap raise needs the Captain's record and a new approval row; nothing launches until the guard passes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_WEEKLY_PIN
+
+A weekly stable number pin does not hold (lanes/weekly-stable): tasks.txt or s390-tasks.txt is not at its pinned digest, the first 80 of the 130 are not the preregistration's run order, a task id is not owner__repo-N, or a built arm's fetch record names another commit.
+
+Fix: Fix the named input or rebuild the arm into an empty folder. Never edit a frozen file, a manifest or a fixture to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_WEEKLY_LAUNCH
+
+A weekly launch was refused before it started (lanes/weekly-stable/plan.ts guard): the item's projection (spend so far, parts still to run at the planning rates, the open-session reserve and the VM and host reserves) would pass its cap, the week's projection plus the weekly thread's own meter would pass the $645 week stop, or the item is marked done.
+
+Fix: Take the guard's lines to the gstack-evals Captain before launching. A cap raise needs a dated change and a new approval row; nothing launches until the guard passes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_WEEKLY_BUILD
+
+A weekly arm build or its contamination search failed for a reason other than gstack's own ./setup (lanes/weekly-stable/build.sh or arms.ts): docker, the depth-1 fetch, a tree check or grep failed. A failed ./setup is not this code: the week is INCOMPLETE for that arm.
+
+Fix: Read the arm's build.log in the arms folder, fix the machine or the network, and build again into an empty folder.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B2_INPUT
+
+A B2 input does not hold (lanes/test-first): a prereg attachment is not at its front-matter sha256, tasks.txt does not hold the 183 run tasks and the three pilot tasks in draw.py's order, or a frozen pin does not match the plan.
+
+Fix: Fix the named input and run the command again. Never edit a frozen file to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B2_ARMS
+
+A B2 arm tar does not hold (lanes/test-first/arms.ts): a rebuilt tar or inventory is not its committed manifest's, a no-gstack arm holds a gstack file, ~/.gstack or a switch, a gstack arm's switches do not read skill_routing on, skill_contracts on and telemetry off, prove-it is missing or misplaced, or a Codex start capture lists the wrong skills.
+
+Fix: Read the named arm's problem, fix the build, and rebuild every tar. Never edit a committed manifest to match a different tar.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B2_PREPARE
+
+B2's prepare could not write a part (lanes/test-first/prepare-run.ts): Lane B's prepare failed, or a Sol part's agent could not be rewritten to the B2 Codex agent with its arm's manifest.
+
+Fix: Read the named step, fix it, and prepare the part again before any launch.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B2_MONEY
+
+A B2 cap does not hold (lanes/test-first/money.ts): the cap rule does not give an item's recorded cap, the plan does not count 183 tasks by 4 arms by 3 models, or a dry-run ledger did not read back approved, settled and done.
+
+Fix: Fix the plan or the pins that disagree with the preregistration. Never change a recorded cap without the Captain's record.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B2_LAUNCH
+
+A B2 launch was refused before it started (lanes/test-first/money.ts launchGuard): the item's projection would pass its cap, the all-in total with this thread's counter would pass the $1,860 stop, the item is marked done, b2-pilot is not done, Sol has no passing image check record, or a part past the look has no look record or the look stopped the run.
+
+Fix: Take the guard's lines to the Captain before launching. A cap raise needs the Captain's record and a new approval row; nothing launches until the guard passes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B2_IMAGES
+
+B2's image check could not build or read a task (lanes/test-first/images.ts): the task is not in the pool or the export, or its image did not build with Codex added.
+
+Fix: Read the task's row in images.jsonl, fix the cause, and run the check again for that task. Sol's counted parts stay refused until every run task passes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B2_TABLE
+
+B2's session table cannot be read as it stands (lanes/test-first): a row names a task outside the scope read, an arm that is not B2's, or a model, arm and task with more than one graded row; or a line of a proxy request log is not JSON, so a trial's metered efforts are unknown.
+
+Fix: Rebuild the table from the pulled parts and read it again; for an unreadable request log line, pull the part's proxy-requests.jsonl again. Never drop or edit rows by hand.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_B2_LOOK
+
+B2's interim look was refused (lanes/test-first/cli.ts lookRows): parts 1 to 4 of all three items are not all settled, so some model, arm and task on the look's half has no row.
+
+Fix: Finish and pull the missing parts, rebuild the table, and run the look once. The look runs exactly once.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B2_SESSIONS
+
+B2's keyless start captures could not run (lanes/test-first/sessions.ts): the stub model did not start, or the Codex binary given is not the pinned Codex 0.170.0 binary. A capture that ran but failed its checks prints its problem with this code, and the command exits 1.
+
+Fix: Point the capture at the pinned Codex binary (its sha256 is in lanes/test-first/pins.ts), check the stub model's log, and run the captures again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_B2_SCORER
+
+B2's scorer seam is not built yet (lanes/test-first/scorer.ts): the Codex rollout reader comes with the B2 scorer branch.
+
+Fix: Merge the B2 scorer branch into the run lane, then build the table again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -3038,6 +4400,22 @@ An egress probe to a non-model host succeeded, so the trial network is not locke
 Fix: Fix the trial network so its only exit is the proxy, and run no trials until this passes.
 
 Exit 3. Side effects: Calibration sessions are charged; no task cell ran. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_OHR_JUDGE_CHECK_FAIL
+
+Office-hours rewrite eval (section 12): a judge failed its check. Kappa against gold is under 0.6 overall or on real session blocks, near-miss accuracy is under 0.8 or there is no near-miss cell, a stock row was credited or left unlabelled, or the check map holds no stock row. Admission A4 fails.
+
+Fix: Admission's one repair, by a dated change to the plan, under stage 1's remaining cap. The judge's production numbers do not count.
+
+Exit 3. Side effects: The check's metered spend stays on its lease. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OHR_JUDGE_CHECK_NO_READ
+
+Office-hours rewrite eval (section 12): a judge's check could not be read. It has fewer than 40 gold outputs from 40 blocks, or a kappa has fewer than 10 gold cells of either class or is undefined. Admission A4 fails.
+
+Fix: Admission's one repair, by a dated change to the plan, under stage 1's remaining cap.
+
+Exit 3. Side effects: The check's metered spend stays on its lease. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Warnings: attach to any verdict, never change the exit code
 
@@ -3422,5 +4800,13 @@ Warning. Owner: U20.
 Ask replay eval: an arm and model cell has more than 3% MISSING samples, so that model's decision rows read as inconclusive.
 
 Fix: None: report it with the MISSING counts by kind.
+
+Warning. Owner: U20.
+
+### E_OHR_LABEL_MISSING
+
+Office-hours rewrite eval (sections 5 and 12): a judge left a cell unlabelled after its one resend. In production the cell is null, so the session's R is null unless another part is 0; in the judge check the cell counts against the judge.
+
+Fix: Nothing to retry past the one resend. Read the count beside coverage in the results.
 
 Warning. Owner: U20.

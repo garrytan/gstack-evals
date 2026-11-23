@@ -1,0 +1,41 @@
+{
+  "arm": "line",
+  "base_arm": "line",
+  "host": "claude",
+  "cli": "claude-code 2.1.312",
+  "spec": "line:system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=hm-status",
+  "typed": false,
+  "session_kind": null,
+  "hook_trust": false,
+  "gstack": null,
+  "prove_it": null,
+  "line": {
+    "path": ".claude/CLAUDE.md",
+    "sha256": "477d390c64ac0b99cb8b0e78eff99d1e96fac91adfbb13de36c82f3539c9d710",
+    "text": "When you fix a bug, first write a test that reproduces it and run it to see it fail, then fix the bug and run the test again to see it pass."
+  },
+  "switches": null,
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu -cf <arm>.tar .claude",
+  "tar": {
+    "file": "line.tar",
+    "bytes": 10240,
+    "sha256": "2918582d13de7d46c60a9ccbcba2a9828193ff66ad626152e2b84bfad792e153"
+  },
+  "tree": {
+    "files": 1,
+    "symlinks": 0,
+    "dirs": 2,
+    "bytes": 141,
+    "digest": "b9fa39140ec8994e5c1934d8722b06ae89f740a952fc0574fa2fb1a01be4798f"
+  },
+  "skills": {
+    "count": 0,
+    "tree_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "skill_md_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "names": []
+  },
+  "inventory_sha256": "dfe96dba9893cad517244a2f427b1a9b20b518dac2c349a8e945d1a63a1dffd4",
+  "start": {
+    "line-stop": "acefbae9ebc95ff0640724e3949303b51b5866f5382c9fa7b22f3a8eb53af219"
+  }
+}

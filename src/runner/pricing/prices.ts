@@ -104,6 +104,17 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   "openai:gpt-6.1-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 } },
   "openai:gpt-6-luna": { input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.125, long: { above_input_tokens: 272_000, input: 0.2, output: 0.75, cache_read: 0.02, cache_write: 0.25 } },
   "openai:gpt-6-astra": { input: 10, output: 50, cache_read: 1, cache_write: 12.5, long: { above_input_tokens: 272_000, input: 20, output: 75, cache_read: 2, cache_write: 25 } },
+  // GPT-6.2 Astra (the office-hours rewrite eval's judge, gold pass, unanimous key and simulator auditor). OpenAI's model
+  // page (https://developers.openai.com/api/docs/models/gpt-6.2-astra) and pricing page
+  // (https://developers.openai.com/api/docs/pricing), read 2026-11-18T01:05Z, Standard tier: $8 input, $40 output, $0.40
+  // cached input and $10 a 30-minute cache write; past 272K input tokens, input and cache rates double and output is 1.5
+  // times, for the whole request ($16, $60, $0.80 and $20).
+  "openai:gpt-6.2-astra": { input: 8, output: 40, cache_read: 0.4, cache_write: 10, long: { above_input_tokens: 272_000, input: 16, output: 60, cache_read: 0.8, cache_write: 20 } },
+  // GPT-6.2 Sol (the skill-pack head-to-head's Sol arms in Codex CLI). OpenAI's model page
+  // (https://developers.openai.com/api/docs/models/gpt-6.2-sol), read 2026-11-21T07:30Z, Standard tier: $2 input, $10
+  // output, $0.10 cached input and $2.50 a 30-minute cache write; past 272K input tokens, input and cache rates double and
+  // output is 1.5 times, for the whole request ($4, $15, $0.20 and $5). The same rates as GPT-6.1 Sol.
+  "openai:gpt-6.2-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 } },
   ...Object.fromEntries(Object.entries(OPENROUTER_MODELS).map(([id, price]) => [`openrouter:${id}`, price])),
   ...Object.fromEntries(Object.entries(TYPESAFE_MODELS).map(([id, price]) => [`typesafe:${id}`, price])),
 };
@@ -190,8 +201,9 @@ export function quoteClientValue(value: unknown, form: "json" | "n" | "type" | "
 
 /**
  * The first part of a request that the provider bills beyond its bytes: a remote or stored file or image (fetched and
- * tokenized by the provider), or a hosted tool enabled under tools (billed per call). Inline base64 media, and replayed
- * hosted-tool calls and results, are counted by their bytes.
+ * tokenized by the provider), or a hosted tool enabled under tools (billed per call). Inline base64 media, a replayed client
+ * tool call's input (a tool_use block in a content list: the model's own arguments, such as a browser tool's url, which the
+ * provider never fetches), and replayed hosted-tool calls and results, are counted by their bytes.
  */
 function unboundedInput(value: unknown, key = "", markers: readonly string[] = []): string | null {
   if (typeof value === "string") {
@@ -211,6 +223,7 @@ function unboundedInput(value: unknown, key = "", markers: readonly string[] = [
   if (key === "tools" && typeof v.type === "string" && HOSTED_TOOL.test(v.type)) return `the hosted tool ${quoteClientValue(v.type, "type", markers)}`;
   if (key === "source" && (v.type === "url" || v.type === "file")) return `a ${v.type} source`;
   for (const [k, child] of Object.entries(v)) {
+    if (k === "input" && key === "content" && v.type === "tool_use") continue;
     const found = unboundedInput(child, k, markers);
     if (found) return found;
   }

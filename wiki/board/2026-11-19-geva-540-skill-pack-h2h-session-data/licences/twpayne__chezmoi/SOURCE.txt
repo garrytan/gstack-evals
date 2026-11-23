@@ -1,0 +1,3 @@
+https://github.com/twpayne/chezmoi at ae6c5fdc32fd9732ed0c2e2f4215bfc56b73d3f0
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

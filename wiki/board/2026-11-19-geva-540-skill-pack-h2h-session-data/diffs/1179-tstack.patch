@@ -1,0 +1,95 @@
+diff --git a/pkg/oci/artifact.go b/pkg/oci/artifact.go
+index f021f9b..1f782c7 100644
+--- a/pkg/oci/artifact.go
++++ b/pkg/oci/artifact.go
+@@ -6,6 +6,7 @@ import (
+ 	"io"
+ 	"os"
+ 	"path/filepath"
++	"strings"
+ 	"sync"
+ 
+ 	"github.com/cheggaaa/pb/v3"
+@@ -143,6 +144,9 @@ func (a *Artifact) Download(ctx context.Context, dir string, opt DownloadOption)
+ 		}
+ 		fileName = v
+ 	}
++	if err = validateFileName(fileName); err != nil {
++		return xerrors.Errorf("invalid file name: %w", err)
++	}
+ 
+ 	layerMediaType, err := layer.MediaType()
+ 	if err != nil {
+@@ -158,6 +162,17 @@ func (a *Artifact) Download(ctx context.Context, dir string, opt DownloadOption)
+ 	return nil
+ }
+ 
++// validateFileName ensures the file name is a plain base name so that it cannot
++// escape the destination directory (e.g. via "../" or an absolute path).
++func validateFileName(fileName string) error {
++	if fileName == "" || fileName == "." || fileName == ".." ||
++		strings.ContainsAny(fileName, `/\`) || filepath.Base(fileName) != fileName ||
++		filepath.IsAbs(fileName) || filepath.VolumeName(fileName) != "" {
++		return xerrors.Errorf("%q must be a plain file name without path components", fileName)
++	}
++	return nil
++}
++
+ func (a *Artifact) download(ctx context.Context, layer v1.Layer, fileName, dir string, quiet bool) error {
+ 	size, err := layer.Size()
+ 	if err != nil {
+diff --git a/pkg/oci/artifact_test.go b/pkg/oci/artifact_test.go
+index 7faf17e..4bbe741 100644
+--- a/pkg/oci/artifact_test.go
++++ b/pkg/oci/artifact_test.go
+@@ -42,6 +42,7 @@ func TestArtifact_Download(t *testing.T) {
+ 		name          string
+ 		input         string
+ 		mediaType     string
++		title         string
+ 		layersReturns layersReturns
+ 		want          string
+ 		wantErr       string
+@@ -90,11 +91,33 @@ func TestArtifact_Download(t *testing.T) {
+ 			},
+ 			wantErr: "unacceptable media type",
+ 		},
++		{
++			name:      "sad: path traversal in title annotation",
++			mediaType: "application/vnd.cncf.openpolicyagent.layer.v1.tar+gzip",
++			title:     "../../evil.tar.gz",
++			layersReturns: layersReturns{
++				layers: []v1.Layer{flayer},
++			},
++			wantErr: "invalid file name",
++		},
++		{
++			name:      "sad: absolute path in title annotation",
++			mediaType: "application/vnd.cncf.openpolicyagent.layer.v1.tar+gzip",
++			title:     "/tmp/evil.tar.gz",
++			layersReturns: layersReturns{
++				layers: []v1.Layer{flayer},
++			},
++			wantErr: "invalid file name",
++		},
+ 	}
+ 
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+ 			tempDir := t.TempDir()
++			title := tt.title
++			if title == "" {
++				title = "bundle.tar.gz"
++			}
+ 
+ 			// Mock image
+ 			img := new(fakei.FakeImage)
+@@ -109,7 +132,7 @@ func TestArtifact_Download(t *testing.T) {
+ 							Hex:       "cba33656188782852f58993f45b68bfb8577f64cdcf02a604e3fc2afbeb5f2d8",
+ 						},
+ 						Annotations: map[string]string{
+-							"org.opencontainers.image.title": "bundle.tar.gz",
++							"org.opencontainers.image.title": title,
+ 						},
+ 					},
+ 				},

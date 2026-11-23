@@ -1,0 +1,12 @@
+{
+  "note": "Cells for the Codex hooks eval's part R (lanes/codex-hooks/r, prereg 2026-11-19-geva-562 section 4.7 and section 11): gpt-6.1-sol in Codex CLI 0.170.0 through Lane B's metering proxy on the OpenAI Responses API (lanes/codex-hooks/r/proxy.json), reserved in the item's ledger before each session, with a $5 allowance per session. max_output_tokens and sdk_max_turns are Claude Code settings the Codex agent does not take; part R's prepare step drops them from the agent kwargs. The proxy writes max_output_tokens at the model's output_cap_tokens on a Responses request that sends none.",
+  "models": [
+    {
+      "id": "gpt-6.1-sol",
+      "harbor_model": "openai/gpt-6.1-sol",
+      "session_cap_usd": 5
+    }
+  ],
+  "max_output_tokens": 32000,
+  "verifier_timeout_multiplier": 2
+}

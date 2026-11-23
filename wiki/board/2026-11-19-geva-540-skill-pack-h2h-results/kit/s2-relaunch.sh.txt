@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# GEVA-540 kit (not committed): relaunches stage 2's controller with the kit copy now in ~/kit (workers are detached and
+# are adopted). Waits until no park-unit.sh restore or session-image build is running, stops the controller with TERM,
+# keeps the old launch.pid and launch.exit beside the new ones, and starts kit/s2-launch.sh with k (default 12).
+set -uo pipefail
+export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
+R=$HOME/h2h/run/geva540-s2-7700a8f; K=${1:-12}
+for _ in $(seq 1 120); do
+  pgrep -f "[p]ark-unit.sh" >/dev/null || [ -n "$(docker ps -q --filter name=session-image-)" ] || break
+  sleep 5
+done
+pgrep -f "[p]ark-unit.sh" >/dev/null && { echo "a restore still runs; not relaunching"; exit 3; }
+[ -n "$(docker ps -q --filter name=session-image-)" ] && { echo "an image build still runs; not relaunching"; exit 3; }
+P=$(cat $R/launch.pid)
+kill -TERM "$P" 2>/dev/null
+for _ in $(seq 1 60); do [ -e $R/launch.exit ] && break; sleep 1; done
+n=$(ls $R | grep -c '^launch.exit') ; mv $R/launch.pid $R/launch.pid.$n; mv $R/launch.exit $R/launch.exit.$n
+echo "old controller $P: $(cat $R/launch.exit.$n)"
+bash $HOME/kit/s2-launch.sh "$K"
+sleep 45
+tail -n 12 $R/out/journal.jsonl | cut -c1-200

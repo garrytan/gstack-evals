@@ -1,0 +1,153 @@
+diff --git a/pusher/http.go b/pusher/http.go
+index 0b0304f..b83838f 100644
+--- a/pusher/http.go
++++ b/pusher/http.go
+@@ -2,6 +2,9 @@ package pusher
+ 
+ import (
+ 	"context"
++	"crypto/md5" // #nosec G501 -- required by the Pusher REST API protocol
++	"crypto/subtle"
++	"encoding/hex"
+ 	"encoding/json"
+ 	"fmt"
+ 	"io"
+@@ -11,6 +14,7 @@ import (
+ 	"strconv"
+ 	"strings"
+ 	"sync"
++	"time"
+ 
+ 	"github.com/anycable/anycable-go/broadcast"
+ 	"github.com/anycable/anycable-go/broker"
+@@ -163,10 +167,30 @@ func (api *RestAPI) Handler(w http.ResponseWriter, r *http.Request) {
+ 	signature := queryParams.Get("auth_signature")
+ 
+ 	var stringToSign string
++	var body []byte
+ 
+ 	switch r.Method {
+ 	case http.MethodPost:
+ 		bodyMD5 := queryParams.Get("body_md5")
++
++		var err error
++		body, err = io.ReadAll(r.Body)
++		if err != nil {
++			api.log.Error("failed to read request body")
++			w.WriteHeader(http.StatusUnprocessableEntity)
++			return
++		}
++
++		// The body digest is a part of the signed string, so we must verify it matches
++		// the actual body; otherwise, a signed request could be replayed with an arbitrary body.
++		actualMD5 := md5.Sum(body) // #nosec G401
++		expectedMD5 := hex.EncodeToString(actualMD5[:])
++		if subtle.ConstantTimeCompare([]byte(strings.ToLower(bodyMD5)), []byte(expectedMD5)) != 1 {
++			api.log.Debug("body md5 mismatch")
++			w.WriteHeader(http.StatusUnauthorized)
++			return
++		}
++
+ 		stringToSign = "POST\n" +
+ 			path + "\n" +
+ 			"auth_key=" + key +
+@@ -190,26 +214,42 @@ func (api *RestAPI) Handler(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 
++	if !validAuthTimestamp(authTimestamp, time.Now()) {
++		api.log.Debug("auth timestamp is invalid or expired", "auth_timestamp", authTimestamp)
++		w.WriteHeader(http.StatusUnauthorized)
++		return
++	}
++
+ 	switch r.Method {
+ 	case http.MethodPost:
+-		api.handleEvents(w, r)
++		api.handleEvents(w, body)
+ 	case http.MethodGet:
+ 		api.handleGetUsers(w, r)
+ 	}
+ }
+ 
+-func (api *RestAPI) handleEvents(w http.ResponseWriter, r *http.Request) {
+-	body, err := io.ReadAll(r.Body)
++// authTimestampTolerance is the maximum allowed difference between the request's auth_timestamp
++// and the server time (as recommended by the Pusher REST API spec).
++const authTimestampTolerance = 600 * time.Second
+ 
++func validAuthTimestamp(ts string, now time.Time) bool {
++	sec, err := strconv.ParseInt(ts, 10, 64)
+ 	if err != nil {
+-		api.log.Error("failed to read request body")
+-		w.WriteHeader(http.StatusUnprocessableEntity)
+-		return
++		return false
+ 	}
+ 
++	diff := now.Sub(time.Unix(sec, 0))
++	if diff < 0 {
++		diff = -diff
++	}
++
++	return diff <= authTimestampTolerance
++}
++
++func (api *RestAPI) handleEvents(w http.ResponseWriter, body []byte) {
+ 	var pusherEvent *PusherEvent
+ 
+-	err = json.Unmarshal(body, &pusherEvent)
++	err := json.Unmarshal(body, &pusherEvent)
+ 
+ 	if err != nil {
+ 		api.log.Error("failed to parse Pusher event")
+diff --git a/pusher/http_test.go b/pusher/http_test.go
+index 4794cb3..86a5919 100644
+--- a/pusher/http_test.go
++++ b/pusher/http_test.go
+@@ -71,6 +71,45 @@ func TestHttpHandler(t *testing.T) {
+ 		assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
+ 	})
+ 
++	t.Run("Rejects signed request replayed with a different body", func(t *testing.T) {
++		authParams := "auth_key=" + config.AppKey +
++			"&auth_timestamp=" + strconv.FormatInt(time.Now().Unix(), 10) +
++			"&auth_version=1.0" +
++			"&body_md5=" + fmt.Sprintf("%x", payloadMD5)
++
++		stringToSign := "POST\n/events\n" + authParams
++		authSignature := verifier.Sign(stringToSign)
++
++		forged := `{"name":"injected-event","channel":"admin","data":"malicious-payload"}`
++
++		req, err := http.NewRequest("POST", "/events?"+authParams+"&auth_signature="+authSignature, strings.NewReader(forged))
++		require.NoError(t, err)
++
++		rr := httptest.NewRecorder()
++		http.HandlerFunc(restAPI.Handler).ServeHTTP(rr, req)
++
++		assert.Equal(t, http.StatusUnauthorized, rr.Code)
++		handler.AssertNotCalled(t, "HandleBroadcast", []byte(`{"stream":"admin","data":"{\"event\":\"injected-event\",\"data\":\"malicious-payload\"}"}`))
++	})
++
++	t.Run("Rejects requests with stale auth_timestamp", func(t *testing.T) {
++		authParams := "auth_key=" + config.AppKey +
++			"&auth_timestamp=" + strconv.FormatInt(time.Now().Add(-11*time.Minute).Unix(), 10) +
++			"&auth_version=1.0" +
++			"&body_md5=" + fmt.Sprintf("%x", payloadMD5)
++
++		stringToSign := "POST\n/events\n" + authParams
++		authSignature := verifier.Sign(stringToSign)
++
++		req, err := http.NewRequest("POST", "/events?"+authParams+"&auth_signature="+authSignature, strings.NewReader(string(payload)))
++		require.NoError(t, err)
++
++		rr := httptest.NewRecorder()
++		http.HandlerFunc(restAPI.Handler).ServeHTTP(rr, req)
++
++		assert.Equal(t, http.StatusUnauthorized, rr.Code)
++	})
++
+ 	t.Run("Rejects when authorization data is incorrect", func(t *testing.T) {
+ 		authParams := "auth_key=" + config.AppKey +
+ 			"&body_md5=" + fmt.Sprintf("%x", payloadMD5) +

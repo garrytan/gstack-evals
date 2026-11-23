@@ -1,0 +1,143 @@
+diff --git a/src/lib/ares_private.h b/src/lib/ares_private.h
+index 3dbdf7a..05347a8 100644
+--- a/src/lib/ares_private.h
++++ b/src/lib/ares_private.h
+@@ -542,6 +542,22 @@ void ares_gethostbyaddr_nolock(ares_channel_t *channel, const void *addr,
+ ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
+                                   ares_bool_t is_hostname);
+ 
++/*! Same as ares_dns_name_parse() but allows the caller to specify whether
++ *  name compression pointers are permitted.  If allow_compression is
++ *  ARES_FALSE and a compression pointer is encountered, ARES_EBADNAME is
++ *  returned.
++ *
++ *  \param[in,out] buf               Initialized buffer object
++ *  \param[out]    name              Pointer passed by reference to be filled
++ *                                   in with allocated string of name.
++ *  \param[in]     is_hostname       Validate hostname character set
++ *  \param[in]     allow_compression Whether compression pointers are allowed
++ *  \return ARES_SUCCESS on success
++ */
++ares_status_t ares_dns_name_parse_ex(ares_buf_t *buf, char **name,
++                                     ares_bool_t is_hostname,
++                                     ares_bool_t allow_compression);
++
+ /*! Write the DNS name to the buffer in the DNS domain-name syntax as a
+  *  series of labels.  The maximum domain name length is 255 characters with
+  *  each label being a maximum of 63 characters.  If the validate_hostname
+diff --git a/src/lib/record/ares_dns_name.c b/src/lib/record/ares_dns_name.c
+index 134f3ed..a1ed07c 100644
+--- a/src/lib/record/ares_dns_name.c
++++ b/src/lib/record/ares_dns_name.c
+@@ -548,8 +548,9 @@ fail:
+   return status;
+ }
+ 
+-ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
+-                                  ares_bool_t is_hostname)
++ares_status_t ares_dns_name_parse_ex(ares_buf_t *buf, char **name,
++                                     ares_bool_t is_hostname,
++                                     ares_bool_t allow_compression)
+ {
+   size_t        save_offset = 0;
+   unsigned char c;
+@@ -592,6 +593,14 @@ ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
+ 
+     /* Pointer/Redirect */
+     if ((c & 0xc0) == 0xc0) {
++      /* Some record types (e.g. SRV per RFC 2782, NAPTR per RFC 3403,
++       * SVCB/HTTPS per RFC 9460) explicitly prohibit name compression within
++       * their RDATA, reject pointers if not permitted */
++      if (!allow_compression) {
++        status = ARES_EBADNAME;
++        goto fail;
++      }
++
+       /* The pointer takes the form of a two octet sequence:
+        *
+        *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+@@ -715,3 +724,9 @@ fail:
+   ares_buf_destroy(namebuf);
+   return status;
+ }
++
++ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
++                                  ares_bool_t is_hostname)
++{
++  return ares_dns_name_parse_ex(buf, name, is_hostname, ARES_TRUE);
++}
+diff --git a/src/lib/record/ares_dns_parse.c b/src/lib/record/ares_dns_parse.c
+index 113438f..2f99006 100644
+--- a/src/lib/record/ares_dns_parse.c
++++ b/src/lib/record/ares_dns_parse.c
+@@ -47,7 +47,11 @@ static ares_status_t ares_dns_parse_and_set_dns_name(ares_buf_t    *buf,
+   ares_status_t status;
+   char         *name = NULL;
+ 
+-  status = ares_dns_name_parse(buf, &name, is_hostname);
++  /* Only RFC1035 record types permit name compression within RDATA.  Others,
++   * such as SRV (RFC 2782), explicitly prohibit it. */
++  status = ares_dns_name_parse_ex(
++    buf, &name, is_hostname,
++    ares_dns_rec_allow_name_comp(ares_dns_rr_get_type(rr)));
+   if (status != ARES_SUCCESS) {
+     return status;
+   }
+diff --git a/test/ares-test-parse-srv.cc b/test/ares-test-parse-srv.cc
+index 6956beb..143896b 100644
+--- a/test/ares-test-parse-srv.cc
++++ b/test/ares-test-parse-srv.cc
+@@ -87,6 +87,53 @@ TEST_F(LibraryTest, ParseSrvReplySingle) {
+   ares_free_data(srv);
+ }
+ 
++/* RFC 2782: name compression is not to be used for the SRV TARGET field */
++TEST_F(LibraryTest, ParseSrvReplyCompressedTarget) {
++  std::vector<byte> data = {
++    0x12, 0x34,  // qid
++    0x84, // response + query + AA + not-TC + not-RD
++    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError
++    0x00, 0x01,  // num questions
++    0x00, 0x01,  // num answer RRs
++    0x00, 0x00,  // num authority RRs
++    0x00, 0x00,  // num additional RRs
++    // Question (offset 12)
++    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',
++    0x03, 'c', 'o', 'm',
++    0x00,
++    0x00, 0x21,  // type SRV
++    0x00, 0x01,  // class IN
++    // Answer 1
++    0xC0, 0x0C,  // owner name: pointer to question (allowed)
++    0x00, 0x21,  // RR type
++    0x00, 0x01,  // class IN
++    0x01, 0x02, 0x03, 0x04, // TTL
++    0x00, 0x08,  // rdata length
++    0x00, 0x0A,  // priority
++    0x00, 0x14,  // weight
++    0x00, 0x1E,  // port
++    0xC0, 0x0C,  // target: compression pointer (prohibited)
++  };
++
++  struct ares_srv_reply* srv = nullptr;
++  EXPECT_NE(ARES_SUCCESS, ares_parse_srv_reply(data.data(), (int)data.size(), &srv));
++  EXPECT_EQ(nullptr, srv);
++
++  ares_dns_record_t *dnsrec = nullptr;
++  EXPECT_EQ(ARES_EBADNAME, ares_dns_parse(data.data(), data.size(), 0, &dnsrec));
++  EXPECT_EQ(nullptr, dnsrec);
++
++  /* Same packet with an uncompressed target must succeed */
++  data[data.size() - 1] = 0x00;
++  data.pop_back();
++  data[data.size() - 1] = 0x00;
++  data[data.size() - 8] = 0x07; /* rdlength: 6 + 1 (root label) */
++  EXPECT_EQ(ARES_SUCCESS, ares_parse_srv_reply(data.data(), (int)data.size(), &srv));
++  ASSERT_NE(nullptr, srv);
++  EXPECT_EQ("", std::string(srv->host));
++  ares_free_data(srv);
++}
++
+ TEST_F(LibraryTest, ParseSrvReplyMalformed) {
+   std::vector<byte> data = {
+     0x12, 0x34,  // qid

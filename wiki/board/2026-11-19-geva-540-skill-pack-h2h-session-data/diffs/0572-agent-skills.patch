@@ -1,0 +1,262 @@
+diff --git a/RULES_DESCRIPTIONS.md b/RULES_DESCRIPTIONS.md
+index f73ee66..35ac941 100644
+--- a/RULES_DESCRIPTIONS.md
++++ b/RULES_DESCRIPTIONS.md
+@@ -1754,6 +1754,7 @@ _Configuration_: N/A
+ _Description_: Since Go 1.25 the `sync` package proposes the [`WaitGroup.Go`](https://pkg.go.dev/sync#WaitGroup.Go) method.
+ This method is a shorter and safer replacement for the idiom `wg.Add ... go { ... wg.Done ... }`.
+ The rule proposes to replace these legacy idioms with calls to the new method.
++The idiom is also detected when the goroutines are launched within a loop (`for` or `range`) that follows the `wg.Add`.
+ 
+ _Limitations_: The rule doesn't rely on type information but on variable names to identify waitgroups.
+ This means the rule search for `wg` (the defacto standard name for wait groups);
+diff --git a/SPEC-use-waitgroup-go-range.md b/SPEC-use-waitgroup-go-range.md
+new file mode 100644
+index 0000000..f7ce48d
+--- /dev/null
++++ b/SPEC-use-waitgroup-go-range.md
+@@ -0,0 +1,45 @@
++# Spec: `use-waitgroup-go` — support loops after `wg.Add`
++
++Status: implemented
++
++## Objective
++`use-waitgroup-go` should also flag `wg.Add(n)` when it's followed by a loop
++(`for range ...`, `for ... range ...` or a classic `for`) whose body launches a
++goroutine that calls `wg.Done()`. Each iteration's goroutine can then be
++replaced with `wg.Go(...)`. Source: kubernetes-sigs/kueue#9892.
++
++```go
++wg.Add(int(jobs)) // MATCH
++for range int(jobs) {
++	go func() {
++		defer wg.Done()
++		doSomething()
++	}()
++}
++```
++
++## Acceptance criteria
++- A `wg.Add(...)` statement followed (in the same block) by a `for`/`range`
++  statement whose body has a top-level `go func(){ ... wg.Done() ... }()` is
++  reported with the existing message.
++- At most one failure per `wg.Add`.
++- Behaviour that already exists stays the same, including the Go < 1.25 skip.
++- Not reported: loops whose goroutines don't call `wg.Done`, and goroutines that
++  run a named function rather than a function literal.
++
++## Commands
++- `go test ./test/ -run TestUseWaitGroupGo`
++- `go test ./...`
++
++## Structure / style
++- Code: `rule/use_waitgroup_go.go`. Fixtures: `testdata/go1.25/use_waitgroup_go.go`
++  (matches) and `testdata/use_waitgroup_go.go` (go < 1.25, no matches).
++- Follow the repo's existing style; no new dependencies.
++
++## Testing
++Add fixture cases for `for range n`, `for i := range n` and the classic `for`,
++plus negative cases: a loop with no `wg.Done`, and a loop that runs a named function.
++
++## Boundaries
++- Always: keep the name-based heuristic (`wg`) and leave the failure message as is.
++- Never: add type-checking requirements or change other rules.
+diff --git a/rule/use_waitgroup_go.go b/rule/use_waitgroup_go.go
+index 6f04fd6..d499e27 100644
+--- a/rule/use_waitgroup_go.go
++++ b/rule/use_waitgroup_go.go
+@@ -75,6 +75,17 @@ func (w *lintUseWaitGroupGo) Visit(node ast.Node) ast.Visitor {
+ //	   ...
+ //	}
+ //
++// The go statement can also be a top-level statement of the body of a loop (for or range)
++// that follows the wg.Add, e.g.
++//
++//	wg.Add(n)
++//	for range n {
++//	   go func() {
++//	      defer wg.Done()
++//	      ...
++//	   }()
++//	}
++//
+ // Warning: the analysis only looks for exactly wg.Add and wg.Done, that means
+ // calls to Add and Done on a WaitGroup struct within a variable named differently than wg will be ignored
+ // This simplification avoids requiring type information while still makes the rule work in most of the cases.
+@@ -97,16 +108,9 @@ func (w *lintUseWaitGroupGo) analyzeBlock(b *ast.BlockStmt) {
+ 		// wg.Add is the i-th statement of block.List
+ 		// we will iterate from the (i+1)-th statement up to the last statement of block.List
+ 		for i++; i < len(stmts); i++ {
+-			stmt := stmts[i]
+-			// looking for a go statement
+-			goStmt, ok := stmt.(*ast.GoStmt)
+-			if !ok {
+-				continue // not a go statement
+-			}
+-
+-			// here we found a the go statement
+-			// now let's check is the go statement is applied to a function literal that contains a wg.Done
+-			if !w.hasCallToWgDone(goStmt) {
++			// looking for a go statement (directly or within the body of a loop)
++			// applied to a function literal that contains a wg.Done
++			if !w.launchesGoroutineWithWgDone(stmts[i]) {
+ 				continue
+ 			}
+ 
+@@ -122,6 +126,32 @@ func (w *lintUseWaitGroupGo) analyzeBlock(b *ast.BlockStmt) {
+ 	}
+ }
+ 
++// launchesGoroutineWithWgDone returns true if the given statement is either
++// a go statement running a function literal that calls wg.Done, or
++// a loop (for or range) whose body contains such a go statement as a top-level statement.
++func (w *lintUseWaitGroupGo) launchesGoroutineWithWgDone(stmt ast.Stmt) bool {
++	var loopBody *ast.BlockStmt
++	switch s := stmt.(type) {
++	case *ast.GoStmt:
++		return w.hasCallToWgDone(s)
++	case *ast.RangeStmt:
++		loopBody = s.Body
++	case *ast.ForStmt:
++		loopBody = s.Body
++	default:
++		return false
++	}
++
++	for _, bodyStmt := range loopBody.List {
++		goStmt, ok := bodyStmt.(*ast.GoStmt)
++		if ok && w.hasCallToWgDone(goStmt) {
++			return true
++		}
++	}
++
++	return false
++}
++
+ // hasCallToWgDone returns true if the given go statement
+ // calls to a function literal containing a call to wg.Done, false otherwise.
+ func (*lintUseWaitGroupGo) hasCallToWgDone(goStmt *ast.GoStmt) bool {
+diff --git a/tasks/plan.md b/tasks/plan.md
+new file mode 100644
+index 0000000..b3e763d
+--- /dev/null
++++ b/tasks/plan.md
+@@ -0,0 +1,18 @@
++Source spec: SPEC-use-waitgroup-go-range.md
++
++# Plan: use-waitgroup-go — support loops after wg.Add
++
++## Task 1: Detect goroutines launched within loops following wg.Add
++- Depends on: none
++- Acceptance: `wg.Add(...)` followed by a `for`/`range` whose body has a top-level
++  `go func(){ ... wg.Done() ... }()` is reported (once); loops without wg.Done or running
++  named functions are not; Go < 1.25 still skipped.
++- Files: rule/use_waitgroup_go.go, testdata/go1.25/use_waitgroup_go.go, testdata/use_waitgroup_go.go
++- Verify: `go test ./test/ -run TestUseWaitGroupGo`, `go test ./...`
++- Status: [x] complete
++
++## Task 2: Document the loop support
++- Depends on: Task 1
++- Acceptance: RULES_DESCRIPTIONS.md mentions loop detection for use-waitgroup-go.
++- Files: RULES_DESCRIPTIONS.md
++- Status: [x] complete
+diff --git a/testdata/go1.25/use_waitgroup_go.go b/testdata/go1.25/use_waitgroup_go.go
+index a827a49..9dd2f50 100644
+--- a/testdata/go1.25/use_waitgroup_go.go
++++ b/testdata/go1.25/use_waitgroup_go.go
+@@ -50,4 +50,45 @@ func useWaitGroupGo() {
+ 		}
+ 	}()
+ 	wg.Wait()
++
++	// from kubernetes-sigs/kueue/pull/9892
++	wg.Add(int(jobs)) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++
++	for range int(jobs) {
++		go func() {
++			defer wg.Done()
++			doSomething()
++		}()
++	}
++
++	wg.Wait()
++
++	wg.Add(n) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++	for i := range n {
++		go func() {
++			doSomething(i)
++			wg.Done()
++		}()
++	}
++
++	wg.Add(n) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++	for i := 0; i < n; i++ {
++		go func() {
++			defer wg.Done()
++			doSomething(i)
++		}()
++	}
++
++	wg.Add(n)
++	for range n {
++		go func() {
++			doSomething()
++		}()
++	}
++
++	wg.Add(n)
++	for range n {
++		go worker(&wg)
++	}
++	wg.Wait()
+ }
+diff --git a/testdata/use_waitgroup_go.go b/testdata/use_waitgroup_go.go
+index 4270b43..0249894 100644
+--- a/testdata/use_waitgroup_go.go
++++ b/testdata/use_waitgroup_go.go
+@@ -50,4 +50,45 @@ func useWaitGroupGo() {
+ 		}
+ 	}()
+ 	wg.Wait()
++
++	// from kubernetes-sigs/kueue/pull/9892
++	wg.Add(int(jobs))
++
++	for range int(jobs) {
++		go func() {
++			defer wg.Done()
++			doSomething()
++		}()
++	}
++
++	wg.Wait()
++
++	wg.Add(n)
++	for i := range n {
++		go func() {
++			doSomething(i)
++			wg.Done()
++		}()
++	}
++
++	wg.Add(n)
++	for i := 0; i < n; i++ {
++		go func() {
++			defer wg.Done()
++			doSomething(i)
++		}()
++	}
++
++	wg.Add(n)
++	for range n {
++		go func() {
++			doSomething()
++		}()
++	}
++
++	wg.Add(n)
++	for range n {
++		go worker(&wg)
++	}
++	wg.Wait()
+ }

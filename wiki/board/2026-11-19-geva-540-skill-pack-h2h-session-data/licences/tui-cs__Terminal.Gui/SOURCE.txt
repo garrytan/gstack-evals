@@ -1,0 +1,3 @@
+https://github.com/tui-cs/Terminal.Gui at a22b8317f58d9913f2721659c0db6986f951fcbc
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

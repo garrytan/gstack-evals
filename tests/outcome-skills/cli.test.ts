@@ -68,3 +68,35 @@ describe("gstack-evals outcome serve --registry", () => {
     expect(existsSync(join(dir, "ledger.sqlite"))).toBe(false);
   });
 });
+
+describe("gstack-evals outcome serve, cso stages", () => {
+  test("a cso stage names its arms as cso:<arm>,cso:<arm>, and the driver checks them against the item's arms", () => {
+    const dir = mkdtempSync(join(tmpdir(), "outcome-cli-cso-"));
+    const args = (stage: string) => ["serve", "--run", "r1", "--envelope-host", machineId(), "--stage", stage, "--host", "127.0.0.1", "--dir", join(dir, "run"), "--ledger", join(dir, "ledger.sqlite"), "--ledger-record", join(dir, "no-record")];
+    const pilot = run(...args("cso-pilot=cso:none,cso:cso,cso:untold"));
+    expect(pilot.code).toBe(2);
+    expect(pilot.err.startsWith("E_LEDGER_MISSING ")).toBe(true);
+    const main = run(...args("cso-main=cso:none,cso:cso,cso:untold"));
+    expect(main.code).toBe(2);
+    expect(main.err.startsWith("E_USAGE ")).toBe(true);
+    expect(main.err).toContain("cso stage cso-main serves cso:none, cso:cso, not cso:untold");
+  });
+
+  test("--cso-allowance hands a doubled allowance to the driver and refuses a malformed value or a model the stages don't serve", () => {
+    const dir = mkdtempSync(join(tmpdir(), "outcome-cli-cso-"));
+    const args = (v: string) => ["serve", "--run", "r1", "--envelope-host", machineId(), "--stage", "cso-main=cso:none,cso:cso", "--host", "127.0.0.1", "--dir", join(dir, "run"), "--ledger", join(dir, "ledger.sqlite"), "--ledger-record", join(dir, "no-record"), "--cso-allowance", v];
+    const doubled = run(...args("claude-opus-5-5=16"));
+    expect(doubled.code).toBe(2);
+    expect(doubled.err.startsWith("E_LEDGER_MISSING ")).toBe(true);
+    const odd = run(...args("claude-opus-5-5=5"));
+    expect(odd.code).toBe(2);
+    expect(odd.err.startsWith("E_USAGE ")).toBe(true);
+    expect(odd.err).toContain("not $5");
+    const malformed = run(...args("claude-opus-5-5:16"));
+    expect(malformed.code).toBe(2);
+    expect(malformed.err).toContain("--cso-allowance takes <model>=<usd>");
+    const stray = run(...args("claude-sonnet-5-5=16"));
+    expect(stray.code).toBe(2);
+    expect(stray.err).toContain("--cso-allowance names claude-sonnet-5-5; the cso stages serve claude-opus-5-5, particle-ai/particle-1");
+  });
+});

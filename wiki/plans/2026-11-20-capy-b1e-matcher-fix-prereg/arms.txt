@@ -1,0 +1,7 @@
+B1E ARMS PASS: gstack 5df6b5a8cf21, tar.gz 7a3de2ad47126397dda36a27f0910b21b5fc9da8fd3439418b46d89a9e90715d
+
+git merge-base --is-ancestor 7f9c1bc52ac9e8471aece6190c62addfe60d3205 5df6b5a8cf2127e349a9f900ee2553df8c8988b5: exit 1
+git merge-base --is-ancestor 5afef04e31de1cb30c727c7f827bdd729d04713e 5df6b5a8cf2127e349a9f900ee2553df8c8988b5: exit 0
+commits 5afef04..5df6b5a8: 29
+skill folders under .claude/skills: 65; top-level SKILL.md set at 5df6b5a8 equals 5afef04's: yes
+fresh task ids or prompts in gstack's tree at 5df6b5a8: 0 ids (git grep), 0 of 60 prompt sha256 in test/fixtures/skill-route-b1-in-sample.json; run prompts there: 60 of 60

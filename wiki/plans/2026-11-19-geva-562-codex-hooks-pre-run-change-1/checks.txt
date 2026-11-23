@@ -1,0 +1,122 @@
+Keyless pin checks for the Codex hooks eval, pre-run change 1 (GEVA-562), 2026-11-19 UTC
+No model call and no key. Codex CLI 0.170.0 (npm @openai/codex@0.170.0) against a local stub of the Responses
+API on 127.0.0.1. gstack at a0534ce6db39a8da1f3c23ec070aac2479e44be9 (tag v1.102.0.0, VERSION 1.102.0.0),
+installed with ./setup --host codex --no-browser into a fresh HOME and CODEX_HOME. <home> below is that scratch
+home. The tag holds 944b41e, b0f865c, 18e24a2e and 9610ba43 (git merge-base --is-ancestor, each).
+
+Every codex exec here ran:
+  codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox \
+    --dangerously-bypass-hook-trust --color never -m gpt-6.1-sol \
+    -c model_provider=probe -c model_providers.probe.name=probe \
+    -c model_providers.probe.base_url=http://127.0.0.1:<port>/v1 -c model_providers.probe.wire_api=responses \
+    -c model_providers.probe.env_key=OPENAI_API_KEY -c model_providers.probe.request_max_retries=0 \
+    -c model_providers.probe.stream_max_retries=0 -c skills.bundled.enabled=false \
+    -c features.sleep_tool=false -c model_reasoning_effort="low" - <<< "<prompt>"
+The stub logs every request body. It answers with a final message "DONE", except in the met run. There it answers
+the parent's first request with a spawn_agent call (namespace collaboration, message "Think like an attacker and
+a chaos engineer. Review the diff on this branch for ways it can fail.", fork_turns none, task_name adversarial),
+and the parent's next request with "## Pre-Landing Review / No blocking findings. / Gate edits: none." Codex hands
+the sub-agent its task as an agent_message item ("Message Type: NEW_TASK / Task name: /root/adversarial"), not
+as a user message, so the stub's user-text rule does not see the marker there and answers the sub-agent "DONE".
+
+== Check 1: hooks.json and config.toml
+$CODEX_HOME/hooks.json after setup, one group per event:
+  UserPromptSubmit                 <home>/.codex/skills/gstack/hosts/codex/hooks/codex-skill-route-hook           timeout 5
+  Stop                             <home>/.codex/skills/gstack/hosts/codex/hooks/codex-skill-contract-stop-hook   timeout 10
+  PreToolUse (matcher Bash)        <home>/.codex/skills/gstack/hosts/codex/hooks/codex-destructive-guard-hook     timeout 10
+Setup exited 0 and printed "gstack added 3 Codex hook(s)". It wrote no config.toml, so config.toml holds no
+[hooks]. Result: pass.
+
+== Check 2: hooks against the stub (session logs from <home>/.gstack/hooks/)
+r-on   prompt "Please fix this bug: add() in calc.py returns the difference of its arguments instead of their sum."
+       request 1 carries one developer message: "gstack skill routing (UserPromptSubmit hook; matched the installed
+       prove-it trigger "fix this bug"; off: gstack-config set skill_routing off): this request fits the prove-it
+       skill. Read and follow the prove-it skill before you start, and tell the user in one sentence that gstack
+       routed this to prove-it."  skill-route.log: event=routed skill=prove-it score=1 variant=name host=codex
+       skill-contract.log: event=no-contract-skill
+c-block prompt "$review check this branch against main"
+       request 1: one <skill> item named review, no routing line (skill-route.log: no-route reason=skill-mention).
+       request 2: one <hook_prompt hook_run_id="stop:2:<home>/.codex/hooks.json"> "SKILL_CONTRACT_UNMET
+       gstack-review (contract v1): missing adversarial-pass, review-report. ..."
+       skill-contract.log: event=blocked skill=gstack-review missing=adversarial-pass,review-report, then
+       event=miss with the same items.
+c-met  prompt "$review [stub-met] check this branch against main"
+       Three requests: the parent's first, the parent's second (it holds the spawn_agent call and Codex's output
+       for it, {"task_name":"/root/adversarial"}), and the sub-agent's own. Six rollouts for five sessions and the
+       sub-agent. No hook_prompt in any request.  skill-contract.log: event=met skill=gstack-review missing=-.
+       All three requests name model gpt-6.1-sol, the sub-agent's included. Every rollout of check 2, the
+       sub-agent's included, records cli_version 0.170.0 in session_meta and model gpt-6.1-sol in turn_context.
+r-off  gstack-config set skill_routing off: request 1 carries no routing line.
+c-off  gstack-config set skill_contracts off: one request, no hook_prompt, no contract log line.
+Both switches were set back on after. No codex exec wrote an error line. Result: pass.
+At b0f865c00c50b25c60265c397d0c0aa348c60e57 the same c-met run logged "event=blocked skill=gstack-review
+missing=adversarial-pass", because the reader counted a dispatch only by an agent_id in the call's output (fixed
+in gstack pull request 4526, 18e24a2e). At 18e24a2e checks 1 to 5 all passed as they do here.
+
+== Check 3: $review
+c-block's first request holds exactly one <skill> user item, named review. Its path is gstack's
+.agents/skills/gstack-review/SKILL.md (the target of <home>/.codex/skills/gstack-review), it holds the skill's body
+(104,185 characters, "Pre-Landing Review" and fork_turns "none" included), and the contract counted it as a
+load (it blocked). A typed $gstack-review injects nothing (probe on 2026-11-19 against Codex 0.170.0). Result: pass.
+
+== Check 4: route table
+route-table.tsv. B1's prompt for each of the 62 tasks and the 79 pilot candidates, from the pinned Harbor's
+(f3a5a923) export of swe-rebench/swe-rebench-leaderboard; all 62 prompts hash to B1b's prompt_sha256. Each
+prompt went to the registered UserPromptSubmit command as a Codex 0.170 payload, with prove-it at
+$CODEX_HOME/skills/prove-it/SKILL.md.
+  run tasks: prove-it alone 33, second of two (after verify) 7, not named 20 (18 nothing, 2 verify alone)
+  covered: 40 of 60; the gate (30) clears; the gstack-prove-it variant is not needed
+  smoke tasks: neither named
+  candidates: 79, of which 63 covered; first four covered in L1's seeded order (seed 20261102):
+    BerriAI__litellm-16997, narwhals-dev__narwhals-3480, delgan__loguru-1425,
+    koxudaxi__datamodel-code-generator-2996
+The table is byte-identical at b0f865c, 18e24a2e and the tag (sha256
+5dae5c05a32e0c71df273387e7649a239a41341d0a9c99fdd6cf56303e754b25). Result: pass.
+
+== Check 5: duplicates
+codex debug prompt-input with the setup's home: 65 skills listed, 65 distinct (64 from gstack, plus prove-it);
+review, verify, office-hours, gstack-upgrade and plan-design-review each once. Result: pass.
+
+== Reader shapes: how gstack's Codex contract reader counts a shell read of /review's SKILL.md
+parseTranscript and skillLoads from lib/skill-contract.ts at each commit, on one exec_command call built the way
+gstack's own test/skill-contract-codex.test.ts builds it. P is ~/.codex/skills/gstack-review/SKILL.md; "no text"
+means the call output is "Process exited with code 1" and nothing else.
+  at 18e24a2e
+    no load  exit=0 with text  sed -n '1,200p;201q' P
+    load     exit=1 no text    sed -n '1,200p' P
+    load     exit=1 no text    cat P
+    load     exit=1 with text  cd /nope && cat P        (text: "cd: /nope: No such file or directory")
+    load     exit=1 no text    bash -lc "cat P"
+    load     exit=1 no text    cat < P
+  at a0534ce6
+    load     exit=0 with text  sed -n '1,200p;201q' P
+    no load  exit=1 no text    sed -n '1,200p' P
+    no load  exit=1 no text    cat P
+    no load  exit=1 with text  cd /nope && cat P
+    load     exit=1 no text    bash -lc "cat P"
+    load     exit=1 no text    cat < P
+9610ba43 (gstack pull request 4528) makes the change: it splits a line into commands only outside quotes, drops a
+read that an earlier && command kept from running, and drops a one-file read that is the line's last command when
+the call exits non-zero. A read inside bash -lc "..." and a read through < still count when the call exits
+non-zero with no error text.
+
+== Host facts
+Destructive-command check, payload as codex exec sends it, GSTACK_SESSION_KIND=unattended:
+  git reset --hard HEAD~1   systemMessage only: "[careful] Destructive: git reset --hard discards all uncommitted
+                            changes. (gstack's destructive-command check, on in every session; off: gstack-config set
+                            destructive_guard off) Allowed without asking: this unattended session has nobody to
+                            answer." No permission decision, so the command runs
+  rm -rf /                  permissionDecision deny
+  rm -rf ~                  permissionDecision deny
+These three outputs are the same at 18e24a2e and at the tag, which also holds gstack pull request 4525's changes to
+the check's command parser.
+Sleep tool: -c features.sleep_tool=false removes clock.sleep from the tools the model receives and changes no
+other tool. The remaining tools: functions.exec, functions.wait, functions.request_user_input,
+functions.request_user_input_async, collaboration.followup_task, collaboration.interrupt_agent,
+collaboration.list_agents, collaboration.send_message, collaboration.spawn_agent, collaboration.wait_agent.
+spawn_agent on gpt-6.1-sol requires task_name; a call without it fails with "missing field task_name". A call
+without the collaboration namespace fails with "unsupported call: spawn_agent". (Codex behaviour, probed against
+the stub on 2026-11-19.)
+prove-it as installed: 9,339 bytes, sha256 3e6c46b4c9e8eee71bfdd5f88da23cb22b355794480abe7a02029839f9084f26
+(B1's gstack-shaped-SKILL.md, sha256 4aeeb6e4a3e2a4b129b75eb8f1a751eee895e707abbd4c5804cdd7d4f06fdc51,
+with its four ~/.claude/skills/gstack paths changed to ~/.codex/skills/gstack and nothing else).

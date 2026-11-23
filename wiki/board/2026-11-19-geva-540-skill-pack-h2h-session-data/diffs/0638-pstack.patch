@@ -1,0 +1,61 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 973f4a9..9ff5384 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -147,6 +147,10 @@ is based on [Keep a Changelog](https://keepachangelog.com).
+ - Fix build issues on some BSD derivatives (#2135).
+ - Fix alignment of `caf::async::batch` on 32bit ARM architecture (#2142).
+ - Timestamps in log output are now rendered without surrounding quotes (#2216).
++- Calling `quit` from a message handler of an actor shell, e.g., from the
++  default error handler after a request timed out, no longer triggers an
++  assertion. Previously, the actor shell kept reading from its mailbox after
++  closing it.
+ 
+ ### Removed
+ 
+diff --git a/libcaf_net/caf/net/abstract_actor_shell.cpp b/libcaf_net/caf/net/abstract_actor_shell.cpp
+index 22cbf81..ffbf86f 100644
+--- a/libcaf_net/caf/net/abstract_actor_shell.cpp
++++ b/libcaf_net/caf/net/abstract_actor_shell.cpp
+@@ -26,7 +26,7 @@ abstract_actor_shell::abstract_actor_shell(actor_config& cfg,
+   : super(cfg), manager_(owner, add_ref) {
+   mailbox_.try_block();
+   resume_ = make_action([this] {
+-    for (;;) {
++    while (!terminated()) {
+       if (!consume_message() && try_block_mailbox())
+         return;
+     }
+diff --git a/libcaf_net/caf/net/actor_shell.test.cpp b/libcaf_net/caf/net/actor_shell.test.cpp
+index 6270752..7a87a6e 100644
+--- a/libcaf_net/caf/net/actor_shell.test.cpp
++++ b/libcaf_net/caf/net/actor_shell.test.cpp
+@@ -235,4 +235,28 @@ TEST("actor shells can use flows") {
+   check_eq(to_string_view(buf), msg);
+ }
+ 
++TEST("actor shells terminate when a request times out without error handler") {
++  scoped_actor self{sys};
++  auto self_hdl = actor_cast<actor>(self);
++  auto cb = [self_hdl](app_t* app) {
++    app->self->mail(get_atom_v)
++      .request(self_hdl, 10ms)
++      .then([](const std::string&) {});
++  };
++  auto& mpx = sys.network_manager().mpx();
++  auto app = app_t::make(actor{self}, cb);
++  auto transport = net::octet_stream::transport::make(fd1, std::move(app));
++  auto mgr = net::socket_manager::make(&mpx, std::move(transport));
++  require(mpx.start(mgr));
++  fd1.id = net::invalid_socket_id;
++  actor shell_hdl;
++  self->receive([&shell_hdl](actor& x) { shell_hdl = x; },
++                after(1s) >> [this] { fail("shell did not send its handle"); });
++  self->monitor(shell_hdl);
++  shell_hdl = nullptr;
++  self->receive(
++    [this](down_msg& msg) { check_eq(msg.reason, sec::request_timeout); },
++    after(1s) >> [this] { fail("shell did not terminate after the timeout"); });
++}
++
+ } // WITH_FIXTURE(fixture)

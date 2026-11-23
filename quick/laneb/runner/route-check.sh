@@ -26,7 +26,7 @@ models=${MODELS:-claude-haiku-5-5 deepseek-v4.1-flash-1017 claude-opus-5-5}
 for m in $models; do
   cap=$(jq -r --arg m "$m" '.models[] | select(.id == $m) | .session_cap_usd' "$root/config/cells.json")
   hm=$(jq -r --arg m "$m" '.models[] | select(.id == $m) | .harbor_model' "$root/config/cells.json")
-  env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH="$here/agent" \
+  env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u TYPESAFE_API_KEY -u GEMINI_API_KEY -u GOOGLE_API_KEY -u XAI_API_KEY -u DEEPSEEK_API_KEY -u UBICLOUD_API_KEY -u EXA_API_KEY -u AGENTRUN_API_KEY -u AGENTRUN_BASE_URL ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH="$here/agent" \
     harbor run -y -p "$out/task" \
     -a laneb_agent:LanebAgent -m "$hm" --base-url "http://$gateway:8787" \
     --ak skip_install=true --ak persona_path="$here/agent/persona.json" --ak arm=none --ak arm_tar="$out/arms/none.tar" \

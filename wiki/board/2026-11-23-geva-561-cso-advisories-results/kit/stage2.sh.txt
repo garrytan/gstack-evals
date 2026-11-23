@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# GEVA-561 stage 2 on host 2: admit cso-main, serve it with Opus's doubled $16 allowance, run the draw's 208 sessions in its
+# seeded order four at a time (section 14), holding the owner's $407.58 cap through each rerun's spend cap (the room left
+# after finished sessions' cost and every running session's full allowance), then stop the driver, judge on the fallback
+# route and score. Stage 2 is plain: no readout key.
+set -uo pipefail
+export PATH=$HOME/.bun/bin:$HOME/uvbin:$HOME/.local/bin:$PATH
+L=$HOME/cso-ledger; export GSTACK_EVALS_LEDGER=$L/ledger.sqlite GSTACK_EVALS_LEDGER_RECORD=$L/record
+for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY; do export $k="$(cat $HOME/.keys/$k)"; done
+G=$HOME/work/gstack-evals; cd $G; GE=$G/bin/gstack-evals
+S=$HOME/stage2; mkdir -p $S/units $S/running
+CAP=407.58; LANES=${LANES:-4}
+CI_RUN=$(cat $HOME/ci-run)
+D=$HOME/units/draw-52.json
+unset CSO_READOUT_KEY
+step() { echo "== $1 $(date -u +%FT%TZ)"; }
+step head; git log --oneline -1; git status --porcelain --untracked-files=all | wc -l
+jq -r '.order[] | "\(.unit) \(.model) \(.arm)"' $D > $S/order.txt; echo "order $(wc -l < $S/order.txt) sessions, draw $(sha256sum $D | cut -c1-12)"
+[ -e $S/next ] || echo 0 > $S/next
+step admit
+[ -e $S/admitted ] || { GSTACK_EVALS_GH_BIN=$HOME/ghshim sg docker -c "$GE rig admit --item cso-main --proof direct --prereg wiki/plans/2026-11-19-geva-561-cso-advisories-prereg/README.md --run cso-main --check-run $CI_RUN --repo garrytan/gstack-evals" && touch $S/admitted || { echo "admit failed"; exit 1; }; }
+step serve
+GW=$(sg docker -c "docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}'")
+MID=$(cat $HOME/machine-id)
+setsid -f $GE outcome serve --run cso-main --envelope-host $MID --stage cso-main=cso:none,cso:cso --host $GW --dir $S/driver --planned 208 --reruns 16 --cso-allowance claude-opus-5-5=16 > $S/serve.log 2>&1 < /dev/null
+for i in $(seq 60); do grep -q '^stage=' $S/serve.log && break; grep -q '^E_' $S/serve.log && break; sleep 2; done
+cat $S/serve.log
+export CSO_CONTROL=$(sed -n 's/^control=//p' $S/serve.log) CSO_PROXY=$(sed -n 's/^stage=.* proxy=//p' $S/serve.log)
+[ -n "$CSO_CONTROL" ] && [ -n "$CSO_PROXY" ] || { echo "driver did not start"; exit 1; }
+export CSO_WORK=$HOME/units CSO_STAGE=stage2 CSO_OUT=$S/sessions
+alive() { pgrep -f "[o]utcome serve --run cso-main" > /dev/null; }
+claim() {
+  local lane=$1 al fin run n line
+  exec 9> $S/queue.lock; flock 9
+  n=$(cat $S/next); line=$(sed -n "$((n + 1))p" $S/order.txt)
+  if [ -z "$line" ] || [ -e $S/capstop ] || [ -e $S/halt ]; then flock -u 9; exec 9>&-; return 1; fi
+  echo $((n + 1)) > $S/next
+  set -- $line
+  al=3; [ $2 = opus ] && al=16
+  fin=$(find $S/sessions -name session.json -print0 2>/dev/null | xargs -0 -r jq -s '[.[].cost_usd // 0] | add // 0'); fin=${fin:-0}
+  run=$(cat $S/running/* 2>/dev/null | awk '{ s += $1 } END { printf "%.6f", s + 0 }')
+  ROOM=$(awk -v c=$CAP -v f=$fin -v r=$run 'BEGIN { printf "%.2f", c - f - r }')
+  echo $al > $S/running/$lane
+  CLAIM="$((n + 1)) $line $al"
+  flock -u 9; exec 9>&-
+}
+lane() {
+  local i=$1
+  while claim $i; do
+    set -- $CLAIM
+    local n=$1 U=$2 m=$3 a=$4 al=$5 extra="" rc t0
+    echo "[\"$U\"]" > $S/units/$U.json
+    if [ $a = none ]; then unset CSO_HOME; else export CSO_HOME=$HOME/homes/cso; fi
+    [ $m = opus ] && extra="--allowance 16"
+    step "session $n $U $a $m lane $i room $ROOM"
+    t0=$(date +%s)
+    if awk -v r=$ROOM 'BEGIN { exit !(r > 0) }'; then
+      sg docker -c "$GE cso rerun --arm $a --model $m --units $S/units/$U.json --spend-cap $ROOM $extra"; rc=$?
+    else rc=10; echo "room $ROOM: nothing left under \$$CAP"; fi
+    rm -f $S/running/$i
+    echo "rerun exit $rc wall $(( $(date +%s) - t0 ))s session $n"
+    [ $rc = 10 ] && touch $S/capstop
+    [ $rc != 0 ] && ! alive && { echo "the driver is gone after session $n"; touch $S/halt; }
+  done
+}
+step sessions
+for i in $(seq $LANES); do lane $i > $S/lane-$i.log 2>&1 & sleep 30; done
+wait
+echo "exits: $(grep -h '^rerun exit' $S/lane-*.log | awk '{ print $3 }' | sort | uniq -c | tr -s ' ' | tr '\n' ';')"
+step stop
+curl -s -X POST $CSO_CONTROL/stop; sleep 15; alive && pkill -TERM -f "[o]utcome serve --run cso-main"; sleep 10; tail -5 $S/serve.log
+$GE ledger status --item cso-main 2>&1 | grep ITEM
+[ -e $S/capstop ] && echo "stage 2 cap-stopped: it ends incomplete"
+[ -e $S/halt ] && { echo "stage 2 halted: no judging"; exit 1; }
+step sessions-file
+find $S/sessions/stage2 -name session.json | sort | xargs -I{} jq -c . {} > $S/sessions.jsonl; echo "sessions $(wc -l < $S/sessions.jsonl)"
+step judge
+J=$HOME/judge-s2
+[ -e $J ] && { echo "$J exists; stop"; exit 1; }
+$GE cso judge --route fallback-opus-particle --work $HOME/units --sessions $S/sessions.jsonl --out $J --run cso-judge > $HOME/judge-s2.out 2>&1; echo "judge exit $?"
+grep -v "^RIG_UNPROVEN" $HOME/judge-s2.out | tail -5
+step score
+$GE cso score --work $HOME/units --sessions $S/sessions.jsonl --judged $J/judged.jsonl --out $S/scores.jsonl; echo "score exit $?"
+$GE ledger status 2>&1 | grep ITEM
+step done

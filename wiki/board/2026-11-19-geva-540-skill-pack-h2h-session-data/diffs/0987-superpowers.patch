@@ -1,0 +1,70 @@
+diff --git a/packages/shared/src/sanitize.ts b/packages/shared/src/sanitize.ts
+index 6167007..ba13d97 100644
+--- a/packages/shared/src/sanitize.ts
++++ b/packages/shared/src/sanitize.ts
+@@ -29,6 +29,9 @@ const colonCharacterReferencePattern = /&colon;?/gi
+ const controlOrWhitespacePattern = /[\u0000-\u0020\u007f-\u009f]/g
+ const eventHandlerPattern = /(?:^|[\s"'<>/])on\w+\s*=\s*["']?[^"'>]+["']?/i
+ const eventHandlerAttributePattern = /(^|[\s"'<>/])on(\w+\s*=)/gi
++// `srcdoc` holds an HTML document: character references in its value are
++// decoded and then parsed as markup, so escaping its value does not help.
++const srcdocAttributePattern = /(^|[\s"'<>/])srcdoc(\s*=)/gi
+ const unquotedUrlAttributePattern =
+   /(^|[\s"'<>/])((?:href|src|action|formaction)\s*=\s*)([^\s"'=<>`]+)/gi
+ 
+@@ -151,6 +154,19 @@ export function sanitizeTranslatedHtml(html: string): string {
+     html = html.replace(eventHandlerAttributePattern, '$1&#111;n$2')
+   }
+ 
++  // Neutralize `srcdoc` attributes by escaping 's'
++  srcdocAttributePattern.lastIndex = 0
++  if (srcdocAttributePattern.test(html)) {
++    if (__DEV__) {
++      warn(
++        'Potentially dangerous srcdoc attribute detected in translation. ' +
++          'Consider removing srcdoc from your translation messages.'
++      )
++    }
++    srcdocAttributePattern.lastIndex = 0
++    html = html.replace(srcdocAttributePattern, '$1&#115;rcdoc$2')
++  }
++
+   // Disable javascript: URLs in unquoted attributes
+   html = html.replace(
+     unquotedUrlAttributePattern,
+diff --git a/packages/shared/test/sanitize.test.ts b/packages/shared/test/sanitize.test.ts
+index ec8a086..d4b7466 100644
+--- a/packages/shared/test/sanitize.test.ts
++++ b/packages/shared/test/sanitize.test.ts
+@@ -244,7 +244,7 @@ describe('sanitizeTranslatedHtml', () => {
+     const html = '<iframe srcdoc="<script>alert(1)</script>">Test</iframe>'
+     const result = sanitizeTranslatedHtml(html)
+     expect(result).toBe(
+-      '<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;">Test</iframe>'
++      '<iframe &#115;rcdoc="&lt;script&gt;alert(1)&lt;/script&gt;">Test</iframe>'
+     )
+   })
+ 
+@@ -372,4 +372,22 @@ describe('sanitizeTranslatedHtml', () => {
+       '<div aria-live="polite" aria-label="Status: &lt;b&gt;Active&lt;/b&gt;">Status</div>'
+     )
+   })
++
++  test('neutralize srcdoc attribute', () => {
++    expect(sanitizeTranslatedHtml('<iframe srcdoc="<b>x</b>"></iframe>')).toBe(
++      '<iframe &#115;rcdoc="&lt;b&gt;x&lt;/b&gt;"></iframe>'
++    )
++    expect(
++      sanitizeTranslatedHtml(
++        "<iframe SRCDOC = '<script>alert(1)</script>'></iframe>"
++      )
++    ).toBe(
++      "<iframe &#115;rcdoc='&lt;script&gt;alert(1)&lt;/script&gt;'></iframe>"
++    )
++    expect(
++      sanitizeTranslatedHtml(
++        '<iframe/srcdoc=&lt;img&#32;src&#61;x&gt;></iframe>'
++      )
++    ).toBe('<iframe/&#115;rcdoc=&lt;img&#32;src&#61;x&gt;></iframe>')
++  })
+ })

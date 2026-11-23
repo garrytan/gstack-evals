@@ -1,0 +1,124 @@
+diff --git a/pkg/oci/artifact.go b/pkg/oci/artifact.go
+index f021f9b..e0c7759 100644
+--- a/pkg/oci/artifact.go
++++ b/pkg/oci/artifact.go
+@@ -6,6 +6,7 @@ import (
+ 	"io"
+ 	"os"
+ 	"path/filepath"
++	"strings"
+ 	"sync"
+ 
+ 	"github.com/cheggaaa/pb/v3"
+@@ -144,6 +145,10 @@ func (a *Artifact) Download(ctx context.Context, dir string, opt DownloadOption)
+ 		fileName = v
+ 	}
+ 
++	if err = validateFileName(fileName); err != nil {
++		return xerrors.Errorf("invalid file name: %w", err)
++	}
++
+ 	layerMediaType, err := layer.MediaType()
+ 	if err != nil {
+ 		return xerrors.Errorf("media type error: %w", err)
+@@ -158,7 +163,27 @@ func (a *Artifact) Download(ctx context.Context, dir string, opt DownloadOption)
+ 	return nil
+ }
+ 
++// validateFileName ensures the file name (which may come from an untrusted
++// manifest annotation) is a plain file name and cannot escape the destination directory.
++func validateFileName(fileName string) error {
++	switch {
++	case fileName == "", fileName == ".", fileName == "..":
++		return xerrors.Errorf("%q is not a valid file name", fileName)
++	case strings.ContainsAny(fileName, `/\`), strings.ContainsRune(fileName, 0):
++		return xerrors.Errorf("%q must not contain path separators", fileName)
++	case filepath.IsAbs(fileName), filepath.VolumeName(fileName) != "":
++		return xerrors.Errorf("%q must not be an absolute path", fileName)
++	case filepath.Base(fileName) != fileName || !filepath.IsLocal(fileName):
++		return xerrors.Errorf("%q must be a plain file name", fileName)
++	}
++	return nil
++}
++
+ func (a *Artifact) download(ctx context.Context, layer v1.Layer, fileName, dir string, quiet bool) error {
++	if err := validateFileName(fileName); err != nil {
++		return xerrors.Errorf("invalid file name: %w", err)
++	}
++
+ 	size, err := layer.Size()
+ 	if err != nil {
+ 		return xerrors.Errorf("size error: %w", err)
+diff --git a/pkg/oci/artifact_test.go b/pkg/oci/artifact_test.go
+index 7faf17e..b63adc2 100644
+--- a/pkg/oci/artifact_test.go
++++ b/pkg/oci/artifact_test.go
+@@ -42,6 +42,7 @@ func TestArtifact_Download(t *testing.T) {
+ 		name          string
+ 		input         string
+ 		mediaType     string
++		title         string
+ 		layersReturns layersReturns
+ 		want          string
+ 		wantErr       string
+@@ -90,11 +91,51 @@ func TestArtifact_Download(t *testing.T) {
+ 			},
+ 			wantErr: "unacceptable media type",
+ 		},
++		{
++			name:      "sad: path traversal in title annotation",
++			mediaType: "application/vnd.cncf.openpolicyagent.layer.v1.tar+gzip",
++			title:     "../../../../tmp/evil.tar.gz",
++			layersReturns: layersReturns{
++				layers: []v1.Layer{flayer},
++			},
++			wantErr: "invalid file name",
++		},
++		{
++			name:      "sad: absolute path in title annotation",
++			mediaType: "application/vnd.cncf.openpolicyagent.layer.v1.tar+gzip",
++			title:     "/tmp/evil.tar.gz",
++			layersReturns: layersReturns{
++				layers: []v1.Layer{flayer},
++			},
++			wantErr: "invalid file name",
++		},
++		{
++			name:      "sad: dot-dot title annotation",
++			mediaType: "application/vnd.cncf.openpolicyagent.layer.v1.tar+gzip",
++			title:     "..",
++			layersReturns: layersReturns{
++				layers: []v1.Layer{flayer},
++			},
++			wantErr: "invalid file name",
++		},
++		{
++			name:      "sad: backslash in title annotation",
++			mediaType: "application/vnd.cncf.openpolicyagent.layer.v1.tar+gzip",
++			title:     `..\\evil.tar.gz`,
++			layersReturns: layersReturns{
++				layers: []v1.Layer{flayer},
++			},
++			wantErr: "invalid file name",
++		},
+ 	}
+ 
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+ 			tempDir := t.TempDir()
++			title := tt.title
++			if title == "" {
++				title = "bundle.tar.gz"
++			}
+ 
+ 			// Mock image
+ 			img := new(fakei.FakeImage)
+@@ -109,7 +150,7 @@ func TestArtifact_Download(t *testing.T) {
+ 							Hex:       "cba33656188782852f58993f45b68bfb8577f64cdcf02a604e3fc2afbeb5f2d8",
+ 						},
+ 						Annotations: map[string]string{
+-							"org.opencontainers.image.title": "bundle.tar.gz",
++							"org.opencontainers.image.title": title,
+ 						},
+ 					},
+ 				},

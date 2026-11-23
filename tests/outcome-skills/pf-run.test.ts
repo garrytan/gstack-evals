@@ -45,7 +45,7 @@ function unitDir(): string {
   return dir;
 }
 
-const image: SessionImage = { image_id: "sha256:" + "e".repeat(64), tag: "pf-session:test", runtime_id: "sha256:" + "c".repeat(64), volume: "v", commits: 1, head: "a".repeat(40), home: "none", tree_patch_sha256: null, qa_home: null };
+const image: SessionImage = { image_id: "sha256:" + "e".repeat(64), tag: "pf-session:test", runtime_id: "sha256:" + "c".repeat(64), volume: "v", commits: 1, head: "a".repeat(40), home: "none", tree_patch_sha256: null, qa_home: null, removed: [] };
 const input = (arm: PfArm, model = OPUS): PfRunInput => ({ unitDir: unitDir(), session: { unit: "pf-run-flag", part: 0, index: 3, model, arm, item: "pf-opus" }, names: "short", control: "http://127.0.0.1:9", proxy: "172.17.0.1:9001", out: "/unused", volume: "v", claude: "/opt/claude", probeNode: "", effort: null });
 const ak = (argv: string[]): Record<string, string> => Object.fromEntries(argv.flatMap((a, i) => (argv[i - 1] === "--ak" ? [[a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1)]] : [])));
 

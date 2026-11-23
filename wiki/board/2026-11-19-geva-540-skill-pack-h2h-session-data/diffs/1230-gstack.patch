@@ -1,0 +1,87 @@
+diff --git a/internal/app/handler.go b/internal/app/handler.go
+index 9c6c2ec..e906a89 100644
+--- a/internal/app/handler.go
++++ b/internal/app/handler.go
+@@ -86,6 +86,25 @@ func sameOriginURL(refURL *url.URL, requestURL *url.URL) bool {
+ 		cmp.Or(requestURL.Port(), defaultPortForScheme(requestURL.Scheme))
+ }
+ 
++// isSafeLocalRedirectPath returns true if path is an absolute local path that
++// cannot be interpreted by a browser as a reference to another host.
++func isSafeLocalRedirectPath(path string) bool {
++	if path == "" {
++		return true
++	}
++	if path[0] != '/' {
++		return false
++	}
++	if len(path) > 1 && (path[1] == '/' || path[1] == '\\') {
++		return false
++	}
++	lower := strings.ToLower(path)
++	if strings.HasPrefix(lower, "/%2f") || strings.HasPrefix(lower, "/%5c") {
++		return false
++	}
++	return true
++}
++
+ func (a *App) validatedRefererRedirect(r *http.Request, referrer string) (string, bool) {
+ 	if referrer == "" {
+ 		return "", false
+@@ -114,6 +133,11 @@ func (a *App) validatedRefererRedirect(r *http.Request, referrer string) (string
+ 	if redirectTarget == "" {
+ 		redirectTarget = "/"
+ 	}
++	// Reject protocol-relative style paths ("//host", "/\host") which browsers
++	// would interpret as a redirect to an external host.
++	if !isSafeLocalRedirectPath(redirectTarget) || !isSafeLocalRedirectPath(refURL.Path) {
++		return "", false
++	}
+ 	if refURL.RawQuery != "" {
+ 		redirectTarget += "?" + refURL.RawQuery
+ 	}
+diff --git a/internal/app/redirect_test.go b/internal/app/redirect_test.go
+new file mode 100644
+index 0000000..ea739c2
+--- /dev/null
++++ b/internal/app/redirect_test.go
+@@ -0,0 +1,39 @@
++// Copyright (c) ClaceIO, LLC
++// SPDX-License-Identifier: Apache-2.0
++package app
++
++import (
++	"net/http/httptest"
++	"testing"
++
++	"github.com/openrundev/openrun/internal/types"
++)
++
++func TestValidatedRefererRedirect(t *testing.T) {
++	a := &App{serverConfig: &types.ServerConfig{}}
++	r := httptest.NewRequest("POST", "http://127.0.0.1:25222/test/abc", nil)
++
++	tests := []struct {
++		ref    string
++		want   string
++		wantOk bool
++	}{
++		{"http://127.0.0.1:25222/test/abc?x=1", "/test/abc?x=1", true},
++		{"/local/path", "/local/path", true},
++		{"http://127.0.0.1:25222", "/", true},
++		{"http://evil.com/abc", "", false},
++		{"http://127.0.0.1:25222//evil.com", "", false},
++		{"http://127.0.0.1:25222//evil.com/x", "", false},
++		{"http://127.0.0.1:25222/\\evil.com", "", false},
++		{"http://127.0.0.1:25222/%2Fevil.com", "", false},
++		{"//evil.com", "", false},
++		{"/\\evil.com", "", false},
++		{"relative", "", false},
++	}
++	for _, tt := range tests {
++		got, ok := a.validatedRefererRedirect(r, tt.ref)
++		if ok != tt.wantOk || got != tt.want {
++			t.Errorf("ref %q: got (%q, %v), want (%q, %v)", tt.ref, got, ok, tt.want, tt.wantOk)
++		}
++	}
++}

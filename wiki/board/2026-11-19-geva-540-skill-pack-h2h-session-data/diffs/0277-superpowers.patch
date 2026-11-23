@@ -1,0 +1,102 @@
+diff --git a/main/HSSF/UserModel/HSSFRow.cs b/main/HSSF/UserModel/HSSFRow.cs
+index e3ad221..182d4cd 100644
+--- a/main/HSSF/UserModel/HSSFRow.cs
++++ b/main/HSSF/UserModel/HSSFRow.cs
+@@ -130,9 +130,14 @@ namespace NPOI.HSSF.UserModel
+                 shortCellNum = (short)(0xffff - columnIndex);
+             }
+ 
+-            ICell cell = new HSSFCell(book, sheet, RowNum, (short)columnIndex, type);
++            HSSFCell cell = new HSSFCell(book, sheet, RowNum, (short)columnIndex, type);
++            ICellStyle columnStyle = sheet.GetColumnStyle(columnIndex);
++            if (columnStyle != null)
++            {
++                cell.CellStyle = columnStyle;
++            }
+             AddCell(cell);
+-            sheet.Sheet.AddValueRecord(RowNum, ((HSSFCell)cell).CellValueRecord);
++            sheet.Sheet.AddValueRecord(RowNum, cell.CellValueRecord);
+             return cell;
+         }
+         public IRow CopyRowTo(int targetIndex)
+diff --git a/ooxml/XSSF/Streaming/SXSSFRow.cs b/ooxml/XSSF/Streaming/SXSSFRow.cs
+index d020cee..310f605 100644
+--- a/ooxml/XSSF/Streaming/SXSSFRow.cs
++++ b/ooxml/XSSF/Streaming/SXSSFRow.cs
+@@ -235,6 +235,11 @@ namespace NPOI.XSSF.Streaming
+         {
+             CheckBounds(column);
+             SXSSFCell cell = new SXSSFCell(this, type);
++            IColumn col = _sheet._sh.GetColumn(column);
++            if (col != null && col.IsFormatted && col.ColumnStyle != null)
++            {
++                cell.CellStyle = col.ColumnStyle;
++            }
+             _cells[column] = cell;
+             _sortedCellCache = null;
+             UpdateIndexWhenAdd(column);
+diff --git a/ooxml/XSSF/UserModel/XSSFRow.cs b/ooxml/XSSF/UserModel/XSSFRow.cs
+index c196e1b..d94f9db 100644
+--- a/ooxml/XSSF/UserModel/XSSFRow.cs
++++ b/ooxml/XSSF/UserModel/XSSFRow.cs
+@@ -381,6 +381,18 @@ namespace NPOI.XSSF.UserModel
+             {
+                 xcell.CellStyle = RowStyle;
+             }
++            else
++            {
++                IColumn column = _sheet.GetColumn(columnIndex);
++                if (column != null && column.IsFormatted)
++                {
++                    ICellStyle columnStyle = column.ColumnStyle;
++                    if (columnStyle != null)
++                    {
++                        xcell.CellStyle = columnStyle;
++                    }
++                }
++            }
+ 
+             _cells[columnIndex] = xcell;
+             UpdateCacheOnAdd(columnIndex);
+diff --git a/testcases/main/SS/UserModel/BaseTestRow.cs b/testcases/main/SS/UserModel/BaseTestRow.cs
+index 93b9ac7..0e68a48 100644
+--- a/testcases/main/SS/UserModel/BaseTestRow.cs
++++ b/testcases/main/SS/UserModel/BaseTestRow.cs
+@@ -478,6 +478,36 @@ namespace TestCases.SS.UserModel
+ 
+             wb2.Close();
+         }
++
++        [Test]
++        public void TestCreateCellAppliesDefaultColumnStyle()
++        {
++            IWorkbook wb1 = _testDataProvider.CreateWorkbook();
++            ISheet sheet = wb1.CreateSheet("test");
++
++            ICellStyle style = wb1.CreateCellStyle();
++            style.DataFormat = 4;
++            sheet.SetDefaultColumnStyle(1, style);
++
++            IRow row = sheet.CreateRow(0);
++            ICell styledCell = row.CreateCell(1);
++            styledCell.SetCellValue(1.5);
++            ICell plainCell = row.CreateCell(2);
++            plainCell.SetCellValue(2.5);
++
++            ClassicAssert.AreEqual(style.Index, styledCell.CellStyle.Index);
++            ClassicAssert.AreEqual(4, styledCell.CellStyle.DataFormat);
++            ClassicAssert.AreNotEqual(style.Index, plainCell.CellStyle.Index);
++
++            IWorkbook wb2 = _testDataProvider.WriteOutAndReadBack(wb1);
++            sheet = wb2.GetSheetAt(0);
++            row = sheet.GetRow(0);
++            ClassicAssert.AreEqual(4, row.GetCell(1).CellStyle.DataFormat);
++            ClassicAssert.AreNotEqual(4, row.GetCell(2).CellStyle.DataFormat);
++
++            wb2.Close();
++            wb1.Close();
++        }
+     }
+ 
+ }
+\ No newline at end of file
