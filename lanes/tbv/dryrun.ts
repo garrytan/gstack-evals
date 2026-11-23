@@ -189,8 +189,10 @@ export async function dryrun(out: string, io: Io): Promise<{ pass: number; fail:
   await section("3d. The all-in check before every paid item, on the crew's actual credits (item 11)", () => {
     for (const item of PAID_ITEMS.filter((i) => i !== "tbv-held")) {
       const ok = head("allin", { item, crewCredits: 150_000, crewRest: 100, settled: 300, reserved: 0, unknown: 0, itemCap: 200 });
-      const no = head("allin", { item, crewCredits: 150_000, crewRest: 100, settled: 1500, reserved: 0, unknown: 0, itemCap: 300 });
-      check(item + ": starts at $750 all-in with the crew term printed against the $300 reserve, and does not start at $2,050", ok.verdict === "START " + item + " ($750.00)" && ok.out.includes("crew spent $150.00 (150000 credits; $150.00 of the $300.00 crew reserve)") && no.verdict.startsWith("NO START (to the Captain; $2050.00"));
+      const [guide, stop] = item === "tbv-r78-astra" ? [4000, 5000] : [2000, 3000];
+      const over = head("allin", { item, crewCredits: 150_000, crewRest: 100, settled: guide - 450, reserved: 0, unknown: 0, itemCap: 300 });
+      const no = head("allin", { item, crewCredits: 150_000, crewRest: 100, settled: stop - 450, reserved: 0, unknown: 0, itemCap: 300 });
+      check(item + ": starts at $750 all-in with the crew term printed against the $300 reserve, starts at $" + (guide + 100) + " over the $" + guide + " guideline, and does not start at $" + (stop + 100) + " over the $" + stop + " stop", ok.verdict === "START " + item + " ($750.00)" && ok.out.includes("crew spent $150.00 (150000 credits; $150.00 of the $300.00 crew reserve)") && over.verdict === "START " + item + " ($" + (guide + 100) + ".00)" && over.out.includes("over the $" + guide + ".00 guideline (it does not bind)") && no.verdict === "NO START (to the Captain; $" + (stop + 100) + ".00 over the $" + stop + ".00 stop)");
     }
     check("an item that is not a paid item is refused", head("allin", { item: "tbv-other", crewCredits: 0, crewRest: 0, settled: 0, reserved: 0, unknown: 0, itemCap: 1 }).refused);
   });

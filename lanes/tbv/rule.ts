@@ -31,6 +31,8 @@ export const CAP_FACTOR = 1.15, ROUND = 4, MAX_TOKENS = 4000, RETRIES = 2;
 // A reading's worst case: four sends (report, follow-up, D1, D2); the first carries at most WORST_INPUT tokens, and each later one adds max_tokens and a user turn per earlier send.
 export const SENDS = 4, WORST_INPUT = 130_000, USER_TURN = 100;
 export const LINE_USD = 2000;
+/** Amendment 2 section 7: the $2,000 line is a guideline that does not bind, and a line past $3,000 stops. tbv-r78-astra judges with GPT-6 Astra, so its check takes the $4,000 guideline (org R71) and the $5,000 stop (org R42), as the Captain ruled on 2026-11-23. */
+export const LINE_STOP_USD = 3000, ASTRA_LINE_USD = 4000, ASTRA_STOP_USD = 5000;
 /** Amendment item 11: crew spend from each thread's counter at about $1 per 1,000 credits, against the $300 crew reserve. */
 export const CREDIT_USD = 0.001, CREW_RESERVE = 300;
 /** Section 7: a seeded 20% of readings in each stage are also read by the other judge. */
@@ -279,10 +281,13 @@ function headroom(rd: Readings, split: { text: string; manifest: SplitManifest }
   say("Verdict: " + (r0 > BAND.hi ? "CEILING" : r0 < BAND.lo ? "FLOOR" : "HEADROOM") + " (band " + BAND.lo + " to " + BAND.hi + ")");
 }
 
-/** Amendment item 14: each judge packet is priced at stage 1's measured mean cost for its judge model and packet kind (judge:kind keys, such as sol:first); a path stage 1 did not meter is priced at the costliest metered path of the same kind. An item lists its double-read packets under the other judge. */
+/** Stage 1's judges. A judge outside them, such as Astra, is never priced from their costs. */
+const STAGE1_JUDGES: Judge[] = ["sol", "opus"];
+/** Amendment item 14: each judge packet is priced at stage 1's measured mean cost for its judge model and packet kind (judge:kind keys, such as sol:first); a path stage 1 did not meter is priced at the costliest metered path of the same kind. An item lists its double-read packets under the other judge. A judge stage 1 never ran needs its own judge:kind cost, since a pricier model would read low at another judge's cost. */
 function judgePrice(measured: Record<string, number>, judge: Judge, kind: PacketKind) {
   const m = measured[judge + ":" + kind];
   if (m !== undefined) return m;
+  if (!STAGE1_JUDGES.includes(judge)) fail("E_USAGE no measured judge cost for " + judge + ":" + kind + "; stage 1 never ran " + judge + ", so give its own " + judge + ":" + kind + " cost rather than another judge's");
   const same = Object.entries(measured).filter(([k]) => k.endsWith(":" + kind)).map(([, v]) => v);
   if (!same.length) fail("E_USAGE no measured judge cost for any " + kind + " packet (stage 1 must meter each packet kind)");
   return Math.max(...same);
@@ -328,7 +333,13 @@ function allin(a: { item: string; crewCredits: number; crewRest: number; settled
   const crewSpent = a.crewCredits * CREDIT_USD;
   const base = crewSpent + a.crewRest + a.settled + a.reserved + a.unknown;
   say("all-in before " + a.item + ": crew spent " + usd(crewSpent) + " (" + a.crewCredits + " credits; " + usd(crewSpent) + " of the " + usd(CREW_RESERVE) + " crew reserve) + crew to come " + usd(a.crewRest) + " + settled " + usd(a.settled) + " + reserved " + usd(a.reserved) + " + unknown " + usd(a.unknown) + " = " + usd(base));
-  if (a.item !== "tbv-held") { say("Verdict: " + (base + a.itemCap <= LINE_USD ? "START " + a.item + " (" + usd(base + a.itemCap) + ")" : "NO START (to the Captain; " + usd(base + a.itemCap) + " over " + usd(LINE_USD) + ")")); return; }
+  if (a.item !== "tbv-held") {
+    const [guide, stop] = a.item === "tbv-r78-astra" ? [ASTRA_LINE_USD, ASTRA_STOP_USD] : [LINE_USD, LINE_STOP_USD];
+    const total = base + a.itemCap;
+    say("line: " + usd(total) + " with " + a.item + "'s cap, " + (total <= guide ? "under" : "over") + " the " + usd(guide) + " guideline (it does not bind); the stop is " + usd(stop));
+    say("Verdict: " + (total <= stop ? "START " + a.item + " (" + usd(total) + ")" : "NO START (to the Captain; " + usd(total) + " over the " + usd(stop) + " stop)"));
+    return;
+  }
   if (!(Number.isFinite(a.thirdPassCap) && a.thirdPassCap! >= 0 && Number.isFinite(a.capyCap) && a.capyCap! >= 0 && a.capyCap! <= a.itemCap)) fail("E_USAGE the all-in check before tbv-held needs thirdPassCap and capyCap as numbers of at least 0, and capyCap no more than itemCap");
   const heldCap = a.itemCap, thirdPassCap = a.thirdPassCap!, capyCap = a.capyCap!;
   if (base + heldCap + thirdPassCap <= LINE_USD) { say("Verdict: STAGE 3 WITH THE THIRD OPUS PASS (" + usd(base + heldCap + thirdPassCap) + ")"); return; }

@@ -100,6 +100,23 @@ test("source B: failed checks, not-passed checks at the head, unresolved finding
   expect(hb(head("SKIPPED")).stratum).toBe("none");
 });
 
+test("coloured test output parses the same as plain: escape codes are stripped before parsing", () => {
+  const plain = "tests/test_a.py::test_one FAILED\ntests/test_a.py::test_two PASSED\ntest_three (pkg.T) ... ERROR\n===== 1 failed, 1 passed, 1 error in 0.12s =====";
+  const red = (s: string) => "\x1b[31m" + s + "\x1b[0m";
+  const coloured = "\x1b[1mtests/test_a.py::test_one\x1b[0m " + red("FAILED") + "\n\x1b[32mtests/test_a.py::test_two PASSED\x1b[0m\n\x1b]8;;file:///t\x07test_three (pkg.T) ... ERROR\x1b]8;;\x07\n" + red("===== 1 failed, 1 passed, 1 error in 0.12s =====");
+  const tests = (out: string) => {
+    const x = extract(histA([["pytest", out]]));
+    return { candidates: x.candidates.map((c) => [c.kind, c.name, c.state]), lists: x.lists, stratum: x.stratum };
+  };
+  expect(tests(coloured)).toEqual(tests(plain));
+  expect(tests(plain).candidates).toEqual([["test", "tests/test_a.py::test_one", "FAILED"], ["test", "pkg.T.test_three", "ERROR"]]);
+});
+
+test("other direction: plain text that only looks like an escape code keeps its brackets", () => {
+  const x = extract(histA([["pytest", "tests/test_a.py::test_x[31m] FAILED\ntests/test_a.py::test_y PASSED"]]));
+  expect(x.candidates.filter((c) => c.kind === "test").map((c) => c.name)).toEqual(["tests/test_a.py::test_x[31m]"]);
+});
+
 test("tokens are history characters / 3, the history's sha256 is checked, and admitsSize uses the larger overhead", () => {
   const h = histA([["ls", "a"]]);
   const chars = "Fix it.".length + JSON.stringify({ command: "ls" }).length + 1;
