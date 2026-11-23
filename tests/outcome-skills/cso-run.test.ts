@@ -17,6 +17,7 @@ import { buildCsoImage, CSO_BASE_IMAGE, CSO_RERUN, csoRunCopy, runCsoSession, tr
 import { csoRunner } from "../../lanes/outcome-skills/cso/rerunner.ts";
 import { isSealedRow, openBytes, openRow, readKey } from "../../lanes/outcome-skills/cso/analysis/readout.ts";
 import type { UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
+import { sessionTreeSha256 } from "../../lanes/outcome-skills/cso/units/build.ts";
 
 const p = loadCsoPrereg();
 const roots: string[] = [];
@@ -135,7 +136,27 @@ test("a failed finalize halts with no record; an open with no summary posts E_CS
   const i2 = input({ harbor: stub([{ opens: true }]).bin, control: "http://127.0.0.1:" + server.port });
   await expect(runCsoSession(i2)).rejects.toThrow(/^E_CSO_FINALIZE_HALT .*driver was stopped through POST \/stop/);
   expect(posts).toEqual([{ code: "E_CSO_FINALIZE_HALT", session: "u1/none/opus/stage0/0 attempt 1" }]);
+  const i3 = input({ harbor: stub([{ summary: bad }]).bin, control: "http://127.0.0.1:" + server.port });
+  await expect(runCsoSession(i3)).rejects.toThrow(/^E_CSO_FINALIZE_HALT .*ses_9.*driver was stopped through POST \/stop/);
+  expect(posts).toHaveLength(2);
   server.stop(true);
+});
+
+test("under the rerun plan a session tree that no longer hashes to its unit record does not run", async () => {
+  const before = process.env.CSO_PLAN;
+  process.env.CSO_PLAN = "rerun";
+  try {
+    const s = stub([{ summary: completed() }]);
+    const t = tree();
+    writeFileSync(join(t, "index.js"), "module.exports = 2;\n");
+    const i = input({ harbor: s.bin, tree: t, unit: { ...UNIT, tree_sha256: sessionTreeSha256(tree()) } });
+    await expect(runCsoSession(i)).rejects.toThrow(/^E_CSO_SESSION u1's session tree .* hashes to [0-9a-f]{64}, not its unit record's/);
+    expect(existsSync(i.out)).toBe(false);
+    expect(existsSync(join(s.dir, "jobs.txt"))).toBe(false);
+  } finally {
+    if (before === undefined) delete process.env.CSO_PLAN;
+    else process.env.CSO_PLAN = before;
+  }
 });
 
 test("a home that no longer hashes to its arm record, a none arm with a home, and a used out dir are refused before Harbor", async () => {

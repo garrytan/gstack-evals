@@ -671,7 +671,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       if (hold?.task === sess.id) hold.until = now() + grace;
       s.live.delete(sess.id);
       s.finished++;
-      const halt = !meter && s.model !== undefined;
+      const halt = !meter && (s.model !== undefined || s.cso);
       const pfHalt = s.pf && !meter;
       if (halt || pfHalt) record({ event: "halt", item: s.item, id: sess.id, lease_id: s.lease_id, meter_id: sess.meter_id, journal: s.journal }, true);
       record({ event: "close", item: s.item, ...answer });

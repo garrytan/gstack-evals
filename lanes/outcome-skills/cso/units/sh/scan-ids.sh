@@ -4,12 +4,13 @@
 # and matched case-insensitively anywhere in a line; every git object store under the root is then streamed object by
 # object (git cat-file), since a packed or loose object is compressed on disk, and read the same way. Prints
 # "HIT <file|git> <b64 path> <b64 match>" per hit, "STORE <b64 path>" per store and "ERR <b64 what>" for a tool that
-# failed, which the caller reads as a scan that did not finish. Paths are relative to the root.
+# failed, which the caller reads as a scan that did not finish. Paths are relative to the root. grep runs under the C locale,
+# so a needle's no-digit edge matches beside any byte, valid UTF-8 or not.
 set -u -o pipefail
 root="${1%/}"; nf="$2"
 enc() { printf %s "$1" | base64 -w0; }
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 LC_ALL=C
 [ -s "$nf" ] || exit 0
 find "$root" -type f -print0 > "$tmp/files" || echo "ERR $(enc find)"
 xargs -0 -r sh -c 'grep "$@"; [ $? -le 1 ]' sh -a -i -E -D skip -H -Z -o -f "$nf" -- < "$tmp/files" > "$tmp/h" || echo "ERR $(enc grep)"

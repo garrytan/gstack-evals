@@ -26,6 +26,7 @@ import { CSO_PREFIX, csoDriverModels } from "./driver.ts";
 import { events } from "../h2h/sessions/exposure.ts";
 import { csoExposure, loaded } from "./exposure.ts";
 import { sealBytes, sealedStage, sealRow } from "./analysis/readout.ts";
+import { sessionTreeSha256 } from "./units/build.ts";
 import { csoFail, loadCsoPrereg, type CsoPrereg } from "./prereg.ts";
 import { csoConfig, csoLimits, csoSessionRecord, harborModel, modelId, readEnd, withRefusalFallback, type EndRead } from "./sessions.ts";
 import type { CsoArm, CsoModel, CsoStage, SessionRecord, UnitRecord } from "./types.ts";
@@ -164,11 +165,13 @@ function find(dir: string, name: string): string | null {
 export async function csoHaltCheck(i: Pick<CsoSessionInput, "unit" | "arm" | "model" | "stage" | "index" | "control">, attempt: 1 | 2, summary: Rec | null, ev: string | null, dir: string): Promise<void> {
   const at = label(i) + " attempt " + attempt;
   const close = summary?.slot?.close;
-  if (close?.finalized === false && !((close.allowance_stops ?? 0) > 0)) csoFail("E_CSO_FINALIZE_HALT", at + ": the proxy's finalize failed at the close of slot " + summary?.slot?.id + ", so its counts are unknown; the session halts with no retry and no record, and the driver's journal names it; " + dir);
+  const stopDriver = () => fetch(i.control + "/stop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "E_CSO_FINALIZE_HALT", session: at }), signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? null : "it answered " + r.status), (e: Error) => e.message);
+  const stopped = (stop: string | null) => (stop ? "POST " + i.control + "/stop failed (" + stop + "): stop the driver by hand; " : "the driver was stopped through POST /stop; ");
+  if (close?.finalized === false && !((close.allowance_stops ?? 0) > 0)) csoFail("E_CSO_FINALIZE_HALT", at + ": the proxy's finalize failed at the close of slot " + summary?.slot?.id + ", so its counts are unknown; the session halts with no retry and no record, the driver's journal names it, and " + stopped(await stopDriver()) + dir);
   const opened = !summary && ev !== null && existsSync(join(ev, OPENS)) && readFileSync(join(ev, OPENS), "utf8").trim() !== "";
   if (!opened) return;
-  const stop = await fetch(i.control + "/stop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "E_CSO_FINALIZE_HALT", session: at }), signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? null : "it answered " + r.status), (e: Error) => e.message);
-  csoFail("E_CSO_FINALIZE_HALT", at + ": the attempt wrote an open line (" + join(ev!, OPENS) + ") and left no summary, so its slot may have spent; the session halts with no retry and no record, and " + (stop ? "POST " + i.control + "/stop failed (" + stop + "): stop the driver by hand; " : "the driver was stopped through POST /stop; ") + dir);
+  const stop = await stopDriver();
+  csoFail("E_CSO_FINALIZE_HALT", at + ": the attempt wrote an open line (" + join(ev!, OPENS) + ") and left no summary, so its slot may have spent; the session halts with no retry and no record, and " + stopped(stop) + dir);
 }
 
 const readJsonl = (f: string): Rec[] => (existsSync(f) ? readFileSync(f, "utf8").split("\n").filter((l) => l.trim()).flatMap((l) => { try { return [JSON.parse(l) as Rec]; } catch { return []; } }) : []);
@@ -188,6 +191,10 @@ export async function runCsoSession(i: CsoSessionInput): Promise<{ record: Sessi
   if (existsSync(i.out)) csoFail("E_CSO_SESSION", i.out + " exists; each session writes a new run dir");
   if ((i.arm === "none") !== (i.home.dir === null)) csoFail("E_CSO_ARM", i.arm + (i.arm === "none" ? " runs with no home" : " needs its installed home"));
   if (i.home.dir !== null && homeTreeSha256(i.home.dir) !== i.home.home_tree_sha256) csoFail("E_CSO_ARM", i.arm + "'s home " + i.home.dir + " no longer hashes to its arm record's " + i.home.home_tree_sha256);
+  if (loadCsoPrereg().rerun) {
+    const got = sessionTreeSha256(i.tree);
+    if (got !== i.unit.tree_sha256) csoFail("E_CSO_SESSION", i.unit.unit + "'s session tree " + i.tree + " hashes to " + got + ", not its unit record's " + i.unit.tree_sha256 + "; the session does not run");
+  }
   const key = sealedStage(i.stage) ? (i.seal ?? csoFail("E_CSO_SESSION", label(i) + ": stage 1 and re-pilot sessions are sealed to the readout key (section 12), and none was given")) : null;
   mkdirSync(i.out, { recursive: true });
   try {
