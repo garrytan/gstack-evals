@@ -47,7 +47,7 @@ Call settled: /cso at gstack 1.101.0.0 is not shown to name more real advisories
 
 **/cso named fewer advisories on Opus.** 3 of 51 against 12 of 51, -17.6 points [-31.1, -5.9]. Ten units were named only by the plain audit and one only by /cso. The loss holds at both gap bounds. Its point estimate is negative in every Opus stratum, and the interval excludes zero in five of the nine (table below).
 
-**It reported almost nothing.** Opus with /cso reported 0.75 findings per session against 14.8, and 0.67 supported findings against 4.73 (-4.06 [-4.71, -3.40]). So /cso didn't only drop false alarms: it dropped real findings too, including the advisory. Across 52 sessions, 18 findings reached the /cso helper, from 9 sessions.
+**It reported almost nothing.** Opus with /cso reported 0.75 findings per session against 14.8, and 0.67 supported findings against 4.73 (-4.06 [-4.71, -3.40]). So /cso didn't only drop false alarms: it dropped real findings too, including the advisory. Across 52 sessions, 23 findings reached the /cso helper, from 12 sessions.
 
 **The procedure didn't always run.** /cso loaded in all 52 Opus sessions, but its helper run started in 39 and the full procedure (start, an inspect or read on that run, and finish) ran in 37 (71%). On particle-1 it ran in 40 of 52 (77%). Both are under the 80% rule, so both rows read "skill not exercised as designed", which the plan maps to FIX-METHOD.
 
