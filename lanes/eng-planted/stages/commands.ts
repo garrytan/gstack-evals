@@ -26,8 +26,7 @@ import { EpError, fail, notBuilt } from "../errors.ts";
 import { FROZEN, SIZE } from "../frozen.ts";
 import type { Command, PlantedGrader, ReviewArm } from "../types.ts";
 import { armCheckoutProblems, EB_ARM, plainArmProblems, plantedArmSpec, SKILL_ARMS, skillPin } from "./arms.ts";
-import { judgeAll, ROLE_MODEL, type JudgeCall, type JudgeRole } from "../readings/judge.ts";
-import { JUDGE_MODELS } from "../readings/local.ts";
+import { judgeAll, ROLE_EFFORT, ROLE_MODEL, type JudgeCall, type JudgeRole } from "../readings/judge.ts";
 import type { AuthorCall } from "./author.ts";
 import { buildKey, ebSession, type MountTable, type PlantedSession } from "./build.ts";
 import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, settleThrown, type AllIn, type Kind } from "./ledger.ts";
@@ -126,8 +125,9 @@ const CARBON_FIX = "add a carbon ModelKey (google/gemini-4-carbon on OpenRouter,
  * anything costs nothing. A call that billed and then failed (a non-200 answer, no text, a provider drift stop, a stream
  * that ended with an error event) throws
  * with that cost on its error (spend.ts), which the gated callers settle. A role routed to Carbon asks for
- * CARBON_MAX_TOKENS; every other role asks for maxTokens. fetch and env reach the meter for the keyless tests. */
-export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[]; fetch?: typeof fetch; env?: Record<string, string | undefined> }): Launcher<Metered<R>> {
+ * CARBON_MAX_TOKENS; every other role asks for maxTokens. effort is one setting for every role, or one per role. fetch
+ * and env reach the meter for the keyless tests. */
+export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null | Readonly<Record<R, string | null>>; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[]; fetch?: typeof fetch; env?: Record<string, string | undefined> }): Launcher<Metered<R>> {
   return async (p) => {
     const problems = routeProblems(o.models, o.routes, o.roles);
     if (problems.length) return fail("E_EP_NOT_BUILT", "the " + o.label + " routes are not all built, so no lease opened:\n" + problems.join("\n") + "\n" + CARBON_FIX);
@@ -137,7 +137,7 @@ export function meterLauncher<R extends string>(o: { out: string; cacheDir: stri
       if (!o.roles.includes(role)) return fail("E_USAGE", "this launch did not check the route for " + role);
       let r: Awaited<ReturnType<typeof meter.call>>;
       try {
-        r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: capOf(role), effort: o.effort, label: o.label + ":" + role, ...(attempt ? { attempt } : {}) });
+        r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: capOf(role), effort: typeof o.effort === "string" || o.effort === null ? o.effort : o.effort[role], label: o.label + ":" + role, ...(attempt ? { attempt } : {}) });
       } catch (e) {
         throw e instanceof MeterError && (e.code === "E_PV_PROVIDER_DRIFT" || e.code === "E_PV_STREAM_ERROR") ? addSpend(e, ALLOWANCE_USD.call) : e;
       }
@@ -150,25 +150,31 @@ export function meterLauncher<R extends string>(o: { out: string; cacheDir: stri
 }
 
 /** A judge call that waits for the judge item's gate and settles its cost there, under the role and the prompt's digest,
- * so a resume that repeats a cached call counts one cell. A call that spent and threw settles as a failed line. */
+ * so a resume that repeats a cached call counts one cell. A call that spent and threw settles as a failed line. An empty
+ * reply is a failed call too: it settles as a failed line and is asked once more as attempt 2, a fresh call the meter
+ * caches apart; a second empty reply is returned empty, and the judge records it as the bundle's error. */
 export function gatedJudge(gate: ItemGate, call: Metered<JudgeRole>): JudgeCall {
   return async (role, prompt) => {
     const cell = role + ":" + createHash("sha256").update(prompt).digest("hex").slice(0, 16);
-    await gate.acquire("call");
-    let r: { text: string; costUsd: number };
-    try {
-      r = await call(role, prompt);
-    } catch (e) {
-      throw settleThrown(gate, "call", e, cell);
-    }
-    gate.settle("call", r.costUsd, cell);
-    return r.text;
+    const ask = async (attempt?: number) => {
+      await gate.acquire("call");
+      let r: { text: string; costUsd: number };
+      try {
+        r = await call(role, prompt, attempt);
+      } catch (e) {
+        throw settleThrown(gate, "call", e, cell);
+      }
+      gate.settle("call", r.costUsd, cell, !r.text.trim());
+      return r.text;
+    };
+    const first = await ask();
+    return first.trim() ? first : ask(2);
   };
 }
 
 export interface Seams {
   author(o: { out: string; cacheDir: string }): Launcher<AuthorCall>;
-  /** The judged secondary's calls (readings/judge.ts): GPT-6 Astra and the two gold labellers, at JUDGE_MODELS.effort. */
+  /** The judged secondary's calls (readings/judge.ts): GPT-6 Astra and the two gold labellers, each at its ROLE_EFFORT. */
   judge(o: { out: string; cacheDir: string; roles: JudgeRole[] }): Launcher<Metered<JudgeRole>>;
   /** pin is null when no skill arm runs (the pilot). */
   review(o: { out: string; arms: ReviewArm[]; pin: DigestPin | null; policy?: string; log: (l: string) => void }): Launcher<ReviewSession>;
@@ -180,7 +186,7 @@ export interface Seams {
 
 export const REAL: Seams = {
   author: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "ep-author", models: AUTHOR_MODELS, routes: AUTHOR_ROUTES, roles: Object.keys(AUTHOR_MODELS) as AuthorRole[] }),
-  judge: (o) => meterLauncher({ ...o, maxTokens: JUDGE_MAX_TOKENS, effort: JUDGE_MODELS.effort, label: "ep-judge", models: ROLE_MODEL, routes: JUDGE_ROUTES }),
+  judge: (o) => meterLauncher({ ...o, maxTokens: JUDGE_MAX_TOKENS, effort: ROLE_EFFORT, label: "ep-judge", models: ROLE_MODEL, routes: JUDGE_ROUTES }),
   review: (o) => reviewLauncher({ arms: o.arms.map((a) => EB_ARM[a]), reviewer: "opus", out: o.out, env: process.env, log: o.log, ...(o.pin ? { pins: { precut: o.pin, engphase: o.pin } } : {}), runId: EP_RUN, ...(o.policy ? { policy: o.policy } : {}) }),
   build: (o) => {
     const table: MountTable = new Map();

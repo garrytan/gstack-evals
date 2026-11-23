@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The judge's output caps through the real judge seam, keyless (Captain's dated plan change, 2026-11-17): the gold
 // labeller on Gemini 4 Carbon asks for 32,000 tokens like the Carbon rater, and GPT-6 Astra and the Opus gold labeller
-// keep the judge's 16,000, all at the frozen high effort.
+// keep the judge's 16,000. Astra and the Opus labeller run at the frozen high effort; the Carbon labeller sends no effort,
+// so it runs at its default like the rater (Captain's dated plan change, 2026-11-23).
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,7 +19,7 @@ const ledger = join(root, "ledger.sqlite");
 recordApproval(record, { action: "init", item: "ep-judge", cap_micros: 50_000_000, quotes: [{ words: "judge cap test on a temporary ledger", by: "ep tests", source: "tests/ep/stages/judge-cap.test.ts" }], admission: "warn" });
 
 describe("the judge's output caps", () => {
-  test("the Carbon gold labeller asks for 32,000 tokens; Astra and the Opus gold labeller keep 16,000; all at high effort", async () => {
+  test("the Carbon gold labeller asks for 32,000 tokens at its default effort; Astra and the Opus gold labeller keep 16,000 at high effort", async () => {
     const seen: Array<{ to: string; body: any }> = [];
     const fetch = (async (url: unknown, init?: { body?: unknown }) => {
       const body = JSON.parse(String(init?.body ?? "{}"));
@@ -34,7 +35,7 @@ describe("the judge's output caps", () => {
       for (const role of roles) await call(role, "Label bundle " + role + ".");
     });
     const by = (to: string) => seen.filter((s) => s.to === to).map((s) => s.body);
-    expect(by("openrouter").map((b) => [b.model, b.max_tokens, b.reasoning, b.stream])).toEqual([["google/gemini-4-carbon", CARBON_MAX_TOKENS, { effort: "high" }, true]]);
+    expect(by("openrouter").map((b) => [b.model, b.max_tokens, b.reasoning, b.stream])).toEqual([["google/gemini-4-carbon", CARBON_MAX_TOKENS, undefined, true]]);
     expect(by("anthropic").map((b) => [b.max_tokens, b.output_config])).toEqual([[JUDGE_MAX_TOKENS, { effort: "high" }]]);
     expect(by("openai").map((b) => [b.max_output_tokens, b.reasoning?.effort])).toEqual([[JUDGE_MAX_TOKENS, "high"]]);
     expect([CARBON_MAX_TOKENS, JUDGE_MAX_TOKENS]).toEqual([32_000, 16_000]);

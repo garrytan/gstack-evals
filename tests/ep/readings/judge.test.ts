@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fxReview, fxUnit } from "../../../lanes/eng-planted/readings/fixtures.ts";
-import { bundleSet, bundleText, genericList, genericRate, goldOf, judgeAll, judgeCheck, kappaOf, keywordHit, NAMED_PROMPT, parseNamed, parseQuotes, QUOTES_PROMPT, ROLE_MODEL, sectionOf, stripNames, type GoldRow, type JudgeCall } from "../../../lanes/eng-planted/readings/judge.ts";
+import { bundleSet, bundleText, genericList, genericRate, goldOf, judgeAll, judgeCheck, kappaOf, keywordHit, NAMED_PROMPT, parseNamed, parseQuotes, QUOTES_PROMPT, ROLE_EFFORT, ROLE_MODEL, sectionOf, stripNames, type GoldRow, type JudgeCall } from "../../../lanes/eng-planted/readings/judge.ts";
 
 describe("the judge's reading", () => {
   test("strips arm and package names", () => {
@@ -39,6 +39,22 @@ describe("the judge's reading", () => {
     expect(parseNamed("MATCH 2\nbecause", 3)).toBe(1);
     expect(parseNamed("match 4", 3)).toBeNull();
     expect(parseNamed("NONE", 3)).toBeNull();
+  });
+  test("an empty reply to either call is the bundle's error, never a reading (plan change 2026-11-23)", async () => {
+    expect(parseQuotes("", "text").error).toBe("call 1 gave an empty reply");
+    expect(parseQuotes(" \n", "text").error).toBe("call 1 gave an empty reply");
+    const files = [{ path: "plan.md", text: "Return zero on empty input." }];
+    const quotes = JSON.stringify(["Return zero on empty input."]);
+    const read = async (named: string) => (await judgeAll([{ unit: "u1", source: "plain", files, hint: "h" }], async (_role, prompt) => (prompt.includes("Hint:") ? named : quotes)))[0]!;
+    const empty = await read("");
+    expect([empty.named, empty.matched, empty.error]).toEqual([false, null, "call 2 gave an empty reply"]);
+    const none = await read("NONE");
+    expect([none.named, none.matched, none.error]).toEqual([false, null, null]);
+    const hit = await read("MATCH 1");
+    expect([hit.named, hit.matched, hit.error]).toEqual([true, 0, null]);
+  });
+  test("the Carbon labeller runs at its default effort; the judge and the Opus labeller stay at high", () => {
+    expect(ROLE_EFFORT).toEqual({ judge: "high", "gold-opus": "high", "gold-gemini": null });
   });
   test("a credited quote maps to its heading", () => {
     const t = "=== file: plan.md ===\n## Coverage diagram\nA covers B.\n## Architecture\nKeep the parser pure.\n=== file: review/test-plan.md ===\nTest a negative count.";

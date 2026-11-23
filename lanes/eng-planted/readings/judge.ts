@@ -24,6 +24,11 @@ export const GENERIC_DIR = join(import.meta.dir, "generic");
 
 export type JudgeRole = "judge" | "gold-opus" | "gold-gemini";
 export const ROLE_MODEL: Record<JudgeRole, string> = { judge: JUDGE_MODELS.judge, "gold-opus": JUDGE_MODELS.gold[0], "gold-gemini": JUDGE_MODELS.gold[1] };
+/** Each role's reasoning effort; null sends none, so the model uses its default. Section 8 froze high for all three. The
+ * Captain's dated plan change of 2026-11-23, made before any gold label entered kappa, runs the Carbon labeller at its
+ * default effort (the raters' setting): at high effort 33 of its 64 calls spent the whole 32,000-token cap thinking and
+ * gave an empty reply. Those high-effort labels stay as a test-retest column only. */
+export const ROLE_EFFORT: Record<JudgeRole, string | null> = { judge: JUDGE_MODELS.effort, "gold-opus": JUDGE_MODELS.effort, "gold-gemini": null };
 /** One model call, by role (ROLE_MODEL picks the model, at JUDGE_MODELS.effort). */
 export type JudgeCall = (role: JudgeRole, prompt: string) => Promise<string>;
 
@@ -78,6 +83,7 @@ const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 /** Call 1's answer: a JSON array of quotes. The first 12 count (the fixed item cap); a quote not found verbatim in the
  * bundle (whitespace and case aside) is dropped and counted. */
 export function parseQuotes(answer: string, text: string): { quotes: string[]; dropped: number; over: number; error: string | null } {
+  if (!answer.trim()) return { quotes: [], dropped: 0, over: 0, error: "call 1 gave an empty reply" };
   const s = answer.indexOf("[");
   const e = answer.lastIndexOf("]");
   let raw: unknown;
@@ -123,14 +129,17 @@ export interface JudgeResult extends JudgedBundle {
 }
 
 /** The two blind calls on one bundle. Call 1 never sees the hint or an arm name; call 2 sees only the hint and the quotes.
- * A bundle with no quote makes no second call and names nothing. */
+ * A bundle with no quote makes no second call and names nothing. An empty reply to either call is the bundle's error,
+ * never a reading: an empty call 2 names nothing and is not read as NONE. */
 export async function judgeBundle(b: BundleInput, call: JudgeCall, role: JudgeRole = "judge", prompts: Prompts = loadPrompts()): Promise<JudgeResult> {
   const t = bundleText(b.files);
   const digest = createHash("sha256").update(t.text + "\0" + b.hint).digest("hex");
   const q = parseQuotes(await call(role, fill(prompts.quotes, { MAX: String(FROZEN.judge.maxItems), BUNDLE: t.text })), t.text);
   const base = { unit: b.unit, source: b.source, words: t.words, quotes: q.quotes, role, dropped: q.dropped, over: q.over, truncated: t.truncated, error: q.error, digest };
   if (!q.quotes.length) return { ...base, named: false, matched: null, sections: [] };
-  const matched = parseNamed(await call(role, fill(prompts.named, { HINT: b.hint.trim(), QUOTES: q.quotes.map((x, i) => i + 1 + ". " + x).join("\n") })), q.quotes.length);
+  const answer = await call(role, fill(prompts.named, { HINT: b.hint.trim(), QUOTES: q.quotes.map((x, i) => i + 1 + ". " + x).join("\n") }));
+  if (!answer.trim()) return { ...base, error: "call 2 gave an empty reply", named: false, matched: null, sections: [] };
+  const matched = parseNamed(answer, q.quotes.length);
   return { ...base, named: matched !== null, matched, sections: matched === null ? [] : [sectionOf(t.text, q.quotes[matched]!)] };
 }
 

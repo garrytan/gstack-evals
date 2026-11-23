@@ -218,3 +218,40 @@ describe("a metered call that billed and failed (commands.ts:125), on a real lea
     expect(settleThrown(g, "build", e, "c")).toBe(e);
   });
 });
+
+describe("an empty judge reply is a failed call, asked once more (commands.ts gatedJudge, plan change 2026-11-23)", () => {
+  const run = (replies: string[]) => {
+    const journal = join(mkdtempSync(join(root, "empty-")), "ep-judge.jsonl");
+    const g = new ItemGate(itemOf("ep-judge"), { capUsd: 5, journal, planned: { call: 4 } });
+    const attempts: Array<number | undefined> = [];
+    const call = async (_role: JudgeRole, _prompt: string, attempt?: number) => {
+      attempts.push(attempt);
+      return { text: replies[attempts.length - 1] ?? "a third call", costUsd: 0.3 };
+    };
+    return { g, journal, attempts, judge: gatedJudge(g, call) };
+  };
+
+  test("a reply with text settles once as an ordinary line and is not asked again", async () => {
+    const t = run(["NONE"]);
+    expect(await t.judge("gold-gemini", "p")).toBe("NONE");
+    expect(t.attempts).toEqual([undefined]);
+    expect(lines(t.journal).map((l) => l.failed === true)).toEqual([false]);
+  });
+
+  test("an empty reply settles as a failed line, and the re-ask is attempt 2 under the same cell, whose text counts", async () => {
+    const t = run(["", "MATCH 1"]);
+    expect(await t.judge("gold-gemini", "p")).toBe("MATCH 1");
+    expect(t.attempts).toEqual([undefined, 2]);
+    const j = lines(t.journal);
+    expect(j.map((l) => [l.failed === true, l.usd, l.cell === j[0].cell])).toEqual([[true, 0.3, true], [false, 0.3, true]]);
+    expect(t.g.inFlight()).toBe(0);
+  });
+
+  test("a second empty reply comes back empty after two failed lines, with no third call", async () => {
+    const t = run([" ", ""]);
+    expect(await t.judge("gold-gemini", "p")).toBe("");
+    expect(t.attempts).toEqual([undefined, 2]);
+    expect(lines(t.journal).map((l) => l.failed === true)).toEqual([true, true]);
+    expect(t.g.inFlight()).toBe(0);
+  });
+});
