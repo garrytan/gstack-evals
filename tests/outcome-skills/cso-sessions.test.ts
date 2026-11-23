@@ -122,6 +122,14 @@ describe("cso sessions: the record", () => {
     ];
     expect(openedPaths(v, "/work/repo")).toEqual(["a.go", "cipher/b.go", "pkg/x.go", "pkg/y.go", ".github/workflows/ci.yml"]);
   });
+  test("a loop inside a loop is written out from the inside, and a glob word stays a glob", () => {
+    const bash = (command: string) => ({ type: "AssistantMessage", parent_tool_use_id: null, content: [{ type: "tool_use", id: "n" + command.length, name: "Bash", input: { command } }] });
+    const v = [
+      bash('L=~/.claude/skills/gstack/bin/gstack-cso-launcher; R=1795273710354-cc00549a7600619a; for d in api web; do echo "looking for $d"; for f in x.go y.go; do $L read $R $d/$f; done; done'),
+      bash("L=~/.claude/skills/gstack/bin/gstack-cso-launcher; R=1795273710354-cc00549a7600619a; for f in src/*.c; do $L read $R $f; done"),
+    ];
+    expect(openedPaths(v, "/work/repo")).toEqual(["api/x.go", "api/y.go", "web/x.go", "web/y.go", "src/*.c"]);
+  });
   test("model id and harness version come from the session's own init record, never the plan", () => {
     expect(sessionIdentity(recs)).toEqual({ model_id: "claude-opus-5-5-20261101", harness_version: "2.1.325" });
     expect(() => sessionIdentity(recs.slice(1))).toThrow(/^E_CSO_SESSION /);

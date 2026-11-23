@@ -209,4 +209,9 @@ describe("section 10: the miss anatomy, in the plan's order", () => {
     expect(miss({ opened: [H], texts: ["Looked at src/other.js:3"] })).toBe("opened_not_named");
     expect(miss({ opened: [ROOT + "/src/parse.js"], texts: ["Looked at src/other.js:3"] })).toBe("opened_not_named");
   });
+  test("a glob in opened opens the fix files it matches", () => {
+    expect(miss({ opened: ["src/*.js"], texts: ["Looked at src/other.js:3"] })).toBe("opened_not_named");
+    expect(miss({ opened: ["src/p?rse.js"], texts: ["Looked at src/other.js:3"] })).toBe("opened_not_named");
+    expect(miss({ opened: ["lib/*.js", "*.js"] })).toBe("never_opened_fix_file");
+  });
 });
