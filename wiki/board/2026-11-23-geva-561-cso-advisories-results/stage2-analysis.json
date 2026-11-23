@@ -420,9 +420,10 @@
      "other_flaw_or_class": 1
     },
     "cso": {
-     "never_opened_fix_file": 7,
+     "unclassified": 1,
      "limit_tooling_or_not_assessed": 2,
-     "other_flaw_or_class": 1
+     "never_opened_fix_file": 5,
+     "other_flaw_or_class": 2
     }
    }
   },
@@ -681,9 +682,9 @@
     "cso": {
      "other_flaw_or_class": 3,
      "unclassified": 1,
-     "never_opened_fix_file": 3,
-     "limit_tooling_or_not_assessed": 1,
-     "opened_not_named": 1
+     "opened_not_named": 3,
+     "never_opened_fix_file": 1,
+     "limit_tooling_or_not_assessed": 1
     }
    }
   }

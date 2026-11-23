@@ -196,6 +196,16 @@ Written 2026-11-23, after stage 2's analysis ran. Section 10 freezes a miss anat
 
 No outcome changes. The command, run again on stage 2's exported inputs with the 16 audited trees the misses need, rebuilt from their public parent commits and matching their recorded hashes, matches the run's analysis in every field but the miss anatomy. The results post publishes both files.
 
+## The opened reader and the submission count, after review
+
+Written 2026-11-23, after review of the results post. Two readers of the session transcripts missed cases the plan's definitions cover.
+
+The miss anatomy's "never opened a file the fix changed" reads each session's opened list: the files it read through its own tools or the /cso helper. The reader that builds the list skipped helper reads written inside a shell for loop over listed files (`for f in a.go b.go; do <helper> read <run> $f; done`), so it counted files those sessions read as never opened. It now writes such a loop out once per listed word (lanes/outcome-skills/cso/sessions.ts; tests/outcome-skills/cso-sessions.test.ts), and `missAnatomy` resolves helper handles and snapshot-rooted paths in the list the way it does in citations (tests/outcome-skills/cso-score.test.ts). Each stage 2 session's opened list was read again from its exported transcript with the fixed reader, every other field as recorded, and `cso analyze --judged` ran again on those lists. Of the advisories plain Opus named and /cso missed, /cso never opened a fix file in 5 of 10, not 7; on particle-1, in 1 of 9, not 3. The reader still doesn't follow a while loop over a generated file list, and the one particle-1 session it still counts read its fix file that way.
+
+The count of findings submitted to the helper took the last JSON object a submit call printed. When a submit and a finish ran in one command, that was the finish's object, which carries no count, so three Opus sessions recorded 0 where the helper accepted 1, 2 and 2. The count now takes the last object that carries one (lanes/outcome-skills/cso/exposure.ts; tests/outcome-skills/cso-exposure.test.ts). Opus's total reads 23 findings from 12 sessions, not 18 from 9. No row, verdict or gate reads this count, and the published session table keeps the recorded values.
+
+No outcome changes.
+
 ## CV5: interim-look bounds replace Holm, if stage 2 takes the look
 
 > When stage 2 takes R113's interim look, its O'Brien-Fleming bounds (3.18 and 2.25 at two-sided 0.025, then 2.80 and 1.98 at 0.05 once one contrast is rejected) replace section 10's Holm thresholds at both looks.
@@ -210,4 +220,4 @@ This applies only to the conditional Sol stage, which runs on the owner's go wit
 
 ## What does not change
 
-Arms, models, texts, the candidate lists and their order, seeds, scoring, the judge model, the labellers, the check thresholds, the analysis, the stages, the other caps and the total all stay as merged. Only the judge's output cap and effort, and the judge item's cap, change, under (d), and the check's own items, pass B's known field and the session image tag, under (e). Stage 2's order is pinned and two flags pass the doubled allowance, under the stage 2 setup. After stage 2's analysis, `cso analyze` reads the judged rows so the frozen miss anatomy prints; no outcome changes. Run receipts name each deviation by its letter and the commit that landed it.
+Arms, models, texts, the candidate lists and their order, seeds, scoring, the judge model, the labellers, the check thresholds, the analysis, the stages, the other caps and the total all stay as merged. Only the judge's output cap and effort, and the judge item's cap, change, under (d), and the check's own items, pass B's known field and the session image tag, under (e). Stage 2's order is pinned and two flags pass the doubled allowance, under the stage 2 setup. After stage 2's analysis, `cso analyze` reads the judged rows so the frozen miss anatomy prints, the opened reader follows helper reads in shell for loops, and the submission count reads a batched submit's own count; no outcome changes. Run receipts name each deviation by its letter and the commit that landed it.
