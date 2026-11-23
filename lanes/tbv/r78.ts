@@ -26,6 +26,20 @@ export function astraKey(entries: PacketKeyEntry[]): PacketKeyEntry[] {
   return entries.filter((e) => e.primary === "sol" || e.second === "sol").map((e) => ({ ...e, primary: "astra", second: null }));
 }
 
+/** A packet key lists each packet once and each output's first packet once, so no judged output counts twice. Checked
+ * before anything is written. */
+export function uniqueKey(entries: PacketKeyEntry[]): PacketKeyEntry[] {
+  const packets = new Set<string>(), firsts = new Set<string>();
+  for (const e of entries) {
+    if (packets.has(e.packet)) fail("E_TBV_INPUT", "the packet key lists one packet twice; give each packet once");
+    packets.add(e.packet);
+    if (e.kind !== "first") continue;
+    if (firsts.has(e.label)) fail("E_TBV_INPUT", "the packet key lists one output's first packet twice; give each output once");
+    firsts.add(e.label);
+  }
+  return entries;
+}
+
 /** Astra's records by packet: one primary record per packet, refused if a record is not Astra's or a packet repeats. */
 export function astraRecords(records: JudgeRecord[]): Map<string, JudgeRecord> {
   const m = new Map<string, JudgeRecord>();
@@ -83,11 +97,8 @@ export function judgeCheck(judge: "sol" | "opus", entries: PacketKeyEntry[], fro
   const partner = judge === "sol" ? "opus" : "sol";
   const byTask = new Map<string, Tally>();
   let packets = 0, outputs = 0, excluded = 0, labelled = 0, unlabelled = 0;
-  const seen = new Set<string>();
-  for (const e of entries) {
+  for (const e of uniqueKey(entries)) {
     if (e.kind !== "first" || e.primary !== judge || e.second !== partner) continue;
-    if (seen.has(e.label)) fail("E_TBV_INPUT", "the packet key lists one output's first packet twice; give each output once");
-    seen.add(e.label);
     const c = frozen.get(e.packet + ":primary"), p = frozen.get(e.packet + ":second"), a = astra.get(e.packet);
     if (c?.status !== "judged" || p?.status !== "judged" || a?.status !== "judged" || !c.answer || !p.answer || !a.answer) { excluded++; continue; }
     if (c.judge !== judge || p.judge !== partner) fail("E_TBV_INPUT", "a judge record does not match its packet key entry's judges");
@@ -175,7 +186,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     const a = parseFlags(argv.slice(1), ["key", "out"], ["held", "seal-cmd"]);
     needsHeld("r78-key", a);
     const seal = heldOutputs(a, ["out"], undefined, [basename(a.out!)]);
-    const entries = readPacketKey(a.key!);
+    const entries = uniqueKey(readPacketKey(a.key!));
     const out = astraKey(entries);
     writePlain(a.out!, JSON.stringify({ schema: "tbv-packet-key.v1", entries: out }, null, 2) + "\n");
     seal?.(a.out!);
@@ -187,6 +198,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   needsHeld("r78", a);
   const seal = heldOutputs(a, ["out"], undefined, [basename(a.out!)]);
   const input = readingsInput(a);
+  uniqueKey(input.entries);
   const astra = astraRecords(joinBatches([], a.astra!.split(",").map((f) => readNdjson<JudgeRecord>(f))).judges);
   const labels = new Set(input.records.map((r) => r.label));
   const planned = input.manifest.controlTaskIds;

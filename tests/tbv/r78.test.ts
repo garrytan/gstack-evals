@@ -97,7 +97,11 @@ describe("judgeCheck (addendum section 2)", () => {
   };
   test("an output listed twice in the packet key is refused, so repeats can't reach R78's floor", () => {
     const { es, fz, as } = twenty();
-    expect(() => judgeCheck("opus", [...es, ...es], fz, as)).toThrow(expect.objectContaining({ code: "E_TBV_INPUT", message: expect.stringContaining("lists one output's first packet twice") }));
+    expect(() => judgeCheck("opus", [...es, ...es.map((e) => ({ ...e, packet: e.packet + "-again" }))], fz, as)).toThrow(expect.objectContaining({ code: "E_TBV_INPUT", message: expect.stringContaining("lists one output's first packet twice") }));
+  });
+  test("one packet listed under two output labels is refused, so one judged packet can't count twice", () => {
+    const { es, fz, as } = twenty();
+    expect(() => judgeCheck("opus", [...es, { ...es[0]!, label: "another-output" }], fz, as)).toThrow(expect.objectContaining({ code: "E_TBV_INPUT", message: expect.stringContaining("lists one packet twice") }));
   });
   test("other direction: the same outputs listed once count once each and stay under the floor", () => {
     const { es, fz, as } = twenty();
@@ -263,6 +267,13 @@ describe("r78-key and r78 runs", () => {
     expect(out).toMatch(/^sol reading: skill layer opus/m);
     expect(out).toMatch(/^astra reading: skill layer opus/m);
     expect(out).not.toMatch(/task-alpha|task-beta|lbl-/);
+  });
+  test("r78 and r78-key refuse a packet key that lists one output twice before writing or sealing anything", async () => {
+    const { f, dir, plain, held, argv } = files();
+    writeFileSync(join(dir, "packet-key.json"), JSON.stringify({ schema: "tbv-packet-key.v1", entries: [...f.entries, { ...f.entries[0]!, packet: "p1-again" }] }));
+    await expect(run(argv, capture().io)).rejects.toMatchObject({ code: "E_TBV_INPUT", message: expect.stringContaining("lists one output's first packet twice") });
+    await expect(run(["r78-key", "--key", join(dir, "packet-key.json"), "--out", join(plain, "astra-key.json"), "--held", held, "--seal-cmd", SEAL], capture().io)).rejects.toMatchObject({ code: "E_TBV_INPUT" });
+    expect([existsSync(join(plain, "astra-readings.json")), existsSync(join(plain, "astra-key.json")), existsSync(held)]).toEqual([false, false, false]);
   });
   test("r78 refuses a missing --astra and an incomplete Astra run", async () => {
     const { f, dir, argv } = files();
