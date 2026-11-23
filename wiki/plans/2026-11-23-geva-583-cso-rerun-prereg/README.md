@@ -19,7 +19,7 @@ links:
   - lanes/outcome-skills/cso/
 attachments:
   - 9c8add95a639cd8cac415961481f565619715f26fd22d7a11b1f8ad986b915e4  power.txt
-  - abbcc341ca57270e59f53c930da782ba01fa0f9f92f370f644a6062157dea807  rerun.json
+  - 8d8520dfd1d8bbb2032118046fa3ae2e292df3f2857726bcf013603397b78e62  rerun.json
 ---
 
 # Preregistration: /cso before and after gstack's fixes, on the same 52 real advisories
@@ -147,7 +147,7 @@ Labelled outputs: 111
 Kappa at least: 0.6
 Errors read: per arm, with the new cso reports read apart from the none reports
 
-The route is the parent's fallback, which judged stage 2: GPT-6.2 Astra judges, with gold from Opus 5.5 and Gemini 4 Argon, at the settings of the parent's deviation (d) and with the same prompts. The 111 labelled reports are the parent's 85 gold reports on this route (kappa 0.975), the 10 pilot reports, and 16 counted new-cso reports, 8 per model, drawn with rerun.json's gold_seed before any judged number of the counted run is read. The parent's check files are sealed; they are opened for this pooling under a custody entry logged before it runs, and opening them reveals no outcome of this rerun.
+The route is the parent's fallback, which judged stage 2: GPT-6.2 Astra judges, with gold from Opus 5.5 and Gemini 4 Argon, at the settings of the parent's deviation (d) and with the same prompts. The 111 labelled reports are the parent's 85 gold reports on this route (kappa 0.975), the 10 pilot reports, and 16 counted new-cso reports, 8 per model, drawn with rerun.json's gold_seed before any judged number of the counted run is read. Gold is a report both labellers agree on. If fewer than 100 of the 111 end as gold, more counted new-cso reports are drawn in the same seeded order, alternating models, until 100 do or the counted reports run out, in which case the check fails on its floor. The parent's check files are sealed; they are opened for this pooling under a custody entry logged before it runs, and opening them reveals no outcome of this rerun.
 
 The judge's numbers count only when all of these hold: kappa on named of at least 0.6 on all 111 and on non-anchor gold reports alone, with at least 10 in each class; a disagreement rate on named in new cso reports within 10 points of that in none reports; validity kappa of at least 0.6 on pooled gold findings; and refusals and over-cap gold drops at most 5% of gold reports. The parent's format-variant gates stand as this route passed them. If any fails, every row reads "judge not validated" (FIX-METHOD), and the Captain decides.
 

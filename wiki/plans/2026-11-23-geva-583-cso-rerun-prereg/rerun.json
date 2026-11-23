@@ -221,7 +221,8 @@
    "the parent's format-variant gates stand as passed on this route"
   ],
   "pilot_gate": "on the 10 pilot cso reports: no refusal, no judge gap, and gold disagrees with the judge on named in at most 2",
-  "on_failure": "no counted number counts; the rows read judge not validated (FIX-METHOD) and the Captain decides"
+  "on_failure": "no counted number counts; the rows read judge not validated (FIX-METHOD) and the Captain decides",
+  "gold_floor": "at least 100 gold reports (both labellers agree); if fewer, more counted new-cso reports are drawn in the same gold_seed order, alternating models, until 100 are gold or the counted reports run out, and then the check fails on its floor"
  },
  "items": {
   "cso2-pilot": {
