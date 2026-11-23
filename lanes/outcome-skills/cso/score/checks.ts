@@ -4,8 +4,8 @@
 // citation gate (every citation that uses a helper snapshot root or handle resolves after normalization). A cited bare
 // file name resolves when it is unique in the tree. An unresolved handle is flagged by the gate, never counted as a
 // phantom; a plain wrong path is a phantom and never fails the gate.
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import type { HelperRecords, SessionRecord } from "../types.ts";
 import { HANDLE, normalizeText, PATH_TOKEN } from "./text.ts";
 
@@ -25,15 +25,18 @@ export function treeIndex(files: Record<string, string>): TreeIndex {
   return { files: m, byBase };
 }
 
-/** A tree index read from a directory, leaving out .git. */
+/** A tree index read from a directory, leaving out .git and every symlink whose target resolves outside the directory, so an
+ *  audited repository's link to a host file (/proc/self/environ, /etc/passwd) never reaches a citation or a judge excerpt. */
 export function readTree(root: string): TreeIndex {
   const files: Record<string, string> = {};
+  const top = realpathSync(root);
+  const inside = (p: string) => (realpathSync(p) + sep).startsWith(top + sep);
   const walk = (dir: string) => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       if (e.name === ".git") continue;
       const p = join(dir, e.name);
       if (e.isDirectory()) walk(p);
-      else if (e.isFile() || (e.isSymbolicLink() && statSync(p, { throwIfNoEntry: false })?.isFile())) files[relative(root, p)] = readFileSync(p, "utf8");
+      else if (e.isFile() || (e.isSymbolicLink() && statSync(p, { throwIfNoEntry: false })?.isFile() && inside(p))) files[relative(root, p)] = readFileSync(p, "utf8");
     }
   };
   walk(root);

@@ -4,11 +4,14 @@
 // position 11 don't; a finding surfaced mid-run counts after a short final message; redaction removes every marker and
 // keeps citations; the stage 0 citation gate; phantom paths and lines; precision, validity and the miss anatomy.
 import { describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
 import type { SessionRecord, UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
 import type { Finding, FindingLabels } from "../../lanes/outcome-skills/cso/judge/schema.ts";
 import { parsePassA } from "../../lanes/outcome-skills/cso/judge/schema.ts";
-import { citationGate, phantoms, treeIndex } from "../../lanes/outcome-skills/cso/score/checks.ts";
+import { citationGate, phantoms, readTree, treeIndex } from "../../lanes/outcome-skills/cso/score/checks.ts";
 import { missAnatomy, pooledPrecision, scoreSession } from "../../lanes/outcome-skills/cso/score/outcomes.ts";
 import { normalizePath, redact, REDACTED, scoredText } from "../../lanes/outcome-skills/cso/score/text.ts";
 
@@ -133,6 +136,23 @@ describe("section 5: the scored text", () => {
     const reply = JSON.stringify({ findings: [{ text: "e1", source: "earlier", citations: [] }, { text: "f1", source: "final", citations: [{ path: "a.js", start: 3 }] }, { text: "f2", source: "final", citations: [] }] });
     expect(parsePassA(reply)!.map((x) => x.text)).toEqual(["f1", "f2", "e1"]);
     expect(parsePassA("not json")).toBeNull();
+  });
+});
+
+describe("the audited tree on disk", () => {
+  test("a symlink is read only when it resolves inside the tree", () => {
+    const d = mkdtempSync(join(tmpdir(), "cso-tree-"));
+    const root = join(d, "repo");
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "a.js"), "inside\n");
+    writeFileSync(join(d, "host.txt"), "host secret\n");
+    symlinkSync("a.js", join(root, "src", "b.js"));
+    symlinkSync("../../host.txt", join(root, "src", "up.js"));
+    symlinkSync(join(d, "host.txt"), join(root, "abs.txt"));
+    if (existsSync("/proc/self/environ")) symlinkSync("/proc/self/environ", join(root, "environ"));
+    const t = readTree(root);
+    expect([...t.files.keys()].sort()).toEqual(["src/a.js", "src/b.js"]);
+    expect([...t.files.values()].flat()).not.toContain("host secret");
   });
 });
 
