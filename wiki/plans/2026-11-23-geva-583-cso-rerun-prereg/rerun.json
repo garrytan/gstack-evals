@@ -209,12 +209,12 @@
   "labelled_outputs": {
    "parent_gold_reports": 85,
    "pilot_cso_reports": 10,
-   "counted_cso_sample": 16,
-   "total": 111
+   "counted_cso_sample": 24,
+   "total": 119
   },
-  "counted_sample_rule": "8 new cso reports per model, drawn with gold_seed from the counted sessions before any judged number of the counted run is read",
+  "counted_sample_rule": "sort the counted units by sha256 of '<gold_seed>:<unit id>' ascending (hex string order); walk the list taking each unit's Opus new-cso report, then its particle-1 report, skipping gap sessions, until 24 are taken; drawn before any judged number of the counted run is read",
   "gates": [
-   "kappa on named at least 0.6 on all 111 gold reports and on non-anchor gold reports alone",
+   "kappa on named at least 0.6 on all gold reports (at least 100) and on non-anchor gold reports alone, with at least 10 in each class",
    "on gold reports, the judge's disagreement rate on named in new cso reports and in none reports differs by at most 10 points",
    "validity kappa at least 0.6 on pooled gold findings",
    "refusals and over-cap gold drops at most 5% of gold reports",
@@ -222,7 +222,7 @@
   ],
   "pilot_gate": "on the 10 pilot cso reports: no refusal, no judge gap, and gold disagrees with the judge on named in at most 2",
   "on_failure": "no counted number counts; the rows read judge not validated (FIX-METHOD) and the Captain decides",
-  "gold_floor": "at least 100 gold reports (both labellers agree); if fewer, more counted new-cso reports are drawn in the same gold_seed order, alternating models, until 100 are gold or the counted reports run out, and then the check fails on its floor"
+  "gold_floor": "at least 100 gold reports (both labellers agree); if fewer, the draw continues down the same list in the same way, up to 20 more reports (about $12 inside cso2-judge's cap); if 100 still aren't gold, the check fails on its floor"
  },
  "items": {
   "cso2-pilot": {
@@ -246,9 +246,10 @@
    "rule": "1.35 times central plus 4 parallel sessions at Opus's $16 allowance"
   },
   "cso2-judge": {
-   "central": 50,
-   "cap": 74,
+   "central": 55,
+   "cap": 81,
    "pilot_part_central": 9,
+   "extension": "up to 20 more gold reports, about $12, inside the cap",
    "rule": "1.35 times central plus 4 calls at Astra's largest, about $1.60"
   },
   "cso2-vm": {
@@ -262,7 +263,7 @@
   }
  },
  "interim_look": {
-  "planned_paid_spend_usd": 291,
+  "planned_paid_spend_usd": 296,
   "look": "none at this size; if the pilot's re-pricing plans the counted run above $500 paid, one look at 26 of 52 units in the frozen order, with the parent's CV5 bounds"
  },
  "planning_prices": {
@@ -276,8 +277,8 @@
   "basis": "parent stage 2 measured: Opus cso $0.58, particle-1 cso $0.18, Opus none $4.11, particle-1 none $1.51, Astra judging $0.17 a session, Opus and Argon gold about $0.40 a report; the fixed /cso reads more code, so its sessions are priced near the plain arm's"
  },
  "totals": {
-  "central": 360,
-  "caps": 564,
+  "central": 365,
+  "caps": 571,
   "reserve": 40
  }
 }

@@ -19,7 +19,7 @@ links:
   - lanes/outcome-skills/cso/
 attachments:
   - 9c8add95a639cd8cac415961481f565619715f26fd22d7a11b1f8ad986b915e4  power.txt
-  - 8d8520dfd1d8bbb2032118046fa3ae2e292df3f2857726bcf013603397b78e62  rerun.json
+  - 9f4e10d0944c1a87736f35f0492cf96e137e40b137c182f77da5ab7c9b9411ca  rerun.json
 ---
 
 # Preregistration: /cso before and after gstack's fixes, on the same 52 real advisories
@@ -143,20 +143,20 @@ The same figures hold at 51 and 52 units. The old Opus contrast had a 22% discor
 ## Judge check
 
 Judge: openai/gpt-6.2-astra scores anthropic/claude-opus-5-5, particle-ai/particle-1
-Labelled outputs: 111
+Labelled outputs: 119
 Kappa at least: 0.6
 Errors read: per arm, with the new cso reports read apart from the none reports
 
-The route is the parent's fallback, which judged stage 2: GPT-6.2 Astra judges, with gold from Opus 5.5 and Gemini 4 Argon, at the settings of the parent's deviation (d) and with the same prompts. The 111 labelled reports are the parent's 85 gold reports on this route (kappa 0.975), the 10 pilot reports, and 16 counted new-cso reports, 8 per model, drawn with rerun.json's gold_seed before any judged number of the counted run is read. Gold is a report both labellers agree on. If fewer than 100 of the 111 end as gold, more counted new-cso reports are drawn in the same seeded order, alternating models, until 100 do or the counted reports run out, in which case the check fails on its floor. The parent's check files are sealed; they are opened for this pooling under a custody entry logged before it runs, and opening them reveals no outcome of this rerun.
+The route is the parent's fallback, which judged stage 2: GPT-6.2 Astra judges, with gold from Opus 5.5 and Gemini 4 Argon, at the settings of the parent's deviation (d) and with the same prompts. The 119 labelled reports are the parent's 85 gold reports on this route (kappa 0.975), the 10 pilot reports, and 24 counted new-cso reports, drawn before any judged number of the counted run is read. The draw: sort the counted units by the sha256 of `<gold_seed>:<unit id>`, ascending, and walk that list taking each unit's Opus report, then its particle-1 report, skipping a gap session, until 24 are taken (12 units, both models). Gold is a report both labellers agree on; the parent's gold agreed on 85 of 94. If fewer than 100 of the labelled reports end as gold, the draw continues down the same list, in the same way, up to 20 more reports (about $12, inside cso2-judge's cap). If 100 still aren't gold, the check fails on its floor. The parent's check files are sealed; they are opened for this pooling under a custody entry logged before it runs, and opening them reveals no outcome of this rerun.
 
-The judge's numbers count only when all of these hold: kappa on named of at least 0.6 on all 111 and on non-anchor gold reports alone, with at least 10 in each class; a disagreement rate on named in new cso reports within 10 points of that in none reports; validity kappa of at least 0.6 on pooled gold findings; and refusals and over-cap gold drops at most 5% of gold reports. The parent's format-variant gates stand as this route passed them. If any fails, every row reads "judge not validated" (FIX-METHOD), and the Captain decides.
+The judge's numbers count only when all of these hold: kappa on named of at least 0.6 on all gold reports (at least 100 of them) and on non-anchor gold reports alone, with at least 10 in each class; a disagreement rate on named in new cso reports within 10 points of that in none reports; validity kappa of at least 0.6 on pooled gold findings; and refusals and over-cap gold drops at most 5% of gold reports. The parent's format-variant gates stand as this route passed them. If any fails, every row reads "judge not validated" (FIX-METHOD), and the Captain decides.
 
 ## Interim look
 
-Planned paid spend: $291
+Planned paid spend: $296
 Look: none
 
-The counted run is planned at $291 paid (sessions $250, judging and gold $41). If the pilot's re-pricing plans it above $500, it takes one look at 26 of the 52 units in the frozen order, with the parent's CV5 O'Brien-Fleming bounds (3.18 then 2.25 at two-sided 0.025; 2.80 then 1.98 at 0.05 once one contrast is rejected), and no other look.
+The counted run is planned at $296 paid (sessions $250, judging and gold $46). If the pilot's re-pricing plans it above $500, it takes one look at 26 of the 52 units in the frozen order, with the parent's CV5 O'Brien-Fleming bounds (3.18 then 2.25 at two-sided 0.025; 2.80 then 1.98 at 0.05 once one contrast is rejected), and no other look.
 
 ## 8. Money
 
@@ -166,12 +166,12 @@ Planning prices come from the parent's stage 2: Opus cso cost $0.58 a session an
 |---|---|---|---|
 | cso2-pilot | 10 sessions (Opus 5 x $4.00, particle-1 5 x $0.80), one at a time | $24 | $40 |
 | cso2-main | 104 sessions (Opus 52 x $4.00, particle-1 52 x $0.80) | $250 | $401 |
-| cso2-judge | Astra on 114 sessions ($34) and gold on 26 reports ($16) | $50 | $74 |
+| cso2-judge | Astra on 114 sessions ($34) and gold on 34 reports ($21); the cap also holds up to 20 more gold reports (about $12) if the gold floor needs them | $55 | $81 |
 | cso2-vm | one Ubicloud standard-16 for about 3 days | $36 | $49 |
 | cso2-reserve | a re-pilot or a repair rerun, on the Captain's word | | $40 |
-| Total | | $360 | $564, plus the $40 reserve |
+| Total | | $365 | $571, plus the $40 reserve |
 
-Caps follow the crew's rule: 1.35 times central, plus parallel sessions at the per-session reserve (4 counted sessions at Opus's $16 allowance; 4 judge calls at about $1.60). Each arm's budget in the Pilots table is its share of cso2-main by the same rule (1.35 times its central plus 4 sessions at its own allowance: $345 for Opus, $68 for particle-1), and its pilot cap is at most a tenth of that. A cap stop ends its item incomplete and is never retried to change a verdict. The /cso line's guideline is $2,000 all-in, with about $965 spent before this plan. This rerun adds $360 paid at central and at most $604 at every cap and the reserve; with crew model use of about $300 to $400, the line ends near $1,650 at central and at most about $2,000 at caps.
+Caps follow the crew's rule: 1.35 times central, plus parallel sessions at the per-session reserve (4 counted sessions at Opus's $16 allowance; 4 judge calls at about $1.60). Each arm's budget in the Pilots table is its share of cso2-main by the same rule (1.35 times its central plus 4 sessions at its own allowance: $345 for Opus, $68 for particle-1), and its pilot cap is at most a tenth of that. A cap stop ends its item incomplete and is never retried to change a verdict. The /cso line's guideline is $2,000 all-in, with about $965 spent before this plan. This rerun adds $365 paid at central and at most $611 at every cap and the reserve; with crew model use of about $300 to $400, the line ends near $1,650 at central and at most about $2,000 at caps.
 
 ## 9. Harness changes before the paid run
 
