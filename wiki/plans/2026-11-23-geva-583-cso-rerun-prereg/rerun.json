@@ -139,7 +139,7 @@
   "rule": "the parent's section 8, as written: a helper start call through gstack-cso-launcher returned a run id, at least one inspect or read call used that run, and a finish call ran",
   "threshold": 0.8,
   "detector_fixes": [
-   "start: a run id is that start's when the start printed it, or when the helper's run record saved from the session holds it, or when a later call prints or passes a run id whose 13-digit creation time falls between the start call and its result",
+   "start: a run id is that start's when the start printed it, or when the helper's run record saved from the session holds it, matched by order (the session's k-th unrefused start takes the record's k-th run, ordered by the creation time in its id), or, when the helper didn't refuse that start, the first run id a later call prints or passes (its own output included) before any other start call; transcripts carry only seconds since session start, so matching is by order, not clock time",
    "used: an inspect or read call names the run by its id, or by a shell variable or command substitution, when the session holds exactly one accepted start",
    "finish: a finish call on the run counts when its own output holds the helper's finish object or it exited 0 with no helper refusal, even when a later command in the same Bash call failed; or the saved run record shows the run finished"
   ],

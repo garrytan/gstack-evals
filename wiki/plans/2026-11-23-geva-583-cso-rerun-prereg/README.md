@@ -19,7 +19,7 @@ links:
   - lanes/outcome-skills/cso/
 attachments:
   - 9c8add95a639cd8cac415961481f565619715f26fd22d7a11b1f8ad986b915e4  power.txt
-  - 9f4e10d0944c1a87736f35f0492cf96e137e40b137c182f77da5ab7c9b9411ca  rerun.json
+  - 5e214b61678584f726d661dce6874315adfaa749700f19f768a5e79218a0c296  rerun.json
 ---
 
 # Preregistration: /cso before and after gstack's fixes, on the same 52 real advisories
@@ -82,7 +82,7 @@ The rule is the parent's section 8, as written: a helper `start` call through gs
 
 The correction post (#444) found two gaps between that rule and the detector that ran: the detector needed the run id in what the model saw of start's output, which `tail` cut; and it ignored a finish whose Bash call failed later in the same command. The fixed /cso also saves start's output to a file and reads the run id with jq, so the id may never print. The detector is fixed to match the rule, in three places:
 
-1. **Start returned a run id** when the start printed it; or when the helper's own run record, saved from the session container at its end, holds a run whose id the start created; or when a later call prints or passes a run id whose 13-digit creation time falls between that start call and its result.
+1. **Start returned a run id** when the start printed it; or when the helper's own run record, saved from the session container at its end, holds the run that start made, matched by order (the session's k-th unrefused start takes the record's k-th run, ordered by the creation time in its id); or when the helper didn't refuse that start and a later call, before any other start call, prints or passes a run id, its own output included, in which case the first such id is the start's. The transcripts carry only seconds since the session began, not clock times, so the match goes by order.
 2. **A call used that run** when an inspect or read names it by its id, or by a shell variable or command substitution (such as `$(jq -r .runId start.json)`), and the session holds exactly one accepted start.
 3. **A finish ran** when a finish call on that run printed the helper's finish object or exited 0 with no helper refusal, even when a later command in the same Bash call failed; or when the saved run record shows the run finished.
 
