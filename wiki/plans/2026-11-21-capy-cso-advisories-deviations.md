@@ -188,6 +188,14 @@ Written 2026-11-22, after stage 1's third sealed readout and before any stage 2 
 
 **Power.** At n2 = 52, section 13's power script finds no difference that reaches 80% power at a 15% discordant share, and none at two-sided 0.025 at 20% (19 points at 0.05); at 30% it is 25 points (24). So a null result will most likely read FIX-METHOD on power, as section 10 says, and is not evidence that /cso doesn't help.
 
+## Miss anatomy wiring, after stage 2's analysis
+
+Written 2026-11-23, after stage 2's analysis ran. Section 10 freezes a miss anatomy: for every unit one arm named and the other missed, the missing session's first matching cause. The library had `missAnatomy` with its own tests, but `cso analyze` never built the per-session map or passed it to the secondaries, so the run's analysis printed the miss anatomy empty for both models.
+
+`cso analyze` now takes `--judged <file>` (the judged rows that `cso score` reads). `missMap` classifies each missed session from its record, its judged findings and its unit's audited tree. Tests: tests/outcome-skills/cso-analysis-secondaries.test.ts and tests/outcome-skills/cso-judge-cli.test.ts.
+
+No outcome changes. The command, run again on stage 2's exported inputs with the 16 audited trees the misses need, rebuilt from their public parent commits and matching their recorded hashes, matches the run's analysis in every field but the miss anatomy. The results post publishes both files.
+
 ## CV5: interim-look bounds replace Holm, if stage 2 takes the look
 
 > When stage 2 takes R113's interim look, its O'Brien-Fleming bounds (3.18 and 2.25 at two-sided 0.025, then 2.80 and 1.98 at 0.05 once one contrast is rejected) replace section 10's Holm thresholds at both looks.
@@ -202,4 +210,4 @@ This applies only to the conditional Sol stage, which runs on the owner's go wit
 
 ## What does not change
 
-Arms, models, texts, the candidate lists and their order, seeds, scoring, the judge model, the labellers, the check thresholds, the analysis, the stages, the other caps and the total all stay as merged. Only the judge's output cap and effort, and the judge item's cap, change, under (d), and the check's own items, pass B's known field and the session image tag, under (e). Stage 2's order is pinned and two flags pass the doubled allowance, under the stage 2 setup. Run receipts name each deviation by its letter and the commit that landed it.
+Arms, models, texts, the candidate lists and their order, seeds, scoring, the judge model, the labellers, the check thresholds, the analysis, the stages, the other caps and the total all stay as merged. Only the judge's output cap and effort, and the judge item's cap, change, under (d), and the check's own items, pass B's known field and the session image tag, under (e). Stage 2's order is pinned and two flags pass the doubled allowance, under the stage 2 setup. After stage 2's analysis, `cso analyze` reads the judged rows so the frozen miss anatomy prints; no outcome changes. Run receipts name each deviation by its letter and the commit that landed it.

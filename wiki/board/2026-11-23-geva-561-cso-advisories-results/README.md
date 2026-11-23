@@ -18,7 +18,8 @@ attachments:
   - 2baac7754f5eb95259145b863f25909511001f8665644dcaa00a0045bbee03bb  kit/open-s1.ts.txt
   - 36daa8201381963231ddfdcb6b82aa0fbd798fb69c00e5992c57ec7c161b2654  kit/stage2.sh.txt
   - ae7cc5a152c9d4095cb33c6c36c4800443ba66727fe7c7f4a586839b67a83bf3  stage1-outcomes.opened.json
-  - bf931411131473236fca45eb3914561391b8af8e35a79793cd8a06e5eb291d3a  stage2-analysis.json
+  - bf931411131473236fca45eb3914561391b8af8e35a79793cd8a06e5eb291d3a  stage2-analysis.as-run.json
+  - 49a75c47ef8b44ef661bfc61efeb8bbde4abfcbbe73da09320733051ba2a84cd  stage2-analysis.json
   - 80984c4bae531b91dfca4a52915838d2316c4cf8a9817f0959476a2083b0de5c  stage2-draw.json
   - b5b7899ebb73a4c3aa09280a84ac7f947ef6e4f0e24040f9c152484fd2d016d9  stage2-scores.jsonl
   - 03c098af04a453fd1c7b7350e6b7919ef8cd46c87e90e6a338e09063b9305a5d  stage2-sessions.tsv
@@ -31,7 +32,7 @@ attachments:
 
 - **We learned that you can grade a security-audit prompt against real, published vulnerabilities.** Each task is a public repository checked out at the commit just before a GitHub security advisory's fix, and the advisory is the answer key. A judge from another model family (GPT-6.2 Astra) agreed with two-labeller gold labels at kappa 0.975 on 85 reports. **You should test audit prompts and skills this way before you trust them,** because it scores whether the audit found the real bug, not how thorough the report looks.
 - **We learned that gstack's /cso, as pinned (gstack 1.101.0.0, /cso 3.0.0), named fewer real advisories than plain Opus 5.5 asked for an audit.** With /cso typed, Opus named the advisory in 3 of 51 audits; with no gstack and a plain request it named 12 of 51: -17.6 points, 95% interval -31.1 to -5.9, Holm p 0.012. /cso reported less than one finding per session against about 15. Its findings were more often real and it cost about a seventh as much per session, but it missed far more. **You should not expect /cso, as pinned, to catch more real vulnerabilities than a plain audit request on Opus 5.5.** The frozen verdict is FIX-METHOD, not a cut, because the /cso procedure ran in only 37 of 52 Opus sessions, under the plan's 80% rule. Had it run in 80% or more, the plan would read this row as Behind and name /cso a cut candidate.
-- **We learned that the skipped procedure does not explain the loss.** In the 37 Opus sessions where the procedure ran, /cso named 2 advisories, and 16 of those 37 audits reported no finding at all (an exploratory split, not in the plan). On particle-1, /cso named 7 of 52 against 13 of 52, -11.5 points [-26.5, +1.9]: no difference shown. Power at 52 units is thin, so that null reads FIX-METHOD and is not evidence that /cso doesn't help particle-1. **gstack's maintainers should find out why a full /cso run ends with almost no reported findings,** and rerun the cso arm before and after the fix on these 52 units.
+- **We learned that the skipped procedure does not explain the loss.** In the 37 Opus sessions where the procedure ran, /cso named 2 advisories, and 16 of those 37 audits reported no finding at all (an exploratory split, not in the plan). And in 7 of the 10 advisories plain Opus named and /cso missed, the /cso session never opened a file the fix changed (the plan's miss anatomy). On particle-1, /cso named 7 of 52 against 13 of 52, -11.5 points [-26.5, +1.9]: no difference shown. Power at 52 units is thin, so that null reads FIX-METHOD and is not evidence that /cso doesn't help particle-1. **gstack's maintainers should find out why a full /cso run ends with almost no reported findings,** and rerun the cso arm before and after the fix on these 52 units.
 
 Call settled: /cso at gstack 1.101.0.0 is not shown to name more real advisories than plain Opus 5.5 and named fewer, so no gain is claimed and its method goes to a fix first (FIX-METHOD)
 
@@ -49,9 +50,9 @@ Call settled: /cso at gstack 1.101.0.0 is not shown to name more real advisories
 
 **The procedure didn't always run.** /cso loaded in all 52 Opus sessions, but its helper run started in 39 and the full procedure (start, an inspect or read on that run, and finish) ran in 37 (71%). On particle-1 it ran in 40 of 52 (77%). Both are under the 80% rule, so both rows read "skill not exercised as designed", which the plan maps to FIX-METHOD.
 
-**The miss anatomy did not print.** The plan froze a classification of every unit one arm named and the other missed (never opened a fix file, opened it but didn't name it, named another flaw, and so on). The analysis command never passed those classifications to the summary, so it printed empty for both models. This post reports no miss anatomy, and the fix step below starts there.
+**It mostly never looked at the vulnerable code.** The plan's miss anatomy classifies every unit one arm named and the other missed, by the first matching cause. Of the 10 advisories plain Opus named and /cso missed, the /cso session never opened a file the fix changed in 7, ended at a limit, a tooling error or a not-assessed helper result in 2, and named the right file with another flaw or class in 1. For the one advisory only /cso named, plain Opus named the right file with another flaw or class.
 
-**GPT-6.2 Sol did not run.** The plan's conditional Sol stage, in Codex CLI, waits on the owner's decision.
+**GPT-6.2 Sol did not run, so /cso is untested on Sol.** The plan made Sol, in Codex CLI, a conditional stage. The owner deferred it until /cso's method is fixed: with the procedure running in under 80% of sessions on both models, a Sol run would most likely read FIX-METHOD too, and the harness can't run /cso sessions in Codex CLI yet.
 
 ## Result
 
@@ -139,6 +140,22 @@ Descriptive, unadjusted. Maven and NuGet had one unit each and are left out.
 
 Every unit's advisory was published, and its fix committed, on or after 2026-07-01, after Opus 5.5's stated training cutoff (June 2026), so the cutoff split has nothing before it. particle-1 has no published cutoff.
 
+### Miss anatomy
+
+For every unit one arm named and the other missed, the missing session's first matching cause, in the plan's order. "Opened" counts files the session read, through its own tools or the /cso helper. The run's analysis printed this frozen secondary empty, because the command never passed it on; it was printed after the run once the command read the judged rows (method notes below). Every other figure in the analysis is identical to the run's.
+
+| Cause | Opus: /cso missed, plain named (10) | Opus: plain missed, /cso named (1) | particle-1: /cso missed, plain named (9) | particle-1: plain missed, /cso named (3) |
+|---|---|---|---|---|
+| Safety stop | 0 | 0 | 0 | 0 |
+| Limit, tooling error or a helper result of not assessed | 2 | 0 | 1 | 1 |
+| Never opened a file the fix changed | 7 | 0 | 3 | 0 |
+| Opened a fix file, but the report doesn't name it | 0 | 0 | 1 | 0 |
+| Named the fix file with another flaw or class | 1 | 1 | 3 | 1 |
+| Named the flaw outside the first 10 findings | 0 | 0 | 0 | 1 |
+| None of these | 0 | 0 | 1 | 0 |
+
+On Opus, the advisories /cso missed are mostly ones its session never read: the plain audit opened the vulnerable file and named the flaw, and /cso never opened it.
+
 ### Stage 1, opened after stage 2's analysis
 
 Stage 1 (12 pilot units, five cells) never enters the confirmatory analysis. Its per-arm outcomes stayed sealed until stage 2's analysis ran, and were opened against the recorded sha256. Descriptive only:
@@ -179,7 +196,7 @@ Carbon gave the same named label to 8 of the 10 format pairs (a table row and a 
 
 This covers the Opus loss and the particle-1 null.
 
-- **Exposure.** /cso loaded every time, but the full procedure ran in 71% of Opus sessions and 77% of particle-1 sessions, under the 80% rule, so neither row can carry a cut. The exploratory split shows the loss doesn't come from the skipped runs: completed runs named 2 of 37 on Opus.
+- **Exposure.** /cso loaded every time, but the full procedure ran in 71% of Opus sessions and 77% of particle-1 sessions, under the 80% rule, so neither row can carry a cut. The exploratory split shows the loss doesn't come from the skipped runs: completed runs named 2 of 37 on Opus. The miss anatomy says where it goes wrong: in 7 of the 10 advisories /cso missed on Opus, its session never opened a file the fix changed.
 - **Task fit.** The plan flagged that libraries may suit /cso's application-security model badly. The Opus loss shows in both libraries (-15.8 [-31.4, -2.5]) and services (-23.1 [-54.5, 0.0]), so task fit doesn't explain it either.
 - **Power and headroom.** The plain audit named 23.5% on Opus and 25.0% on particle-1, so there was room to gain. Power at 52 units is thin (no MDD reaches 80% power), which is why the particle-1 null says nothing about /cso on particle-1. The Opus loss is large enough to clear it.
 - **Does Opus do it unaided?** Partly. A plain audit request found about one advisory in four. /cso found about one in seventeen.
@@ -188,7 +205,7 @@ Verdict: FIX-METHOD on both models. Had the procedure run in 80% of Opus session
 
 ## The one next step
 
-Find out why a /cso run on Opus ends with almost no reported findings, and why the procedure stops short in 15 of 52 sessions. Start from the plan's miss anatomy, which this run did not print, on the 52 Opus cso sessions in the sealed export. A fix to /cso gets a before-and-after rerun of the cso arm on these 52 units. Running GPT-6.2 Sol or more units first would most likely read FIX-METHOD again.
+Find out why a full /cso run on Opus reports almost nothing and mostly never reads the vulnerable code: in 7 of the 10 advisories plain Opus named and /cso missed, /cso never opened a file the fix changed, and the procedure stopped short in 15 of 52 sessions. That question goes to gstack's maintainer. A fix to /cso gets a before-and-after rerun of the cso arm on these 52 units, with its own spend line. Running GPT-6.2 Sol or more units first would most likely read FIX-METHOD again.
 
 ## Setup
 
@@ -210,6 +227,8 @@ Every change below was made before the data it touches, in the deviations post l
 - (e) repairs found in stage 1's readout: the check's own items, pass B's known field and the session image tag;
 - the stage 2 setup: the seeded order, the two flags that pass Opus's doubled allowance, and the re-priced caps.
 
+One change came after the data. The run's analysis printed the frozen miss anatomy empty, because `cso analyze` never passed it on. The command now reads the judged rows (`--judged`) and prints it, and the deviations post records this as a dated note. No outcome changes: the analysis run again on the same inputs matches the run's in every field but the miss anatomy. The 16 audited trees the misses need were rebuilt from their public parent commits, and each matches its recorded hash.
+
 Stage 1's first two readouts stopped stage 2. The first stopped on the judge's format pairs, session gaps, exposure and the plain-audit floor, which led to the repairs in (e) and a re-pilot of the two sessions lost to gaps. The second stopped on the production judge's format pairs, which led to the fallback judge check. The third readout read only exposure, which the owner ruled a result to report beside every verdict, and cost. Stage 1 data from the first two readouts stays sealed. The work moved to a second host once, during the fallback judge check. The rest of that check and all of stage 2 ran there; its cso install carries gstack's three pinned /cso files byte for byte.
 
 ## Limits
@@ -220,7 +239,8 @@ Stage 1's first two readouts stopped stage 2. The first stopped on the judge's f
 - **Construct.** One whole-repository audit per session, in /cso's default daily mode. /cso's comprehensive mode, scope flags and scanners are untested.
 - **Pinned versions.** gstack 1.101.0.0 and Claude Code 2.1.325. Later /cso versions may behave differently.
 - **Contamination.** Every unit is after Opus 5.5's stated cutoff; particle-1's cutoff is unknown.
-- **No miss anatomy** (above), and the exposure split is exploratory.
+- **The exposure split is exploratory,** and the miss anatomy names only the first matching cause of each miss.
+- **Not read for severity.** Nobody has read the supported findings that match no known advisory for severity. The plan sends anything that looks severe to the eval's owner; that read is not done.
 
 ## Replicate it
 
@@ -238,7 +258,7 @@ join <(awk -F'\t' 'NR > 1 && $3 == "cso" { print $1 "|" $2, $12 }' stage2-sessio
   awk '{ split($1, a, "|"); k = a[2] " ran=" $2; n[k]++; if ($3 == "true") h[k]++ } END { for (k in n) print k, h[k] + 0 "/" n[k] }'
 ~~~
 
-stage2-analysis.json is the analysis command's output as it ran. The scripts that ran stage 2 and the analysis are in kit/: stage2.sh.txt (admission, the driver, 208 sessions, judging and scoring), judge-f.sh.txt (the fallback judge check and stage 1's judging), analyze.sh.txt and open-s1.ts.txt (the analysis and the opening of stage 1's sealed file; the published open-s1 has its import's absolute host path made relative to the repository root, and nothing else changed). That record leaves out the unit build, the arm installs, the host setup and the spend approvals, which the plan's harness section and the deviations post describe. A rerun of the sessions needs model keys and spends money: `bin/gstack-evals cso units`, `cso draw`, `outcome serve` and `cso rerun` rebuild and run it, then `cso judge --route fallback-opus-particle`, `cso score` and `cso analyze`.
+stage2-analysis.as-run.json is the analysis command's output as it ran. stage2-analysis.json is the same command after the miss anatomy wiring, identical but for its miss fields; it ran as `cso analyze --work <units and trees> --sessions sessions.jsonl --scores scores.jsonl --judged judged.jsonl --units <stage 2 ids> --check check-production.sealed --check check-fallback-opus-particle.sealed --key <readout key> --headroom-admitted`. The scripts that ran stage 2 and the analysis are in kit/: stage2.sh.txt (admission, the driver, 208 sessions, judging and scoring), judge-f.sh.txt (the fallback judge check and stage 1's judging), analyze.sh.txt and open-s1.ts.txt (the analysis and the opening of stage 1's sealed file; the published open-s1 has its import's absolute host path made relative to the repository root, and nothing else changed). That record leaves out the unit build, the arm installs, the host setup and the spend approvals, which the plan's harness section and the deviations post describe. A rerun of the sessions needs model keys and spends money: `bin/gstack-evals cso units`, `cso draw`, `outcome serve` and `cso rerun` rebuild and run it, then `cso judge --route fallback-opus-particle`, `cso score` and `cso analyze`.
 
 ## What is held out, and why
 
@@ -250,7 +270,7 @@ Report text and transcripts are not published. A report can describe a real, unf
 
 ## Agent notes
 
-- **Miss anatomy wiring.** `cso analyze` calls `secondaries(i, p)` without the per-session miss map, and `missAnatomy` in lanes/outcome-skills/cso/score/outcomes.ts is never called from it. Computing it needs the transcripts and unit trees, which are in the sealed export in the Captain drive (handoffs/GEVA-561/export-2026-11-23; the end-of-session snapshots were not exported, but every unit tree rebuilds from its public commit).
+- **Miss anatomy wiring.** `cso analyze` called `secondaries(i, p)` without the per-session miss map, so the frozen secondary printed empty in the run's analysis. It now takes `--judged` and builds the map with `missMap` (lanes/outcome-skills/cso/analysis/secondaries.ts). The re-run read stage 2's sessions, scores and judged rows from the export in the Captain drive (handoffs/GEVA-561/export-2026-11-23, digests checked against its manifests), and the two sealed checks with the readout key in /dev/shm (logged in CUSTODY.md, key removed after). It also read the 16 audited trees the misses need, rebuilt from their public parent commits with build.ts's sessionTree, each matching its recorded tree_sha256.
 - **Custody.** Every key streaming, sealed opening and teardown for this run is logged in the Captain drive (handoffs/GEVA-561/CUSTODY.md). Stage 1's third readout was opened against 7f271d3d, and the key was removed after each use.
 - **Spend** for every item is in the experiment's registry row.
 
