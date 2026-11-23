@@ -3,6 +3,7 @@
 // its dated pre-data deviations, and the lane's refusal helper. prereg.json in the post bundle is the one source for
 // seeds, pins, texts, units, scoring, judge and analysis constants; code reads it here and nowhere else. Every refusal
 // message starts with its reason code.
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReasonCode } from "../../../src/errors/codes.ts";
@@ -19,6 +20,11 @@ export const csoFail = (code: ReasonCode, message: string): never => {
 export const POST_ID = "2026-11-19-geva-561-cso-advisories-prereg";
 export const PREREG_PATH = join(import.meta.dir, "..", "..", "..", "wiki", "plans", POST_ID, "prereg.json");
 export const DEVIATIONS_POST_ID = "2026-11-21-capy-cso-advisories-deviations";
+/** The before-and-after rerun (GEVA-583): rerun.json, read beside prereg.json when CSO_PLAN=rerun. */
+export const RERUN_POST_ID = "2026-11-23-geva-583-cso-rerun-prereg";
+export const RERUN_PATH = join(import.meta.dir, "..", "..", "..", "wiki", "plans", RERUN_POST_ID, "rerun.json");
+/** The rerun's items and the arms each pays for: the new cso arm only (the plain and old cso arms are reused). */
+export const RERUN_ITEMS = ["cso2-pilot", "cso2-main", "cso2-judge", "cso2-vm", "cso2-reserve"] as const;
 
 /** The dated pre-data deviations, as the deviations post lists them: a, b, CV5 and CV6 in the Captain's approvals record
  *  (approvals/2026-11-19-untested-parts-ship-guards-cso.md), c and d from the Captain's decisions of 2026-11-21. Run
@@ -48,6 +54,8 @@ export interface CsoPrereg {
   judge: Record<string, unknown> & { kappa_min: number; check_reports_min: number; check_findings_min: number; class_min: number; anchor_share_max: number; refusal_max: number; kappa_non_anchor_min: number; gold_overcap_max: number };
   stage1_release: string[];
   items: Record<string, { central?: number; cap: number }>;
+  /** rerun.json under CSO_PLAN=rerun, else absent. */
+  rerun?: Record<string, any>;
   [k: string]: unknown;
 }
 
@@ -69,13 +77,38 @@ export function judgeMaxOutput(p: CsoPrereg): number {
 
 const u32 = (n: unknown) => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 0xffffffff;
 
-/** Reads and checks prereg.json (E_CSO_PREREG when it is missing, not cso-advisories-prereg.v1, or lacks a seed, a text or a unit list). */
-export function loadCsoPrereg(path = PREREG_PATH): CsoPrereg {
+/** Reads and checks prereg.json (E_CSO_PREREG when it is missing, not cso-advisories-prereg.v1, or lacks a seed, a text or a unit list).
+ *  Under CSO_PLAN=rerun it returns the rerun overlay (withRerun) over it. */
+export function loadCsoPrereg(path = PREREG_PATH, env: Record<string, string | undefined> = process.env): CsoPrereg {
   if (!existsSync(path)) csoFail("E_CSO_PREREG", path + " does not exist");
   const p = JSON.parse(readFileSync(path, "utf8")) as CsoPrereg;
   if (p.schema !== "cso-advisories-prereg.v1") csoFail("E_CSO_PREREG", "schema is " + String(p.schema) + ", not cso-advisories-prereg.v1");
   for (const k of ["draw_seed", "bootstrap_seed", "order_seed", "check_seed"] as const) if (!u32(p[k])) csoFail("E_CSO_PREREG", k + " is not an unsigned 32-bit integer");
   for (const k of ["task", "continuation", "question_reply"] as const) if (typeof p.texts?.[k] !== "string" || !p.texts[k]) csoFail("E_CSO_PREREG", "texts." + k + " is missing");
   if (!Array.isArray(p.units?.part1_h2h) || !Array.isArray(p.units?.part2_added)) csoFail("E_CSO_PREREG", "units.part1_h2h or units.part2_added is missing");
-  return p;
+  if (env.CSO_PLAN === undefined || env.CSO_PLAN === "") return p;
+  if (env.CSO_PLAN !== "rerun") csoFail("E_CSO_PREREG", "CSO_PLAN is rerun or unset, not " + JSON.stringify(env.CSO_PLAN));
+  if (!existsSync(RERUN_PATH)) csoFail("E_CSO_PREREG", RERUN_PATH + " does not exist");
+  return withRerun(p, JSON.parse(readFileSync(RERUN_PATH, "utf8")), createHash("sha256").update(readFileSync(path)).digest("hex"));
+}
+
+/** The rerun overlay (rerun prereg section 9 item 1): the parent's plan with the new gstack pin, the rerun's items, the
+ *  pooled judge check's rules (a floor of 100 gold
+ *  reports and no oracle or stock anchor fill). Nothing else the parent froze changes. E_CSO_PREREG when rerun.json names
+ *  another parent prereg.json than the one read. */
+export function withRerun(p: CsoPrereg, r: Record<string, any>, parentSha256: string): CsoPrereg {
+  if (r.schema !== "cso-rerun-prereg.v1") csoFail("E_CSO_PREREG", "rerun.json schema is " + String(r.schema) + ", not cso-rerun-prereg.v1");
+  if (r.parent_prereg_json_sha256 !== parentSha256) csoFail("E_CSO_PREREG", "rerun.json names parent prereg.json " + String(r.parent_prereg_json_sha256) + ", not the " + parentSha256 + " read");
+  const g = r.pins?.gstack;
+  if (!g || !/^[0-9a-f]{40}$/.test(String(g.sha)) || !g.files_sha256) csoFail("E_CSO_PREREG", "rerun.json's gstack pin has no 40-hex sha or files_sha256");
+  const items: Record<string, { central?: number; cap: number }> = {};
+  for (const k of RERUN_ITEMS) items[k] = r.items?.[k] ?? csoFail("E_CSO_PREREG", "rerun.json has no item " + k);
+  const rules = r.judge?.check_rules ?? csoFail("E_CSO_PREREG", "rerun.json has no judge.check_rules");
+  return {
+    ...p,
+    pins: { ...p.pins, gstack: g },
+    items,
+    judge: { ...p.judge, check_reports_min: rules.check_reports_min, anchor_fill: false },
+    rerun: r,
+  };
 }

@@ -104,7 +104,7 @@ export async function rerun(argv: string[], runner: CsoRunner | null = null): Pr
   const cap = Number(f.need("--spend-cap"));
   if (!Number.isFinite(cap) || cap <= 0) csoFail("E_USAGE", "--spend-cap must be a positive number of dollars");
   const p = loadCsoPrereg();
-  if (!(["stage0", "stage1", "stage2"] as const).some((s) => armRuns(arm, model, s, p))) csoFail("E_CSO_RERUN_PRECONDITION", "arm " + arm + " does not run on " + model + " in any stage");
+  if (!(["stage0", "stage1", "stage2", "rerun-pilot", "rerun"] as const).some((s) => armRuns(arm, model, s, p))) csoFail("E_CSO_RERUN_PRECONDITION", "arm " + arm + " does not run on " + model + " in any stage");
   const ids = readUnitIds(f.need("--units"));
   const given = f.has("--allowance") ? Number(f.one("--allowance")) : undefined;
   if (given !== undefined && !(Number.isFinite(given) && given > 0)) csoFail("E_USAGE", "--allowance must be a positive number of dollars");

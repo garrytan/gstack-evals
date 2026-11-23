@@ -4,7 +4,7 @@
 // every part that reads it.
 export type CsoArm = "none" | "cso" | "untold";
 export type CsoModel = "opus" | "particle" | "sol";
-export type CsoStage = "stage0" | "stage1" | "repilot" | "stage2";
+export type CsoStage = "stage0" | "stage1" | "repilot" | "stage2" | "rerun-pilot" | "rerun";
 
 /** One pre-fix hunk of a non-test source file, by parent line numbers. An insert-only hunk has no removed or changed
  *  line: its range is the two parent lines around the insertion point and added holds the inserted lines. */

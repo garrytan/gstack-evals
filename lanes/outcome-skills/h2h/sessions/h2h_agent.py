@@ -18,10 +18,12 @@ An s-* arm (the extension's part S, Sol in Codex) runs ext/h2h_codex.py's loop i
 h2h_config is ext/run.ts's and adds host "codex" and the codex block. Every other arm stays on the Claude Code path.
 """
 import asyncio
+import io
 import json
 import shlex
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import uuid
@@ -44,11 +46,15 @@ SH = [HERE.parents[1] / "pfchecks" / "sh", HERE / "sh"]
 SH_DIR = "/opt/h2h-sh"
 WORK = "/tmp/h2h-work"
 HOME = "/root"
+CSO_RECORDS_CAP = 8 << 20
+CSO_RECORDS = ('cd /root/.gstack/security/cso 2>/dev/null || exit 0; set --; for f in */*/report.json; do [ -f "$f" ] && set -- "$@" "$f"; done; [ "$#" -gt 0 ] || exit 0; '
+               f'c={CSO_RECORDS_CAP}; n=$(tar -cf - -- "$@" | wc -c); [ "$n" -le "$c" ] || {{ echo "the tar is $n bytes, over the $c-byte cap" >&2; exit 3; }}; tar -cf - -- "$@"')
 
 
 class H2hOptions(RealOptions):
     h2h_config: str = Field(description="Host path of the session's h2h config (run.ts writes it); never mounted in the container.")
     home_owner: str = Field(default="", description="session: chown the copied home's paths to the container's own user after the copy; empty (the default) leaves docker cp's host uid.")
+    cso_records: str = Field(default="", description="save: after the session, copy the /cso helper's run records (report.json under /root/.gstack/security/cso) out of the container into the evaluator dir's cso-records/, capped at 8 MiB; empty (the default) copies nothing.")
 
 
 
@@ -138,10 +144,31 @@ class H2hAgent(RealAgent):
         summary = await run_session(Turns(cfg, H2hSlots(self, trial, h["limits"], log)))
         summary["events"] = events
         summary["trial"] = trial
+        if o.cso_records not in ("", "save"):
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP cso_records is save or empty, not {o.cso_records!r}")
+        if o.cso_records == "save":
+            summary["cso_records"] = await asyncio.to_thread(self._save_cso_records, container, evdir / "cso-records")
         (evdir / "h2h-summary.json").write_text(json.dumps(summary, indent=1, default=str))
         spent = ((summary.get("slot") or {}).get("close") or {}).get("spent_micros")
         context.cost_usd = spent / 1_000_000 if spent is not None else None
         context.metadata = {"h2h": {"arm": o.arm, "trial": trial, "turns": [t["termination"] for t in summary["turns"]], "refused": summary.get("refused")}}
+
+    def _save_cso_records(self, container: str, dest: Path) -> dict:
+        """The /cso helper's run records, copied out of the container: the files saved, or the error that stopped the copy."""
+        try:
+            res = self._exec(container, CSO_RECORDS, timeout=120)
+            if res.returncode != 0:
+                return {"files": [], "error": res.stderr.decode(errors="replace")[-300:]}
+            if len(res.stdout) > CSO_RECORDS_CAP:
+                return {"files": [], "error": f"the tar is {len(res.stdout)} bytes, over the {CSO_RECORDS_CAP}-byte cap"}
+            if not res.stdout:
+                return {"files": [], "error": None}
+            dest.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(fileobj=io.BytesIO(res.stdout)) as tf:
+                tf.extractall(dest, members=[m for m in tf.getmembers() if m.isfile() or m.isdir()], filter="data")
+            return {"files": sorted(str(f.relative_to(dest)) for f in dest.rglob("*") if f.is_file()), "error": None}
+        except Exception as e:
+            return {"files": [], "error": f"{type(e).__name__}: {e}"[:300]}
 
     async def _run_codex(self, h: dict, task: dict, container: str, evdir: Path, events: list, log, context) -> None:
         """An s-* arm's session: ext/h2h_codex.py's loop on the same driver slot, with Codex run in the container through

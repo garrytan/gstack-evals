@@ -139,7 +139,8 @@ export async function judgeCmd(argv: string[], o: { transport?: Transport; env?:
     }
     const check = judgeCheck(route.route, reports, formats, p);
     const stage0 = [...new Set(sessions.filter((s) => s.stage === "stage0").map((s) => s.unit))].sort();
-    const fill = goldFill(check, { anchors: stage0.flatMap((u) => [{ id: "oracle " + u, kind: "oracle" as const }, { id: "stock " + u, kind: "stock" as const }]), findings: extraFindingPool(reports, p) }, p);
+    const anchors = (p.judge as { anchor_fill?: boolean }).anchor_fill === false ? [] : stage0.flatMap((u) => [{ id: "oracle " + u, kind: "oracle" as const }, { id: "stock " + u, kind: "stock" as const }]);
+    const fill = goldFill(check, { anchors, findings: extraFindingPool(reports, p) }, p);
     const file = join(out, "check-" + route.route + ".sealed");
     const sha = sealCheck({ schema: "cso-judge-check.v1", check, reports, formats, fill }, sealKey!, file);
     console.log(JSON.stringify(judgeRelease([check])[0]));

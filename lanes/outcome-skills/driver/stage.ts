@@ -32,7 +32,7 @@ import { EFFORT_KEYS, reservationBound } from "../pfchecks/session.ts";
 import { H2H_SKILL, h2hLimits, h2hModel } from "../h2h/sessions/driver.ts";
 import { extFirstRequestFields, extStageProvider, h2hItems, h2hStageArms, h2hStageLimits, h2hStageModel, isExtStage, isStageArm } from "../h2h/ext/driver.ts";
 import { H2hError } from "../h2h/prereg.ts";
-import { CSO_SKILL, CSO_STAGES, csoDriverLimits, csoDriverModels, csoItemCapUsd, isCsoArm } from "../cso/driver.ts";
+import { CSO_SKILL, csoDriverLimits, csoStages, csoDriverModels, csoItemCapUsd, isCsoArm } from "../cso/driver.ts";
 import { CsoError } from "../cso/prereg.ts";
 
 export const DEFAULT_TTL_MS = 72 * 3_600_000;
@@ -337,7 +337,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     if (csoStage(st)) {
       const arms = st.arms ?? [st.arm];
       if (arms.some((a) => !isCsoArm(a))) fail("E_USAGE", "stage " + st.item + " mixes cso arms with other lanes' arms; a cso stage serves cso arms only");
-      const own = Object.hasOwn(CSO_STAGES, st.item) ? CSO_STAGES[st.item]! : fail("E_USAGE", "cso stage " + st.item + " is not a cso session item; cso stages are " + Object.keys(CSO_STAGES).join(", "));
+      const stages = csoStages();
+      const own = Object.hasOwn(stages, st.item) ? stages[st.item]! : fail("E_USAGE", "cso stage " + st.item + " is not a cso session item; cso stages are " + Object.keys(stages).join(", "));
       if (st.model !== undefined) fail("E_USAGE", "cso stage " + st.item + " serves prereg.json's models, not a stage model");
       const stray = arms.filter((a) => !own.includes(a));
       if (!arms.length || stray.length) fail("E_USAGE", "cso stage " + st.item + " serves " + own.join(", ") + ", not " + (stray.join(", ") || "no arm"));

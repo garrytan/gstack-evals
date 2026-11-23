@@ -40,6 +40,22 @@ export const CSO_PROBE_NODE = "/usr/local/bin/node";
 /** The whole-session retry's meta.rerun. */
 export const CSO_RERUN = "upstream or infra end";
 const KEEP = ["sdk-messages.jsonl", "claude-session.jsonl", SUMMARY];
+/** The /cso helper's run records the session agent saves out of the container under the rerun plan (cso_records=save). */
+export const CSO_RECORDS_DIR = "cso-records";
+/** Every helper run record (report.json) saved from one session, in path order; an unreadable one is left out. */
+export function readRunRecords(dir: string): Record<string, unknown>[] {
+  if (!existsSync(dir)) return [];
+  const out: Record<string, unknown>[] = [];
+  for (const repo of readdirSync(dir).sort())
+    for (const run of existsSync(join(dir, repo)) ? readdirSync(join(dir, repo)).sort() : []) {
+      const f = join(dir, repo, run, "report.json");
+      if (!existsSync(f)) continue;
+      try {
+        out.push(JSON.parse(readFileSync(f, "utf8")));
+      } catch {}
+    }
+  return out;
+}
 type Rec = Record<string, any>;
 
 /** Builds a unit's session image: CSO_BASE_IMAGE with the session tree (one commit) at /work/repo, pinned by image id. The
@@ -105,6 +121,7 @@ export function csoRunCopy(i: CsoSessionInput, attempt: 1 | 2, dir: string, p: C
   const ak: Record<string, string> = {
     skip_install: "true", task_json: taskJson, h2h_config: h2hJson, arm: CSO_PREFIX + i.arm, arm_tar: armTar, upstream_model: upstream, control_url: i.control, ledger: "u4", task_label: label(i), trial_n: "1",
     ...(attempt === 2 ? { rerun: CSO_RERUN } : {}), image_id: i.image.image_id, manifest, manifest_sha256: manifestSha, repo_dir: CSO_REPO_DIR, workdir: CSO_WORK_DIR, probe_node: CSO_PROBE_NODE, ...(i.home.dir ? { home_owner: "session" } : {}),
+    ...(p.rerun && i.home.dir ? { cso_records: "save" } : {}),
   };
   const argv = ["run", "-y", "-p", task, "-a", "h2h_agent:H2hAgent", "-m", harborModel(i.model, p), "--base-url", /^https?:\/\//.test(i.proxy) ? i.proxy : "http://" + i.proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "--extra-docker-compose", compose, "-o", join(dir, "jobs"), "--job-name", (i.jobName ?? "cso-" + i.unit.unit + "-" + i.arm + "-" + i.model + "-" + i.index) + "-a" + attempt, "--disable-verification"];
   return { argv, env, config };
@@ -209,6 +226,10 @@ async function session(i: CsoSessionInput, key: Buffer | null): Promise<{ record
     const summary = ev && existsSync(join(ev, SUMMARY)) ? (withRefusalFallback(JSON.parse(readFileSync(join(ev, SUMMARY), "utf8")) as Rec, join(ev, "sdk-messages.jsonl")) as Rec) : null;
     await csoHaltCheck(i, attempt, summary, ev, dir);
     if (ev) for (const f of KEEP) if (existsSync(join(ev, f))) copyFileSync(join(ev, f), join(i.out, f));
+    if (ev && existsSync(join(ev, CSO_RECORDS_DIR))) {
+      rmSync(join(i.out, CSO_RECORDS_DIR), { recursive: true, force: true });
+      cpSync(join(ev, CSO_RECORDS_DIR), join(i.out, CSO_RECORDS_DIR), { recursive: true });
+    }
     const records = ev ? [...readJsonl(join(ev, "sdk-messages.jsonl"))] : [];
     usage.push(attemptUsage(attempt, summary as never, allowance));
     const end = readEnd(summary, attempt, records);
@@ -220,7 +241,9 @@ async function session(i: CsoSessionInput, key: Buffer | null): Promise<{ record
       break;
     }
   }
-  const read = csoExposure(last!.records, tree);
+  const runRecords = p.rerun ? readRunRecords(join(i.out, CSO_RECORDS_DIR)) : [];
+  const read = csoExposure(last!.records, tree, p.rerun ? { fixed: true, runRecords } : {});
+  if (p.rerun) writeFileSync(join(i.out, "exposure.json"), JSON.stringify({ schema: "cso-rerun-exposure.v1", fixed: read.exposure, frozen: csoExposure(last!.records, tree).exposure, run_records: runRecords.length }, null, 1) + "\n", { flag: "wx" });
   const exposure = { ...read.exposure, loaded: read.exposure.loaded || loaded(events(last!.log as never)) };
   const helper = read.helper;
   const record = csoSessionRecord({ unit: i.unit.unit, arm: i.arm, model: i.model, stage: i.stage, attempts: last!.attempt, end: last!.end, summary: last!.summary, records: last!.records, repoDir: CSO_REPO_DIR, exposure, helper, usage, wall_sec: Math.round((Date.now() - started) / 1000) });
