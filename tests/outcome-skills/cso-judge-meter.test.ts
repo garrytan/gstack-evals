@@ -9,9 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
-import { loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
+import { loadCsoPrereg, PREREG_PATH } from "../../lanes/outcome-skills/cso/prereg.ts";
 import { askParsed, judgeClient } from "../../lanes/outcome-skills/cso/judge/client.ts";
-import { JUDGE_ITEM, openJudgeMeter, probe, PROBE_PROMPT } from "../../lanes/outcome-skills/cso/judge/meter.ts";
+import { JUDGE_ITEM, judgeItem, openJudgeMeter, probe, PROBE_PROMPT } from "../../lanes/outcome-skills/cso/judge/meter.ts";
 
 const p = loadCsoPrereg();
 const DRY_ENV = { ANTHROPIC_API_KEY: "dry-run", OPENAI_API_KEY: "dry-run", OPENROUTER_API_KEY: "dry-run" };
@@ -94,4 +94,17 @@ describe("section 7: the metered judge transport", () => {
     await expect(openJudgeMeter({ run_id: "nokey", out: join(s.dir, "out"), record: s.record, ledger: s.ledger, env: { ANTHROPIC_API_KEY: "x" }, fetch: upstream() })).rejects.toThrow(/^E_KEY_MISSING/);
     expect(readItem(s.record, JUDGE_ITEM).leases.length).toBe(0);
   });
+});
+
+test("under the rerun plan the judge leases cso2-judge, not the parent's cso-judge", async () => {
+  const rerun = loadCsoPrereg(PREREG_PATH, { CSO_PLAN: "rerun" });
+  expect([judgeItem(p), judgeItem(rerun)]).toEqual([JUDGE_ITEM, "cso2-judge"]);
+  const dir = mkdtempSync(join(tmpdir(), "cso-meter-rerun-"));
+  const record = join(dir, "record");
+  recordApproval(record, { action: "init", item: "cso2-judge", cap_micros: 20_000_000, quotes: [quote], admission: "warn" });
+  const m = await openJudgeMeter({ run_id: "rerun", item: judgeItem(rerun), out: join(dir, "out"), record, ledger: join(dir, "ledger.sqlite"), env: DRY_ENV, fetch: upstream() });
+  await probe(rerun, m.transport);
+  await m.close();
+  expect(readItem(record, "cso2-judge").leases.length).toBe(1);
+  expect(readItem(record, "cso2-judge").open).toBeNull();
 });

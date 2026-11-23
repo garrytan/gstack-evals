@@ -26,7 +26,7 @@ import { scoreSession, type CsoScore, type Judged } from "./score/outcomes.ts";
 import { scoredText } from "./score/text.ts";
 import { anchorSources, checkSetOrder, countedGoldOrder, extraFindingPool, goldFill, goldOnRun, judgeCheck, judgeSession, pilotGate, runFormatVariants, runReport, type FormatResult, type JudgeRun, type ReportResult } from "./judge/check.ts";
 import { judgeRoutes, routeClients, type Transport } from "./judge/client.ts";
-import { openJudgeMeter, probe } from "./judge/meter.ts";
+import { judgeItem, openJudgeMeter, probe } from "./judge/meter.ts";
 import { exportCmd } from "./export.ts";
 import { printCheck, rerunAnalysis } from "./analysis/rerun.ts";
 import { csoExposure } from "./exposure.ts";
@@ -112,7 +112,7 @@ export async function judgeCmd(argv: string[], o: { transport?: Transport; env?:
   const p = loadCsoPrereg(), out = resolve(f.need("--out"));
   const route = judgeRoutes(p).find((r) => r.route === (f.one("--route") ?? "production")) ?? csoFail("E_USAGE", "--route is one of " + judgeRoutes(p).map((r) => r.route).join(", "));
   mkdirSync(out, { recursive: true });
-  const meter = o.transport ? null : await openJudgeMeter({ run_id: f.need("--run"), out, record: f.one("--record"), ledger: f.one("--ledger"), env: o.env, fetch: o.fetch, seal: sealKey ?? undefined });
+  const meter = o.transport ? null : await openJudgeMeter({ run_id: f.need("--run"), item: judgeItem(p), out, record: f.one("--record"), ledger: f.one("--ledger"), env: o.env, fetch: o.fetch, seal: sealKey ?? undefined });
   const transport = o.transport ?? meter!.transport;
   try {
     if (f.has("--probe")) {
