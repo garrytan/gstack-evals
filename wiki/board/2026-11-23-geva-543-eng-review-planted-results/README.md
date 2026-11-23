@@ -33,7 +33,6 @@ attachments:
   - f0850deff010b6f9b3021ef4e23560c7af56c6fa32f8547ad98ddbd8b4d4e7f5  kit/stage.sh.txt
   - 1038222dfe37414da2a4cd4e7fd7f657386480b11baf24fdd0a3cf42b890432c  readout-exact-lists.txt
   - ecdcf0b5c0f062ac3a1c8c557498931e2353ba181e1d9cd61b8a21e0e8e0d5cd  readout.txt
-  - 24bf3be349ed423c06d66ff09a5395327a4d55be74300b69ec78c74dd40b0c69  run-deviations.md
   - e1605e5429dcea140f2f196a29f8ad9c7755a2c3bb308e245fb1221c81d7be25  run-stages.txt
 ---
 
@@ -222,20 +221,7 @@ The authored plans read as silent at the planted condition under both rubrics, a
 
 ## Cost
 
-Paid model calls, settled on the run's ledger from the metering proxy's billed amounts:
-
-| Item | Settled | Cap |
-|---|---|---|
-| Authoring: plans, audits, hints, ratings, 102 hinted builds and 76 no-review builds | $136.10 | $680 |
-| Exposure smoke: 12 skill-arm sessions | $21.36 | $50 |
-| Comparison: 576 reviews ($837.50) and 576 builds ($376.30), the pilot's 40 plain cells inside | $1,213.81 | $3,230 |
-| Stock control builds: 64 | $34.75 | $190 |
-| Judge: Astra on 48 gold and 384 main bundles under both rubrics, two labellers, the Carbon re-label | $85.33 | $350 |
-| **Paid calls in all** | **$1,491.34** | **$4,500** |
-
-Per session, from the run records: a plain review $0.42, an eng phase review $1.98, a standalone review $1.96; a build $0.45 to $0.77 (table above). A reviewed cell (review plus build) cost $0.93 plain, $2.75 eng phase and $2.63 standalone. The plan's planning figure of $2.50 a build was about four times what builds cost.
-
-Ubicloud VM time, estimated from each VM's lifetime at Ubicloud's list prices read on 2026-11-23 (standard-16 $0.00831 a minute, standard-8 $0.00416, standard-4 $0.00208), leaving out extra disk and public IPv4, which we did not price: the six standard-4 rebuild shards and the screening VM $10.53 (82 hours), the first paid host, a standard-8, $14.83 (59 hours), and the second paid host, a standard-16, $62.42 (125 hours) to this writing and more until it is destroyed. With the $49.60 keyless supply read before the freeze, hosts come to about $137, against the re-projected $140. Agent threads on Capy's meter at list price: the prereg thread (GEVA-537) $282.04 and this run thread (GEVA-543) $292.91 at this writing. All-in so far, about $2,200, against the approved projection of about $4,521 and the $5,000 stop.
+The readout's per-session figures, from the run records: a plain review $0.42, an eng phase review $1.98 and a standalone review $1.96; a build $0.45 to $0.77 by arm (the table above). A reviewed cell (review plus build) cost $0.93 plain, $2.75 eng phase and $2.63 standalone, so a skill review made a cell about three times as expensive with no measurable gain on the primary. The run's paid, host and meter totals are in the experiment's private registry row, as this wiki's rule for results pages asks.
 
 ## Why null? (R48)
 
@@ -265,7 +251,7 @@ Following the frozen decision row, GStack Minder gets a rewrite brief for the te
 
 ## Changes to the plan
 
-Every change below was logged in the run's deviations file (run-deviations.md) before the data it could touch. The Captain ruled on each one marked so.
+Every change below was logged in the run's deviations file before the data it could touch. The Captain ruled on each one marked so. That file stays with the sealed records instead of in this bundle, because it carries the run's spend line by line, which this wiki keeps in the experiment's private registry row.
 
 1. **Go units rebuilt against the sealed base images (2026-11-17, before any paid call, Captain ruling A1).** The golang image tag moved after the freeze, so rebuilt Dockerfiles named a new digest. Those units were screened again with each base pinned to its sealed digest (golang@sha256:ec47ea3725fea0cc88f6de94919aef19f40f12fc1ec0e2d1b3426dbf15ecca04 for 66 units, golang@sha256:699337d620559a59b4a2bb298ad59611e535d2ee755a34cf2d2a98f37578dc80 for 2), and a unit was admitted only on a line-for-line digest check. Of 138 sealed units, 136 emitted and passed, 2 no longer built (lost to infrastructure), and 1 more had a planted set that differs (lost under B1): 135 admitted.
 2. **Rebuilt case lists used as they come (2026-11-17, before any paid call, Captain ruling B1).** Rule 1 reapplied on the fixed code in the grading environment can change a unit's functional set by a case or two. Each unit's single rebuilt list scores every arm, so the pairing holds; any unit whose planted set differed was lost. Of the 64 comparison units, 28 have a functional set that differs from the sealed one: 24 by 1 to 4 cases added or removed, and 4 with none added or removed that the shard check still marks inexact (we did not trace why). The exact-list sensitivity above is the line the ruling asked for. The rebuild ran on Ubicloud standard-4 VMs; the freeze-time screen ran on standard-16 and standard-8. Go test timing on a different VM size is our guess at the cause; we did not test it.
@@ -321,9 +307,9 @@ The units' bodies, plans, hints, hidden tests, fix diffs, review and build trans
 
 ## Agent notes
 
-- Run thread GEVA-543 (issue GST-2729), prereg thread GEVA-537, Captain GEVA-2. The run's commits are on this branch: dated pre-run fixes 58d348f to b9605d7, the gold builder 36d61a5, the Carbon effort change 8ccafc7 and the rubric revision 915685f, each with its tests. Each head the run used has a green ci.yml run, some after one rerun of the known offloop timing flake, listed in run-deviations.md (45229380356 at 8ccafc7 and 45249940979 at 915685f).
+- Run thread GEVA-543 (issue GST-2729), prereg thread GEVA-537, Captain GEVA-2. The run's commits are on this branch: dated pre-run fixes 58d348f to b9605d7, the gold builder 36d61a5, the Carbon effort change 8ccafc7 and the rubric revision 915685f, each with its tests. Each head the run used has a green ci.yml run, some after one rerun of the known offloop timing flake (45229380356 at 8ccafc7 and 45249940979 at 915685f).
 - Custody: every sealing, opening and incident is in the org custody log for this run (ep-geva537/CUSTODY.md). The last archive is records-analysis.tar.zst.age (70,707 entries, matching the host's count).
-- run-deviations.md is the run's own log as of the analysis seal, verbatim except that the runner's home folder is written as ~/. run-stages.txt and the kit scripts' imports write it the same way, because the repository's public-path guard refuses a host home path.
+- run-stages.txt and the kit scripts' imports write the runner's home folder as ~/, because the repository's public-path guard refuses a host home path.
 
 ## Disclosures
 
