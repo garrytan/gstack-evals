@@ -1,0 +1,11 @@
+STAGE_SETTLED item=h1-told arm=autoplan:told lease=h1-told.0001.0b7b3c spent=$54.148411 unknown=$0.00 sessions=2 ended=completed
+STAGE_SETTLED item=h1-none arm=none lease=h1-none.0001.7ea77a spent=$236.980526 unknown=$0.00 sessions=126 ended=completed
+H1_RUN_SETTLED: 2026-11-10T10:40:26Z reading RIG (FIX-METHOD rig) printed by h-harbor-job.sh read at 10:38:50Z; 126 none and 2 told smoke sessions opened and closed; no paid session is owed
+HOURS_LEASE h-vm lease h-vm.0003.d0a715 task host-geva506-h1 host_hours 14.281 spent 4284180 {"schema":1,"kind":"close","item":"h-vm","seq":3,"lease_id":"h-vm.0003.d0a715","how":"settled","spent_micros":4284180,"unknown_micros":0,"unknown_calls":0,"usage":{"input":0,"output":0,"reasoning":0,"cache_read":0,"cache_write":0},"closed_at":"2026-11-10T10:56:49.233Z"}
+ITEM: h-mine cap=$80.00 admission=required committed=$57.521082 left=$22.478918 run=h-mine-c4bb8613b346 leases=1 open=-
+ITEM: h-vm cap=$45.00 admission=warn committed=$23.21898 left=$21.78102 run=h-vm-ca100e455ae0 leases=3 open=-
+ITEM: h1-none cap=$660.00 admission=required committed=$236.980526 left=$423.019474 run=h1 leases=1 open=-
+ITEM: h1-told cap=$180.00 admission=required committed=$54.148411 left=$125.851589 run=h1 leases=1 open=-
+ENVELOPE: program=wave1 cap=$10000.00 committed=$1946.161179 settled=$1946.161179 open=$0.00 pending=$0.00 left=$8053.838821
+SKILL: plan-eng-review cap=$2000.00 committed=$685.452892 settled=$685.452892 open=$0.00 pending=$0.00 left=$1314.547108
+SKILL: autoplan cap=$2000.00 committed=$1260.708287 settled=$1260.708287 open=$0.00 pending=$0.00 left=$739.291713

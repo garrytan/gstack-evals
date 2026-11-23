@@ -1,0 +1,114 @@
+diff --git a/.changeset/safe-action-location.md b/.changeset/safe-action-location.md
+new file mode 100644
+index 0000000..baf2fc8
+--- /dev/null
++++ b/.changeset/safe-action-location.md
+@@ -0,0 +1,5 @@
++---
++'@sveltejs/kit': patch
++---
++
++fix: prevent open redirect from enhanced form actions on paths beginning with `//`
+diff --git a/packages/kit/src/runtime/app/forms/client.js b/packages/kit/src/runtime/app/forms/client.js
+index 67a67c1..a124ea0 100644
+--- a/packages/kit/src/runtime/app/forms/client.js
++++ b/packages/kit/src/runtime/app/forms/client.js
+@@ -9,6 +9,7 @@ import {
+ 	handle_error,
+ 	is_current_location
+ } from '../../client/client.js';
++import { resolve_url } from '../../client/utils.js';
+ import { notify_version } from '#app/state/client';
+ import { deserialize } from './shared.js';
+ import * as e from '../../../messages/client-errors.js';
+@@ -27,6 +28,18 @@ function clone(element) {
+ 	return /** @type {T} */ (HTMLElement.prototype.cloneNode.call(element));
+ }
+ 
++/**
++ * Whether the given location resolves to the current origin
++ * @param {string} value
++ */
++function is_same_origin(value) {
++	try {
++		return resolve_url(value).origin === location.origin;
++	} catch {
++		return false;
++	}
++}
++
+ /**
+  * This action enhances a `<form>` element that otherwise would work without JavaScript.
+  *
+@@ -86,7 +99,11 @@ export function enhance(form_element, submit = noop) {
+ 		}
+ 
+ 		const destination =
+-			navigate && result.type !== 'redirect' && !is_current_location(result.location)
++			navigate &&
++			result.type !== 'redirect' &&
++			result.location !== undefined &&
++			is_same_origin(result.location) &&
++			!is_current_location(result.location)
+ 				? result.location
+ 				: undefined;
+ 
+diff --git a/packages/kit/src/runtime/client/client.js b/packages/kit/src/runtime/client/client.js
+index 1929168..41068c3 100644
+--- a/packages/kit/src/runtime/client/client.js
++++ b/packages/kit/src/runtime/client/client.js
+@@ -3017,6 +3017,7 @@ export function is_current_location(value) {
+ 
+ 	const destination = resolve_url(value);
+ 	const current = new URL(location.href);
++	if (destination.origin !== current.origin) return false;
+ 	if (destination.pathname !== current.pathname) return false;
+ 
+ 	const keys = new Set([...destination.searchParams.keys(), ...current.searchParams.keys()]);
+diff --git a/packages/kit/src/runtime/server/page/actions.js b/packages/kit/src/runtime/server/page/actions.js
+index 210cae6..c490ac8 100644
+--- a/packages/kit/src/runtime/server/page/actions.js
++++ b/packages/kit/src/runtime/server/page/actions.js
+@@ -81,7 +81,13 @@ export function get_action_location(url) {
+ 		}
+ 	}
+ 
+-	return location.pathname + location.search;
++	// a pathname beginning with `//` would be interpreted as a protocol-relative URL,
++	// so we prefix it with `/.`, which resolves to the same pathname on the current origin
++	const pathname = location.pathname.startsWith('//')
++		? '/.' + location.pathname
++		: location.pathname;
++
++	return pathname + location.search;
+ }
+ 
+ /**
+diff --git a/packages/kit/src/runtime/server/page/actions.spec.js b/packages/kit/src/runtime/server/page/actions.spec.js
+index 08f2793..02ddbef 100644
+--- a/packages/kit/src/runtime/server/page/actions.spec.js
++++ b/packages/kit/src/runtime/server/page/actions.spec.js
+@@ -8,7 +8,9 @@ import { init_transport } from '#app/internal/transport';
+ vi.stubGlobal('__SVELTEKIT_DEV__', false);
+ init_transport({});
+ 
+-const { handle_action_request, uneval_action_response } = await import('./actions.js');
++const { handle_action_request, uneval_action_response, get_action_location } = await import(
++	'./actions.js'
++);
+ 
+ /** @param {string} [search] */
+ function create_event(search = '') {
+@@ -126,3 +128,12 @@ test('explains that actions cannot return a Response', () => {
+ 		{ contains: ['/a'], cause: expect.any(Error) }
+ 	);
+ });
++
++test('get_action_location does not produce protocol-relative URLs', () => {
++	const location = get_action_location(new URL('http://localhost//evil.com/x?/login&a=1'));
++	expect(location).toBe('/.//evil.com/x?a=1');
++	const resolved = new URL(location, 'http://localhost/');
++	expect(resolved.origin).toBe('http://localhost');
++	expect(resolved.pathname).toBe('//evil.com/x');
++	expect(get_action_location(new URL('http://localhost/a/b?/x'))).toBe('/a/b');
++});

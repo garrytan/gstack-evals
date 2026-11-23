@@ -5,7 +5,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { createHash, createHmac } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { extract } from "../../lanes/tbv/extract.ts";
 import { historySha256 } from "../../lanes/tbv/history/events.ts";
@@ -13,6 +12,7 @@ import { assembleB, type PrRecord } from "../../lanes/tbv/history/source-b.ts";
 import { run as rule } from "../../lanes/tbv/rule.ts";
 import { capClusters, drawOrder, guardDev, lineageClusters, type Outcome, type PoolRow, rank, run, taskRow, walk } from "../../lanes/tbv/split.ts";
 import type { History, HistoryEvent, Source, Stratum } from "../../lanes/tbv/types.ts";
+import { mkdtempDisk } from "./disk.ts";
 import { pr } from "./history-helpers.ts";
 
 const SEED_HEX = "5e".repeat(32);
@@ -174,7 +174,7 @@ const shmDir = () => {
   return d;
 };
 const diskDir = () => {
-  const d = mkdtempSync(join(tmpdir(), "tbv-split-"));
+  const d = mkdtempDisk("tbv-split-");
   dirs.push(d);
   return d;
 };

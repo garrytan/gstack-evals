@@ -1,0 +1,46 @@
+## S1
+
+| contrast (treatment vs control) | paired tasks | passes (treatment vs control) | success, points (95% interval) | MDD, points | mean bill | bill ratio (95% interval) | mean session time | time ratio (95% interval) |
+|---|---|---|---|---|---|---|---|---|
+| S1 opus F vs N (restructuring) | 99 (78 repos) | 72 vs 66 | 6.1 (1.0 to 11.5); worse 1, better 7 | 8.0 | $0.729 vs $0.182 | 3.996 (3.575 to 4.470); median 3.685 | 229.6 s vs 116.5 s | 1.971 (1.759 to 2.242) |
+| S1 opus R vs F (decider swap) | 99 (78 repos) | 69 vs 72 | -3.0 (-7.9 to 1.1); worse 4, better 1 | 6.3 | $0.229 vs $0.729 | 0.314 (0.279 to 0.356); median 0.314 | 219.6 s vs 229.6 s | 0.956 (0.826 to 1.114) |
+| S1 opus R vs N on the subset (sum of the two steps) | 99 (78 repos) | 69 vs 66 | 3.0 (-3.1 to 8.8); worse 3, better 6 | 8.5 | $0.229 vs $0.182 | 1.254 (1.119 to 1.414); median 1.156 | 219.6 s vs 116.5 s | 1.885 (1.642 to 2.209) |
+
+coverage S1 opus F vs N (restructuring): treatment graded 99 of 100, control graded 99 of 100
+coverage S1 opus R vs F (decider swap): treatment graded 99 of 100, control graded 99 of 100
+coverage S1 opus R vs N on the subset (sum of the two steps): treatment graded 99 of 100, control graded 99 of 100
+
+## S2
+
+| contrast (treatment vs control) | paired tasks | passes (treatment vs control) | success, points (95% interval) | MDD, points | mean bill | bill ratio (95% interval) | mean session time | time ratio (95% interval) |
+|---|---|---|---|---|---|---|---|---|
+| S2 opus R vs J (particle-1 as the middle layer) | 99 (78 repos) | 69 vs 68 | 1.0 (-3.3 to 5.6); worse 2, better 3 | 6.3 | $0.229 vs $0.347 | 0.660 (0.587 to 0.743); median 0.684 | 219.6 s vs 179.6 s | 1.222 (1.058 to 1.437) |
+| S2 sol R vs J (particle-1 as the middle layer) | 99 (78 repos) | 62 vs 61 | 1.0 (-3.2 to 5.7); worse 2, better 3 | 6.3 | $0.104 vs $0.144 | 0.722 (0.642 to 0.819); median 0.788 | 204.2 s vs 149.1 s | 1.370 (1.228 to 1.554) |
+| S2 opus J vs F (Jev at a fixed threshold vs the typed frontier) | 99 (78 repos) | 68 vs 72 | -4.0 (-9.2 to 0.0); worse 5, better 1 | 6.9 | $0.347 vs $0.729 | 0.476 (0.431 to 0.528); median 0.469 | 179.6 s vs 229.6 s | 0.782 (0.708 to 0.862) |
+| S2 opus J vs N (context) | 99 (78 repos) | 68 vs 66 | 2.0 (-2.0 to 5.9); worse 1, better 3 | 5.7 | $0.347 vs $0.182 | 1.902 (1.703 to 2.129); median 1.719 | 179.6 s vs 116.5 s | 1.542 (1.366 to 1.754) |
+| S2 sol J vs N (context) | 99 (78 repos) | 61 vs 60 | 1.0 (-3.3 to 5.4); worse 2, better 3 | 6.3 | $0.144 vs $0.090 | 1.595 (1.246 to 2.002); median 1.521 | 149.1 s vs 101.9 s | 1.464 (1.200 to 1.785) |
+
+coverage S2 opus R vs J (particle-1 as the middle layer): treatment graded 99 of 100, control graded 99 of 100
+coverage S2 sol R vs J (particle-1 as the middle layer): treatment graded 99 of 100, control graded 99 of 100
+coverage S2 opus J vs F (Jev at a fixed threshold vs the typed frontier): treatment graded 99 of 100, control graded 99 of 100
+coverage S2 opus J vs N (context): treatment graded 99 of 100, control graded 99 of 100
+coverage S2 sol J vs N (context): treatment graded 99 of 100, control graded 99 of 100
+
+## S8
+
+| contrast (treatment vs control) | paired tasks | passes (treatment vs control) | success, points (95% interval) | MDD, points | mean bill | bill ratio (95% interval) | mean session time | time ratio (95% interval) |
+|---|---|---|---|---|---|---|---|---|
+| S8 W vs opus N | 95 (75 repos) | 62 vs 64 | -2.1 (-7.3 to 2.9); worse 4, better 2 | 7.2 | $0.013 vs $0.184 | 0.072 (0.062 to 0.082); median 0.062 | 175.2 s vs 118.4 s | 1.479 (1.213 to 1.810) |
+| S8 W vs opus R | 95 (75 repos) | 62 vs 67 | -5.3 (-12.4 to 2.1); worse 9, better 4 | 10.6 | $0.013 vs $0.231 | 0.057 (0.049 to 0.066); median 0.053 | 175.2 s vs 222.1 s | 0.789 (0.660 to 0.943) |
+| S8 W vs opus P | 95 (75 repos) | 62 vs 66 | -4.2 (-10.6 to 2.1); worse 7, better 3 | 9.3 | $0.013 vs $0.229 | 0.058 (0.050 to 0.066); median 0.051 | 175.2 s vs 253.2 s | 0.692 (0.584 to 0.823) |
+| S8 W vs sol N | 95 (75 repos) | 62 vs 59 | 3.2 (-2.1 to 8.8); worse 2, better 5 | 7.8 | $0.013 vs $0.091 | 0.145 (0.120 to 0.173); median 0.133 | 175.2 s vs 102.7 s | 1.706 (1.409 to 2.033) |
+| S8 W vs sol R | 95 (75 repos) | 62 vs 61 | 1.1 (-4.4 to 6.5); worse 3, better 4 | 7.8 | $0.013 vs $0.104 | 0.126 (0.111 to 0.143); median 0.110 | 175.2 s vs 205.5 s | 0.852 (0.710 to 1.010) |
+| S8 W vs sol P | 95 (75 repos) | 62 vs 63 | -1.1 (-5.7 to 3.3); worse 3, better 2 | 6.6 | $0.013 vs $0.104 | 0.126 (0.106 to 0.148); median 0.114 | 175.2 s vs 210.5 s | 0.832 (0.696 to 0.983) |
+
+coverage S8 W vs opus N: treatment graded 95 of 100, control graded 99 of 100
+coverage S8 W vs opus R: treatment graded 95 of 100, control graded 99 of 100
+coverage S8 W vs opus P: treatment graded 95 of 100, control graded 99 of 100
+coverage S8 W vs sol N: treatment graded 95 of 100, control graded 99 of 100
+coverage S8 W vs sol R: treatment graded 95 of 100, control graded 99 of 100
+coverage S8 W vs sol P: treatment graded 95 of 100, control graded 99 of 100
+

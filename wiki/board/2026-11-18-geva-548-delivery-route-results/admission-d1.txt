@@ -1,0 +1,35 @@
+B1 admission rerun with deviation D1 (detector at b12a7b7) against the detector as merged (b5d89f2; the "frozen" column below), over the 1,200 harness mechanics Stage 4 sessions of section 10, and over the 24 smoke sessions.
+The merged side reproduces every count in admission.txt, and followed_as_merged equals it on all 1,200.
+
+claude-opus-5-5 none all             n 200 | frozen followed/tool/pass 0 0 0 | D1 0 0 0
+claude-opus-5-5 none drawn           n 60 | frozen followed/tool/pass 0 0 0 | D1 0 0 0
+claude-opus-5-5 verify-prose all     n 200 | frozen followed/tool/pass 0 0 0 | D1 0 0 0
+claude-opus-5-5 verify-prose drawn   n 60 | frozen followed/tool/pass 0 0 0 | D1 0 0 0
+gpt-6.1-sol none all                 n 200 | frozen followed/tool/pass 151 151 154 | D1 152 152 155
+gpt-6.1-sol none drawn               n 60 | frozen followed/tool/pass 48 48 48 | D1 48 48 48
+gpt-6.1-sol verify-prose all         n 200 | frozen followed/tool/pass 144 144 146 | D1 145 145 147
+gpt-6.1-sol verify-prose drawn       n 60 | frozen followed/tool/pass 47 47 47 | D1 48 48 48
+particle-1 none all                  n 200 | frozen followed/tool/pass 0 0 1 | D1 0 0 1
+particle-1 none drawn                n 60 | frozen followed/tool/pass 0 0 1 | D1 0 0 1
+particle-1 verify-prose all          n 200 | frozen followed/tool/pass 3 2 5 | D1 3 2 5
+particle-1 verify-prose drawn        n 60 | frozen followed/tool/pass 2 1 3 | D1 2 1 3
+changed sessions: 2
+gpt-6.1-sol|none|collective__icalendar-921: followed false to true, followed_tool_only false to true, passing_after_source false to true
+gpt-6.1-sol|verify-prose|google__adk-python-3088 (drawn): followed false to true, followed_tool_only false to true, passing_after_source false to true
+
+Smoke (24 sessions):
+claude-opus-5-5 command all          n 2 | frozen followed/tool/pass 1 1 1 | D1 2 1 2
+claude-opus-5-5 described all        n 2 | frozen followed/tool/pass 0 0 0 | D1 0 0 0
+claude-opus-5-5 gstack-shaped all    n 2 | frozen followed/tool/pass 1 0 1 | D1 2 0 2
+claude-opus-5-5 none all             n 2 | frozen followed/tool/pass 0 0 0 | D1 0 0 0
+gpt-6.1-sol command all              n 2 | frozen followed/tool/pass 2 2 2 | D1 2 2 2
+gpt-6.1-sol described all            n 2 | frozen followed/tool/pass 2 2 2 | D1 2 2 2
+gpt-6.1-sol gstack-shaped all        n 2 | frozen followed/tool/pass 2 2 2 | D1 2 2 2
+gpt-6.1-sol none all                 n 2 | frozen followed/tool/pass 2 2 2 | D1 2 2 2
+particle-1 command all               n 2 | frozen followed/tool/pass 2 2 2 | D1 2 2 2
+particle-1 described all             n 2 | frozen followed/tool/pass 0 0 0 | D1 0 0 0
+particle-1 gstack-shaped all         n 2 | frozen followed/tool/pass 2 1 2 | D1 2 1 2
+particle-1 none all                  n 2 | frozen followed/tool/pass 0 0 0 | D1 0 0 0
+changed sessions: 2
+claude-opus-5-5|command|getmoto__moto-9590: followed false to true, passing_after_source false to true
+claude-opus-5-5|gstack-shaped|getmoto__moto-9590: followed false to true, passing_after_source false to true

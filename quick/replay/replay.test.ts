@@ -18,7 +18,7 @@ async function bun(args: string[], env: Record<string, string | undefined>) {
   const [stdout, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
   return { status: await p.exited, stdout, stderr };
 }
-const QUOTES = [{ words: 'Rec', by: 'Garry', context: 'test' }];
+const QUOTES = [{ words: '(paraphrase) took the recommendation', by: 'Garry', context: 'test' }];
 
 describe('findings', () => {
   test('a null confidence or line is absent, and findings inside a wrapper are read', () => {

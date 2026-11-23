@@ -1,6 +1,6 @@
 # Review replay lane
 
-This lane asks one question: does a gstack reviewer role catch a known historical defect, at which model and effort, and at what cost (plan v3.2, "Review replay lane"). This folder holds GSTA-131's review replay panel, vendored, and the catalog of historical-defect cases that the lane replays and U14 grows. Nothing here calls a model.
+This lane asks one question: does a gstack reviewer role catch a known historical defect, at which model and effort, and at what cost (plan v3.2, "Review replay lane"). This folder holds the review replay panel, vendored, and the catalog of historical-defect cases that the lane replays and U14 grows. Nothing here calls a model.
 
 ## Running a replay
 
@@ -27,22 +27,22 @@ The runner never classes an item infra. Only a preregistered incident list in a 
 
 ## The panel
 
-panel/ is the panel GSTA-131 built and ran while sizing gstack's review depth (garrytan/gstack#3527). It replays single reviewer prompts on two public gstack cases.
+panel/ is the panel a Capy crew thread built and ran while sizing gstack's review depth (garrytan/gstack#3527). It replays single reviewer prompts on two public gstack cases.
 
 - panel-cases.json: case 1 (gstack #3516, the ship-hook-actor negation guard that refused honest requests) and case 2 (gstack #3518, lib/ship-queue-train-verify.ts reading an unreadable GitHub state as "not merged"): PR, reviewed head, merge base, which reviewer caught what, and the evidence.
 - build.ts: renders the panel's 15 prompts (fix-check and specialist prompts over the cases' ranges, plus two clean-code items) from a gstack checkout.
-- eval1/: GSTA-131's first preregistration (bars B1 to B4), its items, the frozen prompt digests and the per-trial results table. Verdict: B1 missed, 0 of 3 for c1-statemachines-range and for c2-fixcheck at medium effort; the decoys passed.
+- eval1/: the panel's first preregistration (bars B1 to B4), its items, the frozen prompt digests and the per-trial results table. Verdict: B1 missed, 0 of 3 for c1-statemachines-range and for c2-fixcheck at medium effort; the decoys passed.
 - eval2/: the attribution run, with a full-pass control (A1) and an effort control (A2). c2-fixcheck caught the defect 2 of 3 times at high effort against 0 of 3 at medium, which set "blocking reviewers stay at full effort" in gstack.
 - measured-tokens.json: median specialist output tokens (full 6,929, light 5,446), the input gstack's scripts/review-dispatch-compare.ts reads with --tokens.
 
-The results tables score names_known_file with a grep on the known file name only; GSTA-131 scored catches by hand (right file and the defect named).
+The results tables score names_known_file with a grep on the known file name only; the panel's author scored catches by hand (right file and the defect named).
 
 ### What is not here
 
 - Case 3 of the source panel-cases.json is a harness-evals case, a private repo, so none of its text is committed. It is withheld with this digest: sha256 `33e1b474e63b22a1f9ca11d4312512c187679081f8059f069f55d3a6c2dc3cbf` over the UTF-8 bytes of `JSON.stringify(cases[2], null, 2)`, where cases is the parsed source file, with no trailing newline. The committed file is `JSON.stringify(cases.slice(0, 2), null, 2)` with one em dash replaced (see Credit and changes), which matches the source's own formatting (the source is `JSON.stringify(cases, null, 2)` with no trailing newline).
 - Rendered prompts. They are gstack text and render from a checkout, so panel/*/prompts/ is gitignored.
-- Per-trial results (results/*.json, model output text) and the pilot files. They stay in the org drive at handoffs/gsta131-review-replay/eval1/results/ and eval2/results/.
-- GSTA-131's run.ts. The lane's runner is rebuilt, not vendored.
+- Per-trial results (results/*.json, model output text) and the pilot files. They stay outside this repo.
+- The panel's run.ts. The lane's runner is rebuilt, not vendored.
 
 ### Reproducing the prompts
 
@@ -57,13 +57,13 @@ The prompts depend on the gstack checkout: the specialist prompts read review/sp
 
 `--out <dir>` renders the prompts for a run. It refuses to overwrite a prompt file whose bytes differ, so a rerun cannot replace frozen prompts. To run an item, render into eval1/prompts or eval2/prompts; items.jsonl paths are relative to the eval dir.
 
-Two things had to change to reproduce the prompts. git sizes abbreviated object names by the clone's object count, so the diffs' index lines differed in a fresh clone; build.ts now runs git with core.abbrev=9, the length GSTA-131's checkout used. And frozen2.sha256 lists eval 2's eight new prompts under prompts2/ while the drive kept all ten under prompts/; the items now point at prompts/<item>.md, and --check matches by file name. The drive's prompts match both frozen files by file name.
+Two things had to change to reproduce the prompts. git sizes abbreviated object names by the clone's object count, so the diffs' index lines differed in a fresh clone; build.ts now runs git with core.abbrev=9, the length the panel's checkout used. And frozen2.sha256 lists eval 2's eight new prompts under prompts2/ while the drive kept all ten under prompts/; the items now point at prompts/<item>.md, and --check matches by file name. The drive's prompts match both frozen files by file name.
 
-This folds GSTA-11's rerun precondition 9 and coverage gap G8: the reproduce step checks the frozen digests instead of overwriting them, and build.ts has a reproduction check. tests/replay/panel.test.ts covers both without a gstack checkout: the digest comparison, the overwrite refusal, and a --check refused off the pin that leaves the eval dir untouched.
+This folds the first review replay's rerun precondition 9 and coverage gap G8: the reproduce step checks the frozen digests instead of overwriting them, and build.ts has a reproduction check. tests/replay/panel.test.ts covers both without a gstack checkout: the digest comparison, the overwrite refusal, and a --check refused off the pin that leaves the eval dir untouched.
 
 ### Digests
 
-Every committed panel file, with its source in the org drive's handoffs/gsta131-review-replay/. tests/replay/panel.test.ts recomputes the committed digests and checks that every panel file is listed.
+Every committed panel file, with its source file, which stays outside this repo. tests/replay/panel.test.ts recomputes the committed digests and checks that every panel file is listed.
 
 | File | sha256 as committed | Source | Source sha256 |
 |---|---|---|---|
@@ -85,7 +85,7 @@ catalog/schema.json (JSON Schema 2020-12) describes one case per file, named <id
 
 catalog/catalog.ts loads a catalog dir. `loadCatalog(dir)` returns the valid cases and a list of problems: schema errors, a file not named after its id, a duplicate id, a sealed case in this repo's tree, and a decoy whose audit found a defect. Private cases use the same schema and live only in the sealed store.
 
-**The decoy rule.** A decoy is the fix commit on the case's range, or a clean PR. It is scorable as clean only when its audit's verdict is clean, which `scorableAsClean(decoy)` implements. An audit records that someone checked for a later fix (later_fix_checked: true), what that later fix was if one exists, the verdict, who, when and how. A null audit means nobody has audited the decoy, and it is never scored as clean. GSTA-20 found why this matters: decoy y09 passed review and still held a real bug, fixed later inside a consolidated release (wiki/board/2026-10-29-gsta-20-review-replay-y09-correction). A decoy whose audit says holds-defect is not a decoy: validation refuses it and says to make it a defect case.
+**The decoy rule.** A decoy is the fix commit on the case's range, or a clean PR. It is scorable as clean only when its audit's verdict is clean, which `scorableAsClean(decoy)` implements. An audit records that someone checked for a later fix (later_fix_checked: true), what that later fix was if one exists, the verdict, who, when and how. A null audit means nobody has audited the decoy, and it is never scored as clean. An audit found why this matters: decoy y09 passed review and still held a real bug, fixed later inside a consolidated release (wiki/board/2026-10-29-gsta-20-review-replay-y09-correction). A decoy whose audit says holds-defect is not a decoy: validation refuses it and says to make it a defect case.
 
 catalog/public/ holds two seeds from panel cases 1 and 2, with full shas resolved from gstack. Each has its fix commit as a decoy with a null audit, since nobody has audited them. Each shelf life starts at the fix PR's creation date from GitHub's API, and both are short: a short-shelf-life case counts only for models released before the PR first appeared. Case 1's deserved severity is CRITICAL, because the panel's evidence says the regression would fail a paid test case. Case 2's is null: every reviewer rated it INFORMATIONAL and the panel names no failing test or production break. Answer-key audits are null until U14 audits them. U14 adds more cases to public/.
 
@@ -110,6 +110,6 @@ The export prints exactly the `{role: {full, light}}` object gstack's scripts/re
 
 ## Credit and changes
 
-The panel is GSTA-131's work: a gstack crew thread working for this repo's owner, whose gstack change is garrytan/gstack#3527 (merged). Its scripts were scratch files on GSTA-131's machine, so they have no source commit; the digest table above identifies every source file. The two cases were caught in GSTA-128's and GSTA-129's /ship review loops on gstack #3516 and #3518.
+The panel is the work of a gstack crew thread working for this repo's owner, whose gstack change is garrytan/gstack#3527 (merged). Its scripts were scratch files on that thread's machine, so they have no source commit; the digest table above identifies every source file. The two cases were caught in two crew threads' /ship review loops on gstack #3516 and #3518.
 
-Changes on vendoring: build.ts's header lists its changes. The items files point at prompts/<item>.md relative to their eval dir instead of absolute paths on GSTA-131's machine. panel-cases.json keeps cases 1 and 2 only, with its one em dash (in case 1's unknowns) replaced by a semicolon, under this repo's plain-writing rule. Every other panel file is byte for byte. The catalog is new code for U13a.
+Changes on vendoring: build.ts's header lists its changes. The items files point at prompts/<item>.md relative to their eval dir instead of absolute paths on that thread's machine. panel-cases.json keeps cases 1 and 2 only, with its one em dash (in case 1's unknowns) replaced by a semicolon, under this repo's plain-writing rule. Every other panel file is byte for byte. The catalog is new code for U13a.

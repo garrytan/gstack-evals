@@ -1,0 +1,79 @@
+diff --git a/core/images/handlers.go b/core/images/handlers.go
+index a60835f..6945990 100644
+--- a/core/images/handlers.go
++++ b/core/images/handlers.go
+@@ -99,8 +99,25 @@ func Handlers(handlers ...Handler) HandlerFunc {
+ //
+ // This differs from dispatch in that each sibling resource is considered
+ // synchronously.
++//
++// Each call is limited to 10,000 references, including duplicates.
++// Exceeding this limit returns an error wrapping
++// [errdefs.ErrResourceExhausted].
+ func Walk(ctx context.Context, handler Handler, descs ...ocispec.Descriptor) error {
++	var referenceCount int
++	return walk(ctx, handler, &referenceCount, descs)
++}
++
++func walk(ctx context.Context, handler Handler, referenceCount *int, descs []ocispec.Descriptor) error {
++	if *referenceCount+len(descs) > maxReferences {
++		return fmt.Errorf("too many descriptors (limit %d): %w", maxReferences, errdefs.ErrResourceExhausted)
++	}
++	*referenceCount += len(descs)
++
+ 	for _, desc := range descs {
++		if err := ctx.Err(); err != nil {
++			return err
++		}
+ 
+ 		children, err := handler.Handle(ctx, desc)
+ 		if err != nil {
+@@ -111,7 +128,7 @@ func Walk(ctx context.Context, handler Handler, descs ...ocispec.Descriptor) err
+ 		}
+ 
+ 		if len(children) > 0 {
+-			if err := Walk(ctx, handler, children...); err != nil {
++			if err := walk(ctx, handler, referenceCount, children); err != nil {
+ 				return err
+ 			}
+ 		}
+diff --git a/core/images/handlers_test.go b/core/images/handlers_test.go
+index 5c4e54e..18a6b83 100644
+--- a/core/images/handlers_test.go
++++ b/core/images/handlers_test.go
+@@ -467,3 +467,35 @@ func TestDispatchCancellationWithNoHandlerError(t *testing.T) {
+ 	err := Dispatch(ctx, handler, nil, descs...)
+ 	require.ErrorIs(t, err, context.Canceled)
+ }
++
++func TestWalkReferenceLimit(t *testing.T) {
++	// Every node fans out to 10 copies of the same child: exponential
++	// amplification without a reference limit.
++	child := ocispec.Descriptor{Digest: "sha256:child"}
++	fanout := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		out := make([]ocispec.Descriptor, 10)
++		for i := range out {
++			out[i] = child
++		}
++		return out, nil
++	})
++	require.ErrorIs(t, Walk(context.Background(), fanout, child), errdefs.ErrResourceExhausted)
++
++	cyclic := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		return []ocispec.Descriptor{desc}, nil
++	})
++	require.ErrorIs(t, Walk(context.Background(), cyclic, child), errdefs.ErrResourceExhausted)
++
++	leaves := make([]ocispec.Descriptor, maxReferences-1)
++	for i := range leaves {
++		leaves[i] = ocispec.Descriptor{Digest: digest.FromString(fmt.Sprint(i))}
++	}
++	root := ocispec.Descriptor{Digest: "sha256:root"}
++	ok := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		if desc.Digest == root.Digest {
++			return leaves, nil
++		}
++		return nil, nil
++	})
++	require.NoError(t, Walk(context.Background(), ok, root))
++}

@@ -1,0 +1,47 @@
+diff --git a/pkg/limatmpl/embed.go b/pkg/limatmpl/embed.go
+index c95b29a..48fabf1 100644
+--- a/pkg/limatmpl/embed.go
++++ b/pkg/limatmpl/embed.go
+@@ -224,9 +224,6 @@ const mergeDocuments = `
+ # (note $b, not $c, because we merge lists from $b)
+ | $b | select((.base | tag == "!!str") and ($a.base | tag == "!!seq")) | .base = [ "" + .base ]
+ 
+-# Delete base DNS entries if the template list is not empty.
+-| $a | select(.dns) | del($b.dns, $c.dns)
+-
+ # Mark all new list fields with a custom tag. This is needed to avoid appending
+ # newly copied lists to themselves again when we merge lists.
+ | $c | .. | select(tag == "!!seq") tag = "!!tag"
+@@ -242,7 +239,8 @@ const mergeDocuments = `
+ # copied lists because they have a custom !!tag instead of !!seq.
+ # Append the elements from the same path in $b.
+ # Exception: base templates, provision scripts and probes are prepended instead.
+-| $a | (.. | select(tag == "!!seq" and (path[0] | test("^(base|provision|probes)$") | not))) |=
++# Exception: existing dns lists are kept as-is, and the base dns list is ignored.
++| $a | (.. | select(tag == "!!seq" and (path[0] | test("^(base|provision|probes|dns)$") | not))) |=
+    (. + (path[] as $p ireduce ($b; .[$p])))
+ | $a | (.. | select(tag == "!!seq" and (path[0] | test("^(base|provision|probes)$")))) |=
+    ((path[] as $p ireduce ($b; .[$p])) + .)
+diff --git a/pkg/limatmpl/embed_test.go b/pkg/limatmpl/embed_test.go
+index 5c82fe0..8b5f548 100644
+--- a/pkg/limatmpl/embed_test.go
++++ b/pkg/limatmpl/embed_test.go
+@@ -100,6 +100,18 @@ minimumLimaVersion: 1.0.2  # or later
+ 		"dns: [8.8.8.8, 1.2.3.4]",
+ 		"dns: [1.1.1.1]",
+ 	},
++	{
++		"dns list from the base is used when the template has no dns entries",
++		"cpus: 2",
++		"dns: [1.1.1.1, 8.8.8.8]",
++		"{cpus: 2, dns: [1.1.1.1, 8.8.8.8]}",
++	},
++	{
++		"dns list and hostResolver settings from the base are used when the template has neither",
++		"",
++		"{dns: [1.1.1.1, 8.8.8.8], hostResolver: {enabled: false}}",
++		"{dns: [1.1.1.1, 8.8.8.8], hostResolver: {enabled: false}}",
++	},
+ 	{
+ 		"Update comments on existing maps and lists that don't have comments yet",
+ 		`#

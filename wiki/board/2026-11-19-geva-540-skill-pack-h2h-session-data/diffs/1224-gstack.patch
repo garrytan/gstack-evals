@@ -1,0 +1,95 @@
+diff --git a/layers/sflow.go b/layers/sflow.go
+index 70fd787..1652424 100644
+--- a/layers/sflow.go
++++ b/layers/sflow.go
+@@ -1270,15 +1270,22 @@ func (asd SFlowASDestination) String() string {
+ 	}
+ }
+ 
+-func (ad *SFlowASDestination) decodePath(data *[]byte) {
++func (ad *SFlowASDestination) decodePath(data *[]byte) error {
++	if len(*data) < 8 {
++		return errors.New("sflow: AS path too short")
++	}
+ 	*data, ad.Type = (*data)[4:], SFlowASPathType(binary.BigEndian.Uint32((*data)[:4]))
+ 	*data, ad.Count = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
++	if uint64(ad.Count) > uint64(len(*data)/4) {
++		return fmt.Errorf("sflow: AS path member count %d exceeds remaining data", ad.Count)
++	}
+ 	ad.Members = make([]uint32, ad.Count)
+ 	for i := uint32(0); i < ad.Count; i++ {
+ 		var member uint32
+ 		*data, member = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
+ 		ad.Members[i] = member
+ 	}
++	return nil
+ }
+ 
+ func decodeExtendedGatewayFlowRecord(data *[]byte) (SFlowExtendedGatewayFlowRecord, error) {
+@@ -1299,15 +1306,27 @@ func decodeExtendedGatewayFlowRecord(data *[]byte) (SFlowExtendedGatewayFlowReco
+ 	*data, eg.ASPathCount = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
+ 	for i := uint32(0); i < eg.ASPathCount; i++ {
+ 		asPath := SFlowASDestination{}
+-		asPath.decodePath(data)
++		if err := asPath.decodePath(data); err != nil {
++			return eg, err
++		}
+ 		eg.ASPath = append(eg.ASPath, asPath)
+ 	}
++	if len(*data) < 4 {
++		return eg, errors.New("sflow: extended gateway record too short")
++	}
+ 	*data, communitiesLength = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
++	// Each community is 4 bytes, plus the trailing 4-byte LocalPref.
++	if uint64(communitiesLength) > uint64(len(*data)/4) {
++		return eg, fmt.Errorf("sflow: communities length %d exceeds remaining data", communitiesLength)
++	}
+ 	eg.Communities = make([]uint32, communitiesLength)
+ 	for j := uint32(0); j < communitiesLength; j++ {
+ 		*data, community = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
+ 		eg.Communities[j] = community
+ 	}
++	if len(*data) < 4 {
++		return eg, errors.New("sflow: extended gateway record too short")
++	}
+ 	*data, eg.LocalPref = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
+ 	return eg, nil
+ }
+diff --git a/layers/sflow_test.go b/layers/sflow_test.go
+index 73a745a..10d0086 100644
+--- a/layers/sflow_test.go
++++ b/layers/sflow_test.go
+@@ -6,6 +6,7 @@
+ package layers
+ 
+ import (
++	"encoding/binary"
+ 	"net"
+ 	"reflect"
+ 	"testing"
+@@ -1930,3 +1931,25 @@ func BenchmarkDecodeSFlowLayerPacket2(b *testing.B) {
+ 		sflow.DecodeFromBytes(SFlowTestPacket2[ /*eth*/ 14+ /*ipv4*/ 20+ /*udp*/ 8:], gopacket.NilDecodeFeedback)
+ 	}
+ }
++
++func TestDecodeExtendedGatewayFlowRecordOversizedCounts(t *testing.T) {
++	build := func(words ...uint32) []byte {
++		b := make([]byte, 4*len(words))
++		for i, w := range words {
++			binary.BigEndian.PutUint32(b[4*i:], w)
++		}
++		return b
++	}
++	cases := map[string][]byte{
++		// ASPathCount=0, communitiesLength=0xFFFFFFFF
++		"communities": build(1003, 0, 1, 0x08080808, 0, 0, 0, 0, 0xFFFFFFFF),
++		// ASPathCount=1, path type=2, member count=0xFFFFFFFF
++		"aspath": build(1003, 0, 1, 0x08080808, 0, 0, 0, 1, 2, 0xFFFFFFFF),
++	}
++	for name, data := range cases {
++		d := data
++		if _, err := decodeExtendedGatewayFlowRecord(&d); err == nil {
++			t.Errorf("%s: expected error for oversized count", name)
++		}
++	}
++}

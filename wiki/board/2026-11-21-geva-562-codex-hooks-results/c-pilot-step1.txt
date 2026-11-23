@@ -1,0 +1,29 @@
+Part C pilot, step 1 of 12 (c-pilot on garrytan/gstack#3526@808dead70e32), 2026-11-21, GPT-6.1 Sol in Codex 0.170.0, gstack at a0534ce6.
+The phase paused after this step under the Captain's decision C (read the first c-on spawn message before a second paid contract session), and part C stopped there.
+
+Sessions, from each copied rollout (session_meta, spawn_agent calls, tool results):
+c-on root thread 01a1fec6-bb60-7ba1-bbdf-49fbd932a8b9, codex 0.170.0: spawn_agent task_name=adversarial fork_turns=none message=gAAAAAB... (1164 characters, ciphertext); gstack marker in a tool result: 0; gstack-skill-start: exit 0 with SKILL_START_PROTO
+c-on sub-agent "/root/adversarial" thread 01a1fec7-0764-7a42-b2cd-b7dfa0bea8f5, codex 0.170.0: no spawn_agent call; gstack marker in a tool result: 0
+c-off root thread 01a1fec6-bb3c-7062-a879-64df8afddace, codex 0.170.0: spawn_agent task_name=adversarial fork_turns=none message=gAAAAAB... (824 characters, ciphertext); gstack marker in a tool result: 0; gstack-skill-start: exit 0 with SKILL_START_PROTO
+c-off sub-agent "/root/adversarial" thread 01a1fec6-ff74-71f2-a3ee-2b4e7b296eb0, codex 0.170.0: no spawn_agent call; gstack marker in a tool result: 0
+c-none root thread 01a1fec6-ba4e-7220-98fd-55a011409c5a, codex 0.170.0: no spawn_agent call; gstack marker in a tool result: 1 (the unit's own diff, which edits gstack's review template)
+
+The marker is gstack's adversarial-pass text, "Think like an attacker and a chaos engineer". In c-on it reached the root thread only inside the injected /review skill text, never in a spawn message or a tool result.
+
+gstack's contract log for the c-on session (gstack-hooks/skill-contract.log), unchanged:
+2026-11-21T15:45:59.367Z session=01a1fec6-bb60-7ba1-bbdf-49fbd932a8b9 event=blocked skill=gstack-review missing=adversarial-pass,review-report waived=-
+2026-11-21T15:46:19.180Z session=01a1fec6-bb60-7ba1-bbdf-49fbd932a8b9 event=miss skill=gstack-review missing=adversarial-pass waived=-
+
+Lines the run printed (review-units through the operator wrapper, c-run-op.ts.txt):
+ALL_IN PASS: $1113.09 of $1200.00
+CODEX_C_GUARD PASS c-pilot: cap $60.00, committed $0.00, left $60.00, projection $53.00 for 18 sessions
+OP_CALL 1 c-pilot garrytan/gstack#3526@808dead70e32 at 2026-11-21T15:38:03.009Z
+lease c-pilot.0001.272395 settled: $2.29 committed, 0 unknown calls
+c-on-gpt-6-1-sol: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0
+c-off-gpt-6-1-sol: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0
+c-none-gpt-6-1-sol: findings 1, empty 0, missing 0, malformed 0, incomplete 0, not_run 0
+CODEX_C_GUARD PASS h-pilot: cap $85.00, committed $0.00, left $85.00, projection $78.00 for 6 sessions
+E_USAGE codex-hooks c run: review-units exited 75 on h-pilot garrytan/gstack#3526@808dead70e32; the phase stops so a broken rig does not run on
+OP_END ok=false calls=1 at 2026-11-21T15:46:26.557Z
+
+Exit 75 is the wrapper's planned pause, before h-pilot's admission or lease. Codex refused 0 commands ("rejected: ... not permitted") in these five threads.

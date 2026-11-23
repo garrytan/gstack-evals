@@ -119,6 +119,8 @@ A trial's arm, model and task come from its Harbor config, never from its direct
 
 ## 8. Money
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 **Ledger.** One ledger item, `texttax-r1`, in its own file `ledger/texttax-r1.jsonl` with one approval row carrying the cap, this post's merge commit and the runner tag sha. Cap: **$75** of metered model spend through the proxy. Item 4 was funded at $50; at that cap particle-1 could run 3 replicates with a minimum detectable difference of 11.6 points by section 11's simulation (11.4 by the replicate-only scaling, a lower bound) against the lead's 10, which failed the admission check (section 11). The Captain (GSTA-2, 2026-11-01, under org rule R42) chose: "Item 4's cap is $75 (particle-1 at 5 replicates, Haiku at 5, DeepSeek at 2; particle-1 and Haiku run first, and DeepSeek runs after they settle)." Ubicloud VM time is reported beside the cap and counts toward the R42 approval. Open reserves left by a settle that never reached the ledger stay open, and spend is reported from the proxy files, as #109 did.
 
 **Grid check, the first step.** Before any paid call, the operating thread runs prepare-run keyless for the full grid: particle-1, Haiku and DeepSeek, each with none, placebo-short and placebo on all 37 tasks, at 5, 5 and 2 replicates (1,332 trials). It checks every cell's tar against its manifest, its told line and its trial count. If any check fails, Run T stops before the route check.
@@ -205,4 +207,4 @@ T1 confirmed and T2 negative on particle-1: told text costs particle-1 passes an
 
 ## 13. Out of scope
 
-Item 2 (its own preregistration), item 1 (Harness Evals leads), gstack's real skill bodies (the placebo isolates text from procedure), the Claude Code system prompt as a factor, other hosts, the open-weight ladder slots, and any posting.
+Item 2 (its own preregistration), item 1 (the harness Captain leads), gstack's real skill bodies (the placebo isolates text from procedure), the Claude Code system prompt as a factor, other hosts, the open-weight ladder slots, and any posting.

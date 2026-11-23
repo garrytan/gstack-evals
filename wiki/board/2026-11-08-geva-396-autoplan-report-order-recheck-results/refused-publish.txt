@@ -1,0 +1,21 @@
+rp e3-ap-tg5dce6b3f8b-t1 own_t2_results=138 marked=5 first_line=5 not_ok=5 ok=0 sub_marked=0 other_phase_marked=0 verdict=clear
+rp e3-ap-tg6b9daf7138-t1 own_t2_results=197 marked=5 first_line=4 not_ok=4 ok=1 sub_marked=0 other_phase_marked=0 verdict=STOP
+rp e3-ap-tgff24032962-t1 own_t2_results=166 marked=5 first_line=5 not_ok=5 ok=0 sub_marked=0 other_phase_marked=0 verdict=clear
+rp e3-ap-tg8d524982ac-t1 own_t2_results=114 marked=4 first_line=4 not_ok=4 ok=0 sub_marked=0 other_phase_marked=0 verdict=clear
+== rpd e3-ap-tg6b9daf7138-t1
+rpd at=764 use_at=762 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=27
+rpd at=788 use_at=787 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=27
+rpd at=826 use_at=825 tool=Bash marker_line=1 marker_lines=2 result_lines=5 is_error=false tag=false ok=true cmd_is_publish_noop=false cmd_has_published=false cmd_first=grep cmd_mentions_gate_log=false cmd_lines=1 cmd_len=115
+rpd at=856 use_at=855 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=27
+rpd at=890 use_at=889 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=27
+== rpd e3-ap-tgff24032962-t1
+rpd at=784 use_at=782 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=27
+rpd at=810 use_at=809 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=27
+rpd at=832 use_at=831 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=27
+rpd at=993 use_at=992 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=26
+rpd at=1017 use_at=1016 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=26
+== rpd e3-ap-tg8d524982ac-t1
+rpd at=761 use_at=759 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=27
+rpd at=783 use_at=782 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=27
+rpd at=1002 use_at=1001 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=26
+rpd at=1028 use_at=1027 tool=Bash marker_line=0 marker_lines=1 result_lines=3 is_error=true tag=false ok=false cmd_is_publish_noop=true cmd_has_published=true cmd_first=true cmd_mentions_gate_log=false cmd_lines=1 cmd_len=26

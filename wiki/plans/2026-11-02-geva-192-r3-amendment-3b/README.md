@@ -178,6 +178,8 @@ Unchanged from amendment 3 section 8.
 
 ## 9. Cost of this post
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 The dry run's probes ran on the temporary item r3-capacity-probe-dry ($5 cap, the Captain drive's approvals/2026-11-02-r3-amendment-3b-caps.md), with UBI_OWNER=GEVA-192 and no provider key on any VM. The dry runs settled $0.108167 of the $5 on that item: $0.051500 for five real probes at eu-central-h1, all passing (53 s and 157 s in drafts of this dry run at a local stand-in for the pin, 31 s at the pin, 36 s at the pin after the probe script's rename, and 32 s in the final run at the pin after the settle-order and window fixes, ubirun-geva192-1793637812-6da4d45f-t1 at 16:43:31Z); one more draft's probe was refused by the ledger before any VM was asked for, because of a reused probe id, since fixed, and $0.056667 for the fixture fault in section 7. list --mine was empty at the end.
 
 ## 10. Commands

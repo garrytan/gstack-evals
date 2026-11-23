@@ -1,0 +1,19 @@
+import json, glob, sys
+root = sys.argv[1]
+M = {"claude-opus-5-5": "opus", "openai/gpt-6.1-sol": "sol", "particle-ai/particle-1": "p1"}
+cols = [m + "_" + a for m in ("opus", "sol", "p1") for a in ("P", "C", "N")]
+units = {}
+for f in sorted(glob.glob(root + "/rescore/score-p[234]/s*.json")):
+    d = json.load(open(f))
+    u = units.setdefault(d["unit"], {"month": d["month"], "stratum": d["stratum"]})
+    u[M[d["model"]] + "_" + d["arm"]] = "gap" if d["gap"] else str(d["score"])
+print("# test units: rescore records, score 1 = a listed check caught the bug (section 6.6), gap = harness gap (section 6.8)")
+print("\t".join(["unit", "month", "stratum"] + cols))
+for k in sorted(units, key=lambda k: (units[k]["month"], k)):
+    u = units[k]
+    print("\t".join([k, u["month"], u["stratum"]] + [u.get(c, "-") for c in cols]))
+print("# blind probe: Opus P blind on the 8 admission units, rescore records")
+print("unit\tmonth\tblind_P")
+for f in sorted(glob.glob(root + "/rescore/score-p5/s*.json")):
+    d = json.load(open(f))
+    print("\t".join([d["unit"], d["month"], "gap" if d["gap"] else str(d["score"])]))

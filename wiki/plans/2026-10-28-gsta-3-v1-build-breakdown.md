@@ -15,7 +15,7 @@ source: Captain drive handoffs/GSTA-3/build-breakdown.md (sha256 41a5da71fc69be6
 ---
 # gstack-evals v1.0: build breakdown for crew threads
 
-GSTA-3, 2026-10-28, from plan v3.2 (approved at autoplan run 2, gate_rev 4, reply "Rec"). Each unit below is one crew thread's brief. Units are sized so a thread can finish in one to three days, own a disjoint set of files, and ship one or two PRs. v1.1 units are listed at the end without detail, since their dates come from the M2 feasibility report.
+GSTA-3, 2026-10-28, from plan v3.2 (approved at autoplan run 2, gate_rev 4, recommendation taken). Each unit below is one crew thread's brief. Units are sized so a thread can finish in one to three days, own a disjoint set of files, and ship one or two PRs. v1.1 units are listed at the end without detail, since their dates come from the M2 feasibility report.
 
 ## Rules every unit follows
 
@@ -176,7 +176,7 @@ The 11-05 to 11-09 and 11-16 to 11-21 windows end after the plan's M1a, M1b and 
 
 ### U12. gstack-side contract work (in garrytan/gstack)
 
-- Scope: office-hours' contract tasks.json and tasks.ext.json from GSTA-134's office-hours set; the lock step in /write-skill's diet.md step 6; contract notes offering the state-root convention and a `resumable` field. This is a gstack crew thread through the Captain and GStack Minder, not a gstack-evals thread.
+- Scope: office-hours' contract tasks.json and tasks.ext.json from GSTA-134's office-hours set; the lock step in /write-skill's diet.md step 6; contract notes offering the state-root convention and a `resumable` field. This is a gstack crew thread through the Captain and the gstack Captain, not a gstack-evals thread.
 - Done means: merged in gstack, with gstack's free `test/skill-eval-tasks.test.ts` passing.
 - Files (gstack): test/fixtures/skill-evals/office-hours/, the write-skill diet section, docs/designs/SKILL_EVAL_CONTRACT.md.
 - Parallel with everything; must land before U11.

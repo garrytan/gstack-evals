@@ -1,0 +1,201 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+import { expect, test } from "bun:test";
+import { analyse, bootstrap, ceilingOf, cellsOf, flaggedUnits, mddText, report, valueOf, verdictOf, wilson, type Row } from "../../lanes/outcome-skills/pfchecks/analysis.ts";
+import { blindFits, ceilingReading, contrastFloor, costCap, costReading, exposureReading, floorReading, infraReading, itemCap, midRunCheck, nRule, reprice, tightestOpen } from "../../lanes/outcome-skills/pfchecks/admission.ts";
+import { ALLOWANCE, ITEMS, LINE, lineItemsMicros, OPUS, P1, PLANNING, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
+import { rowOf } from "../../lanes/outcome-skills/pfchecks/score.ts";
+
+const rows = (): Row[] => {
+  const out: Row[] = [];
+  for (const model of [OPUS, SOL, P1]) for (let i = 0; i < 12; i++) for (const arm of ["P", "C", "N"] as const) {
+    const score = arm === "P" ? (i < 9 ? 1 : 0) : arm === "C" ? (i < 4 ? 1 : 0) : i < 2 ? 1 : 0;
+    out.push({ unit: "u" + i, repo: "r" + (i % 6), model, arm, stratum: i < 4 ? "july-2026" : "jan-jun-2026", score: score as 0 | 1, gap: null, no_static: score as 0 | 1, no_api_guess: score as 0 | 1, compile_rerun: score as 0 | 1, loaded: arm === "P", checker: arm !== "N" });
+  }
+  return out;
+};
+test("items sum to the line and the line holds the $1,980", () => {
+  expect(lineItemsMicros() + LINE.crew_counted_micros).toBe(LINE.cap_micros);
+  expect(LINE.cap_micros).toBe(1_980_000_000);
+  expect(ITEMS["pf-admit"]!.cap_micros).toBe(340_000_000);
+  expect(ITEMS["pf-blind"]!.in_line).toBe(false);
+});
+test("Wilson, the bootstrap p and the verdict words", () => {
+  const [lo, hi] = wilson(5, 10);
+  expect(lo).toBeCloseTo(0.2366, 3);
+  expect(hi).toBeCloseTo(0.7634, 3);
+  const pairs = Array.from({ length: 30 }, (_, i) => ({ unit: "u" + i, repo: "r" + (i % 10), model: "m", a: 0, b: i < 20 ? 1 : 0 }));
+  const b = bootstrap(pairs, 1);
+  expect(b.delta).toBeCloseTo(20 / 30);
+  expect(b.p).toBe(0);
+  expect(bootstrap(pairs, 1)).toEqual(b);
+  expect(verdictOf([0.1, 0.3], 0.01, false)).toBe("HELPS");
+  expect(verdictOf([-0.3, -0.1], 0.01, false)).toBe("HURTS");
+  expect(verdictOf([-0.1, 0.3], 0.01, false)).toBe("NO MEASURABLE DIFFERENCE");
+  expect(verdictOf([0.1, 0.3], 0.01, true)).toBe("INCOMPLETE");
+  expect(mddText(30, true)).toContain("16 to 27");
+});
+test("pooled and per-model analysis, gaps and the incomplete rule", () => {
+  const a = analyse(rows(), 5);
+  expect(a.pooled["P-N"].verdict).toBe("HELPS");
+  expect(a.pooled["P-N"].n).toBe(36);
+  expect(a.pooled["P-C"].p_holm).toBeGreaterThanOrEqual(a.pooled["P-C"].p);
+  expect(a.per_model[OPUS]!["C-N"]!.verdict).toBeNull();
+  expect(Object.keys(a.strata).sort()).toEqual(["jan-jun-2026", "july-2026"]);
+  const g = rows().map((r) => (r.model === SOL && r.arm === "N" && ["u0", "u1"].includes(r.unit) ? { ...r, score: null, gap: "E_PF_FIX_CONFLICT", no_static: null, no_api_guess: null, compile_rerun: null } : r));
+  expect(cellsOf(g).find((c) => c.model === SOL && c.arm === "N")).toMatchObject({ gaps: 2, incomplete: true });
+  const ag = analyse(g, 5);
+  expect(ag.pooled["P-N"].verdict).toBe("INCOMPLETE");
+  expect(ag.pooled["P-N"].readings.worst_case!.n).toBe(36);
+  expect(ag.pooled["P-N"].readings.conflict_as_miss!.n).toBe(36);
+  expect(ag.pooled["P-N"].n).toBe(34);
+});
+test("tree-check refusals and wrap-up allowance gaps: counted per arm and model beside every verdict, and a refusal scored as a miss for its own arm", () => {
+  const gap = (r: Row, code: string): Row => ({ ...r, score: null, gap: code, no_static: null, no_api_guess: null, compile_rerun: null });
+  const g = rows().map((r) => (r.model === OPUS && r.arm === "P" && ["u0", "u1"].includes(r.unit) ? gap(r, "E_PF_ARM") : r.model === SOL && r.arm === "C" && r.unit === "u3" ? gap(r, "E_PF_WRAPUP_ALLOWANCE") : r.model === P1 && r.arm === "N" && r.unit === "u5" ? gap(r, "E_PF_FIX_CONFLICT") : r));
+  expect(valueOf(g.find((r) => r.gap === "E_PF_ARM")!, "arm_refusal_as_miss")).toBe(0);
+  expect(valueOf(g.find((r) => r.gap === "E_PF_WRAPUP_ALLOWANCE")!, "arm_refusal_as_miss")).toBeNull();
+  expect(valueOf(g.find((r) => r.gap === "E_PF_FIX_CONFLICT")!, "arm_refusal_as_miss")).toBeNull();
+  const a = analyse(g, 5);
+  const pn = a.pooled["P-N"];
+  expect(pn.n).toBe(33);
+  expect(pn.readings.arm_refusal_as_miss!.n).toBe(35);
+  expect(pn.readings.arm_refusal_as_miss!.delta).toBeCloseTo((pn.delta * 33 - 2) / 35);
+  expect(pn.named_gaps).toEqual({ E_PF_ARM: { [OPUS]: { P: 2, N: 0 }, [P1]: { P: 0, N: 0 }, [SOL]: { P: 0, N: 0 } }, E_PF_WRAPUP_ALLOWANCE: { [OPUS]: { P: 0, N: 0 }, [P1]: { P: 0, N: 0 }, [SOL]: { P: 0, N: 0 } } });
+  expect(a.pooled["P-C"].named_gaps.E_PF_WRAPUP_ALLOWANCE![SOL]).toEqual({ P: 0, C: 1 });
+  expect(a.per_model[OPUS]!["P-N"]!.named_gaps).toEqual({ E_PF_ARM: { [OPUS]: { P: 2, N: 0 } }, E_PF_WRAPUP_ALLOWANCE: { [OPUS]: { P: 0, N: 0 } } });
+  const lines = report(a);
+  const verdicts = lines.map((l, i) => [l, i] as const).filter(([l]) => /^  (P minus|C minus|P-N|P-C|C-N)/.test(l));
+  expect(verdicts.length).toBe(3 + 3 * 3);
+  for (const [, i] of verdicts) {
+    const block = lines.slice(i + 1, lines.findIndex((l, j) => j > i && !l.startsWith("    ")));
+    expect(block.some((l) => l.startsWith("    E_PF_ARM gaps (tree-check refusals, S base or head mismatches and post-turn failures on what the agent wrote):"))).toBe(true);
+    expect(block.some((l) => l.startsWith("    E_PF_WRAPUP_ALLOWANCE gaps (wrap-up refused for its allowance):"))).toBe(true);
+    expect(block.some((l) => l.startsWith("    arm_refusal_as_miss:"))).toBe(true);
+  }
+  expect(lines.find((l) => l.startsWith("    E_PF_ARM gaps") && l.includes(OPUS + " P 2"))).toBeDefined();
+});
+// Value: protects=section 12's treatment of S base and head mismatches, the same as tree-check refusals; fails_when=a mismatch gap enters the contrast, misses the cell's 10% incomplete line, prints under no code beside a verdict, or is not a miss for its own arm in the as-miss reading; why_new=the two gaps are new and must not let an arm improve its rate by tampering with S; seam=score.ts rowOf over scoreSession's gap records, then analysis.ts analyse and report; no_claim=where the gaps arise (pf-run.test.ts, pf-score.test.ts)
+test("S base and head mismatches read as E_PF_ARM: out of the contrast, toward the incomplete line, printed per arm and model beside every verdict, and misses for their own arm", () => {
+  const rec = (unit: string, reason: string) => ({ schema: "pf-catch.v1" as const, unit, repo: "r" + (Number(unit.slice(1)) % 6), month: "2026-07", stratum: "july-2026", model: OPUS, arm: "P" as const, in_flight: null, score: null, gap: "E_PF_ARM", gap_reason: reason, readings: { no_static: null, no_api_guess: null, compile_rerun: null } });
+  const swap: Record<string, string> = { u0: "base_mismatch", u1: "head_mismatch" };
+  const g = rows().map((r) => (r.model === OPUS && r.arm === "P" && swap[r.unit] ? rowOf(rec(r.unit, swap[r.unit]!) as any) : r));
+  expect(g.filter((r) => r.gap === "E_PF_ARM").map((r) => [r.unit, r.score])).toEqual([["u0", null], ["u1", null]]);
+  expect(cellsOf(g).find((c) => c.model === OPUS && c.arm === "P")).toMatchObject({ units: 12, gaps: 2, incomplete: true });
+  const a = analyse(g, 5);
+  const pn = a.pooled["P-N"];
+  expect(pn.n).toBe(34);
+  expect(pn.verdict).toBe("INCOMPLETE");
+  expect(pn.readings.arm_refusal_as_miss!.n).toBe(36);
+  expect(pn.readings.arm_refusal_as_miss!.delta).toBeCloseTo((pn.delta * 34 - 2) / 36);
+  expect(pn.named_gaps.E_PF_ARM![OPUS]).toEqual({ P: 2, N: 0 });
+  expect(a.incomplete).toEqual([{ model: OPUS, arm: "P", units: 12, gaps: 2, incomplete: true }]);
+  const lines = report(a);
+  expect(lines.filter((l) => l.startsWith("    E_PF_ARM gaps (tree-check refusals, S base or head mismatches and post-turn failures on what the agent wrote): ") && l.includes(OPUS + " P 2")).length).toBe(4);
+});
+test("breaks secondary: sessions measured, with a break and not measured, counted per arm and model", () => {
+  const b = rows().map((r): Row => (r.model === OPUS && r.arm === "P" && r.unit === "u0" ? { ...r, breaks: null, breaks_unmeasured: true } : r.model === OPUS && r.arm === "P" && r.unit === "u1" ? { ...r, breaks: 3, breaks_unmeasured: false } : r.model === SOL && r.arm === "N" && r.unit === "u2" ? { ...r, breaks: 0, breaks_unmeasured: false } : r));
+  const a = analyse(b, 5);
+  expect(a.breaks).toEqual({ [OPUS]: { P: { measured: 1, with_breaks: 1, not_measured: 1 } }, [SOL]: { N: { measured: 1, with_breaks: 0, not_measured: 0 } } });
+  expect(report(a).find((l) => l.startsWith("breaks (sessions measured, with a break, not measured): "))).toContain('"not_measured":1');
+  const c: any = { unit: "u", repo: "r", month: "2026-07", stratum: "july-2026", model: OPUS, arm: "P", score: 1, gap: null, readings: { no_static: 1, no_api_guess: 1, compile_rerun: 1 } };
+  expect(rowOf({ ...c, secondaries: { breaks: null, breaks_skipped: ["test.patch"], breaks_unmeasured: "run 2 stopped after skipping test.patch" } })).toMatchObject({ breaks: null, breaks_unmeasured: true });
+  expect(rowOf({ ...c, secondaries: { breaks: ["s1", "s2"], breaks_skipped: [], breaks_unmeasured: null } })).toMatchObject({ breaks: 2, breaks_unmeasured: false });
+  expect(rowOf({ ...c, secondaries: { breaks: null, breaks_skipped: null, breaks_unmeasured: null } })).toMatchObject({ breaks: null, breaks_unmeasured: false });
+});
+test("admission readings", () => {
+  expect(floorReading({ P: 1, C: 1, N: 0 }).reading).toBe("FLOOR");
+  expect(floorReading({ P: 1, C: 1, N: 0 }, { P: 1, C: 0, N: 0 }).reading).toBe("STOP");
+  expect(floorReading({ P: 2, C: 0, N: 0 }).reading).toBe("OK");
+  expect(contrastFloor({ P: 1, C: 3, N: 0 })).toEqual({ "P-N": true, "P-C": false });
+  expect(ceilingReading(7).reading).toBe("CEILING");
+  expect(ceilingReading(7, { P: 3, C: 2, N: 6 }).issue).toBe("cut");
+  expect(ceilingReading(7, { P: 3, C: 1, N: 5 })).toMatchObject({ issue: "full", ceiling_bound: true });
+  const s = (loaded: boolean, checker: boolean, d: string | null = null) => ({ unit: "u", loaded, checker, harness_defect: d });
+  expect(exposureReading([...Array(6)].map(() => s(true, true)).concat([s(true, false), s(true, false)])).reading).toBe("OK");
+  expect(exposureReading([...Array(5)].map(() => s(true, true)).concat([s(true, false), s(true, false), s(true, false)])).reading).toBe("MODEL_CHOICE");
+  expect(exposureReading([s(false, false, "plugin mount failed")]).reading).toBe("HARNESS_DEFECT");
+  expect(infraReading([{ cell: "opus P", units: 8, gaps: 1 }]).reading).toBe("INFRA");
+  expect(infraReading([{ cell: "opus P", units: 10, gaps: 1 }]).reading).toBe("OK");
+  const c = costReading({ P: [1, 2, 7], C: [1], N: [1] });
+  expect(c.arms[0]!.over).toBe(true);
+  expect(c.allowance.P[SOL]).toBe(24);
+  expect(c.allowance.N[OPUS]).toBe(13);
+});
+test("the re-price, the n rule, the mid-run check and the blind fit", () => {
+  const plan = { [OPUS]: { P: [7], C: [7], N: [2] }, [SOL]: { P: [4.2], C: [4.2], N: [1.2] }, [P1]: {} };
+  const p = reprice(plan);
+  expect(p[OPUS]!.P).toBeCloseTo(8.4);
+  expect(p[SOL]!.P).toBeCloseTo(6.3);
+  expect(p[P1]).toEqual(PLANNING[P1]!);
+  expect(costCap(p[OPUS]!, 28)).toBe(580);
+  expect(itemCap(OPUS, p[OPUS]!, 28)).toBe(594.4);
+  const n = nRule(p, { supply: 50, spent_usd: 500, crew_held_usd: 250 });
+  expect(n.left_usd).toBe(1230);
+  expect(n.caps["pf-opus"]! + n.caps["pf-sol"]! + n.caps["pf-particle"]!).toBeLessThanOrEqual(1230);
+  expect(nRule(p, { supply: 50, spent_usd: 500, crew_held_usd: 250 }).n).toBeGreaterThan(nRule(p, { supply: 50, spent_usd: 600, crew_held_usd: 250 }).n - 1);
+  expect(nRule(p, { supply: 12, spent_usd: 0, crew_held_usd: 0 })).toMatchObject({ n: 12, captain: true });
+  expect(midRunCheck(SOL, { cap_usd: 370, spent_usd: 200, done: 10, n: 28, measured: { P: [10], C: [10], N: [3] } }).stop).toBe(true);
+  expect(blindFits(1860)).toBe(true);
+  expect(blindFits(1861)).toBe(false);
+});
+
+// Value: protects=section 13's tightest-open rule at re-priced prices (#305's run notes item 7, the Captain's ruling A1); fails_when=a re-priced cap is smaller than its item's tightest last open (the central cost less the last session's own price and VM, plus that open's task and wrap-up allowances, with the allowances in force), or n is chosen with cost-only caps; why_new=itemCap was cost-only, so at a small n a cap could not hold one session's reserve (Sol at n = 1: $20 against $24); seam=admission.ts costCap, tightestOpen, itemCap and nRule; no_claim=the re-price itself (the test above)
+test("each re-priced cap is the larger of its cost cap and its tightest last open, which gives section 13's table at planning prices, and n is chosen with those caps", () => {
+  const plan = reprice({});
+  expect([costCap(plan[OPUS]!, 28), tightestOpen(OPUS, plan[OPUS]!, 28), itemCap(OPUS, plan[OPUS]!, 28)]).toEqual([490, expect.closeTo(505.2, 6), 505.2]);
+  expect([costCap(plan[SOL]!, 28), tightestOpen(SOL, plan[SOL]!, 28), itemCap(SOL, plan[SOL]!, 28)]).toEqual([310, expect.closeTo(324.8, 6), 324.8]);
+  expect([costCap(plan[P1]!, 28), tightestOpen(P1, plan[P1]!, 28), itemCap(P1, plan[P1]!, 28)]).toEqual([220, expect.closeTo(215.1, 6), 220]);
+  expect([costCap(plan[SOL]!, 1), itemCap(SOL, plan[SOL]!, 1)]).toEqual([20, 33.2]);
+  expect(itemCap(SOL, plan[SOL]!, 1)).toBeGreaterThanOrEqual(ALLOWANCE.N[SOL]! + 12);
+  const doubled = costReading({ P: [20], C: [], N: [] }).allowance;
+  expect(doubled.P[OPUS]).toBe(26);
+  expect(itemCap(OPUS, plan[OPUS]!, 28, doubled)).toBe(513.2);
+  const left = { supply: 60, spent_usd: 1980 - 1030, crew_held_usd: 0 };
+  expect(nRule(plan, left)).toMatchObject({ n: 27, caps: { "pf-opus": 488, "pf-sol": 314, "pf-particle": 210 } });
+  expect(nRule(plan, { ...left, spent_usd: 1980 - 1050 })).toMatchObject({ n: 28, caps: { "pf-opus": 505.2, "pf-sol": 324.8, "pf-particle": 220 } });
+  expect(nRule(plan, { ...left, spent_usd: 1980 - 1050, allowance: doubled }).n).toBe(27);
+  expect(nRule(plan, { supply: 60, spent_usd: 1980, crew_held_usd: 0 })).toMatchObject({ n: 0, caps: { "pf-opus": 0, "pf-sol": 0, "pf-particle": 0 } });
+});
+
+test("the two ceiling sensitivity readings: unreached entries as missing, and units the 5T + 8R limit flags dropped", () => {
+  const r = rows()[0]!;
+  expect(valueOf({ ...r, score: 0, unreached: 2 }, "ceiling_missing")).toBeNull();
+  expect(valueOf({ ...r, score: 1, unreached: 2 }, "ceiling_missing")).toBe(1);
+  expect(valueOf({ ...r, score: 0, unreached: 0 }, "ceiling_missing")).toBe(0);
+  expect(valueOf({ ...r, score: 0, flagged: true }, "no_flagged")).toBeNull();
+  expect(valueOf({ ...r, score: 0, flagged: false }, "primary")).toBe(0);
+  const timed = rows().map((x): Row => ({ ...x, timeout_s: x.unit === "u0" || x.unit === "u1" ? 1800 : 300, overhead_ms: x.unit === "u0" ? 230_000 : x.unit === "u1" ? 220_000 : 20_000 }));
+  const f = flaggedUnits(timed);
+  expect([f.get("u0"), f.get("u1")!.flagged, f.get("u2")!.flagged]).toEqual([{ t_s: 1800, r_s: 230, flagged: true }, false, false]);
+  const a = analyse(timed, 5);
+  expect(a.flagged_units.map((x) => x.unit)).toEqual(["u0"]);
+  expect(a.pooled["P-N"].readings.no_flagged!.n).toBe(a.pooled["P-N"].n - 3);
+  expect(a.pooled["P-N"].readings.ceiling_missing!.n).toBe(a.pooled["P-N"].n);
+  expect(report(a)).toContain("units flagged by 5T + 8R >= 10800 s: u0 (T 1800 s, R 230 s)");
+});
+
+test("per arm: entries, unreached and timeout-only entries and sessions at the ceiling", () => {
+  const r = rows().filter((x) => x.model === OPUS && x.unit === "u0");
+  const c = ceilingOf(r.map((x): Row => (x.arm === "P" ? { ...x, entries: 10, unreached: 3, timeout_only: 1, ceiling_hit: true } : { ...x, entries: 4, unreached: 0, timeout_only: 0, ceiling_hit: false })));
+  expect(c[OPUS]!.P).toEqual({ sessions: 1, entries: 10, unreached: 3, timeout_only: 1, ceiling_hit: 1, unreached_rate: 0.3, timeout_only_share: 0.1 });
+  expect(c[OPUS]!.N!.unreached_rate).toBe(0);
+  const run = (tree: string, timed_out: boolean, extra: object = {}) => ({ tree, run: 1, exit: timed_out ? 124 : 1, pass: false, timed_out, wall_ms: 1000, rebuild_failed: false, log: "", ...extra });
+  const rec: any = { unit: "u", repo: "r", month: "2026-07", stratum: "july-2026", model: OPUS, arm: "P", score: 0, gap: null, readings: { no_static: 0, no_api_guess: 0, compile_rerun: 0 }, timeout_s: 1766, ceiling_hit: true, entries: [
+    { index: 0, outcome: "unreached", why: "ceiling before neutral run 3", runs: [run("parent", true, { call_ms: 1300, rebuild_ms: 100 }), run("fix", false, { call_ms: 1400, rebuild_ms: 200 })] },
+    { index: 1, outcome: "no_catch", why: "passed on parent run 1", runs: [run("parent", false, { call_ms: 1200, rebuild_ms: 50 })] },
+    { index: 2, outcome: "unreached", why: "ceiling before parent run 1", runs: [] },
+  ] };
+  expect(rowOf(rec)).toMatchObject({ entries: 3, unreached: 2, timeout_only: 1, ceiling_hit: true, timeout_s: 1766, overhead_ms: 400 });
+  expect(valueOf(rowOf(rec), "ceiling_missing")).toBeNull();
+});
+
+test("beside every verdict, per model and arm: reservation-bound refusals and the spawns the subagent cap refused", () => {
+  const rs = rows().map((r) => ({ ...r, reservation_bound: r.model === SOL && r.arm === "P" && r.unit === "u0" ? 2 : 0, subagents: r.arm === "P" ? 3 : 1, subagent_cap_refused: r.arm === "P" && r.unit === "u1" ? 1 : 0 }));
+  const a = analyse(rs, 1);
+  expect(a.in_flight[SOL]!.P).toEqual({ sessions: 12, reservation_bound: 2, sessions_reservation_bound: 1, subagents: 36, subagent_cap_refused: 1, sessions_cap_refused: 1 });
+  expect(a.in_flight[OPUS]!.N).toEqual({ sessions: 12, reservation_bound: 0, sessions_reservation_bound: 0, subagents: 12, subagent_cap_refused: 0, sessions_cap_refused: 0 });
+  expect(report(a)).toContain("in flight " + SOL + " P: 12 sessions; reservation-bound refusals 2 (1 sessions); subagents asked 36, refused at the cap 1 (1 sessions)");
+  const gap = { schema: "pf-catch.v1", unit: "u9", repo: "r9", month: "2026-07", stratum: "july-2026", model: OPUS, arm: "P", in_flight: { reservation_bound: 1, subagents: 4, subagent_cap_refused: 2 }, score: null, gap: "E_PF_WRAPUP_ALLOWANCE", readings: { no_static: null, no_api_guess: null, compile_rerun: null } };
+  expect(rowOf(gap as any)).toMatchObject({ gap: "E_PF_WRAPUP_ALLOWANCE", reservation_bound: 1, subagents: 4, subagent_cap_refused: 2 });
+  expect(rowOf({ ...gap, in_flight: undefined } as any)).toMatchObject({ reservation_bound: 0, subagents: 0, subagent_cap_refused: 0 });
+});

@@ -1,0 +1,35 @@
+// Operator wrapper for one part C phase on the run host (GEVA-562). It runs lanes/codex-hooks/c/run.ts's runPhase unchanged,
+// with an exec that writes the item's rig admission record for its next lease slot before each review-units call
+// (gstack-evals rig admit, trial proof, the green rig.yml push run at the checkout's commit), and can pause the phase after
+// a set number of review-units calls (the Captain's decision C: read the first c-on spawn message before a second paid c-on session).
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { execGstackEvals, runPhase } from "../gse/lanes/codex-hooks/c/run.ts";
+import { suiteUnits } from "../gse/lanes/codex-hooks/c/pins.ts";
+
+const E = process.env;
+const need = (k: string) => { const v = E[k]; if (!v) throw new Error("E_USAGE c-run-op: set " + k); return v; };
+const GSE = need("GSE"), ROOT = need("C_ROOT"), RECORD = need("C_RECORD"), LEDGER = need("C_LEDGER"), RLEDGERS = need("R_LEDGERS"), CREW = need("R_CREW");
+const PHASE = need("C_PHASE") as "pilot" | "main", CHECK_RUN = need("RIG_CHECK_RUN"), PREREG = join(GSE, "wiki/plans/2026-11-19-geva-562-codex-hooks-prereg/README.md");
+const PAUSE = Number(E.PAUSE_AFTER_CALLS ?? "0");
+let calls = 0;
+const exec = async (argv: string[]) => {
+  const item = argv[argv.indexOf("--item") + 1]!;
+  if (PAUSE > 0 && calls >= PAUSE) return { code: 75, stderr: "operator pause after " + calls + " review-units call(s)" };
+  const a = spawnSync("bun", [join(GSE, "bin", "gstack-evals"), "rig", "admit", "--item", item, "--proof", "trial", "--prereg", PREREG, "--check-run", CHECK_RUN, "--repo", "garrytan/gstack-evals", "--ledger-record", RECORD], { cwd: GSE, stdio: "inherit" });
+  if (a.status !== 0) return { code: 76, stderr: "rig admit exited " + a.status + " for " + item };
+  calls++;
+  console.log("OP_CALL " + calls + " " + item + " " + argv.slice(argv.indexOf("--units") + 1, argv.indexOf("--arms")).join(" ") + " at " + new Date().toISOString());
+  return execGstackEvals(argv);
+};
+const r = await runPhase({ root: ROOT, phase: PHASE, record: RECORD, ledger: LEDGER, rLedgers: RLEDGERS, crew: CREW, sources: { "garrytan/gbrain": join(E.HOME!, "src/gbrain"), "garrytan/gstack": join(E.HOME!, "src/gstack") }, upstream: null, ids: suiteUnits(), exec, log: (l) => console.log(l) });
+for (const [i, why] of Object.entries(r.stopped)) console.log("stopped " + i + ": " + why);
+console.log("OP_END ok=" + r.ok + " calls=" + calls + " at " + new Date().toISOString());
+process.exit(r.ok ? 0 : 1);
+
+// launch-c.sh, run detached on the host with setsid -f under the docker group:
+// set -eo pipefail
+// set -a; . /dev/shm/c/keys.env; set +a
+// export PATH="$HOME/.bun/bin:$PATH" GSE="$HOME/gse" C_ROOT="$HOME/c-root" C_RECORD="$HOME/c-record" C_LEDGER="$HOME/c-ledger/ledger.sqlite" R_LEDGERS="$HOME/r-ledgers" R_CREW="$HOME/crew.json" GSTACK_EVALS_GH_BIN="$HOME/ops/gh-cache/gh-shim.sh" RIG_CHECK_RUN=44909083152
+// cd "$HOME/ops"
+// exec bun c-run-op.ts

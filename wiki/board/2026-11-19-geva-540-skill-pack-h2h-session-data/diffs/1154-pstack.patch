@@ -1,0 +1,68 @@
+diff --git a/pkg/k8s/network_policy_test.go b/pkg/k8s/network_policy_test.go
+index a9c40212..16e67fe3 100644
+--- a/pkg/k8s/network_policy_test.go
++++ b/pkg/k8s/network_policy_test.go
+@@ -1815,15 +1815,63 @@ func Test_parseNetworkPolicyPeer(t *testing.T) {
+ 				),
+ 			),
+ 		},
++		{
++			name: "peer-with-only-ipblock",
++			args: args{
++				namespace: "foo-namespace",
++				peer: &slim_networkingv1.NetworkPolicyPeer{
++					IPBlock: &slim_networkingv1.IPBlock{CIDR: "192.0.2.3/32"},
++				},
++			},
++			want: nil,
++		},
++		{
++			name: "peer-with-only-ipblock-and-cluster",
++			args: args{
++				namespace:   "foo-namespace",
++				clusterName: "cluster1",
++				peer: &slim_networkingv1.NetworkPolicyPeer{
++					IPBlock: &slim_networkingv1.IPBlock{CIDR: "192.0.2.3/32"},
++				},
++			},
++			want: nil,
++		},
+ 	}
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+ 			got := parseNetworkPolicyPeer(tt.args.clusterName, tt.args.namespace, tt.args.peer)
++			if tt.want == nil {
++				require.Nil(t, got)
++				return
++			}
+ 			require.Equal(t, tt.want, got)
+ 		})
+ 	}
+ }
+ 
++func TestParseNetworkPolicyIPBlockOnlyPeerWithClusterName(t *testing.T) {
++	ipBlock := &slim_networkingv1.IPBlock{CIDR: "192.0.2.3/32"}
++	np := &slim_networkingv1.NetworkPolicy{
++		ObjectMeta: slim_metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
++		Spec: slim_networkingv1.NetworkPolicySpec{
++			PodSelector: slim_metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-server"}},
++			PolicyTypes: []slim_networkingv1.PolicyType{slim_networkingv1.PolicyTypeIngress, slim_networkingv1.PolicyTypeEgress},
++			Ingress:     []slim_networkingv1.NetworkPolicyIngressRule{{From: []slim_networkingv1.NetworkPolicyPeer{{IPBlock: ipBlock}}}},
++			Egress:      []slim_networkingv1.NetworkPolicyEgressRule{{To: []slim_networkingv1.NetworkPolicyPeer{{IPBlock: ipBlock}}}},
++		},
++	}
++	want := policytypes.Selectors{policytypes.ToSelector(api.CIDRRule{Cidr: "192.0.2.3/32"})}
++
++	for _, clusterName := range []string{cmtypes.PolicyAnyCluster, "cluster1"} {
++		rules, err := ParseNetworkPolicy(hivetest.Logger(t), clusterName, np)
++		require.NoError(t, err)
++		require.Len(t, rules, 2)
++		for _, r := range rules {
++			require.Equal(t, want, r.L3, "clusterName=%q ingress=%v", clusterName, r.Ingress)
++		}
++	}
++}
++
+ func TestGetPolicyLabelsv1(t *testing.T) {
+ 	uuid := "1bba160-ddca-11e8-b697-0800273b04ff"
+ 	tests := []struct {

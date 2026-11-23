@@ -1,0 +1,12 @@
+diff --git a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+index 29a21da..9a07cea 100644
+--- a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
++++ b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+@@ -46,6 +46,6 @@ public final class YamlEscaper extends AbstractCharEscaper {
+     //noinspection UnnecessaryUnicodeEscape
+     return ch <= '\u0022'
+         ? REPLACEMENTS[ch]
+-        : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
++        : ch == '\\' ? "\\\\" : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
+   }
+ }

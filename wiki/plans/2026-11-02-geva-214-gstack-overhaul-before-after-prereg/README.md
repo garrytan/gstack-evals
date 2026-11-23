@@ -25,7 +25,7 @@ attachments:
 
 # Preregistration: gstack's overhaul measured before and after, on frozen public instruments and a sealed held-out set, with no gstack beside both
 
-GEVA-214, issue GST-1089 under GST-1088, Captain GEVA-2. Plan only: no paid call, no task authored and no build happen here. Garry approved the L1 direction (overhaul gstack, measure it before and after, then write it up) on 2026-11-02. Reviewed under org R65: one strong reviewer (Opus 5.5) read the plan with power.py and price.py in two phases, CEO then eng, and one revision applied the gate-1 answer and every reviewer finding.
+GEVA-214, issue GST-1089 under GST-1088, Captain GEVA-2. Plan only: no paid call, no task authored and no build happen here. On 2026-11-02 Garry approved the L1 direction: gstack gets its overhaul, we measure it before and after the change, and the results get written up. Reviewed under org R65: one strong reviewer (Opus 5.5) read the plan with power.py and price.py in two phases, CEO then eng, and one revision applied the gate-1 answer and every reviewer finding.
 
 ## Approval
 
@@ -379,6 +379,8 @@ Two pins-only amendments follow this post. Neither may change an endpoint, arm, 
 - **Amendment B (counted runs).** Written after the after sha exists. Pins the after sha and its install manifest (diffed against before's), every build, the reader maps and their dispatch rules, the probe lists, the AskUserQuestion reply, the analysis config sha256, the confirmatory bundle digests and the price table's as_of. Exposure smokes run on public units only, never on held-out, under their own items: 3 sessions per gstack arm, instrument and model. They confirm the install, the hooks firing, the driver hold and the per-session cost, and they re-cost every item under section 13's rule; they are never scored. Its keyless dry run drives every frozen rule through the pinned SDK and the real pinned CLI against fake upstreams and fake judges: each probe on adversarial fixtures, every session-outcome row, the coverage and cap-stop rules, each verdict branch, the pause, and one ledger lease opened and settled per item on a temporary ledger, with E_ITEM_BOUND on a second run of an item and a --resume after a pause reusing the open lease.
 
 ### 13. Spend
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 Prices come from src/runner/pricing/prices.ts (Opus 5.5 $4 in, $20 out, $0.20 cache read, $5 cache write per million; Sol through OpenRouter $2, $10, $0.10, $2.50, read 2026-11-02; particle-1 $0.10, $1, $0.003, read 2026-10-30). Lane B's proxy prices particle-1 input at $0.25, so its Lane B spend is an upper bound. Planning costs per session come from metered runs on main; price.py's header names each source and labels every guess. Sol has no metered review run, so it is costed at Opus's per-session rate. Cap per launch item = 1.5 x expected + one admission round's worst case: on Lane B, parallel sessions x allowance; on review-units, max(1, floor(parallel / arms)) units x arms x allowance, because review-units admits a round only while spent plus that round's worst case fits under the cap (src/trial/review/run.ts). Per judge batch, 1.5 x expected + $5. Per repair item, 1.5 x expected + 2 x allowance on Lane B, and 1.5 x expected + one round's worst case on review-units. Each cap is rounded up to $10. price.py and price.txt are attached.
 

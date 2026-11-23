@@ -1,0 +1,91 @@
+diff --git a/src/BootstrapBlazor/Components/Table/Table.razor.Sort.cs b/src/BootstrapBlazor/Components/Table/Table.razor.Sort.cs
+index ea6ca48..1578579 100644
+--- a/src/BootstrapBlazor/Components/Table/Table.razor.Sort.cs
++++ b/src/BootstrapBlazor/Components/Table/Table.razor.Sort.cs
+@@ -358,7 +358,7 @@ public partial class Table<TItem>
+     private string? GetLeftStyle(ITableColumn col)
+     {
+         var columns = GetVisibleColumns();
+-        var defaultWidth = 200;
++        var defaultWidth = DefaultFixedColumnWidth;
+         var width = 0;
+         var start = 0;
+         var index = columns.IndexOf(col);
+diff --git a/src/BootstrapBlazor/Components/Table/Table.razor.cs b/src/BootstrapBlazor/Components/Table/Table.razor.cs
+index 9665366..cdab8eb 100644
+--- a/src/BootstrapBlazor/Components/Table/Table.razor.cs
++++ b/src/BootstrapBlazor/Components/Table/Table.razor.cs
+@@ -1422,6 +1422,7 @@ public partial class Table<TItem> : ITable, IModelEqualityComparer<TItem> where
+                 if (stateMap.TryGetValue(name, out var item))
+                 {
+                     item.DisplayName = col.GetDisplayName();
++                    item.Width ??= GetColumnWidth(col);
+                 }
+                 else
+                 {
+@@ -1444,11 +1445,13 @@ public partial class Table<TItem> : ITable, IModelEqualityComparer<TItem> where
+         }
+     }
+ 
++    private int? GetColumnWidth(ITableColumn col) => col.Width ?? (col.Fixed ? DefaultFixedColumnWidth : null);
++
+     private TableColumnState CreateTableColumnState(ITableColumn col) => new TableColumnState()
+     {
+         DisplayName = col.GetDisplayName(),
+         Name = col.GetFieldName(),
+-        Width = col.Width,
++        Width = GetColumnWidth(col),
+         Visible = col.GetVisible(_screenSize)
+     };
+ 
+diff --git a/test/UnitTest/Components/TableTest.cs b/test/UnitTest/Components/TableTest.cs
+index 4652c53..e681a07 100644
+--- a/test/UnitTest/Components/TableTest.cs
++++ b/test/UnitTest/Components/TableTest.cs
+@@ -1990,6 +1990,46 @@ public class TableTest : BootstrapBlazorTestBase
+         cut.Contains("--bb-scroll-width: 7px; --bb-scroll-hover-width: 7px;");
+     }
+ 
++    [Fact]
++    public void DefaultFixedColumnWidth_Ok()
++    {
++        var localizer = Context.Services.GetRequiredService<IStringLocalizer<Foo>>();
++        var cut = Context.Render<BootstrapBlazorRoot>(pb =>
++        {
++            pb.AddChildContent<Table<Foo>>(pb =>
++            {
++                pb.Add(a => a.RenderMode, TableRenderMode.Table);
++                pb.Add(a => a.Items, Foo.GenerateFoo(localizer, 1));
++                pb.Add(a => a.DefaultFixedColumnWidth, 180);
++                pb.Add(a => a.TableColumns, foo => builder =>
++                {
++                    builder.OpenComponent<TableColumn<Foo, string>>(0);
++                    builder.AddAttribute(1, "Field", foo.Name);
++                    builder.AddAttribute(2, "FieldExpression", Utility.GenerateValueExpression(foo, "Name", typeof(string)));
++                    builder.AddAttribute(3, nameof(TableColumn<,>.Fixed), true);
++                    builder.CloseComponent();
++
++                    builder.OpenComponent<TableColumn<Foo, string>>(10);
++                    builder.AddAttribute(11, "Field", foo.Address);
++                    builder.AddAttribute(12, "FieldExpression", Utility.GenerateValueExpression(foo, "Address", typeof(string)));
++                    builder.AddAttribute(13, nameof(TableColumn<,>.Fixed), true);
++                    builder.CloseComponent();
++
++                    builder.OpenComponent<TableColumn<Foo, int>>(20);
++                    builder.AddAttribute(21, "Field", foo.Count);
++                    builder.AddAttribute(22, "FieldExpression", Utility.GenerateValueExpression(foo, "Count", typeof(int)));
++                    builder.CloseComponent();
++                });
++            });
++        });
++
++        var cols = cut.FindAll("colgroup col");
++        Assert.Equal("width: 180px;", cols[0].GetAttribute("style"));
++        Assert.Equal("width: 180px;", cols[1].GetAttribute("style"));
++        Assert.Null(cols[2].GetAttribute("style"));
++        cut.Contains("style=\"left: 180px;\"");
++    }
++
+     [Fact]
+     public void FixedColumn_Ok()
+     {

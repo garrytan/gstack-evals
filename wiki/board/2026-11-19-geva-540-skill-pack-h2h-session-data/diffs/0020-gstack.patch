@@ -1,0 +1,33 @@
+diff --git a/crates/hir-ty/src/tests/regression.rs b/crates/hir-ty/src/tests/regression.rs
+index dc88231..4ee48ba 100644
+--- a/crates/hir-ty/src/tests/regression.rs
++++ b/crates/hir-ty/src/tests/regression.rs
+@@ -2993,3 +2993,14 @@ fn f() {[_; || ()]}
+     "#,
+     );
+ }
++
++#[test]
++fn malformed_type_bound_does_not_panic() {
++    check_no_mismatches(
++        r#"
++fn main() {
++    let x: vec![]+;
++}
++    "#,
++    );
++}
+diff --git a/crates/syntax/src/ast/node_ext.rs b/crates/syntax/src/ast/node_ext.rs
+index 1eb658f..4788aab 100644
+--- a/crates/syntax/src/ast/node_ext.rs
++++ b/crates/syntax/src/ast/node_ext.rs
+@@ -880,7 +880,8 @@ impl ast::TypeBound {
+         } else if let Some(lifetime) = self.lifetime() {
+             Some(TypeBoundKind::Lifetime(lifetime))
+         } else {
+-            unreachable!()
++            // Can happen with malformed bounds, e.g. `let x: vec![]+;`
++            None
+         }
+     }
+ }

@@ -1,0 +1,25 @@
+# GEVA-501: list the scored sessions that logged decision states (cells R, P, J, F) for the replay, one per session name
+# (batch1c's rerun wins over batch1's first attempt), and write the answer step's sessions files for the markers that exist.
+# usage: python3 mksessions.py <lbl root> <markers dir> <out dir>
+import glob, json, os, sys
+root, mdir, out = sys.argv[1:4]
+subset = {r["task"] for r in json.load(open("$VM_HOME/scored/plans/subset.json"))}
+best = {}
+rank = {"batch1": 0, "batch1b": 1, "batch1c": 2}
+for res in sorted(glob.glob(root + "/batch*/*/*/result.json")):
+    trial = os.path.dirname(res); session = os.path.basename(os.path.dirname(trial)); batch = trial.split("/")[-3]
+    cell = session.split("__")[-2]
+    if cell not in ("R", "P", "J", "F"): continue
+    log = trial + "/agent/dr"
+    if not os.path.exists(log + "/decisions.jsonl") or os.path.getsize(log + "/decisions.jsonl") == 0: continue
+    task = json.load(open(res))["task_name"]
+    row = {"session": session, "task": task, "batch": batch, "log_dir": log}
+    if session not in best or rank.get(batch, 3) >= rank.get(best[session]["batch"], 3): best[session] = row
+allrows = sorted(best.values(), key=lambda r: r["session"])
+json.dump(allrows, open(out + "/sessions-all.json", "w"), indent=1)
+have = [r for r in allrows if os.path.exists(mdir + "/" + r["session"] + ".json")]
+ans = lambda rows: [{"session": r["session"], "log_dir": r["log_dir"], "markers_file": mdir + "/" + r["session"] + ".json"} for r in rows]
+json.dump(ans(have), open(out + "/sessions-jev_newer.json", "w"), indent=1)
+ga = [r for r in have if r["session"].split("__")[-2] == "R" and r["task"] in subset]
+json.dump(ans(ga), open(out + "/sessions-guess_ablation.json", "w"), indent=1)
+print("sessions", len(allrows), "with markers", len(have), "guess_ablation", len(ga), "of", len([r for r in allrows if r["session"].split("__")[-2] == "R" and r["task"] in subset]))

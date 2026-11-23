@@ -1,0 +1,14 @@
+ROWS real 60 labelled 48 (bad 24) replies_missing 0 duplicate_replies 0
+POSTHOC_PARSED astra catch 23/24 false_fail 16/24 (parsed only)
+POSTHOC_PARSED opus catch 24/24 false_fail 16/24 (parsed only)
+POSTHOC_FENCED kappa ux=0.741(n49) dx=0.000(n49) ax=0.000(n49) | astra catch 23/24 false_fail 16/24 malformed 0 | opus catch 24/24 false_fail 16/24 malformed 0
+POSTHOC_FENCED rows changed 1
+LABELLED_SIZE astra input tokens min 486 median 2350 max 23394 | over20k: bad 3 caught 3, neutral 3 false_fail 2 | at or under 20k: bad 21 caught 20, neutral 21 false_fail 14
+REAL60_SIZE astra n 60 over20k 8 median 16206 max 55433
+LABELLED_SIZE opus input tokens min 816 median 3961 max 40908 | over20k: bad 6 caught 6, neutral 7 false_fail 6 | at or under 20k: bad 18 caught 18, neutral 17 false_fail 10
+REAL60_SIZE opus n 60 over20k 43 median 26167 max 108448
+REAL60_OPUS_SPLIT over20k (opus input) both-read 37: same sign ux 32/37, dx 34/37, ax 35/37 | rest both-read 11: ux 10/11, dx 10/11, ax 10/11
+astra catch=23/24 false_fail=16/24 stock_above=0 malformed=0 kappa ux=0.7377049180327869,dx=0,ax=0
+opus catch=24/24 false_fail=16/24 stock_above=0 malformed=0 kappa ux=0.7377049180327869,dx=0,ax=0
+ux:kappa=0.7377049180327869,n=48,passes its check dx:kappa=0,n=48,judge failed its check ax:kappa=0,n=48,judge failed its check
+descriptive only: 40 of 60 real diffs got the same sign from both judges on every axis; this is not a catch or false-fail rate

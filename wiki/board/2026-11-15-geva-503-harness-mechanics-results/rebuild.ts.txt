@@ -1,0 +1,44 @@
+// Rebuilds the Stage 4 analysis table and the Stage 1 table from the raw trial dirs with the code at ROOT (a checkout of
+// garrytan/gstack-evals), the way results4/build.ts (Stage 4, run at 3d5dcce) and reading-build.ts (Stage 1, run at
+// 884b2c4) did. Usage: ROOT=<checkout> HM=<the run's work dir, ending in /> bun rebuild.ts <out dir>
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+const ROOT = process.env.ROOT!, OUT = process.argv[2]!, HM = process.env.HM!;
+mkdirSync(OUT, { recursive: true });
+const L = ROOT + "/lanes/harness-mechanics/";
+const { buildHmTable } = await import(L + "table.ts");
+const { pickerColumns } = await import(L + "picker.ts");
+const { judgeColumns } = await import(L + "judge.ts");
+const { readJudgeSessions } = await import(L + "judge-check.ts");
+const { section11Excluded, STAGE1_OPUS_R2_TASKS } = await import(L + "pins.ts");
+const jl = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const write = (p: string, rows: any[]) => writeFileSync(p, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+
+const cfg = JSON.parse(readFileSync(HM + "pick4/table-config.json", "utf8"));
+const rows4 = (buildHmTable(cfg) as any[]).filter((r) => !section11Excluded(r.part));
+const picks4 = ["opus", "sol", "p1"].flatMap((m) => jl(HM + "stage4-" + m + "/pick/picks.jsonl"));
+const parts = [...new Set(cfg.jobs.map((j: any) => dirname(j.dir)))] as string[];
+const sessions = parts.flatMap((jobs) => {
+  const journal = join(dirname(jobs), "out", "judge-journal.ndjson");
+  if (!existsSync(journal)) return [];
+  return readJudgeSessions(readdirSync(jobs).map((j) => join(jobs, j)).filter((d) => statSync(d).isDirectory()), journal);
+});
+const t4 = judgeColumns(pickerColumns(rows4, picks4), sessions) as any[];
+write(join(OUT, "stage4.table.jsonl"), t4);
+
+const r2 = new Set<string>(STAGE1_OPUS_R2_TASKS as readonly string[]);
+const items = [
+  { item: "stage1-opus", parts: ["stage1-opus/s1-1", "stage1-opus/s1-2"], keep: (t: string) => !r2.has(t) },
+  { item: "stage1-opus-r2", parts: ["stage1-opus-r2/r2-1"], keep: (t: string) => r2.has(t) },
+  { item: "stage1-sol-run", parts: ["stage1-sol-run/s1-1", "stage1-sol-run/s1-1-a2", "stage1-sol-run/s1-2"], keep: () => true },
+  { item: "stage1-p1", parts: ["stage1-p1/s1-1", "stage1-p1/s1-2"], keep: () => true },
+];
+const t1: any[] = [];
+for (const it of items) {
+  const cfgs = it.parts.map((part) => { const dir = HM + part + "/pulled", jd = join(dir, "jobs"); return { jobs: readdirSync(jd).filter((j) => statSync(join(jd, j)).isDirectory()).map((j) => ({ dir: join(jd, j), part: part.split("/")[1] })), sessions: [join(dir, "out/proxy-sessions.jsonl")] }; });
+  const c = { jobs: cfgs.flatMap((x) => x.jobs), sessions: cfgs.flatMap((x) => x.sessions) };
+  const rows = (buildHmTable(c) as any[]).filter((r) => it.keep(r.task));
+  t1.push(...(pickerColumns(rows, jl(HM + "pick/home/vm/pick/" + it.item + "/picks.jsonl")) as any[]));
+}
+write(join(OUT, "stage1.table.jsonl"), t1);
+console.log("stage4 rows " + t4.length + ", stage1 rows " + t1.length);

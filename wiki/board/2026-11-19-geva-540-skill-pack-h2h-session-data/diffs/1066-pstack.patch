@@ -1,0 +1,193 @@
+diff --git a/pkg/proxy/authheaders/authheaders.go b/pkg/proxy/authheaders/authheaders.go
+index 5736989..8e4b60d 100644
+--- a/pkg/proxy/authheaders/authheaders.go
++++ b/pkg/proxy/authheaders/authheaders.go
+@@ -30,19 +30,39 @@ import (
+ 	userinfo "k8s.io/apiserver/pkg/authentication/user"
+ )
+ 
+-// SetAuthHeaders stamps the given authenticated user's identity onto the request
+-// headers, after deleting any inbound copies of the identity headers.
+-//
+-// This mirrors k8s.io/client-go/transport.SetAuthProxyHeaders and the upstream
++const (
++	DefaultUserHeader        = "X-Remote-User"
++	DefaultGroupHeader       = "X-Remote-Group"
++	DefaultExtraHeaderPrefix = "X-Remote-Extra-"
++)
++
++// ClearAuthHeaders deletes every inbound copy of the configured identity
++// headers and of the default X-Remote-* headers. It mirrors the upstream
+ // requestheader authenticator's ClearAuthenticationHeaders.
+-func SetAuthHeaders(header http.Header, user userinfo.Info, userHeader, groupHeader, extraHeaderPrefix string) {
+-	header.Del(userHeader)
+-	header.Del(groupHeader)
++func ClearAuthHeaders(header http.Header, userHeader, groupHeader, extraHeaderPrefix string) {
++	userHeaders := []string{userHeader, DefaultUserHeader, groupHeader, DefaultGroupHeader}
++	extraPrefixes := []string{strings.ToLower(extraHeaderPrefix), strings.ToLower(DefaultExtraHeaderPrefix)}
+ 	for key := range header {
+-		if strings.HasPrefix(strings.ToLower(key), strings.ToLower(extraHeaderPrefix)) {
+-			header.Del(key)
++		lower := strings.ToLower(key)
++		for _, h := range userHeaders {
++			if lower == strings.ToLower(h) {
++				delete(header, key)
++			}
++		}
++		for _, prefix := range extraPrefixes {
++			if strings.HasPrefix(lower, prefix) {
++				delete(header, key)
++			}
+ 		}
+ 	}
++}
++
++// SetAuthHeaders stamps the given authenticated user's identity onto the request
++// headers, after deleting any inbound copies of the identity headers.
++//
++// This mirrors k8s.io/client-go/transport.SetAuthProxyHeaders.
++func SetAuthHeaders(header http.Header, user userinfo.Info, userHeader, groupHeader, extraHeaderPrefix string) {
++	ClearAuthHeaders(header, userHeader, groupHeader, extraHeaderPrefix)
+ 
+ 	header.Set(userHeader, user.GetName())
+ 
+diff --git a/pkg/proxy/authheaders/authheaders_test.go b/pkg/proxy/authheaders/authheaders_test.go
+index 258c208..026a808 100644
+--- a/pkg/proxy/authheaders/authheaders_test.go
++++ b/pkg/proxy/authheaders/authheaders_test.go
+@@ -142,3 +142,19 @@ func TestSetAuthHeaders_RealExtraIsEncodedAndForwarded(t *testing.T) {
+ 		t.Errorf("encoded extra header %q = %v, want [root:org:ws]; full headers=%v", encoded, got, h)
+ 	}
+ }
++
++// TestClearAuthHeaders_NonCanonicalKeys ensures keys that bypassed
++// canonicalization are still removed.
++func TestClearAuthHeaders_NonCanonicalKeys(t *testing.T) {
++	t.Parallel()
++	h := http.Header{
++		"x-remote-user":  {"system:admin"},
++		"x-remote-group": {"system:masters"},
++		"x-remote-extra-authorization.kcp.io%2fwarrant": {"forged"},
++		"Accept": {"application/json"},
++	}
++	ClearAuthHeaders(h, userHeader, groupHeader, extraPrefix)
++	if want := (http.Header{"Accept": {"application/json"}}); !reflect.DeepEqual(h, want) {
++		t.Errorf("headers = %v, want %v", h, want)
++	}
++}
+diff --git a/pkg/proxy/proxy.go b/pkg/proxy/proxy.go
+index 7ba4cee..d9948ab 100644
+--- a/pkg/proxy/proxy.go
++++ b/pkg/proxy/proxy.go
+@@ -60,6 +60,8 @@ func WithProxyAuthHeaders(delegate http.Handler, userHeader, groupHeader string,
+ 	return func(w http.ResponseWriter, r *http.Request) {
+ 		if u, ok := request.UserFrom(r.Context()); ok {
+ 			authheaders.SetAuthHeaders(r.Header, u, userHeader, groupHeader, extraHeaderPrefix)
++		} else {
++			authheaders.ClearAuthHeaders(r.Header, userHeader, groupHeader, extraHeaderPrefix)
+ 		}
+ 
+ 		delegate.ServeHTTP(w, r)
+diff --git a/pkg/proxy/proxy_test.go b/pkg/proxy/proxy_test.go
+index 5ca9266..55c73c4 100644
+--- a/pkg/proxy/proxy_test.go
++++ b/pkg/proxy/proxy_test.go
+@@ -212,23 +212,45 @@ func TestWithProxyAuthHeaders_CustomHeaderNames(t *testing.T) {
+ 	}
+ }
+ 
+-// TestWithProxyAuthHeaders_NoAuthenticatedUser ensures that when no user is in
+-// the request context (the proxy did not authenticate the request), the handler
+-// passes through without stamping. The inbound forged headers are left as-is
+-// here because WithProxyAuthHeaders only stamps for authenticated requests; in
+-// the real chain such a request is rejected by WithOptionalAuthentication's
+-// failed handler and never reaches a shard mapping. This documents that
+-// contract.
++// TestWithProxyAuthHeaders_NoAuthenticatedUser ensures forged identity headers
++// are stripped even when no user is in the request context, so the proxy never
++// relies on an upstream filter to keep client-supplied identity off the shard.
+ func TestWithProxyAuthHeaders_NoAuthenticatedUser(t *testing.T) {
+ 	t.Parallel()
+-	var served bool
+-	sink := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { served = true })
+-	handler := WithProxyAuthHeaders(sink, defaultUserHeader, defaultGroupHeader, defaultExtraPrefix)
+-
+-	req := httptest.NewRequest(http.MethodGet, "https://front-proxy/api/v1/secrets", http.NoBody)
+-	handler.ServeHTTP(httptest.NewRecorder(), req)
+-
+-	if !served {
++	got := forwardThroughProxy(t, nil, defaultUserHeader, defaultGroupHeader, defaultExtraPrefix,
++		http.Header{
++			defaultUserHeader:  {"system:admin"},
++			defaultGroupHeader: {"system:masters"},
++			warrantExtraHeader: {`{"groups":["system:masters"]}`},
++			"Accept":           {"application/json"},
++		},
++	)
++	if got == nil {
+ 		t.Fatal("expected request to be passed through to delegate")
+ 	}
++	for k, v := range got {
++		if k != "Accept" {
++			t.Errorf("forged header %q leaked without authenticated user: %v", k, v)
++		}
++	}
++}
++
++// TestWithProxyAuthHeaders_CustomHeaderNamesStripDefaults ensures the default
++// X-Remote-* headers are stripped even when the mapping stamps custom names.
++func TestWithProxyAuthHeaders_CustomHeaderNamesStripDefaults(t *testing.T) {
++	t.Parallel()
++	got := forwardThroughProxy(t,
++		&userinfo.DefaultInfo{Name: "alice", Groups: []string{"system:authenticated"}},
++		"X-Custom-User", "X-Custom-Group", "X-Custom-Extra-",
++		http.Header{
++			defaultUserHeader:  {"system:admin"},
++			defaultGroupHeader: {"system:masters"},
++			scopesExtraHeader:  {"cluster:root"},
++		},
++	)
++	for _, h := range []string{defaultUserHeader, defaultGroupHeader, scopesExtraHeader} {
++		if v := got.Values(h); len(v) != 0 {
++			t.Errorf("default header %q leaked with custom mapping: %v", h, v)
++		}
++	}
+ }
+diff --git a/pkg/server/localproxy.go b/pkg/server/localproxy.go
+index 1a64aa3..57a5d76 100644
+--- a/pkg/server/localproxy.go
++++ b/pkg/server/localproxy.go
+@@ -325,6 +325,8 @@ func withProxyAuthHeaders(delegate http.Handler, userHeader, groupHeader string,
+ 	return func(w http.ResponseWriter, r *http.Request) {
+ 		if u, ok := request.UserFrom(r.Context()); ok {
+ 			authheaders.SetAuthHeaders(r.Header, u, userHeader, groupHeader, extraHeaderPrefix)
++		} else {
++			authheaders.ClearAuthHeaders(r.Header, userHeader, groupHeader, extraHeaderPrefix)
+ 		}
+ 
+ 		delegate.ServeHTTP(w, r)
+diff --git a/pkg/server/localproxy_test.go b/pkg/server/localproxy_test.go
+index c5ae526..80ff06c 100644
+--- a/pkg/server/localproxy_test.go
++++ b/pkg/server/localproxy_test.go
+@@ -187,3 +187,20 @@ func TestWithProxyAuthHeaders_StripsForgedIdentityHeaders(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestWithProxyAuthHeaders_NoAuthenticatedUserStripsForgedHeaders(t *testing.T) {
++	t.Parallel()
++	var forwarded http.Header
++	sink := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		forwarded = r.Header.Clone()
++	})
++	handler := withProxyAuthHeaders(sink, "X-Remote-User", "X-Remote-Group", "X-Remote-Extra-")
++
++	req := httptest.NewRequest(http.MethodGet, "https://shard/clusters/root:org:ws/api/v1/secrets", http.NoBody)
++	req.Header.Add("X-Remote-User", "system:admin")
++	req.Header.Add("X-Remote-Group", "system:masters")
++	req.Header.Add("X-Remote-Extra-Authorization.kcp.io%2fwarrant", `{"groups":["system:masters"]}`)
++	handler.ServeHTTP(httptest.NewRecorder(), req)
++
++	require.Empty(t, forwarded, "forged identity headers must not reach the backend")
++}

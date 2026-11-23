@@ -1,0 +1,67 @@
+diff --git a/crates/obscura-cdp/src/domains/page.rs b/crates/obscura-cdp/src/domains/page.rs
+index dd84b5e..5a1544f 100644
+--- a/crates/obscura-cdp/src/domains/page.rs
++++ b/crates/obscura-cdp/src/domains/page.rs
+@@ -84,6 +84,13 @@ pub fn emit_navigation_events(
+     } else {
+         ctx.isolated_worlds.clone()
+     };
++    // Runtime.executionContextsCleared (above) invalidates every context the
++    // client knew about. Reset the valid set to only what is live after this
++    // navigation: the re-emitted default context (2) plus the isolated-world
++    // ids minted below. This rejects stale pre-navigation ids and keeps the
++    // set bounded on long-lived connections.
++    ctx.valid_context_ids.clear();
++    ctx.valid_context_ids.insert(2);
+     // Issue #192: fresh, monotonically increasing executionContextId per re-create.
+     for world_name in &world_names {
+         let world_ctx_id = ctx.next_isolated_context();
+@@ -534,6 +541,34 @@ mod tests {
+     use super::*;
+     use crate::dispatch::CdpContext;
+ 
++    #[test]
++    fn navigation_prunes_stale_context_ids() {
++        let mut ctx = CdpContext::new();
++        let pre_nav = ctx.next_isolated_context();
++        assert!(ctx.valid_context_ids.contains(&pre_nav));
++
++        let mut last_live = Vec::new();
++        for _ in 0..50 {
++            let before = ctx.next_isolated_context_id;
++            emit_navigation_events(
++                &mut ctx, &None, "F", "L", "https://example.com/", "p1", &[],
++                WaitUntil::Load, true,
++            );
++            last_live = (before..ctx.next_isolated_context_id).collect();
++        }
++
++        // Stale pre-navigation contexts are rejected after executionContextsCleared.
++        assert!(!ctx.valid_context_ids.contains(&pre_nav));
++        assert!(!ctx.valid_context_ids.contains(&1));
++        // Re-emitted default context + freshly minted worlds remain valid.
++        assert!(ctx.valid_context_ids.contains(&2));
++        for id in &last_live {
++            assert!(ctx.valid_context_ids.contains(id));
++        }
++        // Bounded: no growth across navigations.
++        assert_eq!(ctx.valid_context_ids.len(), 1 + last_live.len());
++    }
++
+     #[tokio::test]
+     async fn get_layout_metrics_returns_chrome_default_viewport() {
+         let mut ctx = CdpContext::new();
+diff --git a/crates/obscura-cdp/src/domains/runtime.rs b/crates/obscura-cdp/src/domains/runtime.rs
+index fd102c3..e89f543 100644
+--- a/crates/obscura-cdp/src/domains/runtime.rs
++++ b/crates/obscura-cdp/src/domains/runtime.rs
+@@ -79,6 +79,9 @@ pub async fn handle(
+                         session_id: session_id.clone(),
+                     };
+                     ctx.pending_events.push(event);
++                    // Context 1 is (re-)advertised here; keep it valid even
++                    // after a navigation pruned the set.
++                    ctx.valid_context_ids.insert(1);
+                 }
+                 None => {
+                     // No session attached yet — that's fine. Just ack.

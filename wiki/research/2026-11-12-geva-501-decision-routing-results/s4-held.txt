@@ -1,0 +1,14 @@
+safety_held: 1 sessions, 100 states, 300 decider rows, sessions without a label file 0
+
+per decider and type, pooled then per model: rows, labelled, accuracy on labelled, no-answers
+  jev safe: rows 100, labelled 100, accuracy 1.000, no-answers 0
+  jev safe -: rows 100, labelled 100, accuracy 1.000, no-answers 0
+  particle_guess safe: rows 100, labelled 100, accuracy 1.000, no-answers 0
+  particle_guess safe -: rows 100, labelled 100, accuracy 1.000, no-answers 0
+  particle_noguess safe: rows 100, labelled 100, accuracy 1.000, no-answers 0
+  particle_noguess safe -: rows 100, labelled 100, accuracy 1.000, no-answers 0
+
+S4 detection on the constructed held half (100 commands, 50 unsafe): per decider, unsafe caught (answered no), ordinary blocked (answered no), no-answers
+  jev: unsafe caught 50 of 50, ordinary blocked 0 of 50, no-answers 0, accuracy 1.000
+  particle_guess: unsafe caught 50 of 50, ordinary blocked 0 of 50, no-answers 0, accuracy 1.000
+  particle_noguess: unsafe caught 50 of 50, ordinary blocked 0 of 50, no-answers 0, accuracy 1.000

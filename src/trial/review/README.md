@@ -7,13 +7,15 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
 ## Modules
 
 - unit.ts: unit repositories and unit trees.
-- told.ts: the frozen told prompt and its sha256.
+- told.ts: the frozen told prompt and its sha256, and the PR-context template and its sha256.
 - plan.ts: plan units: the plan arms, prompt, rec user, parser and CEO mode (see Plan units).
 - findings.ts: the fixed findings parser and the render to arm contract v1. A finding that says whether it was confirmed gets reader `confirmed` or `unconfirmed`, so an arm's `severity_map.by_reader.unconfirmed` can map unconfirmed findings as informational, as the plan's primary map does for pstack.
 - cost.ts: cost.tsv and refusals.tsv from the metering proxy's journal, plus reader rows.
 - readers.ts: reader rows: each subagent a session launched, named through a reader map pinned to one gstack commit
   (reader-maps/).
 - run.ts: runReviewUnits, the run loop on a HostRig.
+- codex.ts: what a Codex arm adds (`--host codex`): the codex-arms file's arm specs and the keyless capture of each arm's
+  model input before its first session.
 - cli.ts: the command.
 
 ## Unit repositories
@@ -42,8 +44,8 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
 ## A run
 
 - Task id: `<repo name>-<pr>-<first 8 of head>`. The agent sees only /work/<task id>, seeded with the unit tree.
-- Models: `--models` takes policy models with a Claude Code route (provider anthropic or openrouter), and the dry run
-  prints each one's provider. GPT-6.1 Sol runs as `openai/gpt-6.1-sol`, through OpenRouter's Anthropic-compatible
+- Models: `--models` takes policy models with a Claude Code route (provider anthropic or openrouter), or under
+  `--host codex` a Codex route (provider openai or openrouter), and the dry run prints each one's provider. GPT-6.1 Sol runs as `openai/gpt-6.1-sol`, through OpenRouter's Anthropic-compatible
   Messages route; `gpt-6.1-sol` is its openai route, which the judge and the Codex host use.
 - Prompt: the told prompt with the arm's command (none no prefix, gstack /review, pstack /pstack:interrogate, tstack
   /sol-loop with "Run one review round and stop before any fix.") and the base branch.
@@ -55,7 +57,8 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
   when its worst case at the allowance fits under --spend-cap (CAP_STOP otherwise).
 - Outputs: `<out>/arms/<arm>-<model tag>/` per arm and model in arm contract v1 (arm.json, findings/<unit>.jsonl with each
   finding's pass, cost.tsv; no judgments.tsv, so the arm is raw), plus units.json, parses.tsv, refusals.tsv,
-  cells.ndjson and progress.json. The model tag is a Claude model's family (opus, haiku), else the model id's last path segment, cut to 17 characters
+  cells.ndjson and progress.json. A `--host codex` run also writes `<out>/captures/`, each arm's model input captured
+  before its first session, and `captures.json`. The model tag is a Claude model's family (opus, haiku), else the model id's last path segment, cut to 17 characters
   plus a 6-character hash once it passes 24. Each run rebuilds <out>/arms from the journal, so no stale arm survives a resume there. The receipts sink is a
   merge copy: it keeps any arm an earlier run of the same out dir wrote.
 - Parse outcomes per unit-pass: findings, empty (a real zero), missing (no fenced json block: zero, flagged), malformed
@@ -73,7 +76,7 @@ copy. A failure refuses with E_UNIT_IMAGE, and the unit is dropped for every arm
 The rig's arm installer takes one target skill for every arm, so one invocation runs arms that share a told skill:
 none with gstack, or none with one other stack. `--dry-run` prints the plan and writes nothing.
 
-## Per-arm and per-run settings (GEVA-109)
+## Per-arm and per-run settings
 
 Every default keeps a frozen preregistration's run as it was: same options, same prompts, same session keys.
 
@@ -85,7 +88,7 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   example R2's full-procedure /review line); it must open with a command TOLD_COMMANDS in told.ts declares for the arm:
   its own, and for a gstack arm also /ship (R56-1's review panel). The arm's install target is the skill that command
   names, in the rig's install and in each session alike (/ship installs ship). A code prefix with a control character (a
-  CR, tab or BOM included) is refused, and the refusal names the character. The template and TOLD_SHA256 stay the same. On plan units (GEVA-115, plan-told.ts) only a gstack plan arm takes one: the line must open with the lens's
+  CR, tab or BOM included) is refused, and the refusal names the character. The template and TOLD_SHA256 stay the same. On plan units (plan-told.ts) only a gstack plan arm takes one: the line must open with the lens's
   command (/plan-ceo-review) and add words after it, and the arm's line becomes that line, a space and "Review this plan
   for problems.". A prefix that holds that ask, starts or ends with whitespace, or has a control character (a CR, tab or
   BOM included) is refused, and the refusal names the character. A gstack-<suffix> arm needs a prefix (E_USAGE without
@@ -99,6 +102,12 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   the lock's session_kind and the served review and investigate start lines (src/arms/install.ts). arm_provenance.render
   records the lock. Two arm names may share a stack ref and render, so they install the same tree and differ only in
   their settings. On code units only an arm told /review takes one, since the install checks no other skill's start line.
+- `--host claude|codex`: the CLI every session runs, default claude. `--host codex` runs code units in Codex CLI and
+  needs `--codex-arms <file>`, which names the Codex binary and each arm's effort, hook trust, extra settings, gstack
+  config, switches, install and told prefix (codex.ts). Claude-only flags (`--plan`, `--told-prefix`, `--system-prompt`,
+  `--render`, `--reader-map`, `--cap-stops`, `--arm-models`) are refused under it.
+- `--upstream <url>`, host codex only: send every provider call to this keyless stand-in instead of the provider. It is
+  for keyless checks only, and the run refuses it while a provider key is set.
 - `--max-turns <n>`: the most model turns a session may take, default 60 (the driver's MAX_TURNS).
 - `--session-kind unattended`: GSTACK_SESSION_KIND=unattended in every arm's agent env, none included. Off by default.
 - `--arm-session-kind <arm>=unattended`, repeatable: the same for one arm only, keyed per arm. It can't run beside
@@ -112,20 +121,30 @@ Every default keeps a frozen preregistration's run as it was: same options, same
 - `--cap-stops`, code units only: cap stops (below). Off by default.
 - `--reader-map <file>`, code units only: reader rows (below). Every gstack stack arm must run the map's gstack commit
   and be told /review, whose readers the map names.
+- `--pr-context <dir>`, code units only: every arm sees the PR's title and its first description. The run reads
+  `<dir>/<unit id with / # and @ as _>/pr.md`, the layout harness-evals' scripts/review-bugs/build-unit.ts writes, and
+  the prompt becomes TOLD_PR_TEMPLATE (told.ts): TOLD_TEMPLATE with "The pull request's title and description, as its
+  author first wrote them:" and the pr.md text after its first paragraph. Each arm's own prefix still comes first, so the
+  block is the same bytes for every arm. It is all or none: a selected unit with no readable pr.md, one with no title or
+  description past its heading marker, or one with a control character other than a line feed or tab refuses the run
+  (E_USAGE) and lists every such unit. The session
+  key's task carries TOLD_PR_SHA256 as told_sha256 and the pr.md's sha256 as pr_sha256; arm.json's told block and
+  units.json record the template's sha256 and each unit's pr_sha256. Left out, every prompt, key and record is today's.
 
 run.json records max_turns and session_kind, and arm_session_kinds, allowance_usd and reader_map (its sha256 and gstack commit) when they
-are set. --resume with other values than run.json records is refused before anything runs, and run.json stays as it was
+are set. A `--host codex` run also records host, codex_arms_sha256 and, under `--upstream`, upstream "keyless"; a resume
+that adds or drops `--upstream` is refused (E_CACHE_STALE), since a keyless check's cells never count as results. --resume with other values than run.json records is refused before anything runs, and run.json stays as it was
 (E_CACHE_STALE). A setting off its default also joins the session key, so a cell run under another value is never
 reused. The allowance is the exception: it joins the key only in a --cap-stops run (below), and otherwise only the
 run.json check refuses a resume under another allowance.
 
 ## Cap stops and reader rows (R2 build)
 
-R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
+R48 follow-ups prereg, section 3.6, and a review note on #119.
 
 - **Cap stops.** A run with `--cap-stops` records a code session that either cap ends as its own termination:
   turn_cap (the CLI's error_max_turns result) or allowance_stop (the proxy's E_ALLOWANCE refusal that
-  names the slot's allowance). A capped session is scored, never a coverage gap (GSTA-2's ruling for R2), and counts
+  names the slot's allowance). A capped session is scored, never a coverage gap (the Captain's ruling for R2), and counts
   against its own arm, the same in every arm: its findings are those of the latest main-agent text block in the session's
   transcript.ndjson whose last json block parses as findings (an AskUserQuestion's question never counts), and with no
   such block, or no readable transcript, it is a missing pass, scored as finding nothing. arm.json counts them
@@ -161,7 +180,7 @@ B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what dif
 - Arms: `none` ("Review this plan for problems."), `gstack=<gstack repo>@<sha>` (`/plan-ceo-review` and that line),
   `lens` (the lens line from the skill's description, then that line), `placebo` (Lane B's placebo tree generated
   from the gstack arm, with the gstack line) and `gstack-auto=<gstack repo>@<sha>`, a frozen placeholder for
-  GST-537's CEO-only /autoplan that refuses every gstack until a release sets GSTACK_AUTO. A gstack stack arm named
+  the CEO-only /autoplan that refuses every gstack until a release sets GSTACK_AUTO. A gstack stack arm named
   `gstack-<suffix>` (not gstack-auto) is a second gstack arm, such as a forced-procedure arm, and needs its
   own `--told-prefix`. `--arm-models
   <arm>=<model>[,<model>]` limits an arm to some of `--models`, so lens runs only on Opus and placebo only on particle-1.
@@ -230,3 +249,8 @@ as its amendments change it), with `--sealed-root` when the suite is sealed. ceo
   `gstack-evals ceo rows` takes `--order <file>` at `--stage 2`, and `--smoke-round 1` or `2` at stage 1 to read stage
   1's smoke or its rerun.
 - The out dir must sit outside the repo.
+
+## Product-value units
+
+review-units --plan product-value --family plan|brief runs prereg 2026-11-08-geva-403's review sessions (product-value.ts, pv-cli.ts). Each arm's first line and the closing template are frozen in product-value.ts and tested against the post. Every arm runs with the claude-code-preset system prompt, 150 turns, a 3600 s timeout, one session at a time, a 200,000-token window and web tools denied. The gstack arm runs the 23f9d07 pin unattended; plan-ceo-review-gate adds gstack's opt-in gate for smoke rule 3. --pv-fallback-sentence adds smoke rule 2's sentence on the plan family only. The dry run asserts both families' mounts and prints each arm's prompt sha256. Each session's journal entry holds one parse with the parser's sha256, its end state, every attempt and its spend; arm.json's product_value counts them. lanes/product-value/README.md lists the build-time choices.
+

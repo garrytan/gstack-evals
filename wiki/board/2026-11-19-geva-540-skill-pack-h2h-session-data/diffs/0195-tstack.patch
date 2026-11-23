@@ -1,0 +1,119 @@
+diff --git a/RELEASE_NOTES.md b/RELEASE_NOTES.md
+index 91e9e10..5f78fc9 100644
+--- a/RELEASE_NOTES.md
++++ b/RELEASE_NOTES.md
+@@ -62,6 +62,7 @@ extensive correctness work during development — see [Docs/Sampler.md](Docs/Sam
+ 
+  * `WaveOut`: fixed a race where stopping/disposing faster than the buffer latency could throw a `NullReferenceException` via `PlaybackStopped` (#804)
+  * `WaveFileWriter`: removed the finalizer that fired an unconditional `Debug.Assert` and could crash the process on the finalizer thread when construction had thrown
++ * `WaveBuffer.Copy`: now copies raw bytes into `float[]`/`short[]`/`int[]` destinations; previously `Array.Copy` saw the punned buffer as `byte[]` on .NET Core and threw or widened each byte into a separate sample
+  * `WaveFileWriter.WriteSample` / `WriteSamples`: fixed 32-bit `WaveFormatExtensible` output writing near-silence or corrupt data — `WriteSample(float)` truncated the normalised float to an `Int32` before scaling (writing zero for almost every sample), and both paths ignored the format's SubFormat; they now write IEEE-float or integer-PCM samples according to the declared subformat (#651)
+  * `WaveExtensionMethods.AsStandardWaveFormat`: now also resolves the SubFormat of a `WaveFormatExtraData` (how an extensible format read from a file/stream is materialised), not just a `WaveFormatExtensible`
+  * `AudioClient.Dispose` is now idempotent and safe against concurrent/re-entrant disposal, fixing an intermittent interop `NullReferenceException` (#1183)
+diff --git a/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs b/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs
+index df7465d..3d5db07 100644
+--- a/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs
++++ b/src/NAudio.Core/Wave/WaveOutputs/WaveBuffer.cs
+@@ -222,7 +222,10 @@ public class WaveBuffer : IWaveBuffer
+     /// </summary>
+     public void Copy(Array destinationArray)
+     {
+-        Array.Copy(byteBuffer, destinationArray, numberOfBytes);
++        // Buffer.BlockCopy copies raw bytes regardless of the destination's element type.
++        // Array.Copy would treat the source as byte[] (its real runtime type) and either throw
++        // or widen each byte into a separate element when copying into a float[]/short[]/int[].
++        Buffer.BlockCopy(byteBuffer, 0, destinationArray, 0, numberOfBytes);
+     }
+ 
+     /// <summary>
+diff --git a/tests/NAudio.Core.Tests/WaveStreams/WaveBufferTests.cs b/tests/NAudio.Core.Tests/WaveStreams/WaveBufferTests.cs
+new file mode 100644
+index 0000000..e8b338c
+--- /dev/null
++++ b/tests/NAudio.Core.Tests/WaveStreams/WaveBufferTests.cs
+@@ -0,0 +1,52 @@
++using System;
++using NAudio.Wave;
++using NUnit.Framework;
++
++#pragma warning disable CS0618 // WaveBuffer is obsolete but still shipped for backward compatibility
++
++namespace NAudio.Core.Tests.WaveStreams;
++
++[TestFixture]
++[Category("UnitTest")]
++public class WaveBufferTests
++{
++    [Test]
++    public void CopyToFloatArrayCopiesRawSampleBytes()
++    {
++        var samples = new[] { 0.25f, -0.5f, 1.0f, 0.125f };
++        var bytes = new byte[samples.Length * 4];
++        Buffer.BlockCopy(samples, 0, bytes, 0, bytes.Length);
++        var waveBuffer = new WaveBuffer(bytes) { FloatBufferCount = samples.Length };
++
++        var destination = new float[samples.Length];
++        waveBuffer.Copy(destination);
++
++        Assert.That(destination, Is.EqualTo(samples));
++    }
++
++    [Test]
++    public void CopyToShortArrayCopiesRawSampleBytes()
++    {
++        var samples = new short[] { 1000, -2000, 32767, -32768 };
++        var bytes = new byte[samples.Length * 2];
++        Buffer.BlockCopy(samples, 0, bytes, 0, bytes.Length);
++        var waveBuffer = new WaveBuffer(bytes) { ShortBufferCount = samples.Length };
++
++        var destination = new short[samples.Length];
++        waveBuffer.Copy(destination);
++
++        Assert.That(destination, Is.EqualTo(samples));
++    }
++
++    [Test]
++    public void CopyToByteArrayCopiesByteBufferCount()
++    {
++        var bytes = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
++        var waveBuffer = new WaveBuffer(bytes) { ByteBufferCount = 4 };
++
++        var destination = new byte[8];
++        waveBuffer.Copy(destination);
++
++        Assert.That(destination, Is.EqualTo(new byte[] { 1, 2, 3, 4, 0, 0, 0, 0 }));
++    }
++}
+diff --git a/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs b/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
+index 9eb350e..ed868c1 100644
+--- a/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
++++ b/tests/NAudio.Windows.Tests/WaveStreams/AudioFileReaderTests.cs
+@@ -47,6 +47,28 @@ public class AudioFileReaderTests
+         }
+     }
+ 
++    [Test]
++    public void CopyToDeliversWholeMonoFile()
++    {
++        // 16 seconds of 8kHz mono, as in the "WAV to MP3 truncates file length" report
++        const int sampleRate = 8000;
++        var wav = Build16BitMonoPcmWav(sampleCount: sampleRate * 16, sampleRate: sampleRate);
++        var tmp = Path.Combine(Path.GetTempPath(), "naudio-copyto-test-" + Guid.NewGuid() + ".wav");
++        File.WriteAllBytes(tmp, wav);
++        try
++        {
++            using var reader = new AudioFileReader(tmp);
++            var output = new MemoryStream();
++            reader.CopyTo(output);
++            Assert.That(output.Length, Is.EqualTo(reader.Length));
++            Assert.That(output.Length, Is.EqualTo(sampleRate * 16 * 4)); // 32-bit float mono
++        }
++        finally
++        {
++            File.Delete(tmp);
++        }
++    }
++
+     /// <summary>
+     /// Build a 1kHz sine-in-WAV byte array we can feed to the reader.
+     /// </summary>

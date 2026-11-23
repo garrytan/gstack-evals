@@ -1,0 +1,30 @@
+jev_newer: 1413 sessions, 45584 states, 54662 decider rows, sessions without a label file 0
+
+per decider and type, pooled then per model: rows, labelled, accuracy on labelled, no-answers
+  jev done: rows 1677, labelled 1677, accuracy 0.556, no-answers 0
+  jev done opus: rows 944, labelled 944, accuracy 0.535, no-answers 0
+  jev done sol: rows 733, labelled 733, accuracy 0.583, no-answers 0
+  jev next_step: rows 19443, labelled 0, no-answers 5
+  jev next_step opus: rows 10831, labelled 0, no-answers 5
+  jev next_step sol: rows 8612, labelled 0, no-answers 0
+  jev relevant: rows 9323, labelled 9323, accuracy 0.862, no-answers 0
+  jev relevant opus: rows 2158, labelled 2158, accuracy 0.862, no-answers 0
+  jev relevant sol: rows 7165, labelled 7165, accuracy 0.862, no-answers 0
+  jev safe: rows 21147, labelled 21147, accuracy 0.902, no-answers 14
+  jev safe opus: rows 11905, labelled 11905, accuracy 0.882, no-answers 14
+  jev safe sol: rows 9242, labelled 9242, accuracy 0.928, no-answers 0
+  jev tests_passed: rows 3072, labelled 17, accuracy 0.706, no-answers 0
+  jev tests_passed opus: rows 1727, labelled 13, accuracy 0.846, no-answers 0
+  jev tests_passed sol: rows 1345, labelled 4, accuracy 0.250, no-answers 0
+  Jev 1.14 ECE safe: 0.046
+  Jev 1.14 ECE done: 0.180
+  Jev 1.14 ECE relevant: 0.125
+  Jev 1.14 ECE tests_passed: none (under 100 labelled answers)
+  Jev 1.14 ECE next_step: none (under 100 labelled answers)
+
+S7 Jev 1.14 against Jev 1.13's logged answers, same states: per type, paired rows, same answer, labelled pairs, jev1.14 right only, jev1.13 right only, both right
+  done: 853, same 745 (87.3%), labelled 853, jev1.14 only 52, jev1.13 only 56, both 407
+  next_step: 10304, same 9221 (89.5%), labelled 0, jev1.14 only 0, jev1.13 only 0, both 0
+  relevant: 5388, same 4832 (89.7%), labelled 5388, jev1.14 only 287, jev1.13 only 269, both 4320
+  safe: 11233, same 11027 (98.2%), labelled 11233, jev1.14 only 89, jev1.13 only 103, both 10079
+  tests_passed: 1592, same 1549 (97.3%), labelled 5, jev1.14 only 0, jev1.13 only 0, both 4

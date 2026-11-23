@@ -1,0 +1,94 @@
+diff --git a/context.go b/context.go
+index ec7fdd9..4cf5589 100644
+--- a/context.go
++++ b/context.go
+@@ -166,16 +166,27 @@ func (c *Context) Scheme() string {
+ 		return "https"
+ 	}
+ 	if scheme := c.request.Header.Get(HeaderXForwardedProto); scheme != "" {
+-		return scheme
++		return sanitizeScheme(scheme)
+ 	}
+ 	if scheme := c.request.Header.Get(HeaderXForwardedProtocol); scheme != "" {
+-		return scheme
++		return sanitizeScheme(scheme)
+ 	}
+ 	if ssl := c.request.Header.Get(HeaderXForwardedSsl); ssl == "on" {
+ 		return "https"
+ 	}
+ 	if scheme := c.request.Header.Get(HeaderXUrlScheme); scheme != "" {
+-		return scheme
++		return sanitizeScheme(scheme)
++	}
++	return "http"
++}
++
++// sanitizeScheme returns the normalized scheme if it is one of the allowed values
++// (http, https, ws, wss) and "http" otherwise. Header values are client controlled
++// and must not be used verbatim (e.g. when constructing redirect URLs).
++func sanitizeScheme(scheme string) string {
++	switch s := strings.ToLower(strings.TrimSpace(scheme)); s {
++	case "http", "https", "ws", "wss":
++		return s
+ 	}
+ 	return "http"
+ }
+diff --git a/context_test.go b/context_test.go
+index 9376f0f..383e082 100644
+--- a/context_test.go
++++ b/context_test.go
+@@ -1094,6 +1094,54 @@ func TestContext_Scheme(t *testing.T) {
+ 		c *Context
+ 		s string
+ 	}{
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXForwardedProto: []string{"javascript"}},
++				},
++			},
++			"http",
++		},
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXForwardedProto: []string{"HTTPS"}},
++				},
++			},
++			"https",
++		},
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXForwardedProto: []string{"wss"}},
++				},
++			},
++			"wss",
++		},
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXForwardedProtocol: []string{"file"}},
++				},
++			},
++			"http",
++		},
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXUrlScheme: []string{"data"}},
++				},
++			},
++			"http",
++		},
++		{
++			&Context{
++				request: &http.Request{
++					Header: http.Header{HeaderXUrlScheme: []string{"ws"}},
++				},
++			},
++			"ws",
++		},
+ 		{
+ 			&Context{
+ 				request: &http.Request{

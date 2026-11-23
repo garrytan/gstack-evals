@@ -1,0 +1,16 @@
+{
+ "schema": "sm-prereg.v1",
+ "draw_seed": 3141592653,
+ "bootstrap_seed": 2718281828,
+ "order_seed": 1618033988,
+ "pins": {
+  "swe_bench_live_multilang": {
+   "revision": "eb09c2e5db6e4c5a95e01c903c8fd1d5da33c4f3"
+  },
+  "swe_rebench_pool": {
+   "path": "quick/laneb/tasks/swerebench-r3a4.json",
+   "sha256": "7d2b2735cd50836364cc2c1fba9a2dd07a5ce42e9ea0f9c4b8d699b9e81ea1af"
+  }
+ },
+ "note": "Test fixture with invented seeds; the real file lives in the post bundle."
+}

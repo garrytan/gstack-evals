@@ -1,0 +1,97 @@
+diff --git a/main/HSSF/UserModel/HSSFRow.cs b/main/HSSF/UserModel/HSSFRow.cs
+index e3ad221..ec8a284 100644
+--- a/main/HSSF/UserModel/HSSFRow.cs
++++ b/main/HSSF/UserModel/HSSFRow.cs
+@@ -130,9 +130,15 @@ namespace NPOI.HSSF.UserModel
+                 shortCellNum = (short)(0xffff - columnIndex);
+             }
+ 
+-            ICell cell = new HSSFCell(book, sheet, RowNum, (short)columnIndex, type);
++            HSSFCell cell = new HSSFCell(book, sheet, RowNum, (short)columnIndex, type);
+             AddCell(cell);
+-            sheet.Sheet.AddValueRecord(RowNum, ((HSSFCell)cell).CellValueRecord);
++            sheet.Sheet.AddValueRecord(RowNum, cell.CellValueRecord);
++
++            ICellStyle style = IsFormatted ? RowStyle : sheet.GetColumnStyle(columnIndex);
++            if (style != null)
++            {
++                cell.CellStyle = style;
++            }
+             return cell;
+         }
+         public IRow CopyRowTo(int targetIndex)
+diff --git a/ooxml/XSSF/Streaming/SXSSFRow.cs b/ooxml/XSSF/Streaming/SXSSFRow.cs
+index d020cee..62f82ed 100644
+--- a/ooxml/XSSF/Streaming/SXSSFRow.cs
++++ b/ooxml/XSSF/Streaming/SXSSFRow.cs
+@@ -235,6 +235,18 @@ namespace NPOI.XSSF.Streaming
+         {
+             CheckBounds(column);
+             SXSSFCell cell = new SXSSFCell(this, type);
++            if (IsFormatted)
++            {
++                cell.CellStyle = RowStyle;
++            }
++            else
++            {
++                ICellStyle colStyle = _sheet?.GetColumnStyle(column);
++                if (colStyle != null && colStyle.Index != 0)
++                {
++                    cell.CellStyle = colStyle;
++                }
++            }
+             _cells[column] = cell;
+             _sortedCellCache = null;
+             UpdateIndexWhenAdd(column);
+diff --git a/ooxml/XSSF/UserModel/XSSFRow.cs b/ooxml/XSSF/UserModel/XSSFRow.cs
+index c196e1b..0b3c87b 100644
+--- a/ooxml/XSSF/UserModel/XSSFRow.cs
++++ b/ooxml/XSSF/UserModel/XSSFRow.cs
+@@ -381,6 +381,14 @@ namespace NPOI.XSSF.UserModel
+             {
+                 xcell.CellStyle = RowStyle;
+             }
++            else
++            {
++                ICellStyle colStyle = _sheet.GetColumnStyle(columnIndex);
++                if (colStyle != null && colStyle.Index != 0)
++                {
++                    xcell.CellStyle = colStyle;
++                }
++            }
+ 
+             _cells[columnIndex] = xcell;
+             UpdateCacheOnAdd(columnIndex);
+diff --git a/testcases/main/SS/UserModel/BaseTestRow.cs b/testcases/main/SS/UserModel/BaseTestRow.cs
+index 93b9ac7..1fc4949 100644
+--- a/testcases/main/SS/UserModel/BaseTestRow.cs
++++ b/testcases/main/SS/UserModel/BaseTestRow.cs
+@@ -44,6 +44,28 @@ namespace TestCases.SS.UserModel
+         {
+             _testDataProvider = TestDataProvider;
+         }
++        [Test]
++        public void TestCreateCellUsesDefaultColumnStyle()
++        {
++            IWorkbook workbook = _testDataProvider.CreateWorkbook();
++            ISheet sheet = workbook.CreateSheet();
++            ICellStyle style = workbook.CreateCellStyle();
++            style.Alignment = HorizontalAlignment.Center;
++            sheet.SetDefaultColumnStyle(1, style);
++
++            IRow row = sheet.CreateRow(0);
++            ICell styled = row.CreateCell(1);
++            ICell unstyled = row.CreateCell(2);
++            Assert.AreEqual(style.Index, styled.CellStyle.Index);
++            Assert.AreNotEqual(style.Index, unstyled.CellStyle.Index);
++
++            IWorkbook wb2 = _testDataProvider.WriteOutAndReadBack(workbook);
++            ICell cell = wb2.GetSheetAt(0).GetRow(0).GetCell(1);
++            Assert.AreEqual(HorizontalAlignment.Center, cell.CellStyle.Alignment);
++            wb2.Close();
++            workbook.Close();
++        }
++
+         [Test]
+         public void TestLastAndFirstColumns()
+         {

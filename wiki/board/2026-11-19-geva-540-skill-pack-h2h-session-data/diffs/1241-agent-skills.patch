@@ -1,0 +1,466 @@
+diff --git a/pkg/builder/builder.go b/pkg/builder/builder.go
+index bcd86dd..dc00333 100644
+--- a/pkg/builder/builder.go
++++ b/pkg/builder/builder.go
+@@ -14,7 +14,6 @@ import (
+ 	"os"
+ 	"os/exec"
+ 	"path"
+-	"path/filepath"
+ 	"strings"
+ 	"time"
+ 
+@@ -154,14 +153,14 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
+ 		"buildCommandLen", len(req.BuildCommand))
+ 
+ 	logger.V(1).Info("starting build")
+-	srcPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename), builder.sharedVolumePath)
++	srcPkgPath, err := utils.RootJoin(builder.sharedVolumePath, req.SrcPkgFilename)
+ 	if err != nil {
+ 		logger.Error(err, "filename", req.SrcPkgFilename)
+ 		builder.reply(r.Context(), w, "", err.Error(), http.StatusBadRequest)
+ 		return
+ 	}
+ 	deployPkgFilename := fmt.Sprintf("%s-%s", req.SrcPkgFilename, strings.ToLower(uniuri.NewLen(6)))
+-	deployPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, deployPkgFilename), builder.sharedVolumePath)
++	deployPkgPath, err := utils.RootJoin(builder.sharedVolumePath, deployPkgFilename)
+ 	if err != nil {
+ 		logger.Error(err, "filename", req.SrcPkgFilename)
+ 		builder.reply(r.Context(), w, "", err.Error(), http.StatusBadRequest)
+@@ -205,7 +204,7 @@ func (builder *Builder) Clean(w http.ResponseWriter, r *http.Request) {
+ 	}()
+ 
+ 	srcPkgFilename := r.URL.Query().Get("name")
+-	srcPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, srcPkgFilename), builder.sharedVolumePath)
++	srcPkgPath, err := utils.RootJoin(builder.sharedVolumePath, srcPkgFilename)
+ 	if err != nil {
+ 		logger.Error(err, "rejecting clean request", "source_package", srcPkgFilename)
+ 		builder.reply(r.Context(), w, srcPkgFilename, fmt.Sprintf("error: invalid name: %s", err.Error()), http.StatusBadRequest)
+diff --git a/pkg/builder/builder_test.go b/pkg/builder/builder_test.go
+index 60d157c..c2663bc 100644
+--- a/pkg/builder/builder_test.go
++++ b/pkg/builder/builder_test.go
+@@ -197,7 +197,7 @@ func TestBuilder(t *testing.T) {
+ 				require.NoError(t, err)
+ 				defer srcFile.Close()
+ 				w := httptest.NewRecorder()
+-				r := httptest.NewRequest(http.MethodDelete, "/clean/"+test.srcPkgFilename, http.NoBody)
++				r := httptest.NewRequest(http.MethodDelete, "/clean?name="+url.QueryEscape(test.srcPkgFilename), http.NoBody)
+ 				test.handler(w, r)
+ 				resp := w.Result()
+ 				if resp.StatusCode != test.status {
+@@ -210,7 +210,10 @@ func TestBuilder(t *testing.T) {
+ 		// must be rejected with 400 before any filesystem operation. (Names
+ 		// like "foo/../bar" that filepath.Clean resolves to a legitimate
+ 		// in-volume path are not traversal and remain allowed.)
+-		for _, name := range []string{"../etc/passwd", "../../absolute"} {
++		// The empty name would resolve to the shared volume root itself, and
++		// a sibling sharing the root's name prefix must not be accepted
++		// (GHSA-r5jh-q2mw-gcx4).
++		for _, name := range []string{"../etc/passwd", "../../absolute", "", ".", "../" + filepath.Base(dir) + "-extra/evil"} {
+ 			t.Run("should reject traversal name "+name, func(t *testing.T) {
+ 				w := httptest.NewRecorder()
+ 				r := httptest.NewRequest(http.MethodDelete, "/clean?name="+url.QueryEscape(name), http.NoBody)
+diff --git a/pkg/fetcher/fetcher.go b/pkg/fetcher/fetcher.go
+index 25e789b..f629990 100644
+--- a/pkg/fetcher/fetcher.go
++++ b/pkg/fetcher/fetcher.go
+@@ -179,7 +179,7 @@ func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
+ func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
+ 	for key, val := range dataMap {
+ 		writeFilePath := filepath.Join(dirPath, key)
+-		err := os.WriteFile(writeFilePath, val, 0750)
++		err := utils.RootWriteFile(dirPath, key, val, 0750)
+ 		if err != nil {
+ 			return fmt.Errorf("failed to write file %s: %w", writeFilePath, err)
+ 		}
+@@ -293,14 +293,14 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
+ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req FunctionFetchRequest) (int, error) {
+ 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
+ 
+-	storePath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename), fetcher.sharedVolumePath)
++	storePath, err := utils.RootJoin(fetcher.sharedVolumePath, req.Filename)
+ 	if err != nil {
+ 		logger.Error(err, "filename", req.Filename)
+ 		return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, req)
+ 	}
+ 
+ 	// verify first if the file already exists.
+-	if _, err := os.Stat(storePath); err == nil {
++	if _, err := utils.RootStat(fetcher.sharedVolumePath, req.Filename); err == nil {
+ 		logger.Info("requested file already exists at shared volume - skipping fetch",
+ 			"requested_file", req.Filename,
+ 			"shared_volume_path", fetcher.sharedVolumePath)
+@@ -308,7 +308,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
+ 		return http.StatusOK, nil
+ 	}
+ 
+-	tmpPath, err := utils.SanitizeFilePath(storePath+".tmp", fetcher.sharedVolumePath)
++	tmpPath, err := utils.RootJoin(fetcher.sharedVolumePath, req.Filename+".tmp")
+ 	if err != nil {
+ 		logger.Error(err, "filename", req.Filename)
+ 		return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, req)
+@@ -447,13 +447,13 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
+ 				return httpCode, errors.New(e)
+ 			}
+ 
+-			secretDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedSecretPath, secret.Namespace, secret.Name), fetcher.sharedSecretPath)
++			secretDir, err := utils.RootJoin(fetcher.sharedSecretPath, filepath.Join(secret.Namespace, secret.Name))
+ 			if err != nil {
+ 				logger.Error(err, "directory", secretDir, "secret_name", secret.Name, "secret_namespace", secret.Namespace)
+ 				return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, secret)
+ 			}
+ 
+-			err = os.MkdirAll(secretDir, os.ModeDir|0750)
++			err = utils.RootMkdirAll(fetcher.sharedSecretPath, filepath.Join(secret.Namespace, secret.Name), os.ModeDir|0750)
+ 			if err != nil {
+ 				e := "failed to create directory for secret"
+ 				logger.Error(err, e, "directory", secretDir,
+@@ -493,14 +493,14 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
+ 				return httpCode, errors.New(e)
+ 			}
+ 
+-			configDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedConfigPath, config.Namespace, config.Name), fetcher.sharedConfigPath)
++			configDir, err := utils.RootJoin(fetcher.sharedConfigPath, filepath.Join(config.Namespace, config.Name))
+ 			if err != nil {
+ 				logger.Error(err, "directory", configDir, "config_map_name", config.Name, "config_map_namespace", config.Namespace)
+ 				return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err,
+ 					config)
+ 			}
+ 
+-			err = os.MkdirAll(configDir, os.ModeDir|0750)
++			err = utils.RootMkdirAll(fetcher.sharedConfigPath, filepath.Join(config.Namespace, config.Name), os.ModeDir|0750)
+ 			if err != nil {
+ 				e := "failed to create directory for configmap"
+ 				logger.Error(err, e, "directory", configDir,
+@@ -562,13 +562,13 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
+ 
+ 	logger.Info("fetcher received upload request", "request", req)
+ 
+-	srcFilepath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename), fetcher.sharedVolumePath)
++	srcFilepath, err := utils.RootJoin(fetcher.sharedVolumePath, req.Filename)
+ 	if err != nil {
+ 		logger.Error(err, "error sanitizing file path")
+ 		http.Error(w, fmt.Sprintf("%s: %v", err, req.Filename), http.StatusBadRequest)
+ 		return
+ 	}
+-	dstFilepath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename+".zip"), fetcher.sharedVolumePath)
++	dstFilepath, err := utils.RootJoin(fetcher.sharedVolumePath, req.Filename+".zip")
+ 	if err != nil {
+ 		logger.Error(err, "error sanitizing file path")
+ 		http.Error(w, fmt.Sprintf("%s: %v", err, req.Filename), http.StatusBadRequest)
+@@ -592,7 +592,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
+ 			return
+ 		}
+ 	} else {
+-		err = os.Rename(srcFilepath, dstFilepath)
++		err = utils.RootRename(fetcher.sharedVolumePath, req.Filename, req.Filename+".zip")
+ 		if err != nil {
+ 			e := "error renaming the archive"
+ 			logger.Error(err, e, "source", srcFilepath, "destination", dstFilepath)
+diff --git a/pkg/fetcher/fetcher_test.go b/pkg/fetcher/fetcher_test.go
+index d820755..04f0304 100644
+--- a/pkg/fetcher/fetcher_test.go
++++ b/pkg/fetcher/fetcher_test.go
+@@ -149,3 +149,35 @@ func TestFetch(t *testing.T) {
+ 		assert.Equal(t, http.StatusInternalServerError, code)
+ 	})
+ }
++
++// TestFetchRejectsSiblingDirectoryEscape covers GHSA-r5jh-q2mw-gcx4: a
++// sibling directory whose name begins with the shared volume path (e.g.
++// "/packages-extra" next to "/packages") must not be writable via Fetch.
++func TestFetchRejectsSiblingDirectoryEscape(t *testing.T) {
++	parent := t.TempDir()
++	vol := filepath.Join(parent, "packages")
++	sibling := filepath.Join(parent, "packages-extra")
++	require.NoError(t, os.MkdirAll(vol, 0750))
++	require.NoError(t, os.MkdirAll(sibling, 0750))
++	f := &Fetcher{logger: loggerfactory.GetLogger(), sharedVolumePath: vol}
++
++	pkg := &fv1.Package{}
++	pkg.Spec.Source = fv1.Archive{Literal: []byte("evil")}
++	for _, name := range []string{"../packages-extra/evil", "", "."} {
++		code, err := f.Fetch(t.Context(), pkg, FunctionFetchRequest{FetchType: fv1.FETCH_SOURCE, Filename: name})
++		require.Error(t, err, "filename %q", name)
++		assert.Equal(t, http.StatusBadRequest, code, "filename %q", name)
++	}
++	_, err := os.Stat(filepath.Join(sibling, "evil"))
++	assert.True(t, os.IsNotExist(err), "nothing may be written into the sibling directory")
++}
++
++func TestWriteSecretOrConfigMapRejectsEscapingKey(t *testing.T) {
++	t.Parallel()
++	dir := t.TempDir()
++	require.Error(t, writeSecretOrConfigMap(map[string][]byte{"..": []byte("x")}, filepath.Join(dir, "sub")))
++	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0750))
++	require.Error(t, writeSecretOrConfigMap(map[string][]byte{"../evil": []byte("x")}, filepath.Join(dir, "sub")))
++	_, err := os.Stat(filepath.Join(dir, "evil"))
++	assert.True(t, os.IsNotExist(err))
++}
+diff --git a/pkg/utils/root.go b/pkg/utils/root.go
+new file mode 100644
+index 0000000..c31ff5f
+--- /dev/null
++++ b/pkg/utils/root.go
+@@ -0,0 +1,89 @@
++package utils
++
++import (
++	"errors"
++	"fmt"
++	"io/fs"
++	"os"
++	"path/filepath"
++)
++
++// rootRel validates that name is a local, relative path that stays inside
++// root once cleaned, and returns the cleaned relative path.
++func rootRel(root, name string) (string, error) {
++	if root == "" {
++		return "", errors.New("invalid safe directory")
++	}
++	if name == "" || !filepath.IsLocal(name) {
++		return "", fmt.Errorf("path %q is not under the safe directory %s", name, root)
++	}
++	rel := filepath.Clean(name)
++	if rel == "." {
++		return "", fmt.Errorf("path %q is not under the safe directory %s", name, root)
++	}
++	return rel, nil
++}
++
++// RootJoin joins name onto root, returning an error if name is absolute,
++// empty, or would escape root (e.g. via ".."). Unlike a lexical prefix check,
++// this enforces a path-component boundary, so a sibling such as
++// "/packages-extra" is never accepted as being under "/packages".
++//
++// RootJoin is purely lexical; use the other Root* helpers for filesystem
++// operations so that symlinks cannot be used to escape root either.
++func RootJoin(root, name string) (string, error) {
++	rel, err := rootRel(root, name)
++	if err != nil {
++		return "", err
++	}
++	return filepath.Join(root, rel), nil
++}
++
++func withRoot(root, name string, fn func(r *os.Root, rel string) error) error {
++	rel, err := rootRel(root, name)
++	if err != nil {
++		return err
++	}
++	r, err := os.OpenRoot(root)
++	if err != nil {
++		return err
++	}
++	defer r.Close()
++	return fn(r, rel)
++}
++
++// RootStat stats name inside root through os.Root.
++func RootStat(root, name string) (fs.FileInfo, error) {
++	var fi fs.FileInfo
++	err := withRoot(root, name, func(r *os.Root, rel string) error {
++		var err error
++		fi, err = r.Stat(rel)
++		return err
++	})
++	return fi, err
++}
++
++// RootWriteFile writes data to name inside root through os.Root.
++func RootWriteFile(root, name string, data []byte, perm fs.FileMode) error {
++	return withRoot(root, name, func(r *os.Root, rel string) error {
++		return r.WriteFile(rel, data, perm)
++	})
++}
++
++// RootMkdirAll creates name (and any parents) inside root through os.Root.
++func RootMkdirAll(root, name string, perm fs.FileMode) error {
++	return withRoot(root, name, func(r *os.Root, rel string) error {
++		return r.MkdirAll(rel, perm)
++	})
++}
++
++// RootRename renames oldName to newName, both inside root, through os.Root.
++func RootRename(root, oldName, newName string) error {
++	newRel, err := rootRel(root, newName)
++	if err != nil {
++		return err
++	}
++	return withRoot(root, oldName, func(r *os.Root, oldRel string) error {
++		return r.Rename(oldRel, newRel)
++	})
++}
+diff --git a/pkg/utils/root_test.go b/pkg/utils/root_test.go
+new file mode 100644
+index 0000000..440ebf9
+--- /dev/null
++++ b/pkg/utils/root_test.go
+@@ -0,0 +1,128 @@
++package utils
++
++import (
++	"os"
++	"path/filepath"
++	"testing"
++)
++
++// TestRootJoinRejectsSiblingPrefix reproduces GHSA-r5jh-q2mw-gcx4: a lexical
++// HasPrefix check accepted "/packages-extra/evil" as being under "/packages".
++func TestRootJoinRejectsSiblingPrefix(t *testing.T) {
++	parent := t.TempDir()
++	safe := filepath.Join(parent, "packages")
++	sibling := filepath.Join(parent, "packages-extra")
++	for _, d := range []string{safe, sibling} {
++		if err := os.MkdirAll(d, 0o750); err != nil {
++			t.Fatal(err)
++		}
++	}
++
++	bad := []string{
++		"",
++		".",
++		"../packages-extra/evil",
++		"../packages-extra",
++		"..",
++		"../../etc/passwd",
++		"foo/../../packages-extra/evil",
++		sibling + "/evil",
++		"/etc/passwd",
++	}
++	for _, name := range bad {
++		if p, err := RootJoin(safe, name); err == nil {
++			t.Errorf("RootJoin(%q, %q) = %q, want error", safe, name, p)
++		}
++	}
++
++	good := map[string]string{
++		"pkg":         filepath.Join(safe, "pkg"),
++		"pkg.tmp":     filepath.Join(safe, "pkg.tmp"),
++		"ns/name":     filepath.Join(safe, "ns", "name"),
++		"a/../b":      filepath.Join(safe, "b"),
++		"packages-xy": filepath.Join(safe, "packages-xy"),
++	}
++	for name, want := range good {
++		got, err := RootJoin(safe, name)
++		if err != nil {
++			t.Errorf("RootJoin(%q, %q) unexpected error: %v", safe, name, err)
++			continue
++		}
++		if got != want {
++			t.Errorf("RootJoin(%q, %q) = %q, want %q", safe, name, got, want)
++		}
++	}
++}
++
++func TestRootJoinRejectsEmptyRoot(t *testing.T) {
++	if _, err := RootJoin("", "pkg"); err == nil {
++		t.Fatal("expected error for empty root")
++	}
++}
++
++func TestRootFileOpsConfined(t *testing.T) {
++	parent := t.TempDir()
++	safe := filepath.Join(parent, "packages")
++	sibling := filepath.Join(parent, "packages-extra")
++	if err := os.MkdirAll(safe, 0o750); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.MkdirAll(sibling, 0o750); err != nil {
++		t.Fatal(err)
++	}
++	// A symlink inside the root pointing at the sibling must not be followed.
++	if err := os.Symlink(sibling, filepath.Join(safe, "link")); err != nil {
++		t.Fatal(err)
++	}
++
++	if err := RootWriteFile(safe, "../packages-extra/evil", []byte("x"), 0o600); err == nil {
++		t.Error("RootWriteFile escaped via ..")
++	}
++	if err := RootWriteFile(safe, "link/evil", []byte("x"), 0o600); err == nil {
++		t.Error("RootWriteFile escaped via symlink")
++	}
++	if _, err := os.Stat(filepath.Join(sibling, "evil")); err == nil {
++		t.Fatal("file was written into sibling directory")
++	}
++	if err := RootMkdirAll(safe, "../packages-extra/dir", 0o750); err == nil {
++		t.Error("RootMkdirAll escaped via ..")
++	}
++	if err := RootMkdirAll(safe, "link/dir", 0o750); err == nil {
++		t.Error("RootMkdirAll escaped via symlink")
++	}
++	if err := os.WriteFile(filepath.Join(sibling, "secret"), []byte("s"), 0o600); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := RootStat(safe, "../packages-extra/secret"); err == nil {
++		t.Error("RootStat escaped via ..")
++	}
++	if _, err := RootStat(safe, "link/secret"); err == nil {
++		t.Error("RootStat escaped via symlink")
++	}
++
++	// Happy paths.
++	if err := RootMkdirAll(safe, "ns/name", 0o750); err != nil {
++		t.Fatalf("RootMkdirAll: %v", err)
++	}
++	if err := RootWriteFile(safe, "ns/name/key", []byte("v"), 0o600); err != nil {
++		t.Fatalf("RootWriteFile: %v", err)
++	}
++	if _, err := RootStat(safe, "ns/name/key"); err != nil {
++		t.Fatalf("RootStat: %v", err)
++	}
++	if err := RootRename(safe, "ns/name/key", "ns/name/key2"); err != nil {
++		t.Fatalf("RootRename: %v", err)
++	}
++	if err := RootRename(safe, "ns/name/key2", "../packages-extra/stolen"); err == nil {
++		t.Error("RootRename escaped via ..")
++	}
++	if _, err := os.Stat(filepath.Join(sibling, "stolen")); err == nil {
++		t.Fatal("file was renamed into sibling directory")
++	}
++}
++
++func TestDeleteOldPackagesRejectsSiblingPrefix(t *testing.T) {
++	if err := DeleteOldPackages("/packages-extra/evil", "SRC_PKG"); err == nil {
++		t.Fatal("expected error for sibling of /packages")
++	}
++}
+diff --git a/pkg/utils/utils.go b/pkg/utils/utils.go
+index 72b57f2..094608a 100644
+--- a/pkg/utils/utils.go
++++ b/pkg/utils/utils.go
+@@ -259,7 +259,7 @@ func FindFreePort() (int, error) {
+ // package contains a directory and a .zip file.
+ func DeleteOldPackages(pkgPath, pkgType string) error {
+ 	sharedVolumePath := "/packages"
+-	if !strings.HasPrefix(pkgPath, sharedVolumePath) {
++	if !strings.HasPrefix(filepath.Clean(pkgPath), sharedVolumePath+string(filepath.Separator)) {
+ 		return fmt.Errorf("invalid shared volume path: %s", pkgPath)
+ 	}
+ 
+@@ -287,23 +287,3 @@ func IsOwnerReferencesEnabled() bool {
+ 	disableOwnerReference, _ := strconv.ParseBool(os.Getenv(ENV_DISABLE_OWNER_REFERENCES))
+ 	return !disableOwnerReference
+ }
+-
+-// SanitizeFilePath checks if the path is valid to prevent directory traversal attacks.
+-func SanitizeFilePath(path string, safedir string) (string, error) {
+-	if len(path) == 0 {
+-		return "", errors.New("invalid path")
+-	}
+-	if len(safedir) == 0 {
+-		return "", errors.New("invalid safe directory")
+-	}
+-	// get normalized path and check for directory traversal attacks
+-	normalizedPath := filepath.Clean(path)
+-	if normalizedPath != path {
+-		return "", errors.New("invalid path")
+-	}
+-	// check if the path is under the safe directory
+-	if !strings.HasPrefix(normalizedPath, safedir) {
+-		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
+-	}
+-	return normalizedPath, nil
+-}

@@ -1,0 +1,246 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeHandler.java b/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeHandler.java
+index 5018f46..7d56f53 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeHandler.java
++++ b/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeHandler.java
+@@ -246,6 +246,12 @@ public class EventBridgeHandler {
+                 if (!entryNode.path("Detail").isMissingNode()) {
+                     entry.put("Detail", entryNode.path("Detail").asText(null));
+                 }
++                JsonNode resourcesNode = entryNode.path("Resources");
++                if (resourcesNode.isArray()) {
++                    List<String> resources = new ArrayList<>();
++                    resourcesNode.forEach(r -> resources.add(r.asText()));
++                    entry.put("Resources", resources);
++                }
+                 entries.add(entry);
+             }
+         }
+diff --git a/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeService.java b/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeService.java
+index 9f727d1..7abfc13 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeService.java
++++ b/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeService.java
+@@ -17,6 +17,7 @@ import io.github.hectorvent.floci.services.sqs.SqsService;
+ import com.fasterxml.jackson.core.type.TypeReference;
+ import com.fasterxml.jackson.databind.JsonNode;
+ import com.fasterxml.jackson.databind.ObjectMapper;
++import com.fasterxml.jackson.databind.node.ArrayNode;
+ import com.fasterxml.jackson.databind.node.ObjectNode;
+ import jakarta.enterprise.context.ApplicationScoped;
+ import jakarta.inject.Inject;
+@@ -370,6 +371,20 @@ public class EventBridgeService {
+                     return false;
+                 }
+             }
++            JsonNode resourcesField = pattern.get("resources");
++            if (resourcesField != null && resourcesField.isArray()) {
++                List<String> eventResources = extractResources(event);
++                boolean anyMatch = false;
++                for (String resource : eventResources) {
++                    if (matchesArrayField(resourcesField, resource)) {
++                        anyMatch = true;
++                        break;
++                    }
++                }
++                if (!anyMatch) {
++                    return false;
++                }
++            }
+             JsonNode detailPattern = pattern.get("detail");
+             if (detailPattern != null && detailPattern.isObject()) {
+                 Object eventDetail = event.get("Detail");
+@@ -396,6 +411,20 @@ public class EventBridgeService {
+         }
+     }
+ 
++    private static List<String> extractResources(Map<String, Object> event) {
++        Object raw = event.get("Resources");
++        if (!(raw instanceof List<?> list)) {
++            return List.of();
++        }
++        List<String> resources = new ArrayList<>(list.size());
++        for (Object item : list) {
++            if (item != null) {
++                resources.add(item.toString());
++            }
++        }
++        return resources;
++    }
++
+     private boolean matchesArrayField(JsonNode arrayNode, String value) {
+         if (value == null) return false;
+         for (JsonNode element : arrayNode) {
+@@ -446,7 +475,8 @@ public class EventBridgeService {
+             node.put("account", regionResolver.getAccountId());
+             node.put("time", Instant.now().toString());
+             node.put("region", regionResolver.getDefaultRegion());
+-            node.putArray("resources");
++            ArrayNode resources = node.putArray("resources");
++            extractResources(entry).forEach(resources::add);
+             node.set("detail", objectMapper.readTree(detail));
+             node.put("event-bus-name", busName);
+             return objectMapper.writeValueAsString(node);
+diff --git a/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeResourcesIntegrationTest.java b/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeResourcesIntegrationTest.java
+new file mode 100644
+index 0000000..78ad883
+--- /dev/null
++++ b/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeResourcesIntegrationTest.java
+@@ -0,0 +1,85 @@
++package io.github.hectorvent.floci.services.eventbridge;
++
++import io.quarkus.test.junit.QuarkusTest;
++import io.restassured.RestAssured;
++import io.restassured.config.EncoderConfig;
++import io.restassured.http.ContentType;
++import io.restassured.path.json.JsonPath;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.Test;
++
++import java.util.List;
++
++import static io.restassured.RestAssured.given;
++import static org.hamcrest.Matchers.*;
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++/**
++ * End-to-end: PutEvents with Resources → rule matching on "resources" → SQS target receives
++ * an envelope whose "resources" array mirrors the event's Resources.
++ */
++@QuarkusTest
++class EventBridgeResourcesIntegrationTest {
++
++    private static final String EVENTS_CT = "application/x-amz-json-1.1";
++    private static final String SQS_CT = "application/x-amz-json-1.0";
++    private static final String QUEUE_NAME = "eb-resources-test-queue";
++    private static final String RULE_NAME = "eb-resources-test-rule";
++
++    @BeforeAll
++    static void configureRestAssured() {
++        RestAssured.config = RestAssured.config().encoderConfig(
++                EncoderConfig.encoderConfig()
++                        .encodeContentTypeAs(EVENTS_CT, ContentType.TEXT)
++                        .encodeContentTypeAs(SQS_CT, ContentType.TEXT));
++    }
++
++    @Test
++    void resourcesAreUsedForMatchingAndForwardedToSqsTarget() {
++        String queueUrl = given().contentType(SQS_CT)
++                .header("X-Amz-Target", "AmazonSQS.CreateQueue")
++                .body("{\"QueueName\":\"" + QUEUE_NAME + "\"}")
++                .when().post("/")
++                .then().statusCode(200)
++                .extract().jsonPath().getString("QueueUrl");
++
++        String queueArn = given().contentType(SQS_CT)
++                .header("X-Amz-Target", "AmazonSQS.GetQueueAttributes")
++                .body("{\"QueueUrl\":\"" + queueUrl + "\",\"AttributeNames\":[\"QueueArn\"]}")
++                .when().post("/")
++                .then().statusCode(200)
++                .extract().jsonPath().getString("Attributes.QueueArn");
++
++        events("PutRule", "{\"Name\":\"" + RULE_NAME + "\","
++                + "\"EventPattern\":\"{\\\"resources\\\":[\\\"custom:resource:1\\\"]}\"}");
++        events("PutTargets", "{\"Rule\":\"" + RULE_NAME + "\","
++                + "\"Targets\":[{\"Id\":\"q\",\"Arn\":\"" + queueArn + "\"}]}");
++
++        // Not matching: must be filtered out by the rule
++        events("PutEvents", "{\"Entries\":[{\"Source\":\"my.app\",\"DetailType\":\"T\","
++                + "\"Detail\":\"{}\",\"Resources\":[\"custom:resource:2\"]}]}");
++        // Matching
++        events("PutEvents", "{\"Entries\":[{\"Source\":\"my.app\",\"DetailType\":\"T\","
++                + "\"Detail\":\"{}\",\"Resources\":[\"custom:resource:1\",\"custom:resource:9\"]}]}");
++
++        List<String> bodies = given().contentType(SQS_CT)
++                .header("X-Amz-Target", "AmazonSQS.ReceiveMessage")
++                .body("{\"QueueUrl\":\"" + queueUrl + "\",\"MaxNumberOfMessages\":10}")
++                .when().post("/")
++                .then().statusCode(200)
++                .extract().jsonPath().getList("Messages.Body", String.class);
++
++        assertEquals(1, bodies.size());
++        List<String> resources = JsonPath.from(bodies.getFirst()).getList("resources", String.class);
++        assertEquals(List.of("custom:resource:1", "custom:resource:9"), resources);
++    }
++
++    private static void events(String action, String body) {
++        given().contentType(EVENTS_CT)
++                .header("X-Amz-Target", "AWSEvents." + action)
++                .body(body)
++                .when().post("/")
++                .then().statusCode(200)
++                .body(not(containsString("__type")));
++    }
++}
+diff --git a/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeServiceTest.java b/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeServiceTest.java
+index 85ce75d..8cd8a2b 100644
+--- a/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeServiceTest.java
++++ b/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeServiceTest.java
+@@ -10,11 +10,17 @@ import io.github.hectorvent.floci.services.eventbridge.model.RuleState;
+ import io.github.hectorvent.floci.services.eventbridge.model.Target;
+ import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.Test;
++import io.github.hectorvent.floci.services.sqs.SqsService;
++import org.mockito.ArgumentCaptor;
+ 
+ import java.util.List;
+ import java.util.Map;
+ 
+ import static org.junit.jupiter.api.Assertions.*;
++import static org.mockito.ArgumentMatchers.anyInt;
++import static org.mockito.ArgumentMatchers.anyString;
++import static org.mockito.ArgumentMatchers.eq;
++import static org.mockito.Mockito.*;
+ 
+ class EventBridgeServiceTest {
+ 
+@@ -291,6 +297,51 @@ class EventBridgeServiceTest {
+         assertFalse(service.matchesPattern(event, "{\"detail\":{\"status\":[\"PENDING\"]}}"));
+     }
+ 
++    @Test
++    void matchesPatternByResources() {
++        Map<String, Object> event = Map.of("Source", "my.app",
++                "Resources", List.of("arn:aws:s3:::bucket-a", "custom:resource:1"));
++
++        assertTrue(service.matchesPattern(event, "{\"resources\":[\"custom:resource:1\"]}"));
++        assertTrue(service.matchesPattern(event,
++                "{\"resources\":[\"other\",\"arn:aws:s3:::bucket-a\"]}"));
++        assertFalse(service.matchesPattern(event, "{\"resources\":[\"custom:resource:2\"]}"));
++    }
++
++    @Test
++    void matchesPatternByResourcesFailsWhenEventHasNoResources() {
++        Map<String, Object> event = Map.of("Source", "my.app");
++        assertFalse(service.matchesPattern(event, "{\"resources\":[\"custom:resource:1\"]}"));
++    }
++
++    @Test
++    void putEventsForwardsResourcesToTarget() throws Exception {
++        SqsService sqs = mock(SqsService.class);
++        ObjectMapper mapper = new ObjectMapper();
++        EventBridgeService svc = new EventBridgeService(
++                new InMemoryStorage<>(), new InMemoryStorage<>(), new InMemoryStorage<>(),
++                new RegionResolver("us-east-1", "000000000000"),
++                null, sqs, null, mapper);
++        svc.putRule("r", null, "{\"resources\":[\"custom:resource:1\"]}", null,
++                RuleState.ENABLED, null, null, null, REGION);
++        Target t = new Target();
++        t.setId("t1");
++        t.setArn("arn:aws:sqs:us-east-1:000000000000:queue-1");
++        svc.putTargets("r", null, List.of(t), REGION);
++
++        svc.putEvents(List.of(Map.of("Source", "my.app", "DetailType", "T", "Detail", "{}",
++                "Resources", List.of("custom:resource:1", "custom:resource:9"))), REGION);
++        svc.putEvents(List.of(Map.of("Source", "my.app", "DetailType", "T", "Detail", "{}",
++                "Resources", List.of("custom:resource:2"))), REGION);
++
++        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
++        verify(sqs, times(1)).sendMessage(anyString(), body.capture(), anyInt());
++        var resources = mapper.readTree(body.getValue()).get("resources");
++        assertEquals(2, resources.size());
++        assertEquals("custom:resource:1", resources.get(0).asText());
++        assertEquals("custom:resource:9", resources.get(1).asText());
++    }
++
+     @Test
+     void putEventsReturnsEventIds() {
+         List<Map<String, Object>> entries = List.of(

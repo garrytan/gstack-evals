@@ -1,0 +1,54 @@
+diff --git a/Terminal.Gui/Views/Selectors/SelectorBase.cs b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+index f1f7ed1..94525ab 100644
+--- a/Terminal.Gui/Views/Selectors/SelectorBase.cs
++++ b/Terminal.Gui/Views/Selectors/SelectorBase.cs
+@@ -529,6 +529,19 @@ public abstract class SelectorBase : View, IOrientation, IValue<int?>
+                 SubViews.ElementAt (i).Width = Dim.Auto ();
+             }
+         }
++
++        if (Orientation == Orientation.Horizontal)
++        {
++            // DimAuto sizes PosAlign groups from the SubViews' current Frames. SubViews created after
++            // construction (e.g. Labels set later) have empty Frames until laid out, which would make
++            // this selector's auto width too small on the first layout pass. Pre-compute them.
++            foreach (View sv in SubViews)
++            {
++                sv.SetRelativeLayout (App?.Screen.Size ?? new Size (2048, 2048));
++            }
++        }
++
++        SetNeedsLayout ();
+     }
+ 
+     /// <summary>
+diff --git a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+index f84b0da..d0d68ce 100644
+--- a/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/OptionSelectorTests.cs
+@@ -1069,4 +1069,25 @@ public class OptionSelectorTests
+     }
+ 
+     #endregion
++
++    // Regression: Dim.Auto width must account for all labels when Labels/Values are set after construction
++    [Theory]
++    [InlineData (true)]
++    [InlineData (false)]
++    public void Horizontal_LabelsSetAfterConstruction_AutoWidthFitsAllLabels (bool initiallyVisible)
++    {
++        View host = new () { Width = 80, Height = 10 };
++        OptionSelector selector = new () { Orientation = Orientation.Horizontal, Visible = initiallyVisible };
++        host.Add (selector);
++        host.Layout ();
++
++        selector.Labels = ["IMDb (Recommended)", "TMDb"];
++        selector.Values = [0, 1];
++        selector.Visible = true;
++        host.Layout ();
++
++        CheckBox [] checkBoxes = selector.SubViews.OfType<CheckBox> ().ToArray ();
++        Assert.Equal (checkBoxes [1].Frame.Right, selector.Frame.Width);
++        Assert.Equal ("TMDb".Length + 2, checkBoxes [1].Frame.Width);
++    }
+ }

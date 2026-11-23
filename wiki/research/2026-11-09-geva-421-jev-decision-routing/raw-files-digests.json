@@ -1,0 +1,95 @@
+{
+ "note": "These 18 files were attachments of the full replay bundle: the raw Jev requests and responses and every model-arm output row. They are not published here, to keep the pull request reviewable. Each is pinned by its sha256 and size. The Harness Evals rerun and the separate recompute ran on the full set.",
+ "files": [
+  {
+   "file": "arm-outputs-gbrain-dream-triage.json",
+   "sha256": "17d3d7b0f33203c9c9664b0f20d4e912653cbbf207d5ac4bcda56dc88bcb4dfd",
+   "bytes": 465073
+  },
+  {
+   "file": "arm-outputs-gbrain-edge-contradictions.json",
+   "sha256": "07bc3e835e9ec0c4715f1975a9a47118f35b35528b14a692f3b1ae3e4ef88160",
+   "bytes": 317228
+  },
+  {
+   "file": "arm-outputs-gbrain-grade-takes.json",
+   "sha256": "0cc0d0c2c9208af21b22f301a8565e76bdd3ccc16cd1e78c14719139f816ab68",
+   "bytes": 747821
+  },
+  {
+   "file": "arm-outputs-gstack-pty-state.json",
+   "sha256": "a7606551bf07e1377e800f96dca9490fe44e89db65a56eb568674961e86cd067",
+   "bytes": 83085
+  },
+  {
+   "file": "arm-outputs-gstack-rec-substance.json",
+   "sha256": "59035fe813fcd0dbc18a9b1f9dcfd6e1a0b4f60497467e47aa7dbc7ae0a61379",
+   "bytes": 254622
+  },
+  {
+   "file": "arm-outputs-gstack-rubric-judges.json",
+   "sha256": "3c173e9dc2bd4aeef2604ce32b35263599d8497e01c434e48239aa4caa3d66d0",
+   "bytes": 210036
+  },
+  {
+   "file": "jev-request-gbrain-dream-triage.json",
+   "sha256": "dcd4e084b2c48b70425df1a1db2a360634e043439663e6ae3218e0cfbaae74af",
+   "bytes": 3534232
+  },
+  {
+   "file": "jev-request-gbrain-edge-contradictions.json",
+   "sha256": "78c2cee8e30e80e0d80f611bd8be30dc50b03d593fe8c9107376edac5cbb745c",
+   "bytes": 76877
+  },
+  {
+   "file": "jev-request-gbrain-grade-takes.json",
+   "sha256": "e413cef744bfa2ef3a390478136a26bb1e11796aa95e735ffa39643d5a0d2c89",
+   "bytes": 268878
+  },
+  {
+   "file": "jev-request-gstack-pty-state.json",
+   "sha256": "fc92210d1fb6a10281237bfc67643296b5ebc83e43502a8894b5e615de400757",
+   "bytes": 36738
+  },
+  {
+   "file": "jev-request-gstack-rec-substance.json",
+   "sha256": "60c7b014937680285ad2b6235892aee9794f9e23306b516e53f9230edcc980c2",
+   "bytes": 296707
+  },
+  {
+   "file": "jev-request-gstack-rubric-judges.json",
+   "sha256": "2d95f80d308de65cb2fa98b6803ff09ac786da906321af63ee521d0fec40cb7b",
+   "bytes": 1159832
+  },
+  {
+   "file": "jev-response-gbrain-dream-triage.json",
+   "sha256": "f99d4daef0613de5fddc278e448ef79212e1a0029531ec6ca38596af2df10b14",
+   "bytes": 151287
+  },
+  {
+   "file": "jev-response-gbrain-edge-contradictions.json",
+   "sha256": "74c720381d69f0f91f17668611469a2b4f2e6b6e589c0bcc14a4f95f2e1f8b6e",
+   "bytes": 32827
+  },
+  {
+   "file": "jev-response-gbrain-grade-takes.json",
+   "sha256": "717e5ad5c56baecb4b52dd2aa38b370f36a4504cfa957d6aef7d545c536ac66e",
+   "bytes": 167638
+  },
+  {
+   "file": "jev-response-gstack-pty-state.json",
+   "sha256": "9e003def8f9bf2a1c0c4456ae398bd75b1ab5fa9c7da947c2ebee4a03bf66a82",
+   "bytes": 21308
+  },
+  {
+   "file": "jev-response-gstack-rec-substance.json",
+   "sha256": "40997be57d848b3673d0dc7e07b4931df44863653d98c5ffb9615ee484fe7141",
+   "bytes": 144785
+  },
+  {
+   "file": "jev-response-gstack-rubric-judges.json",
+   "sha256": "bbcc3cdb1e97ce8ab23280d71b623cbdd188fd86123adba7141654364d7bc2d2",
+   "bytes": 294768
+  }
+ ]
+}

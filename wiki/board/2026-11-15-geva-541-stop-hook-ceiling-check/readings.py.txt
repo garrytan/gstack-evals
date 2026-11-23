@@ -1,0 +1,141 @@
+# readings.py: every table in the post, from variants.ts's rows, the harness mechanics run's two run tables and tier.txt.
+# It checks that the as-is reading equals the run table's adherent flag on every joined session, then prints six sections.
+#   python3 readings.py variants-hm.jsonl variants-tb2.jsonl stage1.table.jsonl stage4.table.jsonl tier.txt > readings.txt
+import collections, json, math, random, sys
+
+vhm, vtb, s1, s4, tierf = sys.argv[1:6]
+M = {'claude-opus-5-5': 'opus', 'gpt-6.1-sol': 'sol', 'particle-1': 'p1'}
+V = ('asis', 'bg', 'code', 'codebg')
+ARMS = ('none', 'plain-2', 'verify-prose', 'verify-hook')
+tier, repo, where = {}, {}, {}
+for l in open(tierf):
+    if l.startswith('#'):
+        continue
+    t, rp, li, fr, _ = l.rstrip('\n').split('\t')
+    tier[t], repo[t], where[t] = fr == '1', rp.lower(), li
+var = {}
+for l in open(vhm):
+    r = json.loads(l)
+    var[r['trial']] = r
+rows, skipped = [], collections.Counter()
+for stage, f in (('stage1', s1), ('stage4', s4)):
+    for l in open(f):
+        t = json.loads(l)
+        v = var.get(t['trial'])
+        if v is not None:
+            assert t['score']['adherent'] == v['asis'], t['trial']
+        if v is None or t['outcome'] != 'graded':
+            skipped[(stage, t['outcome'])] += 1
+            continue
+        rows.append(dict(v, stage=stage, model=M[t['model']], arm=t['arm'], task=t['task'], ok=t['pass'], cost=t['cost_usd'], tokens=t['tokens']))
+tb = [json.loads(l) for l in open(vtb)]
+
+def pct(xs):
+    xs = [bool(x) for x in xs if x is not None]
+    return '%d/%d=%.1f%%' % (sum(xs), len(xs), 100 * sum(xs) / len(xs)) if xs else '-'
+
+def mean(xs):
+    xs = [x for x in xs if x is not None]
+    return sum(xs) / len(xs) if xs else float('nan')
+
+def boot(pairs, B=4000, seed=20261115):
+    by = collections.defaultdict(list)
+    for rp, df in pairs:
+        by[rp].append(df)
+    reps, rnd, ms = sorted(by), random.Random(seed), []
+    for _ in range(B):
+        xs = [x for rp in (rnd.choice(reps) for _ in reps) for x in by[rp]]
+        ms.append(sum(xs) / len(xs))
+    ms.sort()
+    return 100 * sum(d for _, d in pairs) / len(pairs), 100 * ms[int(.025 * B)], 100 * ms[int(.975 * B)]
+
+def pairs(sel, v):
+    by = {(r['stage'], r['model'], r['arm'], r['task']): r for r in sel}
+    out = []
+    for (st, m, a, t), p in by.items():
+        h = by.get((st, m, 'verify-hook', t))
+        if a == 'verify-prose' and h and p[v] is not None and h[v] is not None:
+            out.append((repo[t], int(h[v]) - int(p[v])))
+    return out
+
+print('graded run table rows', len(rows), '; left out', dict(skipped), '; terminal-bench rows', len(tb))
+
+print('\n## A. Terminal-Bench 2 twin set, Opus 5.5 (37 tasks, 2 reps per arm)')
+print('arm      n   pass            cost   calls  edited asis')
+for a in ('none', 'before-u', 'before-t', 'after-u', 'after-t'):
+    s = [r for r in tb if r['arm'] == a]
+    print('%-8s %3d %-15s %.3f  %5.1f  %4d   %s' % (a, len(s), pct([r['reward'] >= 1 for r in s if r['reward'] is not None]), mean([r['cost_usd'] for r in s]), mean([r['tool_calls'] for r in s]), sum(r['asis'] is not None for r in s), pct([r['asis'] for r in s])))
+by = collections.defaultdict(list)
+for r in tb:
+    if r['reward'] is not None:
+        by[(r['arm'], r['task'])].append(r['reward'] >= 1)
+for a in ('before-u', 'before-t', 'after-u', 'after-t'):
+    p = [(x, y) for (aa, t), xs in by.items() if aa == 'none' for x, y in zip(xs, by.get((a, t), []))]
+    d = sum(x != y for x, y in p) / len(p)
+    print('pass discordance none against %s: %.3f over %d pairs (task and rep order); MDD with 3 reps of 37 tasks %.1f points (97.5%%)' % (a, d, len(p), 308.3 * math.sqrt(d / 111)))
+solved = {t for (a, t), xs in by.items() if any(xs)}
+fails = [t for (a, t), xs in by.items() if a == 'none' for x in xs if not x]
+print('none-arm failures %d, on tasks no session in any arm passed %d (%d such tasks of %d)' % (len(fails), sum(t not in solved for t in fails), len({t for (a, t) in by} - solved), len({t for (a, t) in by})))
+s = [r for r in rows if r['stage'] == 'stage4' and r['model'] == 'opus' and r['arm'] == 'none']
+print('harness mechanics stage 4, opus none: pass %s cost %.3f calls %.1f asis %s' % (pct([r['ok'] for r in s]), mean([r['cost'] for r in s]), mean([r['tool_calls'] for r in s]), pct([r['asis'] for r in s])))
+miss = [r for r in tb if r['asis'] is False]
+print('terminal-bench misses, all arms:', len(miss), 'last edit', dict(collections.Counter(r['last_kind'] for r in miss)), 'why', dict(collections.Counter(r['why'] for r in miss)))
+RUN = {'python', 'python3', 'node', 'bash', 'sh', 'g++', 'gcc', 'cc', 'clang', 'rustc', 'cargo', 'go', 'make', 'cmake', 'java', 'javac', 'ruby', 'perl', 'Rscript', 'julia', 'sqlite3', 'curl', 'diff', 'cmp', 'pdflatex', 'uv', 'pip', '$P', '$C', '$p', '$c'}
+print('of those misses, sessions that ran a program, a compiler or a comparison after the last edit (%s): %d' % (' '.join(sorted(RUN)), sum(bool(RUN & set(r['after_programs'])) for r in miss)))
+c = collections.Counter(p for r in miss for p in r['after_programs'])
+print('programs run after the last edit in those misses (sessions):', ', '.join('%s %d' % kv for kv in c.most_common(25)))
+
+print('\n## B. Adherence under four readings (edited sessions)')
+for st in ('stage1', 'stage4'):
+    for m in ('opus', 'sol', 'p1'):
+        for a in ARMS:
+            s = [r for r in rows if r['stage'] == st and r['model'] == m and r['arm'] == a]
+            if s:
+                print('%s %-4s %-12s n=%3d pass %-14s %s' % (st, m, a, len(s), pct([r['ok'] for r in s]), '  '.join('%s %s' % (v, pct([r[v] for r in s])) for v in V)))
+        sel = [r for r in rows if r['stage'] == st and r['model'] == m]
+        for v in V:
+            p = pairs(sel, v)
+            if p:
+                print('%s %-4s hook-prose %-6s %+.1f (%+.1f to %+.1f) n=%d' % ((st, m, v) + boot(p) + (len(p),)))
+
+print('\n## C. Why the rule as written was missed (both stages)')
+for m in ('opus', 'sol', 'p1'):
+    for a in ARMS:
+        s = [r for r in rows if r['model'] == m and r['arm'] == a and r['asis'] is False]
+        print('%-4s %-12s misses %3d  last edit %s  why %s' % (m, a, len(s), dict(sorted(collections.Counter(r['last_kind'] for r in s).items())), dict(sorted(collections.Counter(r['why'] for r in s).items()))))
+
+print('\n## D. Task difficulty and session length against adherence (stage 4)')
+s4r = [r for r in rows if r['stage'] == 'stage4']
+for m in ('opus', 'sol'):
+    others = collections.defaultdict(list)
+    for r in s4r:
+        if r['model'] != m and r['arm'] in ('none', 'plain-2') and r['ok'] is not None:
+            others[r['task']].append(r['ok'])
+    band = {t: ('hard' if mean(x) <= .25 else 'easy' if mean(x) == 1 else 'mid') for t, x in others.items()}
+    for a in ('none', 'verify-prose', 'verify-hook'):
+        s = [r for r in s4r if r['model'] == m and r['arm'] == a]
+        toks = sorted(r['tokens'] for r in s)
+        cut = (toks[len(toks) // 3], toks[2 * len(toks) // 3])
+        third = lambda r: 0 if r['tokens'] < cut[0] else 1 if r['tokens'] < cut[1] else 2
+        for v in ('asis', 'codebg'):
+            print('%-4s %-12s %-6s by other models plain pass: %s | by own tokens (thirds): %s' % (m, a, v, '  '.join('%s %s' % (b, pct([r[v] for r in s if band.get(r['task']) == b])) for b in ('hard', 'mid', 'easy')), '  '.join(pct([r[v] for r in s if third(r) == i]) for i in range(3))))
+
+print('\n## E. Changelog tier: tasks whose upstream fix writes a changelog or news entry')
+T = [t for t in tier if tier[t]]
+print('pool %d, tier %d in %d repos; by list %s' % (len(tier), len(T), len({repo[t] for t in T}), dict(sorted(collections.Counter(where[t] for t in T).items()))))
+print('tier tasks in the run tables: %d' % len({r['task'] for r in rows if tier[r['task']]}))
+print('largest repos:', ', '.join('%s %d' % kv for kv in collections.Counter(repo[t] for t in T).most_common(5)))
+for m in ('opus', 'sol', 'p1'):
+    for a in ('none', 'verify-prose', 'verify-hook'):
+        for ft in (True, False):
+            s = [r for r in rows if r['model'] == m and r['arm'] == a and tier[r['task']] == ft]
+            print('%-4s %-12s %-7s n=%3d asis %-14s codebg %-14s pass %-14s cost %.3f' % (m, a, 'tier' if ft else 'other', len(s), pct([r['asis'] for r in s]), pct([r['codebg'] for r in s]), pct([r['ok'] for r in s]), mean([r['cost'] for r in s])))
+    sel = [r for r in rows if r['model'] == m and tier[r['task']]]
+    for v in ('asis', 'codebg'):
+        p = pairs(sel, v)
+        b, c = sum(d > 0 for _, d in p), sum(d < 0 for _, d in p)
+        d = (b + c) / len(p)
+        print('%-4s tier hook-prose %-6s %+.1f points; hook-only %d, prose-only %d of %d pairs; discordance %.3f; MDD at 255 pairs %.1f (95%%) %.1f (97.5%%)' % (m, v, 100 * (b - c) / len(p), b, c, len(p), d, 280 * math.sqrt(d / 255), 308.3 * math.sqrt(d / 255)))
+    s = [r for r in rows if r['model'] == m and r['arm'] == 'verify-prose' and tier[r['task']] and r['asis'] is False]
+    print('%-4s tier prose misses %d, last edit %s' % (m, len(s), dict(collections.Counter(r['last_kind'] for r in s))))
+    print('%-4s tier cost of one task in all three arms %.3f' % (m, sum(mean([r['cost'] for r in rows if r['model'] == m and r['arm'] == a and tier[r['task']]]) for a in ('none', 'verify-prose', 'verify-hook'))))

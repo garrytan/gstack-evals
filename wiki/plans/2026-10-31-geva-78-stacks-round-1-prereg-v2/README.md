@@ -48,7 +48,7 @@ Rig: garrytan/gstack-evals@715f837c353700344785e2ae2c721e8195d616cd (#97), repla
 
 **The arms do not change.** Every TB2 model already has a none arm: Opus 5.5 runs none, gstack and pstack, and Haiku 5.5 and particle-1 run the same three plus gstack-placebo and pstack-placebo (#95 section 8; the plan's cost table counts five arms per cheap rung).
 
-**New row: gstack minus none, per model** (Opus 5.5, Haiku 5.5, particle-1). Garry, 2026-10-31: "Ok well all of our head to head tests have to test no gstack from here so that that case is tested obviously Do it for science". It is frozen the same way as pstack minus gstack: paired by task, task-clustered bootstrap, 10,000 resamples, seed 20261031, printed on all 40 tasks and on the original 20, under both no-reward readings. It sits beside pstack minus gstack in every table and in the claims. It enters no win rule.
+**New row: gstack minus none, per model** (Opus 5.5, Haiku 5.5, particle-1). Garry, 2026-10-31, ruled that every head-to-head test from now on includes a no-gstack arm, so that case is always tested. It is frozen the same way as pstack minus gstack: paired by task, task-clustered bootstrap, 10,000 resamples, seed 20261031, printed on all 40 tasks and on the original 20, under both no-reward readings. It sits beside pstack minus gstack in every table and in the claims. It enters no win rule.
 
 **The code.** TB2's contrasts come from `bun quick/laneb/analysis/stacks-tb2.ts <config>` at the rig pin. The config is analyze.ts's: models, `reference: claude-opus-5-5`, the job folders, the proxy-sessions.jsonl files, and `subsets.original_20` from quick look 3's analysis config. It prints pstack minus gstack, pstack minus pstack-placebo (Haiku and particle-1) and gstack minus none for each model, the win rule per model, and the TB2 idea cards below. It prints every table twice: with each no-reward trial scored 0, and with those trials dropped.
 
@@ -130,6 +130,8 @@ They bias the result one way. A contaminated gstack pass that the scanner misses
 **Disclosure rule.** The results report how many scored transcripts contain an `ls` carrying an option that takes a value (`-I`, `--hide`, `--ignore`, `-w`, `-T`, `--sort` and the like, clusters such as `-Id` included). If that count is above zero, each hit is checked by hand against the frozen rule text above before the reading without flagged passes is published, and the results list each hit with its outcome.
 
 ## 5. Judging spend and the judge ledger items
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 **The judging envelope counts inside the $2,050 review stop.** #95's rule that the settled spend of closed review items plus the caps of open ones never passes $2,050 covers the judging items as well.
 

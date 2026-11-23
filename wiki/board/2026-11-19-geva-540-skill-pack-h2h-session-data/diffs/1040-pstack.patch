@@ -1,0 +1,156 @@
+diff --git a/core/images/handlers.go b/core/images/handlers.go
+index a60835f..85172e1 100644
+--- a/core/images/handlers.go
++++ b/core/images/handlers.go
+@@ -57,6 +57,8 @@ var (
+ 	// ErrEmptyWalk is used when the WalkNotEmpty handlers return no
+ 	// children (e.g.: they were filtered out).
+ 	ErrEmptyWalk = errors.New("image might be filtered out")
++
++	errTooManyReferences = fmt.Errorf("too many descriptors (limit %d): %w", maxReferences, errdefs.ErrResourceExhausted)
+ )
+ 
+ // Handler handles image manifests
+@@ -99,9 +101,22 @@ func Handlers(handlers ...Handler) HandlerFunc {
+ //
+ // This differs from dispatch in that each sibling resource is considered
+ // synchronously.
++//
++// Each call is limited to 10,000 references, including duplicates.
++// Exceeding this limit returns an error wrapping
++// [errdefs.ErrResourceExhausted].
+ func Walk(ctx context.Context, handler Handler, descs ...ocispec.Descriptor) error {
+-	for _, desc := range descs {
++	var referenceCount int
++	return walk(ctx, handler, &referenceCount, descs)
++}
+ 
++func walk(ctx context.Context, handler Handler, referenceCount *int, descs []ocispec.Descriptor) error {
++	if *referenceCount+len(descs) > maxReferences {
++		return errTooManyReferences
++	}
++	*referenceCount += len(descs)
++
++	for _, desc := range descs {
+ 		children, err := handler.Handle(ctx, desc)
+ 		if err != nil {
+ 			if errors.Is(err, ErrSkipDesc) {
+@@ -111,7 +126,7 @@ func Walk(ctx context.Context, handler Handler, descs ...ocispec.Descriptor) err
+ 		}
+ 
+ 		if len(children) > 0 {
+-			if err := Walk(ctx, handler, children...); err != nil {
++			if err := walk(ctx, handler, referenceCount, children); err != nil {
+ 				return err
+ 			}
+ 		}
+@@ -190,7 +205,7 @@ func Dispatch(ctx context.Context, handler Handler, limiter *semaphore.Weighted,
+ 		mu.Lock()
+ 		defer mu.Unlock()
+ 		if referenceCount+len(descs) > maxReferences {
+-			return fmt.Errorf("too many descriptors (limit %d): %w", maxReferences, errdefs.ErrResourceExhausted)
++			return errTooManyReferences
+ 		}
+ 		referenceCount += len(descs)
+ 		next = append(next, descs...)
+diff --git a/core/images/handlers_test.go b/core/images/handlers_test.go
+index 5c4e54e..b1e5795 100644
+--- a/core/images/handlers_test.go
++++ b/core/images/handlers_test.go
+@@ -42,6 +42,18 @@ func newDesc(id string) ocispec.Descriptor {
+ 	}
+ }
+ 
++func walkDispatch(ctx context.Context, handler Handler, _ *semaphore.Weighted, descs ...ocispec.Descriptor) error {
++	return Walk(ctx, handler, descs...)
++}
++
++var traversals = []struct {
++	name     string
++	dispatch func(context.Context, Handler, *semaphore.Weighted, ...ocispec.Descriptor) error
++}{
++	{"Dispatch", Dispatch},
++	{"Walk", walkDispatch},
++}
++
+ func digestSet(digests []digest.Digest) map[digest.Digest]struct{} {
+ 	set := make(map[digest.Digest]struct{}, len(digests))
+ 	for _, d := range digests {
+@@ -345,6 +357,7 @@ func TestDispatchDuplicateRoots(t *testing.T) {
+ 		wantCalls int32
+ 	}{
+ 		{"Dispatch visits each root", Dispatch, 2},
++		{"Walk visits each root", walkDispatch, 2},
+ 	}
+ 
+ 	for _, tt := range tests {
+@@ -467,3 +480,69 @@ func TestDispatchCancellationWithNoHandlerError(t *testing.T) {
+ 	err := Dispatch(ctx, handler, nil, descs...)
+ 	require.ErrorIs(t, err, context.Canceled)
+ }
++
++func TestTraversalReferenceLimits(t *testing.T) {
++	root := newDesc("root")
++	dup := newDesc("dup")
++	fanoutChildren := make([]ocispec.Descriptor, maxReferences)
++	for i := range fanoutChildren {
++		fanoutChildren[i] = dup
++	}
++	var dupVisits atomic.Int32
++	fanout := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		if desc.Digest == root.Digest {
++			return fanoutChildren, nil
++		}
++		dupVisits.Add(1)
++		return nil, nil
++	})
++
++	a, b := newDesc("a"), newDesc("b")
++	cycle := map[digest.Digest][]ocispec.Descriptor{a.Digest: {b}, b.Digest: {a}}
++	cyclic := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		return cycle[desc.Digest], nil
++	})
++
++	// Each level of this diamond chain names the next level twice, so an
++	// unbounded traversal visits 2^depth descriptors.
++	const depth = 64
++	levels := make([]ocispec.Descriptor, depth+1)
++	for i := range levels {
++		levels[i] = newDesc(fmt.Sprintf("level-%d", i))
++	}
++	next := make(map[digest.Digest][]ocispec.Descriptor, depth)
++	for i := 0; i < depth; i++ {
++		next[levels[i].Digest] = []ocispec.Descriptor{levels[i+1], levels[i+1]}
++	}
++	diamond := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		return next[desc.Digest], nil
++	})
++
++	for _, tt := range traversals {
++		t.Run(tt.name, func(t *testing.T) {
++			dupVisits.Store(0)
++			require.ErrorIs(t, tt.dispatch(context.Background(), fanout, nil, root), errdefs.ErrResourceExhausted)
++			assert.Equal(t, int32(0), dupVisits.Load(), "children of an over-limit slice must not be visited")
++			require.ErrorIs(t, tt.dispatch(context.Background(), cyclic, nil, a), errdefs.ErrResourceExhausted)
++			require.ErrorIs(t, tt.dispatch(context.Background(), diamond, nil, levels[0]), errdefs.ErrResourceExhausted)
++		})
++	}
++}
++
++func TestWalkAcceptsReferencesAtLimit(t *testing.T) {
++	root := newDesc("root")
++	children := make([]ocispec.Descriptor, maxReferences-1)
++	for i := range children {
++		children[i] = newDesc(fmt.Sprintf("child-%d", i))
++	}
++	var visits int
++	handler := HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
++		visits++
++		if desc.Digest == root.Digest {
++			return children, nil
++		}
++		return nil, nil
++	})
++	require.NoError(t, Walk(context.Background(), handler, root))
++	assert.Equal(t, maxReferences, visits)
++}

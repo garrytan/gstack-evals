@@ -1,0 +1,12 @@
+#!/bin/bash
+# GEVA-501: the scored label pass over batches 6, 5, 4, 3, 2, 1 on one VM: label a batch, then clear its task images.
+# A batch's trial dirs must be synced to ~/lbl/batch<K> (batch1 also batch1b, batch1c) with ~/lbl/ready-<K> touched.
+set -uo pipefail
+for K in 6 5 4 3 2 1; do
+  while [ ! -e ~/lbl/ready-$K ]; do sleep 30; done
+  echo "== $(date -u +%T) batch $K"
+  sg docker -c "bash ~/vms4/labelpass.sh $K 6" > ~/lbl/logs/pass-$K.log 2>&1
+  grep -c FAILED ~/lbl/logs/pass-$K.log; tail -2 ~/lbl/logs/pass-$K.log
+  sg docker -c "bash ~/vms4/clean-all.sh" > ~/lbl/logs/clean-$K.log 2>&1; tail -1 ~/lbl/logs/clean-$K.log
+done
+echo "== $(date -u +%T) ALL-LABELS-DONE"

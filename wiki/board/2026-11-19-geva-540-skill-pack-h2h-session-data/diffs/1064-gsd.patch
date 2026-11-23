@@ -1,0 +1,143 @@
+diff --git a/pkg/proxy/authheaders/authheaders.go b/pkg/proxy/authheaders/authheaders.go
+index 5736989..bf13da1 100644
+--- a/pkg/proxy/authheaders/authheaders.go
++++ b/pkg/proxy/authheaders/authheaders.go
+@@ -30,18 +30,63 @@ import (
+ 	userinfo "k8s.io/apiserver/pkg/authentication/user"
+ )
+ 
++// Default request-header identity header names. These are always stripped from
++// inbound requests, in addition to any configured custom header names, so that a
++// client can never smuggle an identity assertion to a backend regardless of how
++// the backend's request-header authenticator is configured.
++const (
++	DefaultUserHeader        = "X-Remote-User"
++	DefaultGroupHeader       = "X-Remote-Group"
++	DefaultUIDHeader         = "X-Remote-Uid"
++	DefaultExtraHeaderPrefix = "X-Remote-Extra-"
++)
++
++// StripAuthHeaders unconditionally removes every inbound identity header: the
++// configured user/group headers and extra-header prefix as well as the default
++// X-Remote-User / X-Remote-Group / X-Remote-Uid / X-Remote-Extra-* headers.
++// Matching is case-insensitive.
++func StripAuthHeaders(header http.Header, userHeader, groupHeader, extraHeaderPrefix string) {
++	exact := map[string]struct{}{
++		strings.ToLower(DefaultUserHeader):  {},
++		strings.ToLower(DefaultGroupHeader): {},
++		strings.ToLower(DefaultUIDHeader):   {},
++	}
++	if userHeader != "" {
++		exact[strings.ToLower(userHeader)] = struct{}{}
++	}
++	if groupHeader != "" {
++		exact[strings.ToLower(groupHeader)] = struct{}{}
++	}
++	prefixes := []string{strings.ToLower(DefaultExtraHeaderPrefix)}
++	if extraHeaderPrefix != "" {
++		prefixes = append(prefixes, strings.ToLower(extraHeaderPrefix))
++	}
++
++	for key := range header {
++		lower := strings.ToLower(key)
++		if _, ok := exact[lower]; ok {
++			delete(header, key)
++			continue
++		}
++		for _, p := range prefixes {
++			if strings.HasPrefix(lower, p) {
++				delete(header, key)
++				break
++			}
++		}
++	}
++}
++
+ // SetAuthHeaders stamps the given authenticated user's identity onto the request
+ // headers, after deleting any inbound copies of the identity headers.
+ //
+ // This mirrors k8s.io/client-go/transport.SetAuthProxyHeaders and the upstream
+ // requestheader authenticator's ClearAuthenticationHeaders.
+ func SetAuthHeaders(header http.Header, user userinfo.Info, userHeader, groupHeader, extraHeaderPrefix string) {
+-	header.Del(userHeader)
+-	header.Del(groupHeader)
+-	for key := range header {
+-		if strings.HasPrefix(strings.ToLower(key), strings.ToLower(extraHeaderPrefix)) {
+-			header.Del(key)
+-		}
++	StripAuthHeaders(header, userHeader, groupHeader, extraHeaderPrefix)
++
++	if user == nil {
++		return
+ 	}
+ 
+ 	header.Set(userHeader, user.GetName())
+diff --git a/pkg/proxy/authheaders/authheaders_test.go b/pkg/proxy/authheaders/authheaders_test.go
+index 258c208..10adae2 100644
+--- a/pkg/proxy/authheaders/authheaders_test.go
++++ b/pkg/proxy/authheaders/authheaders_test.go
+@@ -142,3 +142,30 @@ func TestSetAuthHeaders_RealExtraIsEncodedAndForwarded(t *testing.T) {
+ 		t.Errorf("encoded extra header %q = %v, want [root:org:ws]; full headers=%v", encoded, got, h)
+ 	}
+ }
++
++// TestStripAuthHeaders_DefaultsAndCustom confirms that default X-Remote-*
++// headers are stripped even when custom header names are configured, and that
++// matching is case-insensitive.
++func TestStripAuthHeaders_DefaultsAndCustom(t *testing.T) {
++	t.Parallel()
++	h := http.Header{
++		"X-Remote-User":      {"system:admin"},
++		"X-Remote-Group":     {"system:masters"},
++		"X-Remote-Uid":       {"0"},
++		warrantHeader:        {"forged"},
++		"x-custom-user":      {"system:admin"},
++		"X-Custom-Group":     {"system:masters"},
++		"X-Custom-Extra-Foo": {"bar"},
++		"Authorization":      {"Bearer keep"},
++	}
++	StripAuthHeaders(h, "X-Custom-User", "X-Custom-Group", "X-Custom-Extra-")
++	if !reflect.DeepEqual(h, http.Header{"Authorization": {"Bearer keep"}}) {
++		t.Errorf("unexpected headers after strip: %v", h)
++	}
++
++	h = http.Header{groupHeader: {"system:masters"}}
++	SetAuthHeaders(h, &userinfo.DefaultInfo{Name: "alice"}, "X-Custom-User", "X-Custom-Group", "X-Custom-Extra-")
++	if v := h.Values(groupHeader); len(v) != 0 {
++		t.Errorf("default group header leaked with custom config: %v", v)
++	}
++}
+diff --git a/pkg/proxy/proxy.go b/pkg/proxy/proxy.go
+index 7ba4cee..95af466 100644
+--- a/pkg/proxy/proxy.go
++++ b/pkg/proxy/proxy.go
+@@ -58,8 +58,12 @@ func newTransport(clientCert, clientKeyFile, caFile string) (*http.Transport, er
+ // passing them through access headers to the shard.
+ func WithProxyAuthHeaders(delegate http.Handler, userHeader, groupHeader string, extraHeaderPrefix string) http.HandlerFunc {
+ 	return func(w http.ResponseWriter, r *http.Request) {
++		// Always strip client-supplied identity headers, even if no user is
++		// attached to the request, so that nothing forged reaches the backend.
+ 		if u, ok := request.UserFrom(r.Context()); ok {
+ 			authheaders.SetAuthHeaders(r.Header, u, userHeader, groupHeader, extraHeaderPrefix)
++		} else {
++			authheaders.StripAuthHeaders(r.Header, userHeader, groupHeader, extraHeaderPrefix)
+ 		}
+ 
+ 		delegate.ServeHTTP(w, r)
+diff --git a/pkg/server/localproxy.go b/pkg/server/localproxy.go
+index 1a64aa3..bcdaa06 100644
+--- a/pkg/server/localproxy.go
++++ b/pkg/server/localproxy.go
+@@ -323,8 +323,12 @@ func newInsecureTransport() (*http.Transport, error) {
+ // passing them through access headers to the shard.
+ func withProxyAuthHeaders(delegate http.Handler, userHeader, groupHeader string, extraHeaderPrefix string) http.HandlerFunc {
+ 	return func(w http.ResponseWriter, r *http.Request) {
++		// Always strip client-supplied identity headers, even if no user is
++		// attached to the request, so that nothing forged reaches the backend.
+ 		if u, ok := request.UserFrom(r.Context()); ok {
+ 			authheaders.SetAuthHeaders(r.Header, u, userHeader, groupHeader, extraHeaderPrefix)
++		} else {
++			authheaders.StripAuthHeaders(r.Header, userHeader, groupHeader, extraHeaderPrefix)
+ 		}
+ 
+ 		delegate.ServeHTTP(w, r)

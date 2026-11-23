@@ -1,0 +1,58 @@
+diff --git a/lib/dispatcher/client-h2.js b/lib/dispatcher/client-h2.js
+index 3fc6384..d3fa628 100644
+--- a/lib/dispatcher/client-h2.js
++++ b/lib/dispatcher/client-h2.js
+@@ -291,17 +291,19 @@ function writeH2 (client, request) {
+   for (let n = 0; n < reqHeaders.length; n += 2) {
+     const key = reqHeaders[n + 0]
+     const val = reqHeaders[n + 1]
++    // https://www.rfc-editor.org/rfc/rfc9113#section-8.2.3
++    const separator = key.toLowerCase() === 'cookie' ? '; ' : ', '
+ 
+     if (Array.isArray(val)) {
+       for (let i = 0; i < val.length; i++) {
+         if (headers[key]) {
+-          headers[key] += `, ${val[i]}`
++          headers[key] += `${separator}${val[i]}`
+         } else {
+           headers[key] = val[i]
+         }
+       }
+     } else if (headers[key]) {
+-      headers[key] += `, ${val}`
++      headers[key] += `${separator}${val}`
+     } else {
+       headers[key] = val
+     }
+diff --git a/test/h2c-client.js b/test/h2c-client.js
+index 2265cb0..8972809 100644
+--- a/test/h2c-client.js
++++ b/test/h2c-client.js
+@@ -119,3 +119,27 @@ test('Should reject request if not h2c supported', async t => {
+     'SocketError: other side closed'
+   )
+ })
++
++test('Should join multiple cookie values with semicolons', async t => {
++  const planner = tspl(t, { plan: 3 })
++
++  const server = createServer((req, res) => {
++    planner.equal(req.headers.cookie, 'a=b; c=d; e=f')
++    planner.equal(req.headers['x-multi'], '1, 2')
++    res.end('ok')
++  })
++
++  server.listen()
++  await once(server, 'listening')
++  const client = new H2CClient(`http://localhost:${server.address().port}/`)
++
++  t.after(() => client.close())
++  t.after(() => server.close())
++
++  const response = await client.request({
++    path: '/',
++    method: 'GET',
++    headers: { Cookie: ['a=b', 'c=d', 'e=f'], 'x-multi': ['1', '2'] }
++  })
++  planner.equal(await response.body.text(), 'ok')
++})

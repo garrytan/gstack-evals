@@ -1,0 +1,14 @@
+== A as approved: {'S': 280, 'S2': 100}
+  calibration: N on both models, deciders in shadow            sessions    80  expected $   38.80  cap $   90
+  pilot: R and P on both models, 20 tasks                      sessions    80  expected $   26.00  cap $   70
+  pilot: J on both models, F on Opus and W, 12 tasks           sessions    48  expected $   20.76  cap $   70
+  scored, Opus: N, R and P                                     sessions   840  expected $  285.60  cap $  420
+  scored, Sol: N, R and P                                      sessions   840  expected $  316.40  cap $  460
+  scored subset: F on Opus, J on both models                   sessions   300  expected $  153.00  cap $  240
+  reference: the whole agent on particle-1                     sessions   100  expected $   20.00  cap $   60
+  decision-level replay: Jev 1.14.0, safety set, guess ablation sessions     0  expected $   15.00  cap $   40
+  model calls                                                  sessions  2288  expected $  875.56  cap $ 1450
+  runner VMs (139 h, 3000 label runs)                                          expected $   83.64  cap $  140
+  crew (threads, read from counters)                                           expected $  220.00  cap $  350
+  ALL-IN                                                                       expected $ 1179.20  cap $ 1940
+

@@ -1,0 +1,91 @@
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header/expected.out b/plugins/inputs/turbostat/testcases/repeated-header/expected.out
+new file mode 100644
+index 0000000..c4bdbf3
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header/expected.out
+@@ -0,0 +1,3 @@
++turbostat,core=-,cpu=- usec=12,busy_percent=1.5,package_power_watt=10.5
++turbostat,core=0,cpu=0 usec=7,busy_percent=2.5,package_power_watt=10.5
++turbostat,core=-,cpu=- usec=15,busy_percent=3.5,package_power_watt=11.5
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header/input.txt b/plugins/inputs/turbostat/testcases/repeated-header/input.txt
+new file mode 100644
+index 0000000..33660f9
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header/input.txt
+@@ -0,0 +1,5 @@
++usec	Core	CPU	Busy%	PkgWatt
++12	-	-	1.5	10.5
++7	0	0	2.5	10.5
++usec	Core	CPU	Busy%	PkgWatt	
++15	-	-	3.5	11.5
+diff --git a/plugins/inputs/turbostat/testcases/repeated-header/telegraf.conf b/plugins/inputs/turbostat/testcases/repeated-header/telegraf.conf
+new file mode 100644
+index 0000000..b4d44da
+--- /dev/null
++++ b/plugins/inputs/turbostat/testcases/repeated-header/telegraf.conf
+@@ -0,0 +1 @@
++[[inputs.turbostat]]
+diff --git a/plugins/inputs/turbostat/turbostat.go b/plugins/inputs/turbostat/turbostat.go
+index 48671e6..300218a 100644
+--- a/plugins/inputs/turbostat/turbostat.go
++++ b/plugins/inputs/turbostat/turbostat.go
+@@ -122,17 +122,20 @@ func (t *Turbostat) Start(acc telegraf.Accumulator) error {
+ 			acc.AddError(scanner.Err())
+ 			return
+ 		}
+-		header := scanner.Text()
+-		columns := make([]column, 0, 50)
+-		for _, s := range strings.Fields(header) {
+-			columns = append(columns, createColumn(s))
+-		}
++		columns := parseHeader(strings.Fields(scanner.Text()))
+ 		for scanner.Scan() {
+-			line := scanner.Text()
+-			if line == header {
++			values := strings.Fields(scanner.Text())
++			if len(values) == 0 {
++				continue
++			}
++			// Turbostat repeats the header line periodically and the header
++			// may differ from the initial one (e.g. different whitespace or
++			// columns). Detect header lines and update the column definitions
++			// instead of trying to parse them as values.
++			if isHeader(values) {
++				columns = parseHeader(values)
+ 				continue
+ 			}
+-			values := strings.Fields(line)
+ 			acc.AddError(processValues(acc, columns, values))
+ 		}
+ 		acc.AddError(scanner.Err())
+@@ -155,6 +158,30 @@ func (*Turbostat) Gather(telegraf.Accumulator) error {
+ 	return nil
+ }
+ 
++// Creates the column definitions from the fields of a header line.
++func parseHeader(fields []string) []column {
++	columns := make([]column, 0, len(fields))
++	for _, s := range fields {
++		columns = append(columns, createColumn(s))
++	}
++	return columns
++}
++
++// Checks whether the given fields belong to a header line. Value lines only
++// contain numbers or dashes, while header lines contain column names.
++func isHeader(fields []string) bool {
++	for _, f := range fields {
++		if f == "-" {
++			continue
++		}
++		if _, err := strconv.ParseFloat(f, 64); err == nil {
++			return false
++		}
++		return true
++	}
++	return false
++}
++
+ // Creates a metric from columns and values, and adds it to an accumulator.
+ func processValues(acc telegraf.Accumulator, columns []column, values []string) error {
+ 	if len(values) > len(columns) {

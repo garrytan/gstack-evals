@@ -1,0 +1,87 @@
+diff --git a/lib/resolver-compat.js b/lib/resolver-compat.js
+index c00d1bf..6c4a6b8 100644
+--- a/lib/resolver-compat.js
++++ b/lib/resolver-compat.js
+@@ -109,7 +109,12 @@ class LegacyResolver extends CustomResolver {
+ 	constructor(fileSystem, globalPaths, builtinModules, rootPaths, pathContext, customResolver, hostRequire, compiler, strict, externals, allowTransitive) {
+ 		super(fileSystem, globalPaths, builtinModules, rootPaths, pathContext, customResolver, hostRequire, compiler, strict);
+ 		this.externals = externals.map(makeExternalMatcher);
+-		this.externalCache = externals.map(pattern => new RegExp(makeExternalMatcherRegex(pattern)));
++		// SECURITY: Match the requested module id against the full package-name boundary.
++		// An unanchored regex would let 'evil-left-pad' or 'left-pad-backdoor' pass an
++		// allowlist containing only 'left-pad' (GHSA-c48m-32m9-vx93). Subpaths such as
++		// 'left-pad/lib/x' remain allowed, but '..' segments that could escape the package are not.
++		this.externalCache = externals.map(pattern => new RegExp(
++			`^${makeExternalMatcherRegex(pattern)}(?:[\\\\/](?!(?:.*[\\\\/])?\\.\\.(?:[\\\\/]|$)).*)?$`));
+ 		this.currMod = undefined;
+ 		this.trustedMods = new WeakMap();
+ 		this.allowTransitive = allowTransitive;
+diff --git a/test/ghsa/GHSA-c48m-32m9-vx93/repro.js b/test/ghsa/GHSA-c48m-32m9-vx93/repro.js
+new file mode 100644
+index 0000000..5642072
+--- /dev/null
++++ b/test/ghsa/GHSA-c48m-32m9-vx93/repro.js
+@@ -0,0 +1,63 @@
++'use strict';
++
++/**
++ * GHSA-c48m-32m9-vx93 — External allowlist substring match with custom resolver
++ *
++ * With `require.external: ['left-pad']` and a custom `require.resolve`, the
++ * pre-check on the requested module id used an unanchored regex, so
++ * `evil-left-pad` (or `left-pad/../evil-left-pad`) passed the allowlist and
++ * was loaded in the host context.
++ */
++
++const assert = require('assert');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const { NodeVM } = require('../../../lib/main.js');
++
++describe('GHSA-c48m-32m9-vx93 (external allowlist bypass via colliding package name)', function () {
++	let root;
++
++	before(function () {
++		root = fs.mkdtempSync(path.join(os.tmpdir(), 'vm2-ghsa-c48m-'));
++		const write = (name, src) => {
++			const dir = path.join(root, 'node_modules', name);
++			fs.mkdirSync(dir, { recursive: true });
++			fs.writeFileSync(path.join(dir, 'index.js'), src);
++		};
++		write('left-pad', 'module.exports = "LEFT_PAD";');
++		fs.mkdirSync(path.join(root, 'node_modules', 'left-pad', 'lib'));
++		fs.writeFileSync(path.join(root, 'node_modules', 'left-pad', 'lib', 'sub.js'), 'module.exports = "SUB";');
++		write('evil-left-pad', 'module.exports = "HOST_EXEC";');
++		write('left-pad-backdoor', 'module.exports = "HOST_EXEC";');
++	});
++
++	after(function () {
++		fs.rmSync(root, { recursive: true, force: true });
++	});
++
++	function makeVM() {
++		return new NodeVM({
++			require: {
++				external: ['left-pad'],
++				resolve: id => require.resolve(id, { paths: [root] }),
++				context: 'host',
++				builtin: []
++			}
++		});
++	}
++
++	it('still allows the allowlisted package and its subpaths', function () {
++		const vm = makeVM();
++		assert.strictEqual(vm.run('module.exports = require("left-pad")', path.join(root, 'x.js')), 'LEFT_PAD');
++		assert.strictEqual(vm.run('module.exports = require("left-pad/lib/sub")', path.join(root, 'x.js')), 'SUB');
++	});
++
++	for (const id of ['evil-left-pad', 'left-pad-backdoor', 'left-pad/../evil-left-pad']) {
++		it(`rejects ${id}`, function () {
++			const vm = makeVM();
++			assert.throws(() => vm.run(`module.exports = require(${JSON.stringify(id)})`, path.join(root, 'x.js')),
++				/Cannot find module/);
++		});
++	}
++});

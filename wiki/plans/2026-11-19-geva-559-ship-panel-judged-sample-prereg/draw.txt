@@ -1,0 +1,342 @@
+# private-repos.json sha256 ecaa91c8d359cd345ce5f8d3a3cf003b93d564fd2b2fc02316b773521afbf80f: 7 private repositories, 1 not sent to any model
+# Review-Finding trailers on merged PRs with a /ship receipt: 1576 findings in 327 PRs; seed 1149397022422259893
+# full-depth PRs with trailers: 254; trailer count against the last receipt's fixed: equal 163, fewer 12, more 79
+# reader	stratum	tier	visibility	findings
+?	-	full/gate	public	6
+adversarial-native	AD	full/code	private	25
+adversarial-native	AD	full/code	public	71
+adversarial-native	AD	full/gate	private	29
+adversarial-native	AD	full/gate	public	99
+adversarial-native	AD	light/code	private	23
+adversarial-native	AD	light/code	public	53
+adversarial-native	AD	light/docs	public	7
+api-contract	FR	full/code	public	1
+api-contract	FR	full/gate	private	2
+capy	-	full/gate	public	2
+claim-check	FR	full/code	private	14
+core	FR	full/code	private	6
+core	FR	full/code	public	9
+core	FR	full/gate	private	20
+core	FR	full/gate	public	35
+core	FR	light/code	private	16
+core	FR	light/code	public	4
+core	FR	light/docs	public	8
+cross-family-audit	SM	full/gate	public	2
+fix-check	-	full/code	private	5
+fix-check	-	full/code	public	16
+fix-check	-	full/gate	private	8
+fix-check	-	full/gate	public	12
+fix-check	-	light/code	private	2
+fix-check	-	light/code	public	27
+gpt-6.1-sol	SM	full/gate	public	1
+outside-voice	SM	full/code	private	19
+outside-voice	SM	full/code	public	59
+outside-voice	SM	full/gate	private	44
+outside-voice	SM	full/gate	public	146
+outside-voice	SM	light/code	private	19
+outside-voice	SM	light/code	public	28
+outside-voice	SM	light/docs	public	14
+qa	-	full/code	private	1
+qa	-	full/code	public	1
+qa	-	full/gate	private	4
+qa	-	full/gate	public	6
+qa	-	light/code	private	1
+red-team	RT	full/code	private	19
+red-team	RT	full/code	public	139
+red-team	RT	full/docs	public	2
+red-team	RT	full/gate	private	47
+red-team	RT	full/gate	public	187
+red-team	RT	light/code	private	11
+red-team	RT	light/code	public	40
+red-team	RT	light/docs	public	3
+security	FR	full/code	private	1
+security	FR	full/code	public	13
+security	FR	full/gate	private	7
+security	FR	full/gate	public	23
+security	FR	light/code	private	2
+security	FR	light/code	public	4
+security	FR	light/docs	public	1
+specialist	FR	full/gate	public	1
+specialist	FR	light/code	public	3
+specialist-batched	FR	full/code	private	7
+specialist-batched	FR	full/code	public	22
+specialist-batched	FR	full/gate	private	4
+specialist-batched	FR	full/gate	public	23
+specialist-batched	FR	light/code	private	1
+specialist-batched	FR	light/code	public	1
+specialist/claim-check	FR	light/docs	private	3
+state-machines	FR	full/code	public	1
+state-machines	FR	full/gate	public	12
+targeted	-	full/code	private	5
+targeted	-	full/code	public	4
+targeted	-	full/gate	private	3
+targeted	-	full/gate	public	18
+testing	FR	full/code	private	4
+testing	FR	full/code	public	25
+testing	FR	full/gate	private	5
+testing	FR	full/gate	public	60
+testing	FR	light/code	private	8
+testing	FR	light/code	public	22
+# part A: public full-depth PRs with trailers 215; enough finding ids for their receipts 49; complete first-pass list 49
+# RT: 326 public full-depth findings, 69 on complete-list PRs; sample 40
+# AD: 170 public full-depth findings, 32 on complete-list PRs; sample 32
+# SM: 208 public full-depth findings, 33 on complete-list PRs; sample 33
+# FR: 225 public full-depth findings, 40 on complete-list PRs; sample 40
+# part A sample: 145 findings in 44 PRs; orders 41 on are the reserve, in order
+# stratum	order	role	repo	pr	finding	reader	tier	item
+RT	1	gold	garrytan/gstack-evals	258	p1/red-team#2	red-team	full/code	995b02949d155b50
+RT	2	gold	garrytan/gstack	4284	p2/red-team#3	red-team	full/gate	e974ba444b6c0fdc
+RT	3	gold	garrytan/gstack-evals	205	p2/red-team#1	red-team	full/code	29417c7380fb5985
+RT	4	gold	garrytan/gstack-evals	203	p1/red-team#1	red-team	full/gate	b2a3c879fcb69314
+RT	5	gold	garrytan/gstack	4204	p1/red-team#1	red-team	full/code	190d23b9b762611d
+RT	6	batch	garrytan/gstack	4007	p2/red-team#1	red-team	full/gate	40de673f2f9ec06e
+RT	7	main	garrytan/gstack-evals	321	p1/red-team#1	red-team	full/code	57433bacd93657c9
+RT	8	main	garrytan/gstack	4142	p1/red-team#1	red-team	full/gate	5a4d8c9545d490dc
+RT	9	main	garrytan/gstack	4149	p1/red-team#1	red-team	full/gate	3125bfcecd9b4bc8
+RT	10	main	garrytan/gstack	4073	p1/red-team#2	red-team	full/code	4dcd142301d14844
+RT	11	main	garrytan/gstack	4204	p1/red-team#3	red-team	full/code	cbcf803f9edcf53e
+RT	12	main	garrytan/gstack	4442	p1/red-team#1	red-team	full/gate	8c4474893108f778
+RT	13	main	garrytan/gstack-evals	221	p1/red-team#1	red-team	full/gate	61677cef5d76eef7
+RT	14	main	garrytan/gstack	4142	p1/red-team#2	red-team	full/gate	2f60c7ccbd4a17d0
+RT	15	main	garrytan/alphaclaw	320	p1/red-team#1	red-team	full/gate	9100f0ea5136fd4a
+RT	16	main	garrytan/gstack-evals	289	p1/red-team#2	red-team	full/gate	d3d36c1a72fa2227
+RT	17	main	garrytan/gstack-evals	232	p1/red-team#1	red-team	full/gate	00c40a2a11b2ff3d
+RT	18	main	garrytan/gstack	4078	p1/red-team#1	red-team	full/code	d267592323d50412
+RT	19	main	garrytan/gstack-evals	232	p1/red-team#3	red-team	full/gate	a2585eab40182af5
+RT	20	main	garrytan/gstack	4059	p1/red-team#2	red-team	full/code	000f8aeea82a3335
+RT	21	main	garrytan/gstack	4073	p1/red-team#4	red-team	full/code	4f2a47a504728066
+RT	22	main	garrytan/gstack	3994	p1/red-team#1	red-team	full/gate	44bdd7f525792839
+RT	23	main	garrytan/gstack-evals	279	p1/red-team#4	red-team	full/code	b2926d9751603e5a
+RT	24	main	garrytan/gstack	4365	p1/red-team#3	red-team	full/gate	204c7caff9b11200
+RT	25	main	garrytan/gstack-evals	289	p1/red-team#1	red-team	full/gate	710774089621ca92
+RT	26	main	garrytan/gstack	4204	p1/red-team#2	red-team	full/code	aa59789e3a53bb48
+RT	27	main	garrytan/gstack-evals	279	p1/red-team#2	red-team	full/code	2863b81773652668
+RT	28	main	garrytan/gstack	4011	p1/red-team#2	red-team	full/gate	f83cb8de8ad333f3
+RT	29	main	garrytan/gstack-evals	258	p1/red-team#1	red-team	full/code	dc482603901506fc
+RT	30	main	garrytan/gstack	4284	p1/red-team#3	red-team	full/gate	320655086093db81
+RT	31	main	garrytan/gstack	4007	p1/red-team#1	red-team	full/gate	d3cb1cc748966608
+RT	32	main	garrytan/gstack-evals	322	p1/red-team#1	red-team	full/code	7cde38c29ce44465
+RT	33	main	garrytan/gstack-evals	200	p1/red-team#1	red-team	full/gate	d3377f34ca3353d7
+RT	34	main	garrytan/gstack	4441	p1/red-team#1	red-team	full/code	0b95e2455069c90d
+RT	35	main	garrytan/gstack	4095	p1/red-team#1	red-team	full/gate	379224f38805f6fd
+RT	36	main	garrytan/gstack	4466	p1/red-team#1	red-team	full/gate	34163a7910de599c
+RT	37	main	garrytan/gstack	4105	p1/red-team#1	red-team	full/gate	6b375452a78dc1bc
+RT	38	main	garrytan/gstack	4007	p1/red-team#3	red-team	full/gate	1e01d8c9e6b93c74
+RT	39	main	garrytan/gstack-evals	279	p1/red-team#1	red-team	full/code	fb3aa7853c324b4f
+RT	40	main	garrytan/gstack-evals	226	p1/red-team#2	red-team	full/gate	de60e31ac3e8e06b
+RT	41	reserve	garrytan/gstack-evals	281	p1/red-team#1	red-team	full/code	90b79bf5377f79b2
+RT	42	reserve	garrytan/gstack	4082	p1/red-team#1	red-team	full/code	82835aca42d08819
+RT	43	reserve	garrytan/gstack	4486	p1/red-team#1	red-team	full/gate	f08befc40d3ac327
+RT	44	reserve	garrytan/gstack	4218	p1/red-team#2	red-team	full/code	24a29ba94d3841ec
+RT	45	reserve	garrytan/gstack	4204	p1/red-team#4	red-team	full/code	2d47dab16b8324ec
+RT	46	reserve	garrytan/gstack-evals	226	p1/red-team#1	red-team	full/gate	9794dadb9d6d1f98
+RT	47	reserve	garrytan/gstack-evals	320	p1/red-team#1	red-team	full/code	e68b80f1dbbb9eb5
+RT	48	reserve	garrytan/gstack	4284	p1/red-team#1	red-team	full/gate	b4bbc2d98f5579c8
+RT	49	reserve	garrytan/gstack	4011	p1/red-team#1	red-team	full/gate	908e6bb132e2bbcc
+RT	50	reserve	garrytan/gstack	4383	p1/red-team#1	red-team	full/code	c0fbe23fb467ff7b
+RT	51	reserve	garrytan/gstack-evals	248	p1/red-team#1	red-team	full/gate	bb23feb43455727e
+RT	52	reserve	garrytan/gstack	4059	p1/red-team#1	red-team	full/code	023d1a5b8a1ca794
+RT	53	reserve	garrytan/gstack	4142	p2/red-team#1	red-team	full/gate	8af42cb0c5151eb4
+RT	54	reserve	garrytan/gstack-evals	320	p1/red-team#2	red-team	full/code	4de24ba2f9b2d655
+RT	55	reserve	garrytan/gstack	4365	p1/red-team#1	red-team	full/gate	2fc3f803a36bd12a
+RT	56	reserve	garrytan/gstack-evals	281	p1/red-team#2	red-team	full/code	0ea403c6452b943e
+RT	57	reserve	garrytan/gstack-evals	203	p1/red-team#2	red-team	full/gate	3d96b4b732db30cc
+RT	58	reserve	garrytan/gstack	4142	p1/red-team#3	red-team	full/gate	7018f3a4fa64fc0f
+RT	59	reserve	garrytan/gstack	4383	p1/red-team#2	red-team	full/code	9e71affab0d28cf0
+RT	60	reserve	garrytan/alphaclaw	450	review-p1/red-team#1	red-team	full/code	cd48a796037949b5
+RT	61	reserve	garrytan/gstack	4365	p1/red-team#2	red-team	full/gate	124031d9024e9321
+RT	62	reserve	garrytan/gstack-evals	320	p1/red-team#3	red-team	full/code	85f29c7181b5bd00
+RT	63	reserve	garrytan/gstack-evals	221	p1/red-team#2	red-team	full/gate	0652aed8a187a3ed
+RT	64	reserve	garrytan/gstack	4007	p1/red-team#2	red-team	full/gate	104427ed1fea1a1b
+RT	65	reserve	garrytan/gstack	4093	p1/red-team#1	red-team	full/gate	658c75011fa140fc
+RT	66	reserve	garrytan/gstack	4073	p1/red-team#3	red-team	full/code	db5f15973cec1a81
+RT	67	reserve	garrytan/alphaclaw	449	review-p1/red-team#1	red-team	full/code	c235ef04cea69663
+RT	68	reserve	garrytan/gstack	4142	p1/red-team#4	red-team	full/gate	8f5a44a56f502d0f
+RT	69	reserve	garrytan/gstack-evals	279	p1/red-team#3	red-team	full/code	9862fc93fddba2c4
+AD	1	gold	garrytan/gstack-evals	205	p1/adversarial-native#3	adversarial-native	full/code	a6768c245a63d9f2
+AD	2	gold	garrytan/gstack-evals	289	p1/adversarial-native#11	adversarial-native	full/gate	269f5c8207708e97
+AD	3	gold	garrytan/gstack-evals	289	p1/adversarial-native#13	adversarial-native	full/gate	2950d349de1a89e2
+AD	4	gold	garrytan/gstack-evals	205	p1/adversarial-native#5	adversarial-native	full/code	f27d772800a138ca
+AD	5	gold	garrytan/gstack	4142	s11/adversarial-native#3	adversarial-native	full/gate	5eacde12f17cae5b
+AD	6	batch	garrytan/gstack	4007	p2/adversarial-native#1	adversarial-native	full/gate	258f2cd7a9089223
+AD	7	main	garrytan/gstack-evals	221	v1/adversarial-native#4	adversarial-native	full/gate	7095e04358c753b5
+AD	8	main	garrytan/gstack-evals	221	v1/adversarial-native#2	adversarial-native	full/gate	098ecd08c5e9baf1
+AD	9	main	garrytan/gstack-evals	289	p1/adversarial-native#5	adversarial-native	full/gate	0dd89ba24577d4e6
+AD	10	main	garrytan/gstack-evals	205	p1/adversarial-native#1	adversarial-native	full/code	144ba6a4ddf43bf3
+AD	11	main	garrytan/gstack-evals	289	p1/adversarial-native#2	adversarial-native	full/gate	55558a5ab2d1e5b1
+AD	12	main	garrytan/gstack-evals	289	p1/adversarial-native#9	adversarial-native	full/gate	0d1691b6963285e0
+AD	13	main	garrytan/gstack-evals	289	p1/adversarial-native#6	adversarial-native	full/gate	0667a0500c3dd32b
+AD	14	main	garrytan/gstack-evals	205	p1/adversarial-native#7	adversarial-native	full/code	f5fecba8fb594794
+AD	15	main	garrytan/gstack-evals	289	p1/adversarial-native#1	adversarial-native	full/gate	588101b43c90a99e
+AD	16	main	garrytan/gstack	4208	p1/adversarial-native#2	adversarial-native	full/gate	38ebbb96087e6f66
+AD	17	main	garrytan/gstack-evals	289	p1/adversarial-native#3	adversarial-native	full/gate	903c15463b4dc324
+AD	18	main	garrytan/gstack	4059	p3/adversarial-native#1	adversarial-native	full/code	f561540cb476d425
+AD	19	main	garrytan/gstack	4073	v2/adversarial-native#1	adversarial-native	full/code	cf5e17d25b8ded03
+AD	20	main	garrytan/gstack-evals	221	v1/adversarial-native#1	adversarial-native	full/gate	a7099b47391c414b
+AD	21	main	garrytan/gstack-evals	205	p1/adversarial-native#6	adversarial-native	full/code	3a9583f35138cd17
+AD	22	main	garrytan/gstack-evals	289	p1/adversarial-native#4	adversarial-native	full/gate	8d315682d9925f91
+AD	23	main	garrytan/gstack-evals	289	p1/adversarial-native#10	adversarial-native	full/gate	d8f86cd410d535d2
+AD	24	main	garrytan/gstack	4017	v1/adversarial-native#2	adversarial-native	full/code	cf0ceb6d023b78ca
+AD	25	main	garrytan/gstack-evals	289	p1/adversarial-native#7	adversarial-native	full/gate	58c1af808bdca147
+AD	26	main	garrytan/gstack	4365	p2/adversarial-native#1	adversarial-native	full/gate	70b44ad9a959dd43
+AD	27	main	garrytan/gstack	4305	p1/adversarial-native#6	adversarial-native	full/gate	b35f893832a4c432
+AD	28	main	garrytan/gstack	4017	v1/adversarial-native#4	adversarial-native	full/code	24f9076fc6b57e71
+AD	29	main	garrytan/gstack-evals	221	v1/adversarial-native#5	adversarial-native	full/gate	f244e777c49018db
+AD	30	main	garrytan/gstack-evals	289	p1/adversarial-native#8	adversarial-native	full/gate	6894a97f1e4c16a0
+AD	31	main	garrytan/gstack-evals	226	s11/adversarial-native#1	adversarial-native	full/gate	0bb6ebd99baa4a6b
+AD	32	main	garrytan/gstack-evals	289	p1/adversarial-native#12	adversarial-native	full/gate	a59ca7b35c6d6491
+SM	1	gold	garrytan/alphaclaw	450	s11/outside-voice#1	outside-voice	full/code	5633a34334b0d45c
+SM	2	gold	garrytan/gstack-evals	289	p1/outside-voice#1	outside-voice	full/gate	20bc6cfd29169c53
+SM	3	gold	garrytan/gstack	4073	v2/outside-voice#1	outside-voice	full/code	dbf9a521544e5388
+SM	4	gold	garrytan/gstack	4059	p3/outside-voice#2	outside-voice	full/code	1e87576f32b02ee1
+SM	5	gold	garrytan/gstack-evals	289	p1/outside-voice#7	outside-voice	full/gate	081f37d37ab838be
+SM	6	batch	garrytan/gstack-evals	289	p1/outside-voice#8	outside-voice	full/gate	8b3d959f3e520a7f
+SM	7	main	garrytan/gstack	4041	p1/outside-voice#1	outside-voice	full/gate	d44e1de1b67907fb
+SM	8	main	garrytan/gstack-evals	289	p1/outside-voice#3	outside-voice	full/gate	cefcfa9a3883ccfa
+SM	9	main	garrytan/gstack-evals	226	s11/outside-voice#1	outside-voice	full/gate	075d099399a52337
+SM	10	main	garrytan/gstack-evals	289	p1/outside-voice#6	outside-voice	full/gate	1577d24577683281
+SM	11	main	garrytan/gstack-evals	205	p1/outside-voice#1	outside-voice	full/code	99951cace8d9cf67
+SM	12	main	garrytan/gstack	4142	p2v/outside-voice#3	outside-voice	full/gate	f0fa4f405eb4d29a
+SM	13	main	garrytan/alphaclaw	450	s11/outside-voice#2	outside-voice	full/code	cd2230825b10dc21
+SM	14	main	garrytan/gstack	4142	p2v/outside-voice#1	outside-voice	full/gate	b24b7fb2f9a64116
+SM	15	main	garrytan/gstack-evals	203	p2/outside-voice#1	outside-voice	full/gate	df56e915dc0eec67
+SM	16	main	garrytan/gstack	4365	p2/outside-voice#1	outside-voice	full/gate	2ff2e786f354f0c9
+SM	17	main	garrytan/gstack-evals	241	p1/outside-voice#1	outside-voice	full/code	297ce0a47d93b4cb
+SM	18	main	garrytan/gstack	4365	p3/outside-voice#1	outside-voice	full/gate	6eb569d7ad3ae8ea
+SM	19	main	garrytan/gstack-evals	289	p1/outside-voice#4	outside-voice	full/gate	75d7fc55ab1d9c6d
+SM	20	main	garrytan/gstack	4305	p1/outside-voice#1	outside-voice	full/gate	8687e8bfbbc14fd3
+SM	21	main	garrytan/gstack-evals	289	p1/outside-voice#2	outside-voice	full/gate	5e9cb4eb3649094b
+SM	22	main	garrytan/gstack	4142	p2v/outside-voice#2	outside-voice	full/gate	f1b98323ef0a6005
+SM	23	main	garrytan/gstack	3994	p2/outside-voice#1	outside-voice	full/gate	3f796386a90ebf71
+SM	24	main	garrytan/gstack	4007	p2/outside-voice#1	outside-voice	full/gate	12f873cf98581648
+SM	25	main	garrytan/gstack	4017	v1/outside-voice#1	outside-voice	full/code	d7962338d47f4398
+SM	26	main	garrytan/gstack	4011	p1/outside-voice#2	outside-voice	full/gate	6d502b26a982f54f
+SM	27	main	garrytan/gstack	4040	v1/outside-voice#1	outside-voice	full/gate	cfae7d89facfbe84
+SM	28	main	garrytan/gstack-evals	289	p1/outside-voice#5	outside-voice	full/gate	b5bd76f93fbd61f9
+SM	29	main	garrytan/gstack-evals	221	v1/outside-voice#1	outside-voice	full/gate	7ceab5ac3cf4fb9d
+SM	30	main	garrytan/gstack	4464	p2v/outside-voice#1	outside-voice	full/gate	b743895d6aa1c812
+SM	31	main	garrytan/gstack	4203	p1/outside-voice#1	outside-voice	full/gate	8e4537869e4a3ac0
+SM	32	main	garrytan/gstack	4011	p1/outside-voice#1	outside-voice	full/gate	c00d09c386d1a24d
+SM	33	main	garrytan/gstack	4142	s11/outside-voice#1	outside-voice	full/gate	39de145a83a291a7
+FR	1	gold	garrytan/gstack-evals	200	quick/laneb/runner/agent/sitecustomize.py:26:secrets-false-positive	core	full/gate	31c33a5474503d63
+FR	2	gold	garrytan/gstack-evals	258	p1/specialist-batched#1	specialist-batched	full/code	a5a5f958b0635192
+FR	3	gold	garrytan/gstack-evals	232	p1/specialist-batched#1	security	full/gate	316b61da75cd2f46
+FR	4	gold	garrytan/gstack	4486	p1/specialist-batched#1	security	full/gate	afa232c94795513f
+FR	5	gold	garrytan/gstack	4441	p1/specialist-batched#2	specialist-batched	full/code	b5c5f721072152a7
+FR	6	batch	garrytan/gstack-evals	322	p1/specialist-batched#1	testing	full/code	cf3c5b7648ce17ea
+FR	7	main	garrytan/gstack-evals	294	p1/specialist-batched#2	testing	full/gate	27473ad9e47a8f72
+FR	8	main	garrytan/alphaclaw	449	review-p1/specialist-batched#2	specialist-batched	full/code	23ab683c9aeb111e
+FR	9	main	garrytan/gstack-evals	322	p1/specialist-batched#2	testing	full/code	e21fc1a6124068b4
+FR	10	main	garrytan/gstack-evals	294	p1/specialist-batched#1	testing	full/gate	96f23334fa209c04
+FR	11	main	garrytan/gstack	4095	p1/specialist-batched#1	testing	full/gate	2843452dd670e315
+FR	12	main	garrytan/gstack-evals	221	p1/specialist-batched#1	specialist-batched	full/gate	ab13a80133883ba4
+FR	13	main	garrytan/gstack	4073	p1/specialist-batched#1	security	full/code	13cba7fcfb1668be
+FR	14	main	garrytan/gstack	4011	p1/specialist-batched#1	state-machines	full/gate	b88a61b647233229
+FR	15	main	garrytan/gstack	3994	p1/specialist-batched#2	testing	full/gate	d11939c7bd612175
+FR	16	main	garrytan/gstack-evals	289	p1/specialist-batched#1	security	full/gate	fe17894e52e9465e
+FR	17	main	garrytan/gstack	4441	p1/specialist-batched#1	specialist-batched	full/code	e22f59103919a8b0
+FR	18	main	garrytan/alphaclaw	333	p1/specialist-batched#1	security	full/gate	e541a907fa4d4a89
+FR	19	main	garrytan/gstack-evals	320	p1/specialist-batched#1	specialist-batched	full/code	c98a9faa176f0d29
+FR	20	main	garrytan/alphaclaw	449	review-p1/specialist-batched#1	specialist-batched	full/code	3b71707671f4c88d
+FR	21	main	garrytan/gstack	4007	p1/specialist-batched#1	security	full/gate	686f7b5a87d6d858
+FR	22	main	garrytan/gstack-evals	226	p1/specialist-batched#1	testing	full/gate	7d61b0f901362dfc
+FR	23	main	garrytan/alphaclaw	450	review-p1/specialist-batched#2	specialist-batched	full/code	060e9794818b86f4
+FR	24	main	garrytan/gstack-evals	321	p1/specialist-batched#1	testing	full/code	ec3e4ae1fe63f20d
+FR	25	main	garrytan/gstack	4142	p1/specialist-batched#2	security	full/gate	bd09173091fc1a8a
+FR	26	main	garrytan/gstack	4284	p1/specialist-batched#1	specialist-batched	full/gate	447dfc1db7b03834
+FR	27	main	garrytan/alphaclaw	319	p1/specialist-batched#1	state-machines	full/gate	cab9172483f1147c
+FR	28	main	garrytan/alphaclaw	450	review-p1/specialist-batched#1	specialist-batched	full/code	ba36c24aee848a67
+FR	29	main	garrytan/gstack	3994	p1/specialist-batched#1	testing	full/gate	92895a0b099fa3d4
+FR	30	main	garrytan/gstack-evals	258	p1/specialist-batched#2	specialist-batched	full/code	5fb6417a76d686ec
+FR	31	main	garrytan/gstack	4105	p1/specialist-batched#1	security	full/gate	237fdb65ee248609
+FR	32	main	garrytan/gstack	4007	p1/specialist-batched#2	testing	full/gate	6b80b111c47e79e4
+FR	33	main	garrytan/gstack	4218	p1/specialist-batched#1	testing	full/code	97df3713cefaa27d
+FR	34	main	garrytan/gstack	4142	p1/specialist-batched#1	state-machines	full/gate	87c65a80acf2c4ea
+FR	35	main	garrytan/gstack-evals	289	p1/specialist-batched#2	testing	full/gate	8014828793c1af98
+FR	36	main	garrytan/gstack-evals	203	p1/specialist-batched#1	testing	full/gate	1107c8acd872a954
+FR	37	main	garrytan/gstack	4365	p1/specialist-batched#1	state-machines	full/gate	e2d4e9b5eb101507
+FR	38	main	garrytan/gstack	4059	p1/specialist-batched#2	testing	full/code	b58807585953ba18
+FR	39	main	garrytan/gstack-evals	232	p1/specialist-batched#2	testing	full/gate	0af480836940e3e5
+FR	40	main	garrytan/gstack	4464	p1/specialist-batched#1	testing	full/gate	3a3a59db4e128a24
+# part B: PRs a later PR corrected within 7 days (full 7-day exposure, blame ok): 120; seed 1149397022422259903
+# full/code	private	main	11
+# full/code	public	gold	2
+# full/code	public	main	9
+# full/gate	private	batch	1
+# full/gate	private	gold	1
+# full/gate	private	main	10
+# full/gate	private	not-sent	3
+# full/gate	public	gold	7
+# full/gate	public	main	24
+# legacy	private	gold	4
+# legacy	private	main	16
+# legacy	public	gold	1
+# legacy	public	main	6
+# light/code	private	batch	2
+# light/code	private	gold	4
+# light/code	private	main	6
+# light/code	private	not-sent	1
+# light/code	public	gold	1
+# light/code	public	main	3
+# light/tests	private	main	1
+# standard/code	private	batch	1
+# standard/code	private	main	3
+# standard/code	public	main	3
+# B	order	role	repo	pr	tier	later_prs
+B	1	gold	garrytan/gbrain	8496	full/gate	8521
+B	2	gold	garrytan/gstack-evals	139	full/gate	144
+B	6	gold	garrytan/gstack	3487	legacy	3511
+B	10	gold	garrytan/gbrain	8367	full/gate	8380
+B	12	gold	garrytan/gstack-evals	101	full/gate	106
+B	14	gold	garrytan/gbrain-evals	393	full/code	395
+B	15	gold	garrytan/gstack-evals	305	full/gate	324
+B	16	gold	garrytan/gstack	3675	full/gate	3685
+B	18	gold	garrytan/gstack-evals	157	full/gate	164
+B	19	gold	garrytan/gstack-evals	186	full/code	189
+B	20	gold	garrytan/gstack	4022	light/code	4027
+B	22	main	garrytan/gstack-evals	96	standard/code	97
+B	26	main	garrytan/gstack-evals	327	full/gate	329
+B	31	main	garrytan/gstack-evals	18	legacy	19
+B	32	main	garrytan/gstack-evals	206	full/code	210
+B	33	main	garrytan/gstack-evals	240	full/gate	244
+B	36	main	garrytan/gbrain-evals	395	full/code	396
+B	37	main	garrytan/gstack	3684	full/gate	3694
+B	44	main	garrytan/gbrain-evals	357	full/code	361
+B	45	main	garrytan/gstack	3917	full/gate	4031
+B	46	main	garrytan/gstack	3803	light/code	3990
+B	49	main	garrytan/gstack	3787	full/gate	3803
+B	53	main	garrytan/gstack-evals	100	standard/code	101
+B	57	main	garrytan/gbrain	8762	full/gate	8770
+B	60	main	garrytan/gstack-evals	124	full/gate	129
+B	61	main	garrytan/gbrain-evals	379	full/gate	383
+B	63	main	garrytan/gstack	4247	full/gate	4264
+B	64	main	garrytan/gstack-evals	142	full/gate	149
+B	66	main	garrytan/alphaclaw	343	full/gate	355
+B	67	main	garrytan/gstack	3621	full/gate	3638
+B	72	main	garrytan/gstack-evals	232	full/gate	237
+B	73	main	garrytan/gstack-evals	175	full/gate	178
+B	74	main	garrytan/gbrain	7510	full/gate	8491
+B	77	main	garrytan/gbrain	7844	legacy	7851
+B	78	main	garrytan/gbrain	7872	legacy	7896
+B	80	main	garrytan/alphaclaw	361	full/code	365
+B	82	main	garrytan/gstack-evals	231	light/code	237
+B	83	main	garrytan/gstack-evals	106	full/gate	107
+B	84	main	garrytan/gstack	3682	full/gate	3685
+B	87	main	garrytan/gstack-evals	7	legacy	27
+B	89	main	garrytan/gstack	4136	full/gate	4140
+B	93	main	garrytan/gstack-evals	225	full/code	229
+B	94	main	garrytan/gstack	3617	full/gate	3710
+B	97	main	garrytan/gbrain-evals	202	full/gate	204
+B	98	main	garrytan/gstack	3920	full/gate	3917
+B	99	main	garrytan/gstack	4039	full/code	4046
+B	104	main	garrytan/gstack-evals	313	full/code	315
+B	107	main	garrytan/gbrain-evals	347	full/code	351
+B	108	main	garrytan/gstack-evals	15	legacy	25
+B	111	main	garrytan/gbrain-evals	304	full/code	353
+B	112	main	garrytan/gstack	3832	full/gate	3865
+B	114	main	garrytan/gstack	4108	light/code	4111
+B	115	main	garrytan/gstack-evals	180	full/gate	188
+B	116	main	garrytan/gbrain-evals	308	full/gate	309
+B	117	main	garrytan/gstack-evals	6	legacy	22
+B	118	main	garrytan/gbrain	8380	standard/code	8404
+# part B private: 64 PRs, sha256 81028b6946e2f1045d3dca82d07d70da998ca22cfc929a52f131f445d942296e

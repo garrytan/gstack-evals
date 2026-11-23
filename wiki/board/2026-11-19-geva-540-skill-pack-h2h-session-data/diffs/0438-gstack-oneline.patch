@@ -1,0 +1,107 @@
+diff --git a/pkg/workflow/copilot_installer.go b/pkg/workflow/copilot_installer.go
+index 70ebb94..2f4b031 100644
+--- a/pkg/workflow/copilot_installer.go
++++ b/pkg/workflow/copilot_installer.go
+@@ -24,6 +24,16 @@ func GenerateCopilotInstallerSteps(version, stepName string) []GitHubActionStep
+ 	// and does not use gh CLI, so GH_HOST does not affect the download. No step-level
+ 	// GH_HOST override is needed here; the correct host is already set in GITHUB_ENV
+ 	// by configure_gh_for_ghe.sh (or by the Derive GH_HOST step when DIFC proxy is active).
++	if isEngineVersionExpression(version) {
++		// Pass GitHub Actions expressions via env var to prevent shell injection
++		return []GitHubActionStep{{
++			"      - name: " + stepName,
++			"        run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh \"${ENGINE_VERSION}\"",
++			"        env:",
++			"          ENGINE_VERSION: " + version,
++		}}
++	}
++
+ 	stepLines := []string{
+ 		"      - name: " + stepName,
+ 		"        run: ${RUNNER_TEMP}/gh-aw/actions/install_copilot_cli.sh " + version,
+diff --git a/pkg/workflow/engine_version_expression_test.go b/pkg/workflow/engine_version_expression_test.go
+new file mode 100644
+index 0000000..f771493
+--- /dev/null
++++ b/pkg/workflow/engine_version_expression_test.go
+@@ -0,0 +1,39 @@
++//go:build !integration
++
++package workflow
++
++import (
++	"strings"
++	"testing"
++)
++
++func TestEngineVersionExpressionUsesEnvVar(t *testing.T) {
++	expr := "${{ inputs.engine-version }}"
++	engines := []CodingAgentEngine{NewCopilotEngine(), NewClaudeEngine(), NewCodexEngine(), NewGeminiEngine()}
++	for _, engine := range engines {
++		t.Run(engine.GetID(), func(t *testing.T) {
++			data := &WorkflowData{EngineConfig: &EngineConfig{ID: engine.GetID(), Version: expr}}
++			var all []string
++			for _, step := range engine.GetInstallationSteps(data) {
++				all = append(all, step...)
++			}
++			yaml := strings.Join(all, "\n")
++			if !strings.Contains(yaml, "ENGINE_VERSION: "+expr) {
++				t.Errorf("expected expression passed via ENGINE_VERSION env var, got:\n%s", yaml)
++			}
++			for _, line := range all {
++				if strings.Contains(line, "run:") && strings.Contains(line, expr) {
++					t.Errorf("expression must not be interpolated into run command: %s", line)
++				}
++			}
++		})
++	}
++}
++
++func TestEngineVersionLiteralUnchanged(t *testing.T) {
++	steps := GenerateNpmInstallSteps("@openai/codex", "1.2.3", "Install", "codex", false)
++	got := strings.Join(steps[0], "\n")
++	if !strings.Contains(got, "npm install -g @openai/codex@1.2.3") || strings.Contains(got, "ENGINE_VERSION") {
++		t.Errorf("unexpected literal version step:\n%s", got)
++	}
++}
+diff --git a/pkg/workflow/nodejs.go b/pkg/workflow/nodejs.go
+index 1dae06c..996b272 100644
+--- a/pkg/workflow/nodejs.go
++++ b/pkg/workflow/nodejs.go
+@@ -2,6 +2,7 @@ package workflow
+ 
+ import (
+ 	"fmt"
++	"strings"
+ 
+ 	"github.com/github/gh-aw/pkg/constants"
+ 	"github.com/github/gh-aw/pkg/logger"
+@@ -52,6 +53,18 @@ func GenerateNpmInstallStepsWithScope(packageName, version, stepName, cacheKeyPr
+ 	if isGlobal {
+ 		globalFlag = "-g "
+ 	}
++	if isEngineVersionExpression(version) {
++		// Pass GitHub Actions expressions via env var to prevent shell injection
++		installCmd := fmt.Sprintf("npm install %s\"%s@${ENGINE_VERSION}\"", globalFlag, packageName)
++		steps = append(steps, GitHubActionStep{
++			"      - name: " + stepName,
++			"        run: " + installCmd,
++			"        env:",
++			"          ENGINE_VERSION: " + version,
++		})
++		return steps
++	}
++
+ 	installCmd := fmt.Sprintf("npm install %s%s@%s", globalFlag, packageName, version)
+ 	steps = append(steps, GitHubActionStep{
+ 		"      - name: " + stepName,
+@@ -60,3 +73,9 @@ func GenerateNpmInstallStepsWithScope(packageName, version, stepName, cacheKeyPr
+ 
+ 	return steps
+ }
++
++// isEngineVersionExpression reports whether the engine version is a GitHub Actions expression
++// (e.g. "${{ inputs.engine-version }}") that must be passed to shell via an env var.
++func isEngineVersionExpression(version string) bool {
++	return strings.Contains(version, "${{")
++}

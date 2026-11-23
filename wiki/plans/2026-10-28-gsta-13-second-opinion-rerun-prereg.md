@@ -65,7 +65,9 @@ Everything is as in the parent unless stated here.
 
 ## Cap and stop rule
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 - Cap: $35, line item `lanea-quick-rerun`, ledger `captain-gstack-evals/ledger/lanea-quick-rerun.jsonl`.
-- The ledger's first row is the approval. It quotes Garry's gate-1 "Rec", his 2026-10-28 "It should be fast like this week", and GSTA-2's allocation: the $20.44 left on lanea-quick plus $15 of the plan's $25 pilot reserve. The lanea-quick ledger gets a note row recording that its unspent $20.44 moved here.
+- The ledger's first row is the approval. It records Garry's gate-1 approval, his 2026-10-28 request to run it this week, and GSTA-2's allocation: the $20.44 left on lanea-quick plus $15 of the plan's $25 pilot reserve. The lanea-quick ledger gets a note row recording that its unspent $20.44 moved here.
 - Each session reserves $7.25, the parent's Opus worst case, and settles with measured usage. With one session at a time, the cap stops the run only once settled spend passes $27.75. Expected spend is about $19, from the parent's mean of $0.46 per session on these cells.
 - A reservation that would pass the cap stops the run: CAP_STOP, incomplete, never retried to change a result.

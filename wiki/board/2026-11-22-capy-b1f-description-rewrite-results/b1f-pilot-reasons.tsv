@@ -1,0 +1,15 @@
+set	arm	task	trial	outcome	reason	loaded	followed	named	first_text
+nonfit	long	bluesky__ophyd-async-1165	bluesky__ophyd-async-1165__hMwbBiG	counted	graded	false	false	-	Now implement.
+nonfit	required	line__line-bot-sdk-python-981_interface	line__line-bot-sdk-python-981_in__9E4rmYz	counted	graded	false	false	-	There's a precedent: `generate-code.py` appends hand-written methods to generated files after codegen. I'll do the same for the new wrappers.
+primary	hook	aallan__vera-662_interface	aallan__vera-662_interface__NJxjnjy	counted	graded	true	false	prove-it	gstack routed this to /prove-it, so I'll reproduce the bug first.
+primary	hook	iluvcapra__pycmx-15	iluvcapra__pycmx-15__q98veJX	counted	graded	true	true	prove-it	I'll follow the gstack routing hook and start with /prove-it.
+primary	hook	openai__openai-agents-python-1984	openai__openai-agents-python-198__5WoKApm	counted	graded	false	false		Existing tests pass. Adding tests for both modes:
+primary	hook	sciunto-org__python-bibtexparser-515	sciunto-org__python-bibtexparser__SYMpuNq	counted	graded	true	true	prove-it	gstack routed this to /prove-it (test first, then fix).
+primary	long	aallan__vera-662_interface	aallan__vera-662_interface__SjZ7BN4	counted	graded	false	false	-	Use the canonical walker for the SlotRef path too.
+primary	long	itsdnns__docsight-437	itsdnns__docsight-437__k2nhdTD	counted	graded	false	false	-	The comparison API currently converts null counters to `0`, so I'll fix the backend aggregation as well as hide the chart in the frontend. Checking `renderChart` next.
+primary	long	pgmpy__pgmpy-3137	pgmpy__pgmpy-3137__BBevjkw	counted	graded	false	false	-	Reproduction now gives 1 unique skeleton. Running the relevant tests:
+primary	own	aallan__vera-662_interface	aallan__vera-662_interface__Yz6tpXA	counted	graded	false	false	-	Reproduced. Find where index expressions infer the array element type.
+primary	own	scipp__plopp-513	scipp__plopp-513__2whAckY	counted	graded	false	false	-	Quick check with the issue's example:
+primary	required	aallan__vera-662_interface	aallan__vera-662_interface__APYtQtU	counted	graded	true	false	-	Let me reproduce first.
+primary	required	joke2k__faker-2309	joke2k__faker-2309__wJLQW9Y	counted	graded	true	true	-	Cause: `-i/--include` uses `nargs="*"`, so it swallows every positional word after it, including the fake name. Following the repo's prove-it rule, I'll add a failing test first.
+primary	required	mmornati__home-assistant-csnet-home-132	mmornati__home-assistant-csnet-h__4Ksy3cs	counted	graded	true	false	-	Callers already fall back to defaults when they get `None`, so the fix is to return `None` for `0`/`-1`. Test first:

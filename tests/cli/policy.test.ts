@@ -66,7 +66,7 @@ describe("the default model policy", () => {
 });
 
 describe("a caller's own policy", () => {
-  // Value: protects=Fable 5.1 runs as a capped rung only under a ledger item its policy row names (Garry, 2026-10-31, "Do it" on B1) and stays smoke_only everywhere else; fails_when=a lane whose prereg does not name the rung can run Fable as a subject; why_new=new; seam=modelProblem; no_claim=the lanes' own checks (preflight, review-units)
+  // Value: protects=Fable 5.1 runs as a capped rung only under a ledger item its policy row names (Garry approved B1 on 2026-10-31) and stays smoke_only everywhere else; fails_when=a lane whose prereg does not name the rung can run Fable as a subject; why_new=new; seam=modelProblem; no_claim=the lanes' own checks (preflight, review-units)
   test("a smoke_only model runs as a subject only in smoke runs or under a ledger item its rungs name", () => {
     const rung = custom("rung", { ...def.policy.models, "claude-fable-5-1": { ...def.policy.models["claude-fable-5-1"]!, rungs: ["planning-r1a"] } });
     const as = (p: LoadedPolicy, item: string | null) => modelProblem(p, "claude-fable-5-1", "subject", { smoke: false, item });

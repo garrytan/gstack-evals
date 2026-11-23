@@ -1,0 +1,373 @@
+diff --git a/backend/local/local.go b/backend/local/local.go
+index 91ec9cd..c56537e 100644
+--- a/backend/local/local.go
++++ b/backend/local/local.go
+@@ -112,6 +112,21 @@ setuid, setgid and sticky bits are not restored by default - see the
+ 				Default:  false,
+ 				Advanced: true,
+ 			},
++			{
++				Name: "links_allow_unsafe",
++				Help: `Allow creating symlinks which point outside the destination.
++
++When using --links, symlinks are recreated from the contents of
++'` + fs.LinkSuffix + `' objects. By default rclone refuses to create a
++symlink whose target is absolute or otherwise resolves to a location
++outside the destination root, as a malicious source could use such a
++link to write files anywhere on the local filesystem.
++
++Only set this flag if you trust the source, for example when restoring
++your own backup which contains absolute symlinks.`,
++				Default:  false,
++				Advanced: true,
++			},
+ 			{
+ 				Name: "skip_links",
+ 				Help: `Don't warn about skipped symlinks.
+@@ -376,6 +391,7 @@ only useful for reading.
+ type Options struct {
+ 	FollowSymlinks         bool                 `config:"copy_links"`
+ 	TranslateSymlinks      bool                 `config:"links"`
++	AllowUnsafeLinks       bool                 `config:"links_allow_unsafe"`
+ 	SkipSymlinks           bool                 `config:"skip_links"`
+ 	SkipSpecials           bool                 `config:"skip_specials"`
+ 	UTFNorm                bool                 `config:"unicode_normalization"`
+@@ -1478,11 +1494,31 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 		}
+ 	}
+ 
++	// When translating symlinks, make sure we never write through
++	// a symlinked directory which points outside the root.
++	if o.fs.opt.TranslateSymlinks {
++		err = o.fs.checkParentInRoot(o.path)
++		if err != nil {
++			return err
++		}
++	}
++
+ 	err = o.mkdirAll()
+ 	if err != nil {
+ 		return err
+ 	}
+ 
++	// When translating symlinks, an existing symlink at the
++	// destination path must be replaced, not written through.
++	if o.fs.opt.TranslateSymlinks && !o.translatedLink {
++		if fi, lerr := os.Lstat(o.path); lerr == nil && fi.Mode()&os.ModeSymlink != 0 {
++			if removeErr := os.Remove(o.path); removeErr != nil {
++				fs.Errorf(o, "Failed to remove existing symlink: %v", removeErr)
++				return removeErr
++			}
++		}
++	}
++
+ 	// Wipe hashes before update
+ 	o.clearHashCache()
+ 
+@@ -1533,6 +1569,10 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 	}
+ 
+ 	if o.translatedLink {
++		if err == nil {
++			// Check the symlink doesn't point outside the root
++			err = o.fs.checkSymlinkTarget(o.path, symlinkData.String())
++		}
+ 		if err == nil {
+ 			// Remove any current symlink or file, if one exists
+ 			if _, err := os.Lstat(o.path); err == nil {
+diff --git a/backend/local/symlink_safety.go b/backend/local/symlink_safety.go
+new file mode 100644
+index 0000000..8d310b4
+--- /dev/null
++++ b/backend/local/symlink_safety.go
+@@ -0,0 +1,174 @@
++package local
++
++import (
++	"errors"
++	"fmt"
++	"os"
++	"path/filepath"
++	"strings"
++)
++
++// maxSymlinkDepth is the maximum number of nested symlinks we will
++// follow when checking where a symlink target resolves to.
++const maxSymlinkDepth = 40
++
++var (
++	errSymlinkEscapesRoot = errors.New("symlink target points outside the destination root - use --local-links-allow-unsafe to override")
++	errPathEscapesRoot    = errors.New("path traverses a symlink pointing outside the destination root")
++	errTooManySymlinks    = errors.New("too many levels of symbolic links")
++)
++
++// isWithin returns true if p is base or is inside base.
++//
++// Both paths should be clean and absolute.
++func isWithin(base, p string) bool {
++	rel, err := filepath.Rel(base, p)
++	if err != nil {
++		return false
++	}
++	if filepath.IsAbs(rel) {
++		return false
++	}
++	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
++}
++
++// resolveExisting resolves all the symlinks in the longest existing
++// prefix of p and appends the non existing remainder.
++func resolveExisting(p string) (string, error) {
++	p = filepath.Clean(p)
++	var rest []string
++	cur := p
++	for {
++		resolved, err := filepath.EvalSymlinks(cur)
++		if err == nil {
++			parts := append([]string{resolved}, rest...)
++			return filepath.Join(parts...), nil
++		}
++		// If the item exists but can't be resolved (eg a dangling
++		// symlink) then we can't safely reason about it.
++		if _, lerr := os.Lstat(cur); lerr == nil {
++			return "", fmt.Errorf("failed to resolve %q: %w", cur, err)
++		}
++		parent := filepath.Dir(cur)
++		if parent == cur {
++			return "", err
++		}
++		rest = append([]string{filepath.Base(cur)}, rest...)
++		cur = parent
++	}
++}
++
++// realRoot returns the root of the Fs with symlinks resolved.
++func (f *Fs) realRoot() (string, error) {
++	root, err := filepath.Abs(f.root)
++	if err != nil {
++		return "", err
++	}
++	return resolveExisting(root)
++}
++
++// checkParentInRoot checks that the parent directory of p, after
++// resolving any existing symlinks, is still within the root of the
++// Fs. This stops files being written through a symlinked directory
++// which points outside of the destination.
++func (f *Fs) checkParentInRoot(p string) error {
++	root, err := f.realRoot()
++	if err != nil {
++		return err
++	}
++	abs, err := filepath.Abs(p)
++	if err != nil {
++		return err
++	}
++	dir, err := resolveExisting(filepath.Dir(abs))
++	if err != nil {
++		return err
++	}
++	if !isWithin(root, dir) {
++		return fmt.Errorf("%q: %w", p, errPathEscapesRoot)
++	}
++	return nil
++}
++
++// splitLinkTarget splits a symlink target into its components,
++// accepting both '/' and the OS separator.
++func splitLinkTarget(target string) []string {
++	return strings.FieldsFunc(target, func(r rune) bool {
++		return r == '/' || r == filepath.Separator
++	})
++}
++
++// resolveLinkTarget works out where target would point to if it were
++// the contents of a symlink in directory dir, following any existing
++// symlinks along the way.
++func resolveLinkTarget(dir, target string, depth int) (string, error) {
++	if depth > maxSymlinkDepth {
++		return "", errTooManySymlinks
++	}
++	cur := dir
++	if filepath.IsAbs(target) || filepath.VolumeName(target) != "" || strings.HasPrefix(target, "/") || strings.HasPrefix(target, string(filepath.Separator)) {
++		vol := filepath.VolumeName(target)
++		target = target[len(vol):]
++		cur = vol + string(filepath.Separator)
++	}
++	for _, c := range splitLinkTarget(target) {
++		switch c {
++		case ".":
++			continue
++		case "..":
++			cur = filepath.Dir(cur)
++			continue
++		}
++		cur = filepath.Join(cur, c)
++		fi, err := os.Lstat(cur)
++		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
++			continue
++		}
++		link, err := os.Readlink(cur)
++		if err != nil {
++			return "", err
++		}
++		cur, err = resolveLinkTarget(filepath.Dir(cur), link, depth+1)
++		if err != nil {
++			return "", err
++		}
++	}
++	return filepath.Clean(cur), nil
++}
++
++// checkSymlinkTarget checks that a symlink at linkPath with contents
++// target would point inside the root of the Fs.
++func (f *Fs) checkSymlinkTarget(linkPath, target string) error {
++	if f.opt.AllowUnsafeLinks {
++		return nil
++	}
++	if target == "" {
++		return fmt.Errorf("%q: empty symlink target", linkPath)
++	}
++	if strings.ContainsRune(target, 0) {
++		return fmt.Errorf("%q: invalid symlink target", linkPath)
++	}
++	root, err := f.realRoot()
++	if err != nil {
++		return err
++	}
++	abs, err := filepath.Abs(linkPath)
++	if err != nil {
++		return err
++	}
++	dir, err := resolveExisting(filepath.Dir(abs))
++	if err != nil {
++		return err
++	}
++	if !isWithin(root, dir) {
++		return fmt.Errorf("%q: %w", linkPath, errPathEscapesRoot)
++	}
++	resolved, err := resolveLinkTarget(dir, target, 0)
++	if err != nil {
++		return fmt.Errorf("%q: failed to check symlink target %q: %w", linkPath, target, err)
++	}
++	if !isWithin(root, resolved) {
++		return fmt.Errorf("%q -> %q: %w", linkPath, target, errSymlinkEscapesRoot)
++	}
++	return nil
++}
+diff --git a/backend/local/symlink_safety_test.go b/backend/local/symlink_safety_test.go
+new file mode 100644
+index 0000000..14cc1d2
+--- /dev/null
++++ b/backend/local/symlink_safety_test.go
+@@ -0,0 +1,110 @@
++//go:build !windows
++
++package local
++
++import (
++	"bytes"
++	"context"
++	"os"
++	"path/filepath"
++	"testing"
++	"time"
++
++	"github.com/rclone/rclone/fs"
++	"github.com/rclone/rclone/fs/config/configmap"
++	"github.com/rclone/rclone/fs/object"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++func newLinksFs(t *testing.T, root string, extra configmap.Simple) *Fs {
++	m := configmap.Simple{"links": "true"}
++	for k, v := range extra {
++		m[k] = v
++	}
++	f, err := NewFs(context.Background(), "local", root, m)
++	require.NoError(t, err)
++	return f.(*Fs)
++}
++
++func putString(t *testing.T, f *Fs, remote, contents string) error {
++	src := object.NewStaticObjectInfo(remote, time.Now(), int64(len(contents)), true, nil, nil)
++	_, err := f.Put(context.Background(), bytes.NewBufferString(contents), src)
++	return err
++}
++
++func TestSymlinkTargetEscape(t *testing.T) {
++	base := t.TempDir()
++	dest := filepath.Join(base, "dest")
++	outside := filepath.Join(base, "outside")
++	require.NoError(t, os.MkdirAll(outside, 0777))
++	f := newLinksFs(t, dest, nil)
++
++	for _, target := range []string{
++		outside,
++		"../outside",
++		"sub/../../outside",
++		"/tmp/x",
++		"",
++	} {
++		err := putString(t, f, "pwn"+fs.LinkSuffix, target)
++		assert.Error(t, err, target)
++		_, err = os.Lstat(filepath.Join(dest, "pwn"))
++		assert.True(t, os.IsNotExist(err), target)
++	}
++
++	// The following write must not escape the destination
++	_ = putString(t, f, "pwn/authorized_keys", "attacker")
++	_, err := os.Stat(filepath.Join(outside, "authorized_keys"))
++	assert.True(t, os.IsNotExist(err))
++
++	// Safe relative links are allowed
++	require.NoError(t, putString(t, f, "dir/file.txt", "hello"))
++	require.NoError(t, putString(t, f, "dir/link"+fs.LinkSuffix, "file.txt"))
++	require.NoError(t, putString(t, f, "link2"+fs.LinkSuffix, "dir/../dir/file.txt"))
++	require.NoError(t, putString(t, f, "dot"+fs.LinkSuffix, "."))
++	got, err := os.Readlink(filepath.Join(dest, "dir", "link"))
++	require.NoError(t, err)
++	assert.Equal(t, "file.txt", got)
++
++	// Chained link escaping via an existing in-root link is refused
++	// dot -> . so dot/.. is outside the root
++	assert.Error(t, putString(t, f, "chain"+fs.LinkSuffix, "dot/../outside"))
++	assert.Error(t, putString(t, f, "dir/chain"+fs.LinkSuffix, "../dot/.."))
++}
++
++func TestSymlinkParentEscape(t *testing.T) {
++	base := t.TempDir()
++	dest := filepath.Join(base, "dest")
++	outside := filepath.Join(base, "outside")
++	require.NoError(t, os.MkdirAll(outside, 0777))
++	require.NoError(t, os.MkdirAll(dest, 0777))
++	// Pre-planted symlink in the destination pointing outside
++	require.NoError(t, os.Symlink(outside, filepath.Join(dest, "pwn")))
++	f := newLinksFs(t, dest, nil)
++
++	err := putString(t, f, "pwn/sub/authorized_keys", "attacker")
++	require.Error(t, err)
++	_, err = os.Stat(filepath.Join(outside, "sub"))
++	assert.True(t, os.IsNotExist(err))
++
++	// Writing a regular file over an existing symlink replaces the
++	// symlink rather than writing through it.
++	require.NoError(t, os.Symlink(filepath.Join(outside, "victim"), filepath.Join(dest, "file")))
++	require.NoError(t, putString(t, f, "file", "data"))
++	_, err = os.Stat(filepath.Join(outside, "victim"))
++	assert.True(t, os.IsNotExist(err))
++	fi, err := os.Lstat(filepath.Join(dest, "file"))
++	require.NoError(t, err)
++	assert.True(t, fi.Mode().IsRegular())
++}
++
++func TestSymlinkAllowUnsafe(t *testing.T) {
++	base := t.TempDir()
++	dest := filepath.Join(base, "dest")
++	f := newLinksFs(t, dest, configmap.Simple{"links_allow_unsafe": "true"})
++	require.NoError(t, putString(t, f, "abs"+fs.LinkSuffix, "/etc/hostname"))
++	got, err := os.Readlink(filepath.Join(dest, "abs"))
++	require.NoError(t, err)
++	assert.Equal(t, "/etc/hostname", got)
++}

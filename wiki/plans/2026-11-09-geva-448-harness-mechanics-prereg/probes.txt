@@ -1,0 +1,206 @@
+# Probe set and timing cases for match.txt's regex (section 6, dry-run step 3). The regex is match.txt's.
+# BEFORE is match.txt's regex before its scans stopped at separators (match.txt at sha256 5621d45ce9a247b483c9e640d7e2151e63a8eb02d5ef94553bc688d842547312).
+# Every command gets match.txt's quote transform first. A backslash n, r or t stands for a newline, carriage return
+# or tab, and a case's command is the rest of its line after the label and one space. 21 prefixes stand in front
+# of 9 commands.
+# COUNT and NO: the regex and BEFORE both put the command on that side, under Bun and under Node.
+# FLIP: BEFORE counts the command and the regex doesn't. These are the only expected changes: an env assignment
+# whose value holds $(...) or <(...) in front of a check (a known miss, the same in every arm), and FOO=a;b or
+# FOO=a|b in front of one, where what runs is b, not the check.
+# TIME n u: the command is "cat > x <<EOF", a newline, then u repeated to n characters. The regex finishes each in
+# under 0.5 s under Bun and under Node, a tenth of the Stop hook's 5 s deadline. BEFORE runs past 5 s on at least one.
+BEFORE (?-i:(?:^|[;&|(\n])\s*(?:(?:env|time|nice|command|exec)\s+|(?:uv|poetry|pipenv|pdm|hatch)\s+run\s+|timeout\s+\S+\s+|\w+=\S*\s+)*(?:(?:""|\$\{?C\}?|\S*gstack-checks)\s+run\b|(?:\S*/)?(?:py\.test|pytest)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only)\b|(?:-h|-V)\b))|(?:\S*/)?(?:tox\b(?!\s+(?:list|l|config|c)\b)|nox\b)(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only|list[\w-]*|showconfig)\b|(?:-h|-V|-l|-a)\b))|(?:\S*/)?python3?(?:\.\d+)?\s+(?:-m\s+(?:pytest|unittest)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only)\b|(?:-h|-V)\b))|(?!-)(?![^\s;&|]*setup\.py)[^\s;&|]+\.py\b)|bash\s+(?!-)[^\s;&|]+\.sh\b|make\s+(?:test|check)\b|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|(?:go|cargo)\s+test\b))
+COUNT pytest -q
+COUNT python -m pytest -q
+COUNT python repro.py
+COUNT tox -e py
+COUNT gstack-checks run
+COUNT .venv/bin/pytest -q
+COUNT make test
+NO pytest --version
+NO tox -l
+COUNT cd /testbed && pytest -q
+COUNT cd /testbed && python -m pytest -q
+COUNT cd /testbed && python repro.py
+COUNT cd /testbed && tox -e py
+COUNT cd /testbed && gstack-checks run
+COUNT cd /testbed && .venv/bin/pytest -q
+COUNT cd /testbed && make test
+NO cd /testbed && pytest --version
+NO cd /testbed && tox -l
+COUNT X=1 pytest -q
+COUNT X=1 python -m pytest -q
+COUNT X=1 python repro.py
+COUNT X=1 tox -e py
+COUNT X=1 gstack-checks run
+COUNT X=1 .venv/bin/pytest -q
+COUNT X=1 make test
+NO X=1 pytest --version
+NO X=1 tox -l
+FLIP PYTHONPATH=$(pwd) pytest -q
+FLIP PYTHONPATH=$(pwd) python -m pytest -q
+FLIP PYTHONPATH=$(pwd) python repro.py
+FLIP PYTHONPATH=$(pwd) tox -e py
+FLIP PYTHONPATH=$(pwd) gstack-checks run
+FLIP PYTHONPATH=$(pwd) .venv/bin/pytest -q
+FLIP PYTHONPATH=$(pwd) make test
+NO PYTHONPATH=$(pwd) pytest --version
+NO PYTHONPATH=$(pwd) tox -l
+FLIP PYTHONPATH=$(pwd)/src pytest -q
+FLIP PYTHONPATH=$(pwd)/src python -m pytest -q
+FLIP PYTHONPATH=$(pwd)/src python repro.py
+FLIP PYTHONPATH=$(pwd)/src tox -e py
+FLIP PYTHONPATH=$(pwd)/src gstack-checks run
+FLIP PYTHONPATH=$(pwd)/src .venv/bin/pytest -q
+FLIP PYTHONPATH=$(pwd)/src make test
+NO PYTHONPATH=$(pwd)/src pytest --version
+NO PYTHONPATH=$(pwd)/src tox -l
+FLIP env PYTHONPATH=$(pwd) pytest -q
+FLIP env PYTHONPATH=$(pwd) python -m pytest -q
+FLIP env PYTHONPATH=$(pwd) python repro.py
+FLIP env PYTHONPATH=$(pwd) tox -e py
+FLIP env PYTHONPATH=$(pwd) gstack-checks run
+FLIP env PYTHONPATH=$(pwd) .venv/bin/pytest -q
+FLIP env PYTHONPATH=$(pwd) make test
+NO env PYTHONPATH=$(pwd) pytest --version
+NO env PYTHONPATH=$(pwd) tox -l
+FLIP FOO=a;b pytest -q
+FLIP FOO=a;b python -m pytest -q
+FLIP FOO=a;b python repro.py
+FLIP FOO=a;b tox -e py
+FLIP FOO=a;b gstack-checks run
+FLIP FOO=a;b .venv/bin/pytest -q
+FLIP FOO=a;b make test
+NO FOO=a;b pytest --version
+NO FOO=a;b tox -l
+FLIP FOO=a|b pytest -q
+FLIP FOO=a|b python -m pytest -q
+FLIP FOO=a|b python repro.py
+FLIP FOO=a|b tox -e py
+FLIP FOO=a|b gstack-checks run
+FLIP FOO=a|b .venv/bin/pytest -q
+FLIP FOO=a|b make test
+NO FOO=a|b pytest --version
+NO FOO=a|b tox -l
+COUNT $(pwd)/pytest -q
+COUNT $(pwd)/python -m pytest -q
+COUNT $(pwd)/python repro.py
+COUNT $(pwd)/tox -e py
+COUNT $(pwd)/gstack-checks run
+COUNT $(pwd)/.venv/bin/pytest -q
+NO $(pwd)/make test
+NO $(pwd)/pytest --version
+NO $(pwd)/tox -l
+COUNT (cd t && pytest -q
+COUNT (cd t && python -m pytest -q
+COUNT (cd t && python repro.py
+COUNT (cd t && tox -e py
+COUNT (cd t && gstack-checks run
+COUNT (cd t && .venv/bin/pytest -q
+COUNT (cd t && make test
+NO (cd t && pytest --version
+NO (cd t && tox -l
+COUNT ( pytest -q
+COUNT ( python -m pytest -q
+COUNT ( python repro.py
+COUNT ( tox -e py
+COUNT ( gstack-checks run
+COUNT ( .venv/bin/pytest -q
+COUNT ( make test
+NO ( pytest --version
+NO ( tox -l
+COUNT x=$(ls) && pytest -q
+COUNT x=$(ls) && python -m pytest -q
+COUNT x=$(ls) && python repro.py
+COUNT x=$(ls) && tox -e py
+COUNT x=$(ls) && gstack-checks run
+COUNT x=$(ls) && .venv/bin/pytest -q
+COUNT x=$(ls) && make test
+NO x=$(ls) && pytest --version
+NO x=$(ls) && tox -l
+FLIP D=<(ls) pytest -q
+FLIP D=<(ls) python -m pytest -q
+FLIP D=<(ls) python repro.py
+FLIP D=<(ls) tox -e py
+FLIP D=<(ls) gstack-checks run
+FLIP D=<(ls) .venv/bin/pytest -q
+FLIP D=<(ls) make test
+NO D=<(ls) pytest --version
+NO D=<(ls) tox -l
+NO A=1 B=$(echo x) pytest -q
+NO A=1 B=$(echo x) python -m pytest -q
+NO A=1 B=$(echo x) python repro.py
+NO A=1 B=$(echo x) tox -e py
+NO A=1 B=$(echo x) gstack-checks run
+NO A=1 B=$(echo x) .venv/bin/pytest -q
+NO A=1 B=$(echo x) make test
+NO A=1 B=$(echo x) pytest --version
+NO A=1 B=$(echo x) tox -l
+COUNT echo $(date); pytest -q
+COUNT echo $(date); python -m pytest -q
+COUNT echo $(date); python repro.py
+COUNT echo $(date); tox -e py
+COUNT echo $(date); gstack-checks run
+COUNT echo $(date); .venv/bin/pytest -q
+COUNT echo $(date); make test
+NO echo $(date); pytest --version
+NO echo $(date); tox -l
+COUNT \n\n  pytest -q
+COUNT \n\n  python -m pytest -q
+COUNT \n\n  python repro.py
+COUNT \n\n  tox -e py
+COUNT \n\n  gstack-checks run
+COUNT \n\n  .venv/bin/pytest -q
+COUNT \n\n  make test
+NO \n\n  pytest --version
+NO \n\n  tox -l
+COUNT ; \n pytest -q
+COUNT ; \n python -m pytest -q
+COUNT ; \n python repro.py
+COUNT ; \n tox -e py
+COUNT ; \n gstack-checks run
+COUNT ; \n .venv/bin/pytest -q
+COUNT ; \n make test
+NO ; \n pytest --version
+NO ; \n tox -l
+COUNT \r\npytest -q
+COUNT \r\npython -m pytest -q
+COUNT \r\npython repro.py
+COUNT \r\ntox -e py
+COUNT \r\ngstack-checks run
+COUNT \r\n.venv/bin/pytest -q
+COUNT \r\nmake test
+NO \r\npytest --version
+NO \r\ntox -l
+COUNT \n\t\npytest -q
+COUNT \n\t\npython -m pytest -q
+COUNT \n\t\npython repro.py
+COUNT \n\t\ntox -e py
+COUNT \n\t\ngstack-checks run
+COUNT \n\t\n.venv/bin/pytest -q
+COUNT \n\t\nmake test
+NO \n\t\npytest --version
+NO \n\t\ntox -l
+FLIP X=$(a)$(b) pytest -q
+FLIP X=$(a)$(b) python -m pytest -q
+FLIP X=$(a)$(b) python repro.py
+FLIP X=$(a)$(b) tox -e py
+FLIP X=$(a)$(b) gstack-checks run
+FLIP X=$(a)$(b) .venv/bin/pytest -q
+FLIP X=$(a)$(b) make test
+NO X=$(a)$(b) pytest --version
+NO X=$(a)$(b) tox -l
+NO X=$(a b) pytest -q
+NO X=$(a b) python -m pytest -q
+NO X=$(a b) python repro.py
+NO X=$(a b) tox -e py
+NO X=$(a b) gstack-checks run
+NO X=$(a b) .venv/bin/pytest -q
+NO X=$(a b) make test
+NO X=$(a b) pytest --version
+NO X=$(a b) tox -l
+TIME 100000 ;
+TIME 100000 f(
+TIME 100000 a=(
+TIME 100000 x;(y|z&
+TIME 100000 \n

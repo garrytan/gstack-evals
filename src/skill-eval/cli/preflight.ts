@@ -10,6 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statfsSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { ASYNC_QUESTION_MODELS, offersAsyncQuestion } from "../../adapters/codex/driver.ts";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { usd } from "../../runner/ledger/money.ts";
 import { ledgerStatus } from "../../runner/ledger/ledger.ts";
@@ -152,9 +153,10 @@ export function preflight(call: Call, opts: PreflightOptions): PreflightReport {
   const judged = tasks.some((t) => ext[t.id]?.judge !== undefined);
   report.passed.push("contract: " + tasks.length + " tasks (" + tasks.filter((t) => t.safety).length + " safety, " + interactive.length + " interactive)" + (contract.ext ? " with " + show(contract.ext.path) : ""));
 
-  if (call.host === "codex" && interactive.length) {
+  const syncOnly = call.host === "codex" && interactive.length ? call.models.filter((m) => !offersAsyncQuestion(m)) : [];
+  if (syncOnly.length) {
     const others = tasks.filter((t) => !interactive.includes(t.id)).map((t) => t.id);
-    stop("E_INTERACTIVE_HOST", "--host codex runs only non-interactive tasks in v1; these tasks are declared interactive: " + interactive.join(", "), "Use --host claude, or " + (others.length ? "--tasks-only " + others.join(",") : "drop the interactive tasks (no task would be left)") + ". Do not --resume.");
+    stop("E_INTERACTIVE_HOST", "--host codex answers questions only on models the pinned Codex offers request_user_input_async; " + syncOnly.join(", ") + " get only request_user_input, which Codex answers itself, and these tasks are declared interactive: " + interactive.join(", "), "Use --host claude, a Codex model offered request_user_input_async (" + [...ASYNC_QUESTION_MODELS].join(", ") + "), or " + (others.length ? "--tasks-only " + others.join(",") : "drop the interactive tasks (no task would be left)") + ". Do not --resume.");
   }
   const subjects = call.models.map((m) => ({ model: m, provider: providerOf(call.policy, m) }));
   const offHost = subjects.filter((s) => s.provider && !HOST_PROVIDERS[call.host].includes(s.provider));

@@ -1,0 +1,89 @@
+diff --git a/pkg/k8s/network_policy.go b/pkg/k8s/network_policy.go
+index a07c8b18..ffce60b9 100644
+--- a/pkg/k8s/network_policy.go
++++ b/pkg/k8s/network_policy.go
+@@ -109,6 +109,11 @@ func processNamespaceSelector(ns *slim_metav1.LabelSelector) *slim_metav1.LabelS
+ }
+ 
+ func parseNetworkPolicyPeer(clusterName, namespace string, peer *slim_networkingv1.NetworkPolicyPeer) types.Selector {
++	// A peer without any pod or namespace selector (e.g. an ipBlock-only
++	// peer) must not yield a label selector. Otherwise the cluster label
++	// below would instantiate a pod selector which, combined with the
++	// policy namespace, would allow all pods in the local namespace
++	// (GHSA-fm8w-2m5w-9j7r).
+ 	if peer == nil || (peer.PodSelector == nil && peer.NamespaceSelector == nil) {
+ 		return nil
+ 	}
+@@ -132,7 +137,11 @@ func parseNetworkPolicyPeer(clusterName, namespace string, peer *slim_networking
+ 		namespaceSelector := processNamespaceSelector(peer.NamespaceSelector)
+ 		es := api.NewESFromK8sLabelSelector(labels.LabelSourceK8sKeyPrefix, namespaceSelector, podSelector)
+ 		return types.NewLabelSelector(es)
+-	} else if podSelector != nil {
++	} else if peer.PodSelector != nil {
++		// Check the original peer rather than the local copy: the copy may
++		// have been instantiated above solely to carry the cluster label,
++		// which must never turn a selectorless peer into a selector for the
++		// whole local namespace.
+ 		podSelector = parsePodSelector(podSelector, namespace)
+ 		es := api.NewESFromK8sLabelSelector(labels.LabelSourceK8sKeyPrefix, podSelector)
+ 		return types.NewLabelSelector(es)
+@@ -165,13 +174,14 @@ func ParseNetworkPolicy(logger *slog.Logger, clusterName string, np *slim_networ
+ 		if len(iRule.From) > 0 {
+ 			for _, rule := range iRule.From {
+ 				ingress := &types.PolicyEntry{Ingress: true, Tier: types.Normal}
+-				endpointSelector := parseNetworkPolicyPeer(clusterName, namespace, &rule)
++				if rule.NamespaceSelector != nil || rule.PodSelector != nil {
++					endpointSelector := parseNetworkPolicyPeer(clusterName, namespace, &rule)
+ 
+-				if endpointSelector != nil {
+-					ingress.L3 = append(ingress.L3, endpointSelector)
+-				} else {
+-					// No label-based selectors were in NetworkPolicyPeer.
+-					logger.Debug("NetworkPolicyPeer does not have PodSelector or NamespaceSelector", logfields.K8sNetworkPolicyName, np.Name)
++					if endpointSelector != nil {
++						ingress.L3 = append(ingress.L3, endpointSelector)
++					} else {
++						logger.Debug("NetworkPolicyPeer does not have PodSelector or NamespaceSelector", logfields.K8sNetworkPolicyName, np.Name)
++					}
+ 				}
+ 
+ 				// Parse CIDR-based parts of rule.
+diff --git a/pkg/k8s/network_policy_test.go b/pkg/k8s/network_policy_test.go
+index a9c40212..ba012d1c 100644
+--- a/pkg/k8s/network_policy_test.go
++++ b/pkg/k8s/network_policy_test.go
+@@ -1919,3 +1919,34 @@ func TestIPBlockToCIDRRule(t *testing.T) {
+ 		}
+ 	}
+ }
++
++// Regression test for GHSA-fm8w-2m5w-9j7r: an ipBlock-only peer must not
++// produce a label selector (which would allow the whole local namespace)
++// when a non-default cluster name is configured.
++func TestParseNetworkPolicyIPBlockOnlyWithClusterName(t *testing.T) {
++	for _, clusterName := range []string{cmtypes.PolicyAnyCluster, "cluster1"} {
++		np := &slim_networkingv1.NetworkPolicy{
++			ObjectMeta: slim_metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
++			Spec: slim_networkingv1.NetworkPolicySpec{
++				PodSelector: slim_metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-server"}},
++				PolicyTypes: []slim_networkingv1.PolicyType{slim_networkingv1.PolicyTypeIngress, slim_networkingv1.PolicyTypeEgress},
++				Ingress: []slim_networkingv1.NetworkPolicyIngressRule{{
++					From: []slim_networkingv1.NetworkPolicyPeer{{IPBlock: &slim_networkingv1.IPBlock{CIDR: "192.0.2.3/32"}}},
++				}},
++				Egress: []slim_networkingv1.NetworkPolicyEgressRule{{
++					To: []slim_networkingv1.NetworkPolicyPeer{{IPBlock: &slim_networkingv1.IPBlock{CIDR: "192.0.2.3/32"}}},
++				}},
++			},
++		}
++		rules, err := ParseNetworkPolicy(hivetest.Logger(t), clusterName, np)
++		require.NoError(t, err)
++		require.Len(t, rules, 2)
++		expected := policytypes.ToSelectors(api.CIDRRule{Cidr: "192.0.2.3/32", ExceptCIDRs: make([]api.CIDR, 0)})
++		for _, r := range rules {
++			require.Equal(t, expected, r.L3, "cluster %q, ingress=%v", clusterName, r.Ingress)
++		}
++
++		require.Nil(t, parseNetworkPolicyPeer(clusterName, "default",
++			&slim_networkingv1.NetworkPolicyPeer{IPBlock: &slim_networkingv1.IPBlock{CIDR: "192.0.2.3/32"}}))
++	}
++}

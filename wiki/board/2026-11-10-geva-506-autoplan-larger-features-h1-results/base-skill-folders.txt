@@ -1,0 +1,6 @@
+Skill folders in the four flagged tasks' repos at base (each task image's /testbed, network none, 2026-11-10T10:49:39Z). Counts only.
+task          skill folders at base          files in /testbed naming .claude/skills, .agents/skills or .codex/skills
+th22febd06e1  none                           144
+th2ff942c332  none                           33
+thac0edfecd9  .agents/skills (22 files)      16
+thafc1efccdd  none                           4

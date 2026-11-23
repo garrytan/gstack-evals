@@ -1,0 +1,3 @@
+EXPO_ANY openai/gpt-6.1-sol P sessions=30 frozen_loaded_and_checker=30 any_loaded_and_checker=30 fair_at=23
+EXPO_ANY claude-opus-5-5 P sessions=30 frozen_loaded_and_checker=1 any_loaded_and_checker=30 fair_at=23
+EXPO_ANY particle-ai/particle-1 P sessions=30 frozen_loaded_and_checker=15 any_loaded_and_checker=30 fair_at=23

@@ -1,0 +1,32 @@
+diff --git a/pkg/protocol/handshake/message_server_key_exchange.go b/pkg/protocol/handshake/message_server_key_exchange.go
+index 70413f5..4c0ed64 100644
+--- a/pkg/protocol/handshake/message_server_key_exchange.go
++++ b/pkg/protocol/handshake/message_server_key_exchange.go
+@@ -96,6 +96,10 @@ func (m *MessageServerKeyExchange) Unmarshal(data []byte) error { //nolint:cyclo
+ 		return errLengthMismatch
+ 	}
+ 
++	if len(data) == 0 {
++		return errBufferTooSmall
++	}
++
+ 	if _, ok := elliptic.CurveTypes()[elliptic.CurveType(data[0])]; ok {
+ 		m.EllipticCurveType = elliptic.CurveType(data[0])
+ 	} else {
+diff --git a/pkg/protocol/handshake/message_server_key_exchange_test.go b/pkg/protocol/handshake/message_server_key_exchange_test.go
+index 8084103..c3eb71c 100644
+--- a/pkg/protocol/handshake/message_server_key_exchange_test.go
++++ b/pkg/protocol/handshake/message_server_key_exchange_test.go
+@@ -71,3 +71,12 @@ func TestHandshakeMessageServerKeyExchange(t *testing.T) {
+ 		test(rawServerKeyExchange, parsedServerKeyExchange)
+ 	})
+ }
++
++func TestServerKeyExchangeEcdhePskTruncated(t *testing.T) {
++	for _, raw := range [][]byte{{0x00, 0x00}, {0x00, 0x01, 0xff}} {
++		m := &MessageServerKeyExchange{
++			KeyExchangeAlgorithm: types.KeyExchangeAlgorithmPsk | types.KeyExchangeAlgorithmEcdhe,
++		}
++		assert.ErrorIs(t, m.Unmarshal(raw), errBufferTooSmall, "Unmarshal(%x)", raw)
++	}
++}

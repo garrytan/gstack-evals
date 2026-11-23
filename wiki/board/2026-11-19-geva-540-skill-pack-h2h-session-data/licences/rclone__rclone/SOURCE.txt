@@ -1,0 +1,3 @@
+https://github.com/rclone/rclone at 8a84a4859fba732afe89695291e4f589c77e6319
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: COPYING

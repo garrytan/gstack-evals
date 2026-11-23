@@ -1,0 +1,219 @@
+// Operator glue for the ask replay paid stage, kept outside the repo. It only composes the lane's own functions
+// (custody, draw, seal, pilot, score, the label readout) and prints counts, rates and bundle digests.
+// Usage (identity on stdin where it opens custody):
+//   bun ops.ts synth-bundle smoke|synth3 <outdir>
+//   bun ops.ts draw pilot|audit <outdir>            < identity
+//   bun ops.ts pilot                                < identity
+//   bun ops.ts labels                               < identity
+//   bun ops.ts score                                < identity
+import { spawnSync } from "node:child_process";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const W = "<home>/.capy/work/ask-replay/results-branch";
+const HOME = process.env.HOME!;
+const C = join(HOME, ".capy/drive/project-user-gstack-evals-garry-tan/ask-replay/custody");
+const RUN = join(HOME, ".capy/work/ask-replay/run");
+const LOG = join(C, "CUSTODY.md");
+const MAIN = { files: [join(C, "items.jsonl.age")], sums: join(C, "SHA256SUMS") };
+const RECIPIENT = readFileSync(join(HOME, ".capy/drive/project-user-gstack-evals-garry-tan/ask-replay/key/recipient.txt"), "utf8").trim();
+
+const cust = await import(W + "/lanes/ask-replay/custody.ts");
+const cli = await import(W + "/lanes/ask-replay/cli.ts");
+const build = await import(W + "/lanes/ask-replay/build.ts");
+const label = await import(W + "/lanes/ask-replay/label.ts");
+const run = await import(W + "/lanes/ask-replay/run.ts");
+
+const io = { out: (t: string) => console.log(t), err: (t: string) => console.error(t) };
+const note = (t: string) => appendFileSync(LOG, "- " + new Date().toISOString() + " " + t + "\n");
+
+type Group = { files: string[]; sums: string; into?: string };
+const bundle = (dir: string): Group => ({ files: [join(dir, "items.jsonl.age")], sums: join(dir, "SHA256SUMS") });
+const replies = (out: string, into: string): Group | null => {
+  const d = join(RUN, out, "replies");
+  if (!existsSync(join(d, "SHA256SUMS"))) return null;
+  return { files: readdirSync(d).filter((f) => f.endsWith(".age")).map((f) => join(d, f)), sums: join(d, "SHA256SUMS"), into };
+};
+
+/** Opens each group in its own custody() on /dev/shm, nested, and copies reply records into merged dirs under the outermost opening. */
+async function openAll(identity: Buffer, groups: Group[], cb: (dirs: string[], merged: (name: string) => string) => Promise<number>): Promise<number> {
+  const dirs: string[] = [];
+  let root = "";
+  const merged = (name: string) => {
+    const p = join(root, "merged-" + name);
+    mkdirSync(p, { recursive: true, mode: 0o700 });
+    return p;
+  };
+  let code = 0;
+  const step = async (i: number): Promise<void> => {
+    if (i === groups.length) {
+      code = await cb(dirs, merged);
+      return;
+    }
+    const g = groups[i]!;
+    await cust.custody({ files: g.files, sums: g.sums, log: LOG, identity }, async (dir: string) => {
+      if (i === 0) root = dir;
+      if (g.into) {
+        const m = merged(g.into);
+        for (const f of readdirSync(dir)) if (f.endsWith(".ask.json")) copyFileSync(join(dir, f), join(m, f));
+      }
+      dirs.push(dir);
+      await step(i + 1);
+    });
+  };
+  await step(0);
+  return code;
+}
+
+const [cmd, ...rest] = process.argv.slice(2);
+let exit = 0;
+if (cmd === "synth-bundle") {
+  const [kind, outDir] = rest as [string, string];
+  const { generate } = await import(W + "/lanes/ask-replay/synthetic/generator.ts");
+  const smoke = cli.smokeItems(generate().items);
+  const items = kind === "smoke" ? smoke : kind === "synth3" ? ["DECISION", "DUPLICATE", "PERMISSION_FOR_DEFAULT"].map((l) => smoke.find((i: { label: string }) => i.label === l)) : null;
+  if (!items) throw new Error("kind is smoke or synth3");
+  const jsonl = build.toJsonl(items);
+  mkdirSync(outDir, { recursive: true });
+  const out = join(outDir, "items.jsonl.age");
+  const r = spawnSync(cust.AGE, ["-r", RECIPIENT, "-o", out], { input: jsonl });
+  if (r.status !== 0) throw new Error("age exited " + r.status);
+  writeFileSync(join(outDir, "SHA256SUMS"), cust.sha256(readFileSync(out)) + "  items.jsonl.age\n");
+  const per: Record<string, number> = {};
+  for (const i of items) per[i.label] = (per[i.label] ?? 0) + 1;
+  console.log(JSON.stringify({ kind, items: items.length, per_class: per, plain_sha256: cust.sha256(jsonl) }));
+} else if (cmd === "draw") {
+  const [kind, outDir] = rest as [string, string];
+  const identity = cust.readIdentity();
+  note("operator: opening the main bundle for the " + kind + " draw; the drawn set is sealed to the recipient before teardown");
+  exit = await openAll(identity, [MAIN], async ([dir]) => {
+    const d = join(dir!, "draw");
+    mkdirSync(d, { mode: 0o700 });
+    const plain = join(d, "items.jsonl");
+    const code = await cli.main(["draw", "--kind", kind, "--items", join(dir!, "items.jsonl"), "--out", plain, "--seed-log", LOG], io);
+    if (code !== 0) return code;
+    const s = cust.seal(plain, RECIPIENT);
+    mkdirSync(outDir, { recursive: true });
+    copyFileSync(s.path, join(outDir, "items.jsonl.age"));
+    writeFileSync(join(outDir, "SHA256SUMS"), s.sha256 + "  items.jsonl.age\n");
+    console.log(JSON.stringify({ sealed_bundle_sha256: s.sha256 }));
+    return 0;
+  });
+} else if (cmd === "pilot") {
+  const identity = cust.readIdentity();
+  note("operator: opening the pilot bundle and the pilot replies for the pilot readout (numbers only)");
+  const groups = [bundle(join(RUN, "bundles/pilot")), replies("i2-opus", "pilot"), replies("i2-sol", "pilot")].filter(Boolean) as Group[];
+  exit = await openAll(identity, groups, async ([items], merged) => cli.main(["pilot", "--items", join(items!, "items.jsonl"), "--replies", merged("pilot")], io));
+} else if (cmd === "labels") {
+  const identity = cust.readIdentity();
+  note("operator: opening the main bundle and the label records for the label readout (numbers only)");
+  const groups = [MAIN, replies("i3-audit-opus", "labels"), replies("i3-audit-astra", "labels"), replies("i4-opus", "labels"), replies("i4-astra", "labels"), replies("i5-link-opus", "labels")].filter(Boolean) as Group[];
+  exit = await openAll(identity, groups, async ([main], merged) => {
+    const items = build.readItems(join(main!, "items.jsonl"));
+    const r = label.labelReadout(items, run.finalRecords(cust.readRecords(merged("labels"))));
+    console.log(JSON.stringify(r.summary, null, 2));
+    return 0;
+  });
+} else if (cmd === "score") {
+  const identity = cust.readIdentity();
+  note("operator: opening the main and pilot bundles, the main and pilot replies and the label records for score (numbers only)");
+  const groups = [MAIN, bundle(join(RUN, "bundles/pilot")), replies("i6-opus", "replies"), replies("i7-sol", "replies"), replies("i8-particle", "replies"), replies("i2-opus", "pilot"), replies("i2-sol", "pilot"), replies("i3-audit-opus", "labels"), replies("i3-audit-astra", "labels"), replies("i4-opus", "labels"), replies("i4-astra", "labels"), replies("i5-link-opus", "labels")].filter(Boolean) as Group[];
+  exit = await openAll(identity, groups, async ([main, pilot], merged) => cli.main(["score", "--items", join(main!, "items.jsonl"), "--replies", merged("replies"), "--pilot-items", join(pilot!, "items.jsonl"), "--pilot-replies", merged("pilot"), "--labels", merged("labels")], io));
+} else if (cmd === "sizes") {
+  const identity = cust.readIdentity();
+  note("operator: opening the pilot and audit bundles to size prompts (characters / 4, numbers only)");
+  const prompt = await import(W + "/lanes/ask-replay/prompt.ts");
+  const gstack = prompt.loadGstack(join(HOME, ".local/share/gstack"));
+  exit = await openAll(identity, [bundle(join(RUN, "bundles/pilot")), bundle(join(RUN, "bundles/audit")), MAIN], async ([p, a, m]) => {
+    const stat = (xs: number[]) => ({ n: xs.length, mean: Math.round(xs.reduce((s, x) => s + x, 0) / xs.length), max: Math.max(...xs) });
+    const est = (o: { system: string; user: string }) => Math.ceil((o.system.length + o.user.length) / 4);
+    const pilot = build.readItems(join(p!, "items.jsonl"));
+    const audit = build.readItems(join(a!, "items.jsonl"));
+    const main = build.readItems(join(m!, "items.jsonl"));
+    const dups = main.filter((i: { label: string }) => i.label === "DUPLICATE");
+    const arms = Object.fromEntries(["a", "b", "c", "d"].map((arm) => [arm, { pilot: stat(pilot.map((i: unknown) => est(prompt.buildPrompt(i, arm, gstack)))), main: stat(main.map((i: unknown) => est(prompt.buildPrompt(i, arm, gstack)))) }]));
+    console.log(JSON.stringify({ arms, label_audit: stat(audit.map((i: unknown) => est(label.labelPrompt(i)))), label_link: stat(dups.map((i: unknown) => est(label.labelPrompt(i)))), label_synth3_note: "see cost.ts" }));
+    return 0;
+  });
+} else if (cmd === "project-labels") {
+  const identity = cust.readIdentity();
+  note("operator: opening the main and audit bundles to project the I4 and I5 label costs from the I3 ledger (numbers only)");
+  const { Database } = await import("bun:sqlite");
+  const db = new Database(join(RUN, "ledger.sqlite"), { readonly: true });
+  const rows = (db.query("SELECT cell, spent_micros, usage FROM reservations").all() as { cell: string; spent_micros: number | null; usage: string | null }[]).map((r) => ({ c: JSON.parse(r.cell), spent: r.spent_micros ?? 0, u: r.usage ? JSON.parse(r.usage) : {} })).filter((r) => r.c.run_id === "ask-i3-label-audit");
+  exit = await openAll(identity, [MAIN, bundle(join(RUN, "bundles/audit"))], async ([m, a]) => {
+    const main = build.readItems(join(m!, "items.jsonl"));
+    const audited = new Set(build.readItems(join(a!, "items.jsonl")).map((i: { item: string }) => i.item));
+    const est = new Map(main.map((i: any) => [i.item, Math.ceil((label.labelPrompt(i).system.length + label.labelPrompt(i).user.length) / 4)]));
+    const cls = new Map(main.map((i: any) => [i.item, i.label as string]));
+    const rate: Record<string, { in: number; read: number; write: number; out: number }> = { "claude-opus-5-5": { in: 4, read: 0.2, write: 5, out: 20 }, "gpt-6-astra": { in: 10, read: 1, write: 12.5, out: 50 } };
+    const per: Record<string, any> = {};
+    for (const r of rows) {
+      const id = String(r.c.task).split(".label-")[0]!;
+      if (!audited.has(id)) continue;
+      const k = r.c.model;
+      const p = (per[k] ??= { calls: 0, spent: 0, est: 0, write: 0, read: 0, out: 0, byClass: {} as Record<string, { n: number; out: number; spent: number }> });
+      const out = (r.u.output ?? 0) + (r.u.reasoning ?? 0);
+      p.calls++; p.spent += r.spent; p.est += est.get(id)!; p.write += (r.u.cache_write ?? 0) + (r.u.input ?? 0); p.read += r.u.cache_read ?? 0; p.out += out;
+      const c = (p.byClass[cls.get(id)!] ??= { n: 0, out: 0, spent: 0 });
+      c.n++; c.out += out; c.spent += r.spent;
+    }
+    const project = (model: string, items: string[], outOf: (id: string) => number) => {
+      const p = per[model]; const R = rate[model]!;
+      const ratio = p.write / p.est; const readPer = p.read / p.calls;
+      return items.reduce((s, id) => s + est.get(id)! * ratio * R.write / 1e6 + readPer * R.read / 1e6 + outOf(id) * R.out / 1e6, 0);
+    };
+    const outClass = (model: string) => (id: string) => { const c = per[model].byClass[cls.get(id)!]; return c ? c.out / c.n : per[model].out / per[model].calls; };
+    const rest = main.filter((i: any) => !audited.has(i.item)).map((i: any) => i.item);
+    const dups = main.filter((i: any) => i.label === "DUPLICATE").map((i: any) => i.item);
+    const mean = (ids: string[]) => Math.round(ids.reduce((s, id) => s + est.get(id)!, 0) / ids.length);
+    console.log(JSON.stringify({
+      measured: Object.fromEntries(Object.entries(per).map(([k, p]: [string, any]) => [k, { calls: p.calls, spent_usd: +(p.spent / 1e6).toFixed(4), per_call_usd: +(p.spent / p.calls / 1e6).toFixed(4), real_input_per_est_token: +(p.write / p.est).toFixed(3), mean_out: Math.round(p.out / p.calls), out_by_class: Object.fromEntries(Object.entries(p.byClass).map(([c, v]: [string, any]) => [c, { n: v.n, mean_out: Math.round(v.out / v.n), per_call_usd: +(v.spent / v.n / 1e6).toFixed(4) }])) }])),
+      est_label_prompt_mean: { audited: mean([...audited]), contingency_247: mean(rest), duplicates_121: mean(dups) },
+      i4_projection_usd: { items: rest.length, opus: +project("claude-opus-5-5", rest, outClass("claude-opus-5-5")).toFixed(2), astra: +project("gpt-6-astra", rest, outClass("gpt-6-astra")).toFixed(2) },
+      i5_projection_usd: { items: dups.length, opus: +project("claude-opus-5-5", dups, outClass("claude-opus-5-5")).toFixed(2) },
+    }, null, 1));
+    return 0;
+  });
+} else if (cmd === "confusion") {
+  const identity = cust.readIdentity();
+  note("operator: opening the main bundle and the I3 label records for the audit-by-labeller class counts (numbers only)");
+  const groups = [MAIN, replies("i3-audit-opus", "labels"), replies("i3-audit-astra", "labels")].filter(Boolean) as Group[];
+  exit = await openAll(identity, groups, async ([main], merged) => {
+    const cls = new Map(build.readItems(join(main!, "items.jsonl")).map((i: any) => [i.item, i.label]));
+    const recs = run.finalRecords(cust.readRecords(merged("labels")));
+    const t: Record<string, Record<string, number>> = {};
+    const pair: Record<string, number> = {};
+    const byItem = new Map<string, Record<string, string>>();
+    for (const r of recs as any[]) {
+      const id = r.sample.item; const m = r.sample.model; const k = m + " audit=" + cls.get(id) + " -> " + (r.label?.class ?? "none");
+      (t[m] ??= {})[k] = ((t[m] ??= {})[k] ?? 0) + 1;
+      byItem.set(id, { ...byItem.get(id), [m]: r.label?.class });
+    }
+    for (const [id, l] of byItem) { const k = "audit=" + cls.get(id) + " opus=" + l.opus + " astra=" + l.astra; pair[k] = (pair[k] ?? 0) + 1; }
+    console.log(JSON.stringify({ by_labeller: t, pairs: pair }, null, 1));
+    return 0;
+  });
+} else if (cmd === "contingency") {
+  const [model] = rest as [string];
+  const identity = cust.readIdentity();
+  note("operator: opening the sealed audit draw so label --kind contingency (" + model + ") can read its item ids (--audit-draw); the shard runs inside this opening");
+  exit = await openAll(identity, [bundle(join(RUN, "bundles/audit"))], async ([a]) => {
+    const r = spawnSync(join(RUN, "shard.sh"), ["i4-" + model, "label", "--kind", "contingency", "--model", model, "--bundle", MAIN.files[0]!, "--sums", MAIN.sums, "--out", join(RUN, "i4-" + model), "--audit-draw", join(a!, "items.jsonl")], { encoding: "utf8", timeout: 3_400_000 });
+    console.log(r.stdout);
+    return r.status ?? 1;
+  });
+} else if (cmd === "check") {
+  const identity = cust.readIdentity();
+  note("operator: opening the labeller schema check records (synthetic items) to read their field types");
+  const groups = [replies("i3-check-opus", "check"), replies("i3-check-astra", "check")].filter(Boolean) as Group[];
+  exit = await openAll(identity, groups, async (_d, merged) => {
+    const recs = run.finalRecords(cust.readRecords(merged("check")));
+    console.log(JSON.stringify(recs.map((r: any) => ({ model: r.sample.model, class: r.label?.class ?? null, repeats_of: r.label ? (r.label.repeats_of === null ? "null" : typeof r.label.repeats_of) : "no label", judgements: r.label?.answer_judgement?.length ?? null, capped: r.capped }))));
+    return 0;
+  });
+} else {
+  console.error("usage: see the header");
+  exit = 2;
+}
+process.exit(exit);

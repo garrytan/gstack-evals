@@ -1,0 +1,69 @@
+diff --git a/docs/middleware/proxy.md b/docs/middleware/proxy.md
+index ae90b2a..53a120d 100644
+--- a/docs/middleware/proxy.md
++++ b/docs/middleware/proxy.md
+@@ -126,7 +126,7 @@ app.Use(proxy.Balancer(proxy.Config{
+         "http://localhost:3003",
+     },
+     ModifyRequest: func(c fiber.Ctx) error {
+-        c.Request().Header.Add("X-Real-IP", c.IP())
++        c.Request().Header.Set("X-Real-IP", c.IP())
+         return nil
+     },
+     ModifyResponse: func(c fiber.Ctx) error {
+diff --git a/middleware/proxy/proxy.go b/middleware/proxy/proxy.go
+index 2883ff5..57733a5 100644
+--- a/middleware/proxy/proxy.go
++++ b/middleware/proxy/proxy.go
+@@ -279,7 +279,7 @@ func BalancerForward(servers []string, clients ...*fasthttp.Client) fiber.Handle
+ 		if !strings.HasPrefix(server, "http") {
+ 			server = "http://" + server
+ 		}
+-		c.Request().Header.Add("X-Real-IP", c.IP())
++		c.Request().Header.Set("X-Real-IP", c.IP())
+ 		return Do(c, server+c.OriginalURL(), clients...)
+ 	}
+ }
+diff --git a/middleware/proxy/proxy_test.go b/middleware/proxy/proxy_test.go
+index dfca5e4..e5fa966 100644
+--- a/middleware/proxy/proxy_test.go
++++ b/middleware/proxy/proxy_test.go
+@@ -985,6 +985,38 @@ func Test_Proxy_Balancer_Forward_Local(t *testing.T) {
+ 	require.Equal(t, "forwarded", string(b))
+ }
+ 
++// go test -run Test_Proxy_Balancer_Forward_Overrides_XRealIP
++func Test_Proxy_Balancer_Forward_Overrides_XRealIP(t *testing.T) {
++	t.Parallel()
++
++	app := fiber.New()
++
++	_, addr := createProxyTestServerIPv4(t, func(c fiber.Ctx) error {
++		var values []string
++		for _, v := range c.Request().Header.PeekAll("X-Real-IP") {
++			values = append(values, string(v))
++		}
++		return c.SendString(strings.Join(values, ","))
++	})
++
++	app.Use(BalancerForward([]string{addr}))
++
++	req := httptest.NewRequest(fiber.MethodGet, "/", http.NoBody)
++	req.Header.Set("X-Real-IP", "10.0.0.1")
++
++	resp, err := app.Test(req)
++	require.NoError(t, err)
++	require.Equal(t, fiber.StatusOK, resp.StatusCode)
++
++	b, err := io.ReadAll(resp.Body)
++	require.NoError(t, err)
++
++	got := string(b)
++	require.NotContains(t, got, "10.0.0.1")
++	require.NotContains(t, got, ",")
++	require.Equal(t, "0.0.0.0", got)
++}
++
+ func Test_Proxy_Immutable(t *testing.T) {
+ 	t.Parallel()
+ 

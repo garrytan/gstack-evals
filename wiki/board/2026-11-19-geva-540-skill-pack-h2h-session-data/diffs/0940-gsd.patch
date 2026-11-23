@@ -1,0 +1,81 @@
+diff --git a/cipher/cbc_hmac.go b/cipher/cbc_hmac.go
+index 00e794d..ca9b71c 100644
+--- a/cipher/cbc_hmac.go
++++ b/cipher/cbc_hmac.go
+@@ -106,6 +106,10 @@ func (ctx *cbcAEAD) Open(dst, nonce, ciphertext, data []byte) ([]byte, error) {
+ 		return nil, errors.New("go-jose/go-jose: invalid ciphertext (too short)")
+ 	}
+ 
++	if len(nonce) != ctx.blockCipher.BlockSize() {
++		return nil, errors.New("go-jose/go-jose: invalid nonce (wrong length)")
++	}
++
+ 	offset := len(ciphertext) - ctx.authtagBytes
+ 	expectedTag := ctx.computeAuthTag(data, nonce, ciphertext[:offset])
+ 	match := subtle.ConstantTimeCompare(expectedTag, ciphertext[offset:])
+@@ -118,7 +122,7 @@ func (ctx *cbcAEAD) Open(dst, nonce, ciphertext, data []byte) ([]byte, error) {
+ 	// Make copy of ciphertext buffer, don't want to modify in place
+ 	buffer := append([]byte{}, ciphertext[:offset]...)
+ 
+-	if len(buffer)%ctx.blockCipher.BlockSize() > 0 {
++	if len(buffer) == 0 || len(buffer)%ctx.blockCipher.BlockSize() > 0 {
+ 		return nil, errors.New("go-jose/go-jose: invalid ciphertext (invalid length)")
+ 	}
+ 
+@@ -178,7 +182,7 @@ func padBuffer(buffer []byte, blockSize int) []byte {
+ 
+ // Remove padding
+ func unpadBuffer(buffer []byte, blockSize int) ([]byte, error) {
+-	if len(buffer)%blockSize != 0 {
++	if len(buffer) == 0 || len(buffer)%blockSize != 0 {
+ 		return nil, errors.New("go-jose/go-jose: invalid padding")
+ 	}
+ 
+diff --git a/cipher/cbc_hmac_test.go b/cipher/cbc_hmac_test.go
+index 88b2145..688485d 100644
+--- a/cipher/cbc_hmac_test.go
++++ b/cipher/cbc_hmac_test.go
+@@ -528,3 +528,43 @@ func BenchmarkDecryptAES256_CBCHMAC_1MB(b *testing.B) {
+ func BenchmarkDecryptAES256_CBCHMAC_64MB(b *testing.B) {
+ 	benchDecryptCBCHMAC(b, 32, 67108864)
+ }
++
++func TestEmptyCiphertextWithValidTag(t *testing.T) {
++	key := make([]byte, 32)
++	nonce := make([]byte, 16)
++	if _, err := io.ReadFull(rand.Reader, key); err != nil {
++		t.Fatal(err)
++	}
++	aead, err := NewCBCHMAC(key, aes.NewCipher)
++	if err != nil {
++		t.Fatal(err)
++	}
++	ctx := aead.(*cbcAEAD)
++
++	// Ciphertext consisting solely of a valid auth tag over empty content.
++	ct := ctx.computeAuthTag(nil, nonce, nil)
++	if _, err := aead.Open(nil, nonce, ct, nil); err == nil {
++		t.Error("open on empty ciphertext should fail")
++	}
++
++	if _, err := unpadBuffer([]byte{}, 16); err == nil {
++		t.Error("unpad of empty buffer should fail")
++	}
++}
++
++func TestInvalidNonceLengthOpen(t *testing.T) {
++	key := make([]byte, 32)
++	aead, err := NewCBCHMAC(key, aes.NewCipher)
++	if err != nil {
++		t.Fatal(err)
++	}
++	ctx := aead.(*cbcAEAD)
++
++	for _, n := range []int{0, 1, 15, 17, 32} {
++		nonce := make([]byte, n)
++		ct := append(make([]byte, 16), ctx.computeAuthTag(nil, nonce, make([]byte, 16))...)
++		if _, err := aead.Open(nil, nonce, ct, nil); err == nil {
++			t.Errorf("open with %d-byte nonce should fail", n)
++		}
++	}
++}

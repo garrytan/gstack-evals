@@ -1,0 +1,41 @@
+diff --git a/internal/tui/components/detailedit/controller.go b/internal/tui/components/detailedit/controller.go
+index d86fec5..88745a1 100644
+--- a/internal/tui/components/detailedit/controller.go
++++ b/internal/tui/components/detailedit/controller.go
+@@ -320,6 +320,13 @@ func (c Controller) Update(msg tea.Msg) (Controller, tea.Cmd, *Submit, bool) {
+ 	}
+ 
+ 	switch msg.(type) {
++	case tea.PasteMsg:
++		if !c.Active() {
++			return c, nil, nil, false
++		}
++		c.inputBox, taCmd = c.inputBox.Update(msg)
++		return c, taCmd, nil, true
++
+ 	case spinner.TickMsg, popupautocomplete.ClearFetchStatusMsg:
+ 		var acCmd tea.Cmd
+ 		*c.ac, acCmd = c.ac.Update(msg)
+diff --git a/internal/tui/components/detailedit/controller_test.go b/internal/tui/components/detailedit/controller_test.go
+index cafc2b7..b5a0722 100644
+--- a/internal/tui/components/detailedit/controller_test.go
++++ b/internal/tui/components/detailedit/controller_test.go
+@@ -338,3 +338,18 @@ func TestUnassignModeDoesNotUseAutocomplete(t *testing.T) {
+ 
+ 	require.False(t, c.usesAutocomplete())
+ }
++
++func TestPasteInsertsTextIntoInputBox(t *testing.T) {
++	c := newTestController(t)
++	c, _ = c.Enter(EnterOptions{
++		Mode:       ModeComment,
++		Prompt:     "comment",
++		Repo:       testRepo(),
++		EnterFetch: FetchNone,
++	})
++
++	c, _, _, handled := c.Update(tea.PasteMsg{Content: "this should paste into gh-dash"})
++
++	require.True(t, handled)
++	require.Equal(t, "this should paste into gh-dash", c.inputBox.Value())
++}

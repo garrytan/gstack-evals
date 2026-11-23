@@ -1,0 +1,7 @@
+#!/bin/bash
+# GEVA-501: after lbl-vm6.sh ends, retry missing labels for batches 6, 5 and 4, then clear task images.
+set -uo pipefail
+until grep -q VM6-LABELS-DONE ~/lbl/logs/all3.log 2>/dev/null; do sleep 60; done
+for K in 6 5 4; do sg docker -c "bash ~/vms5/lbl-retry.sh $K"; done
+sg docker -c "bash ~/vms4/clean-all.sh" > ~/lbl/logs/clean-retry.log 2>&1; tail -1 ~/lbl/logs/clean-retry.log
+echo "== $(date -u +%T) VM6-RETRY-DONE"

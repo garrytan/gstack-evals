@@ -1,0 +1,181 @@
+diff --git a/src/execution/physical_plan/plan_window.cpp b/src/execution/physical_plan/plan_window.cpp
+index a85dbcb..1056232 100644
+--- a/src/execution/physical_plan/plan_window.cpp
++++ b/src/execution/physical_plan/plan_window.cpp
+@@ -113,8 +113,9 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
+ 			}
+ 
+ 			// CSE Elimination: Search for a previous match
++			// Volatile expressions (e.g. using random() or uuid()) must be evaluated independently
+ 			bool cse = false;
+-			for (idx_t i = 0; i < matching.size(); ++i) {
++			for (idx_t i = 0; i < matching.size() && !wexpr.IsVolatile(); ++i) {
+ 				const auto match_idx = matching[i];
+ 				auto &match_expr = op.expressions[match_idx]->Cast<BoundWindowExpression>();
+ 				if (wexpr.Equals(match_expr)) {
+diff --git a/src/optimizer/common_aggregate_optimizer.cpp b/src/optimizer/common_aggregate_optimizer.cpp
+index d351ccb..71a557c 100644
+--- a/src/optimizer/common_aggregate_optimizer.cpp
++++ b/src/optimizer/common_aggregate_optimizer.cpp
+@@ -50,6 +50,15 @@ void CommonAggregateOptimizer::ExtractCommonAggregates(LogicalAggregate &aggr) {
+ 	for (idx_t i = 0; i < aggr.expressions.size(); i++) {
+ 		ProjectionIndex original_index(i + total_erased);
+ 		ProjectionIndex new_index(i);
++		if (aggr.expressions[i]->IsVolatile()) {
++			// volatile aggregates must be evaluated independently: never merge them
++			if (new_index != original_index) {
++				ColumnBinding original_binding(aggr.aggregate_index, original_index);
++				ColumnBinding new_binding(aggr.aggregate_index, new_index);
++				aggregate_map[original_binding] = new_binding;
++			}
++			continue;
++		}
+ 		auto entry = aggregate_remap.find(*aggr.expressions[i]);
+ 		if (entry == aggregate_remap.end()) {
+ 			// aggregate does not exist yet: add it to the map
+diff --git a/src/optimizer/window_self_join.cpp b/src/optimizer/window_self_join.cpp
+index 087ec13..b62767a 100644
+--- a/src/optimizer/window_self_join.cpp
++++ b/src/optimizer/window_self_join.cpp
+@@ -105,6 +105,12 @@ bool WindowSelfJoinOptimizer::CanOptimize(const BoundWindowExpression &w_expr,
+ 	if (w_expr.Partitions().empty()) {
+ 		return false;
+ 	}
++	// the partition keys are evaluated on both sides of the join - this is only correct if they are not volatile
++	for (auto &part : w_expr.Partitions()) {
++		if (part->IsVolatile()) {
++			return false;
++		}
++	}
+ 	if (w_expr.WindowExclude() != WindowExcludeMode::NO_OTHER) {
+ 		return false;
+ 	}
+diff --git a/src/planner/binder/expression/bind_aggregate_expression.cpp b/src/planner/binder/expression/bind_aggregate_expression.cpp
+index 55c92b7..56aa8b9 100644
+--- a/src/planner/binder/expression/bind_aggregate_expression.cpp
++++ b/src/planner/binder/expression/bind_aggregate_expression.cpp
+@@ -331,12 +331,16 @@ BindResult BaseSelectBinder::BindAggregate(FunctionExpression &aggr, AggregateFu
+ 
+ 	// check for all the aggregates if this aggregate already exists
+ 	ProjectionIndex aggr_index;
+-	auto entry = node.aggregate_map.find(*aggregate);
++	// volatile aggregates (e.g. sum(random())) must be evaluated independently - never deduplicate them
++	const bool is_volatile = aggregate->IsVolatile();
++	auto entry = is_volatile ? node.aggregate_map.end() : node.aggregate_map.find(*aggregate);
+ 	if (entry == node.aggregate_map.end()) {
+ 		// new aggregate: insert into aggregate list
+ 		auto &aggr_ref = *aggregate;
+ 		aggr_index = ColumnBinding::PushExpression(node.aggregates, std::move(aggregate));
+-		node.aggregate_map[aggr_ref] = aggr_index;
++		if (!is_volatile) {
++			node.aggregate_map[aggr_ref] = aggr_index;
++		}
+ 	} else {
+ 		// duplicate aggregate: simplify refer to this aggregate
+ 		aggr_index = entry->second;
+diff --git a/src/planner/expression/bound_window_expression.cpp b/src/planner/expression/bound_window_expression.cpp
+index c4f2ec6..15f4df6 100644
+--- a/src/planner/expression/bound_window_expression.cpp
++++ b/src/planner/expression/bound_window_expression.cpp
+@@ -96,6 +96,15 @@ bool BoundWindowExpression::PartitionsAreEquivalent(const BoundWindowExpression
+ 	if (partitions.size() != other.partitions.size()) {
+ 		return false;
+ 	}
++	if (this == &other) {
++		return true;
++	}
++	// volatile partition keys (e.g. PARTITION BY random()) must be evaluated independently per window
++	for (const auto &partition : partitions) {
++		if (partition->IsVolatile()) {
++			return false;
++		}
++	}
+ 	// TODO: Should partitions be an expression_set_t?
+ 	expression_set_t others;
+ 	for (const auto &partition : other.partitions) {
+@@ -114,7 +123,8 @@ idx_t BoundWindowExpression::GetSharedOrders(const vector<BoundOrderByNode> &lhs
+ 
+ 	idx_t result = 0;
+ 	for (; result < overlap; ++result) {
+-		if (!lhs.at(result).Equals(rhs.at(result))) {
++		// volatile sort keys (e.g. ORDER BY random()) must be evaluated independently - they are never shared
++		if (lhs.at(result).expression->IsVolatile() || !lhs.at(result).Equals(rhs.at(result))) {
+ 			return 0;
+ 		}
+ 	}
+diff --git a/test/sql/window/test_volatile_cse.test b/test/sql/window/test_volatile_cse.test
+new file mode 100644
+index 0000000..42ea856
+--- /dev/null
++++ b/test/sql/window/test_volatile_cse.test
+@@ -0,0 +1,70 @@
++# name: test/sql/window/test_volatile_cse.test
++# description: Identical volatile aggregate/window expressions must be evaluated independently
++# group: [window]
++
++statement ok
++PRAGMA enable_verification
++
++# window aggregate over a partition (rewritten into aggregate + self join)
++query I
++SELECT bool_or(id_a = id_b) FROM (
++	SELECT g,
++		any_value(uuid()::varchar) OVER (PARTITION BY g) AS id_a,
++		any_value(uuid()::varchar) OVER (PARTITION BY g) AS id_b
++	FROM (VALUES (1),(1),(2),(2)) t(g)
++);
++----
++false
++
++query I
++SELECT bool_or(a = b) FROM (
++	SELECT any_value(random()) OVER (PARTITION BY range % 10) a,
++		any_value(random()) OVER (PARTITION BY range % 10) b
++	FROM range(1000)
++);
++----
++false
++
++# plain aggregates
++query I
++SELECT any_value(uuid()::varchar) = any_value(uuid()::varchar) FROM range(3);
++----
++false
++
++query I
++SELECT sum(random()) = sum(random()) FROM range(100);
++----
++false
++
++query I
++SELECT bool_or(a = b) FROM (
++	SELECT g, sum(random()) a, sum(random()) b FROM (SELECT range % 10 g FROM range(1000)) GROUP BY g
++);
++----
++false
++
++# window with volatile ORDER BY
++query I
++SELECT bool_or(r1 <> r2) FROM (
++	SELECT row_number() OVER (ORDER BY random()) r1, row_number() OVER (ORDER BY random()) r2
++	FROM range(1000)
++);
++----
++true
++
++# window with volatile PARTITION BY
++query I
++SELECT bool_or(a <> b) FROM (
++	SELECT sum(1) OVER (PARTITION BY (random() * 10)::INT) a, sum(1) OVER (PARTITION BY (random() * 10)::INT) b
++	FROM range(1000)
++);
++----
++true
++
++# non-volatile duplicates are still deduplicated and identical
++query I
++SELECT bool_and(a = b) FROM (
++	SELECT sum(range) OVER (PARTITION BY range % 3) a, sum(range) OVER (PARTITION BY range % 3) b FROM range(30)
++);
++----
++true

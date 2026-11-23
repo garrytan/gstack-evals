@@ -1,0 +1,15 @@
+#!/bin/bash
+# GEVA-501: VM6 label driver, second form. After the first driver finishes batch 6 (clean-6.log ends CLEAN DONE), stop it
+# by pid and run batches 5 and 4 with labelpass2.sh (labels plus pristine listings), clearing task images after each.
+# VM7 takes batches 3, 2 and 1 (lbl-vm7.sh).
+set -uo pipefail
+OLD=$1
+until grep -q "CLEAN DONE" ~/lbl/logs/clean-6.log 2>/dev/null; do sleep 30; done
+kill $OLD 2>/dev/null; echo "== $(date -u +%T) stopped driver $OLD"
+for K in 5 4; do
+  echo "== $(date -u +%T) batch $K"
+  sg docker -c "bash ~/vms4/labelpass2.sh $K 6" > ~/lbl/logs/pass-$K.log 2>&1
+  grep -c FAILED ~/lbl/logs/pass-$K.log; tail -2 ~/lbl/logs/pass-$K.log
+  sg docker -c "bash ~/vms4/clean-all.sh" > ~/lbl/logs/clean-$K.log 2>&1; tail -1 ~/lbl/logs/clean-$K.log
+done
+echo "== $(date -u +%T) VM6-LABELS-DONE"

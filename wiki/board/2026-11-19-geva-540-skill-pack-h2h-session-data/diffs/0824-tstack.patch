@@ -1,0 +1,47 @@
+diff --git a/src/core/event/index.js b/src/core/event/index.js
+index f1a5571..a8dedd5 100644
+--- a/src/core/event/index.js
++++ b/src/core/event/index.js
+@@ -407,8 +407,8 @@ export function Events(Base) {
+       };
+       const { query } = this.route;
+       const focusEl = query.id
+-        ? // Heading ID
+-          dom.find(`#${query.id}`)
++        ? // Heading ID (prefer main content over coverpage duplicates)
++          dom.find(`#main [id="${query.id}"]`) || dom.find(`#${query.id}`)
+         : // First heading
+           dom.find('#main :where(h1, h2, h3, h4, h5, h6)') ||
+           // Content container
+diff --git a/test/e2e/configuration.test.js b/test/e2e/configuration.test.js
+index d081d95..6149b3c 100644
+--- a/test/e2e/configuration.test.js
++++ b/test/e2e/configuration.test.js
+@@ -251,3 +251,27 @@ test.describe('keyBindings', () => {
+     await expect(bodyElm).toHaveAttribute('data-foo');
+   });
+ });
++
++test.describe('coverpage', () => {
++  test('title link focuses matching heading in main content', async ({
++    page,
++  }) => {
++    await docsifyInit({
++      markdown: {
++        coverpage: `
++          # Quick start
++        `,
++        homepage: `
++          # Quick start
++
++          Main content.
++        `,
++      },
++    });
++
++    await page.click('section.cover h1 a');
++
++    await expect(page).toHaveURL(/id=quick-start/);
++    await expect(page.locator('#main h1#quick-start')).toBeFocused();
++  });
++});

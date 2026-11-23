@@ -1,0 +1,57 @@
+diff --git a/.changeset/shy-protos-guard.md b/.changeset/shy-protos-guard.md
+new file mode 100644
+index 0000000..52b34b6
+--- /dev/null
++++ b/.changeset/shy-protos-guard.md
+@@ -0,0 +1,5 @@
++---
++'style-dictionary': patch
++---
++
++Fix prototype pollution vulnerability in `convertTokenData` utility when converting to object output (GHSA-vj5c-m527-mpff).
+diff --git a/__tests__/utils/convertTokenData.test.js b/__tests__/utils/convertTokenData.test.js
+index f50aa0e..28e5cd4 100644
+--- a/__tests__/utils/convertTokenData.test.js
++++ b/__tests__/utils/convertTokenData.test.js
+@@ -75,6 +75,20 @@ describe('utils', () => {
+     //   );
+     // });
+ 
++    it('should not pollute Object.prototype when converting to object', () => {
++      const result = convertTokenData(
++        [
++          { key: '{__proto__.foo}', value: 'malicious' },
++          { key: '{constructor.prototype.bar}', value: 'malicious' },
++        ],
++        { output: 'object' },
++      );
++      expect({}.foo).to.be.undefined;
++      expect({}.bar).to.be.undefined;
++      expect(Object.prototype.hasOwnProperty.call(result, '__proto__')).to.be.false;
++      expect(result.constructor.prototype.bar.value).to.equal('malicious');
++    });
++
+     // The below produces: (mode * outputs * inputs) matrix -> (2 * 3 * 3) = 18 tests
+     // For mode "normal" and mode "DTCG" tokens
+     Object.keys(data).forEach((mode) => {
+diff --git a/lib/utils/convertTokenData.js b/lib/utils/convertTokenData.js
+index c3dabb0..651ec11 100644
+--- a/lib/utils/convertTokenData.js
++++ b/lib/utils/convertTokenData.js
+@@ -34,9 +34,15 @@ function convertToTokenObject(tokenArray) {
+   tokenArray.forEach((token) => {
+     const { key } = token;
+     const keyArr = /** @type {string} */ (key).replace('{', '').replace('}', '').split('.');
++    // Prevent prototype pollution, e.g. a token with key '{__proto__.foo}'
++    if (keyArr.includes('__proto__')) {
++      return;
++    }
+     let slice = obj;
+     keyArr.forEach((k, i, arr) => {
+-      if (slice[k] === undefined) {
++      // Only traverse own properties, so inherited ones such as 'constructor' or 'prototype'
++      // can never be reached and mutated
++      if (!Object.prototype.hasOwnProperty.call(slice, k) || slice[k] === undefined) {
+         slice[k] = {};
+       }
+       // end

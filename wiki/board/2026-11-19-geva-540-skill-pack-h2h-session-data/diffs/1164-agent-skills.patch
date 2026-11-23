@@ -1,0 +1,162 @@
+diff --git a/backend/local/local.go b/backend/local/local.go
+index 91ec9cd..856098c 100644
+--- a/backend/local/local.go
++++ b/backend/local/local.go
+@@ -1435,6 +1435,63 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
+ 	return in, nil
+ }
+ 
++// checkSymlinkTarget checks that target is a safe target for a
++// symlink created at o.path when translating links.
++//
++// The target must be relative and must not escape the root of the
++// Fs, otherwise an untrusted source could plant a symlink pointing
++// anywhere on the local filesystem.
++func (o *Object) checkSymlinkTarget(target string) error {
++	if target == "" {
++		return fmt.Errorf("refusing to create symlink %q: empty link target", o.remote)
++	}
++	if filepath.IsAbs(target) || filepath.VolumeName(target) != "" || strings.HasPrefix(target, "/") || strings.HasPrefix(target, string(filepath.Separator)) {
++		return fmt.Errorf("refusing to create symlink %q: absolute link target %q not allowed", o.remote, target)
++	}
++	relDir, err := filepath.Rel(o.fs.root, filepath.Dir(o.path))
++	if err != nil {
++		return fmt.Errorf("refusing to create symlink %q: %w", o.remote, err)
++	}
++	resolved := filepath.Join(relDir, filepath.FromSlash(target))
++	if resolved == ".." || strings.HasPrefix(resolved, ".."+string(filepath.Separator)) {
++		return fmt.Errorf("refusing to create symlink %q: link target %q escapes the destination", o.remote, target)
++	}
++	return nil
++}
++
++// checkNoSymlinkInPath checks that none of the existing components
++// of o.path below the root of the Fs are symlinks.
++//
++// When translating links, symlinks are objects, not directories, so
++// they must never be followed when writing, otherwise a planted
++// symlink could be used to write outside the destination.
++func (o *Object) checkNoSymlinkInPath() error {
++	rel, err := filepath.Rel(o.fs.root, o.path)
++	if err != nil {
++		return err
++	}
++	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
++		return fmt.Errorf("refusing to write %q: path outside the destination", o.remote)
++	}
++	current := o.fs.root
++	for _, part := range strings.Split(rel, string(filepath.Separator)) {
++		current = filepath.Join(current, part)
++		fi, err := os.Lstat(current)
++		if os.IsNotExist(err) {
++			return nil
++		} else if err != nil {
++			return err
++		}
++		if fi.Mode()&os.ModeSymlink != 0 && current != o.path {
++			return fmt.Errorf("refusing to write %q: path component %q is a symlink", o.remote, current)
++		}
++		if current == o.path && fi.Mode()&os.ModeSymlink != 0 && !o.translatedLink {
++			return fmt.Errorf("refusing to write %q: destination is a symlink", o.remote)
++		}
++	}
++	return nil
++}
++
+ // mkdirAll makes all the directories needed to store the object
+ func (o *Object) mkdirAll() error {
+ 	dir := filepath.Dir(o.path)
+@@ -1478,6 +1535,13 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 		}
+ 	}
+ 
++	if o.fs.opt.TranslateSymlinks {
++		err = o.checkNoSymlinkInPath()
++		if err != nil {
++			return err
++		}
++	}
++
+ 	err = o.mkdirAll()
+ 	if err != nil {
+ 		return err
+@@ -1533,6 +1597,9 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
+ 	}
+ 
+ 	if o.translatedLink {
++		if err == nil {
++			err = o.checkSymlinkTarget(symlinkData.String())
++		}
+ 		if err == nil {
+ 			// Remove any current symlink or file, if one exists
+ 			if _, err := os.Lstat(o.path); err == nil {
+diff --git a/backend/local/local_internal_test.go b/backend/local/local_internal_test.go
+index f36cc17..093e46c 100644
+--- a/backend/local/local_internal_test.go
++++ b/backend/local/local_internal_test.go
+@@ -730,3 +730,65 @@ func TestCopySymlink(t *testing.T) {
+ 	want = fstest.NewItem("dst2/file.txt", "hello world", when)
+ 	fstest.CompareItems(t, []fs.DirEntry{dst}, []fstest.Item{want}, nil, f.precision, "")
+ }
++
++// Test that a translated symlink can't be used to escape the destination
++func TestSymlinkEscape(t *testing.T) {
++	if runtime.GOOS == "windows" {
++		t.Skip("symlink escape test not supported on Windows")
++	}
++	ctx := context.Background()
++	r := fstest.NewRun(t)
++	f := r.Flocal.(*Fs)
++	f.opt.FollowSymlinks = false
++	f.opt.TranslateSymlinks = true
++	f.lstat = os.Lstat
++
++	outside := t.TempDir()
++
++	put := func(remote, contents string) error {
++		src := object.NewStaticObjectInfo(remote, time.Now(), int64(len(contents)), true, nil, nil)
++		_, err := f.Put(ctx, bytes.NewBufferString(contents), src)
++		return err
++	}
++
++	for _, target := range []string{
++		outside,
++		"/etc",
++		"..",
++		"../",
++		"../escape",
++		"sub/../../escape",
++		"sub/../../../",
++		"",
++	} {
++		t.Run(fmt.Sprintf("Target=%q", target), func(t *testing.T) {
++			err := put("pwn"+fs.LinkSuffix, target)
++			require.Error(t, err)
++			_, err = os.Lstat(filepath.Join(f.root, "pwn"))
++			assert.True(t, os.IsNotExist(err), "symlink should not have been created")
++		})
++	}
++
++	// Deep links which stay inside the root are allowed
++	require.NoError(t, put("a/b/ok"+fs.LinkSuffix, "../c/../x"))
++	linkText, err := os.Readlink(filepath.Join(f.root, "a", "b", "ok"))
++	require.NoError(t, err)
++	assert.Equal(t, "../c/../x", linkText)
++	require.NoError(t, put("ok2"+fs.LinkSuffix, "sub/./file.txt"))
++
++	// A deep link escaping is not allowed
++	require.Error(t, put("a/b/bad"+fs.LinkSuffix, "../../../x"))
++
++	// Simulate a symlink to outside planted in the destination
++	// and check we don't write through it
++	require.NoError(t, os.Symlink(outside, filepath.Join(f.root, "planted")))
++	err = put("planted/authorized_keys", "ATTACKER KEY")
++	require.Error(t, err)
++	err = put("planted/deeper/authorized_keys", "ATTACKER KEY")
++	require.Error(t, err)
++	err = put("planted/x"+fs.LinkSuffix, "y")
++	require.Error(t, err)
++	entries, err := os.ReadDir(outside)
++	require.NoError(t, err)
++	assert.Empty(t, entries, "nothing should be written outside the destination")
++}

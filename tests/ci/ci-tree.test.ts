@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { CHECK, treeRecord } from "../../scripts/ci-tree.ts";
+import { CHECK, mergeShards, treeRecord } from "../../scripts/ci-tree.ts";
 
 // CI carry (GST-1182): scripts/ci-tree.ts writes ci.yml's tree.json, and .gstack/pregate.json's run_profiles and
 // ship_lanes_from must name exactly what ci.yml runs and records. gstack's /ship and pregate carry a lane only when every
@@ -42,11 +42,12 @@ const JUNIT = [
   "</testsuites>",
 ].join("\n");
 
-type Step = { name?: string; uses?: string; run?: string; if?: unknown; "continue-on-error"?: unknown; with?: Record<string, unknown> };
-const workflow = Bun.YAML.parse(readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8")) as { on: Record<string, unknown>; jobs: Record<string, { steps: Step[] }> };
+type Step = { name?: string; id?: string; uses?: string; run?: string; if?: unknown; "continue-on-error"?: unknown; with?: Record<string, unknown>; env?: Record<string, string> };
+type CiJob = { name?: string; needs?: unknown; if?: unknown; strategy?: { "fail-fast"?: unknown; matrix?: { shard?: number[] } }; steps: Step[] };
+const workflow = Bun.YAML.parse(readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8")) as { on: Record<string, unknown>; jobs: Record<string, CiJob> };
 const policy = JSON.parse(readFileSync(join(root, ".gstack", "pregate.json"), "utf8")) as {
   run_profiles: Record<string, { workflow: string; events: string[]; jobs: string[]; artifact: string; os?: string }>;
-  ship_lanes_from: Record<string, { profiles: string[]; inventory: string }>;
+  ship_lanes_from: Record<string, { profiles: string[]; inventory: string; per_file?: string }>;
 };
 const testInventory = policy.ship_lanes_from["bun test"]!.inventory;
 
@@ -91,8 +92,16 @@ describe("treeRecord", () => {
       tree: TREE,
       os: "Linux",
       files: ["quick/x/s.test.ts", "tests/a.test.ts", "tests/b.test.ts", CHECK + "bun run typecheck", CHECK + "bun run errors:check"],
+      skipped_files: ["quick/x/s.test.ts"],
       tests: 2,
     });
+  });
+
+  test("lists a file as skipped only when every case in it skipped, nested describes included", () => {
+    const nested = JUNIT.replace('<testcase name="three" />', '<testcase name="three"><skipped /></testcase>');
+    expect(treeRecord(env(), { junit: nested, checks: "", tree: TREE }).skipped_files).toEqual(["quick/x/s.test.ts", "tests/a.test.ts"]);
+    const none = JUNIT.replace('<testcase name="only skipped"><skipped /></testcase>', '<testcase name="only skipped" />');
+    expect(treeRecord(env(), { junit: none, checks: "", tree: TREE }).skipped_files).toEqual([]);
   });
 
   test("takes the head from GITHUB_SHA on a dispatch", () => {
@@ -108,6 +117,68 @@ describe("treeRecord", () => {
     expect(() => treeRecord(env({ GITHUB_RUN_ATTEMPT: "0" }), { junit: JUNIT, checks: "", tree: TREE })).toThrow("GITHUB_RUN_ATTEMPT is not a positive integer");
     expect(() => treeRecord(env({ RUNNER_OS: "" }), { junit: JUNIT, checks: "", tree: TREE })).toThrow("RUNNER_OS");
     expect(() => treeRecord(env(), { junit: JUNIT, checks: "", tree: "HEAD" })).toThrow("is not a tree id");
+  });
+});
+
+describe("mergeShards", () => {
+  const report = (...suites: string[]) => ['<?xml version="1.0" encoding="UTF-8"?>', '<testsuites name="bun test" tests="9">', ...suites, "</testsuites>"].join("\n");
+  const suite = (file: string, time: string, inner = '<testcase name="t" />') => '  <testsuite name="' + file + '" file="' + file + '" time="' + time + '"><testsuite name="group" file="' + file + '" time="0.1">' + inner + "</testsuite></testsuite>";
+  const one = report(suite("tests/a.test.ts", "1.5"), suite("tests/b.test.ts", "0.25", '<testcase name="s"><skipped /></testcase>'));
+  const two = report(suite("quick/c.test.ts", "12.0004"));
+  const inventory = ["quick/c.test.ts", "tests/a.test.ts", "tests/b.test.ts"];
+
+  test("joins the shards' reports into one the record reads, with every file's time in bun's timings format", () => {
+    const m = mergeShards([one, two], inventory);
+    expect([m.files, m.tests]).toEqual([3, 3]);
+    expect(m.timings).toEqual({ version: 1, files: { "quick/c.test.ts": 12000, "tests/a.test.ts": 1500, "tests/b.test.ts": 250 } });
+    expect(treeRecord(env(), { junit: m.junit, checks: "", tree: TREE }).files).toEqual(inventory);
+  });
+
+  test("refuses a file in two shards, a listed file no shard ran, a file with no case, an unlisted file and an empty or broken report", () => {
+    expect(() => mergeShards([one, two, report(suite("tests/a.test.ts", "1"))], inventory)).toThrow("tests/a.test.ts ran in shard 1 and shard 3");
+    expect(() => mergeShards([one], inventory)).toThrow("1 test file(s) ran in no shard or registered no test case, the first quick/c.test.ts");
+    expect(() => mergeShards([one, report('  <testsuite name="quick/c.test.ts" file="quick/c.test.ts" time="0" />')], inventory)).toThrow("the first quick/c.test.ts");
+    expect(() => mergeShards([one, two, report(suite("tests/x.test.ts", "1"))], inventory)).toThrow("1 reported test file(s) are not in the bun test lane's inventory, the first tests/x.test.ts");
+    expect(() => mergeShards([], inventory)).toThrow("no shard report to merge");
+    expect(() => mergeShards([one, "not xml"], inventory)).toThrow("shard 2's report is not a JUnit testsuites document");
+  });
+});
+
+describe("ci-tree.ts merge", () => {
+  const merge = (cwd: string, args: string[]) => spawnSync(process.execPath, ["--no-env-file", "--config=/dev/null", SCRIPT, "merge", ...args], { cwd, encoding: "utf8" });
+  const body = 'import { test } from "bun:test";\ntest("t", () => {});\n';
+  const files = { ".gstack/pregate.json": JSON.stringify({ ship_lanes_from: { "bun test": { inventory: testInventory } } }), "a/one.test.ts": body, "a/two.test.ts": body, "b/three.test.ts": body };
+
+  test("runs real bun test shards and joins them only when every inventory file ran once, and refuses a missing shard report", () => {
+    const dir = tempRepo(files);
+    for (const i of [1, 2]) {
+      mkdirSync(join(dir, "junit", "junit-" + i), { recursive: true });
+      const r = spawnSync(process.execPath, ["--no-env-file", "--config=/dev/null", "test", "--shard=" + i + "/2", "--reporter=junit", "--reporter-outfile=" + join(dir, "junit", "junit-" + i, "junit.xml")], { cwd: dir, encoding: "utf8" });
+      expect(r.status).toBe(0);
+    }
+    const args = (n: string) => ["--shards", n, "--dir", "junit", "--out", join(dir, "out", "junit.xml"), "--timings-out", join(dir, "out", "timings.json")];
+    const ok = merge(dir, args("2"));
+    expect([ok.status, ok.stderr, ok.stdout.trim()]).toEqual([0, "", "SHARDS: 2 reports, 3 test files, each in exactly one shard, 3 cases"]);
+    expect(Object.keys(JSON.parse(readFileSync(join(dir, "out", "timings.json"), "utf8")).files)).toEqual(["a/one.test.ts", "a/two.test.ts", "b/three.test.ts"]);
+    const missing = merge(dir, args("3"));
+    expect([missing.status, missing.stderr.trim()]).toEqual([1, "ci-tree: shard 3 uploaded no report (junit/junit-3/junit.xml)"]);
+  });
+});
+
+describe("ci-tree.ts verify-checkout", () => {
+  const verify = (cwd: string, sha: string) => spawnSync(process.execPath, ["--no-env-file", "--config=/dev/null", SCRIPT, "verify-checkout"], { cwd, encoding: "utf8", env: { ...process.env, GITHUB_SHA: sha } });
+
+  test("passes a shard checkout at GITHUB_SHA with nothing changed, and fails another commit, an edited tracked file or a new untracked file", () => {
+    const dir = tempRepo({ "src/a.ts": "export const a = 1;\n" });
+    const head = sh(dir, "git rev-parse HEAD").trim();
+    const ok = verify(dir, head);
+    expect([ok.status, ok.stdout.trim()]).toEqual([0, "CHECKOUT: HEAD is GITHUB_SHA and the tree is unchanged"]);
+    expect([verify(dir, SHA_A).status, verify(dir, SHA_A).stderr.trim()]).toEqual([1, "ci-tree: HEAD is not GITHUB_SHA, the commit this run tested"]);
+    writeFileSync(join(dir, "src", "b.ts"), "export const b = 2;\n");
+    expect([verify(dir, head).status, verify(dir, head).stderr.trim()]).toEqual([1, "ci-tree: the checkout changed after checkout, so the checks did not read HEAD's tree"]);
+    rmSync(join(dir, "src", "b.ts"));
+    writeFileSync(join(dir, "src", "a.ts"), "export const a = 3;\n");
+    expect(verify(dir, head).status).toBe(1);
   });
 });
 
@@ -198,11 +269,18 @@ describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
   const steps = workflow.jobs[job]!.steps;
   const runs = steps.map((s) => (s.run ?? "").trim());
   const record = runs.findIndex((r) => r.startsWith("bun scripts/ci-tree.ts record "));
-  const upload = steps.findIndex((s) => s.uses?.startsWith("actions/upload-artifact@"));
+  const upload = steps.findIndex((s) => s.uses?.startsWith("actions/upload-artifact@") && s.with?.name === profile.artifact);
+  const shardJob = workflow.jobs.tests!;
+  const shardSteps = shardJob.steps;
+  const shardRuns = shardSteps.map((s) => (s.run ?? "").trim());
+  const shards = shardJob.strategy?.matrix?.shard ?? [];
+  const merge = runs.findIndex((r) => r.startsWith("bun scripts/ci-tree.ts merge "));
+  const download = steps.findIndex((s) => s.uses?.startsWith("actions/download-artifact@"));
+  const timingsUpload = steps.findIndex((s) => s.uses?.startsWith("actions/upload-artifact@") && s.with?.name === "test-timings");
 
-  test("the profile names ci.yml's one checks job, its artifact, its OS and events it runs on", () => {
+  test("the profile names ci.yml's checks job, its artifact, its OS and events it runs on; the tests job only feeds it", () => {
     expect(profile.jobs).toEqual(["checks"]);
-    expect(Object.keys(workflow.jobs)).toEqual(["checks"]);
+    expect(Object.keys(workflow.jobs)).toEqual(["tests", "checks"]);
     expect(profile.os).toBe("Linux");
     for (const e of profile.events) expect(Object.keys(workflow.on)).toContain(e);
     expect(steps[upload]!.with).toMatchObject({ name: profile.artifact, path: "${{ runner.temp }}/tested-tree/tree.json", "if-no-files-found": "error" });
@@ -211,15 +289,57 @@ describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
     expect(upload).toBe(steps.length - 1);
   });
 
-  test("no step in the job can be skipped or fail without failing the job", () => {
-    for (const s of steps) expect([s.name ?? s.uses, s.if, s["continue-on-error"]]).toEqual([s.name ?? s.uses, undefined, undefined]);
+  test("no step can fail without failing its job, and only a docs-only pull request skips any, skipping the tests and the record together", () => {
+    const SCOPE_IF = "github.event_name == 'pull_request' && github.base_ref == github.event.repository.default_branch";
+    const GATE = "steps.scope.outputs.docs_only != 'true'";
+    const jobsGated: [string, Step[], number[]][] = [
+      ["checks", steps, [runs.findIndex((r) => r.startsWith("bun run typecheck\n")), download, merge, timingsUpload, record, upload]],
+      ["tests", shardSteps, [shardRuns.findIndex((r) => r.startsWith("bun test ")), shardRuns.indexOf("bun scripts/ci-tree.ts verify-checkout"), shardSteps.findIndex((s) => s.uses?.startsWith("actions/upload-artifact@"))]],
+    ];
+    for (const [job, list, gated] of jobsGated) {
+      const scope = list.findIndex((s) => s.id === "scope");
+      expect([job, scope >= 0]).toEqual([job, true]);
+      for (const i of gated) expect([job, i, i > scope]).toEqual([job, i, true]);
+      for (const [i, s] of list.entries()) {
+        const when = i === scope ? SCOPE_IF : gated.includes(i) ? GATE : undefined;
+        expect([job, s.name ?? s.uses, s.if, s["continue-on-error"]]).toEqual([job, s.name ?? s.uses, when, undefined]);
+      }
+    }
+    expect(shardSteps.find((s) => s.id === "scope")).toEqual(steps.find((s) => s.id === "scope")!);
   });
 
-  test("bun test writes the JUnit report the record reads, before the record", () => {
-    const tests = runs.findIndex((r) => r.startsWith("bun test "));
-    expect(runs[tests]).toBe('bun test --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"');
+  test("the checks job waits for every shard, runs when one fails, and fails unless all passed", () => {
+    expect([workflow.jobs.checks!.needs, workflow.jobs.checks!.if]).toEqual(["tests", "${{ always() }}"]);
+    const passed = steps.find((s) => s.name === "Every test shard passed")!;
+    expect(passed.env).toEqual({ TESTS: "${{ needs.tests.result }}" });
+    const run = (result: string) => spawnSync("bash", ["-e", "-c", passed.run!], { encoding: "utf8", env: { ...process.env, TESTS: result } }).status;
+    expect(["success", "failure", "cancelled", "skipped", ""].map(run)).toEqual([0, 1, 1, 1, 1]);
+    expect(steps.indexOf(passed)).toBeLessThan(record);
+    expect(shardJob.strategy?.["fail-fast"]).toBe(false);
+  });
+
+  test("each shard runs its slice of bun test, balanced by the committed timings, and the checks job joins every shard's JUnit report before the record reads it", () => {
+    const tests = shardRuns.findIndex((r) => r.startsWith("bun test "));
+    expect(shards).toEqual(Array.from({ length: shards.length }, (_, i) => i + 1));
+    expect(shards.length).toBeGreaterThan(1);
+    expect(shardJob.name).toBe("tests (${{ matrix.shard }}/" + shards.length + ")");
+    expect(shardRuns[tests]).toBe("bun test --shard=${{ matrix.shard }}/" + shards.length + ' --timings=.github/test-timings.json --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"');
+    const shardUpload = shardSteps.findIndex((s) => s.uses?.startsWith("actions/upload-artifact@"));
+    expect(shardSteps[shardUpload]!.with).toMatchObject({ name: "junit-${{ matrix.shard }}", path: "${{ runner.temp }}/junit.xml", "if-no-files-found": "error" });
+    const verify = shardRuns.indexOf("bun scripts/ci-tree.ts verify-checkout");
+    expect([tests < verify, verify < shardUpload]).toEqual([true, true]);
+    expect(steps[download]!.with).toEqual({ pattern: "junit-*", path: "${{ runner.temp }}/junit" });
+    expect(runs[merge]).toBe("bun scripts/ci-tree.ts merge --shards " + shards.length + ' --dir "$RUNNER_TEMP/junit" --out "$RUNNER_TEMP/junit.xml" --timings-out "$RUNNER_TEMP/test-timings/test-timings.json"');
+    expect(steps[timingsUpload]!.with).toMatchObject({ name: "test-timings", path: "${{ runner.temp }}/test-timings/test-timings.json", "if-no-files-found": "error" });
     expect(runs[record]).toContain('--junit "$RUNNER_TEMP/junit.xml"');
-    expect(tests).toBeLessThan(record);
+    expect([download < merge, merge < record]).toEqual([true, true]);
+  });
+
+  test(".github/test-timings.json is bun's timings format and names only files the bun test lane's inventory lists", () => {
+    const t = JSON.parse(readFileSync(join(root, ".github", "test-timings.json"), "utf8")) as { version: number; files: Record<string, number> };
+    const listed = new Set(lines(sh(root, testInventory)));
+    expect(t.version).toBe(1);
+    for (const [f, ms] of Object.entries(t.files)) expect([f, listed.has(f), Number.isSafeInteger(ms) && ms >= 0]).toEqual([f, true, true]);
   });
 
   test("every mapped lane carries from this profile, and each check lane's inventory is the entry its step writes", () => {
@@ -233,6 +353,12 @@ describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
       expect(runs[at]!.split("\n").at(-1)).toBe("echo '" + command + "' >> \"$RUNNER_TEMP/checks-passed.txt\"");
     }
     expect(runs[record]).toContain('--checks "$RUNNER_TEMP/checks-passed.txt"');
+  });
+
+  test("the bun test lane runs the files CI skipped entirely here, with the tests stage's runner", () => {
+    const runner = (JSON.parse(readFileSync(join(root, ".gstack", "pregate.json"), "utf8")) as { runner: string }).runner;
+    expect(policy.ship_lanes_from["bun test"]!.per_file).toBe(runner);
+    expect(Object.entries(policy.ship_lanes_from).filter(([, lane]) => lane.per_file).map(([command]) => command)).toEqual(["bun test"]);
   });
 
   test("the wiki:check entry is written only when the run checked against the default branch", () => {

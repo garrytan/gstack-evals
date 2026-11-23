@@ -1,0 +1,43 @@
+## Picker position (section 15 item 7)
+opus: picker calls 199 of 200; picked the first-listed patch 105 of 199 (52.8%); shipped attempt A (none) 107 of 200; parsed 199; cut 7
+sol: picker calls 200 of 200; picked the first-listed patch 127 of 200 (63.5%); shipped attempt A (none) 97 of 200; parsed 200; cut 11
+p1: picker calls 198 of 200; picked the first-listed patch 99 of 198 (50.0%); shipped attempt A (none) 101 of 200; parsed 198; cut 10
+
+## STATUS lines (section 15 item 5)
+opus none: no STATUS line 2 of 200; false done 39.5% of all, 39.4% leaving those out; claims {'FIXED': 197, 'NOT FIXED': 1, 'None': 2}
+opus plain-2: no STATUS line 0 of 200; false done 33.5% of all, 33.5% leaving those out; claims {'FIXED': 198, 'NOT FIXED': 2}
+opus verify-prose: no STATUS line 1 of 200; false done 38.0% of all, 37.7% leaving those out; claims {'FIXED': 197, 'NOT FIXED': 2, 'None': 1}
+opus verify-hook: no STATUS line 1 of 200; false done 36.0% of all, 36.2% leaving those out; claims {'FIXED': 198, 'NOT FIXED': 1, 'None': 1}
+opus judge-jev: no STATUS line 0 of 60; false done 35.0% of all, 35.0% leaving those out; claims {'FIXED': 58, 'NOT FIXED': 2}
+opus judge-p1: no STATUS line 1 of 60; false done 35.0% of all, 35.6% leaving those out; claims {'FIXED': 59, 'None': 1}
+sol none: no STATUS line 1 of 200; false done 42.5% of all, 42.2% leaving those out; claims {'FIXED': 199, 'None': 1}
+sol plain-2: no STATUS line 0 of 200; false done 40.5% of all, 40.5% leaving those out; claims {'FIXED': 200}
+sol verify-prose: no STATUS line 0 of 200; false done 40.0% of all, 40.0% leaving those out; claims {'FIXED': 200}
+sol verify-hook: no STATUS line 0 of 200; false done 42.0% of all, 42.0% leaving those out; claims {'FIXED': 200}
+sol judge-jev: no STATUS line 0 of 60; false done 40.0% of all, 40.0% leaving those out; claims {'FIXED': 60}
+sol judge-p1: no STATUS line 0 of 60; false done 36.7% of all, 36.7% leaving those out; claims {'FIXED': 60}
+p1 none: no STATUS line 9 of 200; false done 38.5% of all, 38.2% leaving those out; claims {'FIXED': 190, 'NOT FIXED': 1, 'None': 9}
+p1 plain-2: no STATUS line 11 of 200; false done 39.5% of all, 38.6% leaving those out; claims {'FIXED': 189, 'None': 11}
+p1 verify-prose: no STATUS line 11 of 200; false done 38.0% of all, 37.6% leaving those out; claims {'FIXED': 189, 'None': 11}
+p1 verify-hook: no STATUS line 11 of 200; false done 39.0% of all, 38.6% leaving those out; claims {'FIXED': 189, 'None': 11}
+p1 judge-jev: no STATUS line 4 of 60; false done 36.7% of all, 35.7% leaving those out; claims {'FIXED': 56, 'None': 4}
+p1 judge-p1: no STATUS line 4 of 60; false done 36.7% of all, 33.9% leaving those out; claims {'FIXED': 56, 'None': 4}
+
+## Contract hook outcomes in verify-hook and the judge arms
+opus verify-hook: hook outcomes {'None': 1, 'met': 195, 'met_after_block': 4}; sessions blocked 4, of them passed 3 and scored adherent 3; sessions with an edit the scorer read as non-adherent 4, hook outcomes there {'met': 3, 'met_after_block': 1}
+opus judge-jev: hook outcomes {'met': 56, 'met_after_block': 4}; sessions blocked 4, of them passed 4 and scored adherent 4; sessions with an edit the scorer read as non-adherent 4, hook outcomes there {'met': 4}
+opus judge-p1: hook outcomes {'None': 1, 'met': 54, 'met_after_block': 5}; sessions blocked 5, of them passed 4 and scored adherent 5; sessions with an edit the scorer read as non-adherent 0, hook outcomes there {}
+sol verify-hook: hook outcomes {'met': 187, 'met_after_block': 13}; sessions blocked 13, of them passed 8 and scored adherent 8; sessions with an edit the scorer read as non-adherent 18, hook outcomes there {'met': 13, 'met_after_block': 5}
+sol judge-jev: hook outcomes {'met': 55, 'met_after_block': 5}; sessions blocked 5, of them passed 3 and scored adherent 3; sessions with an edit the scorer read as non-adherent 10, hook outcomes there {'met': 8, 'met_after_block': 2}
+sol judge-p1: hook outcomes {'met': 59, 'met_after_block': 1}; sessions blocked 1, of them passed 0 and scored adherent 1; sessions with an edit the scorer read as non-adherent 6, hook outcomes there {'met': 6}
+p1 verify-hook: hook outcomes {'None': 10, 'met': 185, 'met_after_block': 5}; sessions blocked 5, of them passed 3 and scored adherent 3; sessions with an edit the scorer read as non-adherent 12, hook outcomes there {'None': 4, 'met': 6, 'met_after_block': 2}
+p1 judge-jev: hook outcomes {'None': 3, 'met': 57}; sessions blocked 0, of them passed 0 and scored adherent 0; sessions with an edit the scorer read as non-adherent 2, hook outcomes there {'met': 2}
+p1 judge-p1: hook outcomes {'None': 4, 'met': 53, 'met_after_block': 2, 'miss': 1}; sessions blocked 3, of them passed 2 and scored adherent 1; sessions with an edit the scorer read as non-adherent 4, hook outcomes there {'None': 2, 'met_after_block': 1, 'miss': 1}
+
+## Judge hook decision logs (Stage 4, judge arms)
+opus judge-jev: sessions 60; risky lines 1007 (exact rule 18 {'careful': 1, 'read_only_list': 17}, backend calls 989); denied by backend 120, by exact rule 1; fail-open 13 of 989 (1.31%); escalated 0; median backend latency 361.0 ms; done lines 71 {'not_admitted': 67, 'contract_block': 4}
+opus judge-p1: sessions 60; risky lines 999 (exact rule 116 {'careful': 2, 'read_only_list': 114}, backend calls 883); denied by backend 192, by exact rule 2; fail-open 0 of 883 (0.00%); escalated 0; median backend latency 2090 ms; done lines 69 {'not_admitted': 64, 'contract_block': 5}
+p1 judge-jev: sessions 60; risky lines 2528 (exact rule 1335 {'careful': 5, 'read_only_list': 1330}, backend calls 1193); denied by backend 173, by exact rule 5; fail-open 1 of 1193 (0.08%); escalated 0; median backend latency 375.0 ms; done lines 59 {'not_admitted': 59}
+p1 judge-p1: sessions 60; risky lines 2742 (exact rule 1599 {'careful': 6, 'read_only_list': 1593}, backend calls 1143); denied by backend 255, by exact rule 6; fail-open 0 of 1143 (0.00%); escalated 0; median backend latency 2012 ms; done lines 59 {'not_admitted': 56, 'contract_block': 3}
+sol judge-jev: sessions 60; risky lines 1056 (exact rule 389 {'read_only_list': 389}, backend calls 667); denied by backend 112, by exact rule 0; fail-open 2 of 667 (0.30%); escalated 0; median backend latency 367 ms; done lines 65 {'not_admitted': 60, 'contract_block': 5}
+sol judge-p1: sessions 60; risky lines 1003 (exact rule 380 {'read_only_list': 380}, backend calls 623); denied by backend 139, by exact rule 0; fail-open 0 of 623 (0.00%); escalated 0; median backend latency 2392 ms; done lines 61 {'not_admitted': 60, 'contract_block': 1}

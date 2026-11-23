@@ -6,11 +6,12 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { heldStep, heldUnseal, place, run, sealOne } from "../../lanes/tbv/held.ts";
 import { TbvError } from "../../lanes/tbv/errors.ts";
 import { historySha256 } from "../../lanes/tbv/history/events.ts";
+import { mkdtempDisk } from "./disk.ts";
 import { history } from "./drive-fixture.ts";
 import { pr } from "./history-helpers.ts";
 
@@ -24,7 +25,7 @@ const T = 300_000;
 
 const made: string[] = [];
 const shm = () => { const d = mkdtempSync("/dev/shm/tbv-held-test-"); made.push(d); return d; };
-const disk = () => { const d = mkdtempSync(join(tmpdir(), "tbv-held-test-")); made.push(d); return d; };
+const disk = () => { const d = mkdtempDisk("tbv-held-test-"); made.push(d); return d; };
 afterAll(() => {
   for (const d of made) { spawnSync("chmod", ["-R", "u+rwx", d]); rmSync(d, { recursive: true, force: true }); }
 });
@@ -149,7 +150,7 @@ describe.skipIf(!DOCKER)("confined steps (docker)", () => {
     mkdirSync(held, { mode: 0o700 });
     const tag = ".tbv-plant-" + process.pid + "-" + Date.now();
     const targets: { type: string; path: string }[] = [
-      { type: "disk (tmpdir)", path: join(disk(), tag) },
+      { type: "disk (a test disk dir)", path: join(disk(), tag) },
       { type: "disk (checkout)", path: join(REPO, tag) },
       { type: "disk (home)", path: join(homedir(), tag) },
       { type: "tmpfs (/dev/shm outside work)", path: join(shm(), tag) },

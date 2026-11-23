@@ -127,5 +127,171 @@
       "forced": "None: the after pin 699a41cb is named, so told runs there and no forced line or before-pin arm runs (G prereg, big decision 1).",
       "untold": "Dropped: no measurement shows untold opens at the after pin, and its route hook never routes to this skill (G prereg section 4)."
     }
+  },
+  "sm": {
+    "$comment": "Family SM (the implicit state machines prereg, sections 5, 6 and 17). Kept beside family G's arms, not among them, so G's registry checks and tests read G's arms only. Every first-stage turn is the arm's sentence, a blank line and the shared suffix; {scope} is the unit's scope (section 3) and {statement} the issue text. session_cap_usd is per model id as the session opens it. The /qa pin and its install are gstack main's last commit on 2026-11-08 UTC; qa:told refuses to run while the pin is null. tests/outcome-skills/sm-arms.test.ts pins every text by sha256 against the post.",
+    "prereg": "2026-11-09-geva-409-state-machines-prompt-prereg",
+    "suffix": "My app is the repository in this directory. Focus on `{scope}`. Don't stop to ask.",
+    "no_answer": "No one is available to answer. Use your own judgment.",
+    "models": {
+      "claude-opus-5-5": "anthropic",
+      "openai/gpt-6.1-sol": "openrouter",
+      "particle-ai/particle-1": "openrouter"
+    },
+    "pins": {
+      "qa": {
+        "repo": "garrytan/gstack",
+        "sha": "b6155921a564ba9ec2470fd2cb3894c05e2c2d13",
+        "version": "1.98.0.0",
+        "install": "./setup --host claude"
+      }
+    },
+    "arms": {
+      "sm:A0": {
+        "family": "SM",
+        "skill": null,
+        "kind": "prompt",
+        "install": "none",
+        "clean_room": true,
+        "turns": [
+          {
+            "phase": "t1",
+            "text": "Find and fix the bugs in my app.\n\nMy app is the repository in this directory. Focus on `{scope}`. Don't stop to ask."
+          }
+        ],
+        "limits": {
+          "session_cap_usd": {
+            "claude-opus-5-5": 15,
+            "openai/gpt-6.1-sol": 15,
+            "particle-ai/particle-1": 3
+          },
+          "wall_limit_sec": 5400,
+          "max_turns": 200,
+          "quiet_sec": 30,
+          "bg_wait_sec": 600
+        }
+      },
+      "sm:A1": {
+        "family": "SM",
+        "skill": null,
+        "kind": "prompt",
+        "install": "none",
+        "clean_room": true,
+        "turns": [
+          {
+            "phase": "t1",
+            "text": "Find all of the implicit state machines in my app. Make the best decision that will elevate all three: the user experience (UX), developer experience (DX), and agent experience (AX) always, without breaking anything.\n\nMy app is the repository in this directory. Focus on `{scope}`. Don't stop to ask."
+          }
+        ],
+        "limits": {
+          "session_cap_usd": {
+            "claude-opus-5-5": 15,
+            "openai/gpt-6.1-sol": 15,
+            "particle-ai/particle-1": 3
+          },
+          "wall_limit_sec": 5400,
+          "max_turns": 200,
+          "quiet_sec": 30,
+          "bg_wait_sec": 600
+        }
+      },
+      "sm:A2": {
+        "family": "SM",
+        "skill": null,
+        "kind": "prompt",
+        "install": "none",
+        "clean_room": true,
+        "turns": [
+          {
+            "phase": "t1",
+            "text": "Find all of the bugs in my app. Make the best decision that will elevate all three: the user experience (UX), developer experience (DX), and agent experience (AX) always, without breaking anything.\n\nMy app is the repository in this directory. Focus on `{scope}`. Don't stop to ask."
+          }
+        ],
+        "limits": {
+          "session_cap_usd": {
+            "claude-opus-5-5": 15,
+            "openai/gpt-6.1-sol": 15,
+            "particle-ai/particle-1": 3
+          },
+          "wall_limit_sec": 5400,
+          "max_turns": 200,
+          "quiet_sec": 30,
+          "bg_wait_sec": 600
+        }
+      },
+      "sm:S2": {
+        "family": "SM",
+        "skill": null,
+        "kind": "prompt",
+        "install": "none",
+        "clean_room": true,
+        "turns": [
+          {
+            "phase": "t1",
+            "text": "Find all of the code in my app that most needs restructuring. Make the best decision that will elevate all three: the user experience (UX), developer experience (DX), and agent experience (AX) always, without breaking anything.\n\nMy app is the repository in this directory. Focus on `{scope}`. Don't stop to ask."
+          }
+        ],
+        "limits": {
+          "session_cap_usd": {
+            "claude-opus-5-5": 15,
+            "openai/gpt-6.1-sol": 15,
+            "particle-ai/particle-1": 3
+          },
+          "wall_limit_sec": 5400,
+          "max_turns": 200,
+          "quiet_sec": 30,
+          "bg_wait_sec": 600
+        }
+      },
+      "sm:followon": {
+        "family": "SM",
+        "skill": null,
+        "kind": "followon",
+        "install": "none",
+        "clean_room": true,
+        "turns": [
+          {
+            "phase": "t1",
+            "text": "{statement}\n\nFix this issue in this repository. Don't stop to ask."
+          }
+        ],
+        "limits": {
+          "session_cap_usd": {
+            "claude-opus-5-5": 6,
+            "openai/gpt-6.1-sol": 6,
+            "particle-ai/particle-1": 1
+          },
+          "wall_limit_sec": 3600,
+          "max_turns": 150,
+          "quiet_sec": 30,
+          "bg_wait_sec": 600
+        }
+      },
+      "qa:told": {
+        "family": "SM",
+        "skill": "qa",
+        "kind": "told",
+        "install": "gstack",
+        "clean_room": false,
+        "turns": [
+          {
+            "phase": "t1",
+            "text": "/qa Find and fix the bugs in my app.\n\nMy app is the repository in this directory. Focus on `{scope}`. Don't stop to ask.",
+            "skill_turn": true
+          }
+        ],
+        "limits": {
+          "session_cap_usd": {
+            "claude-opus-5-5": 15,
+            "openai/gpt-6.1-sol": 15,
+            "particle-ai/particle-1": 3
+          },
+          "wall_limit_sec": 5400,
+          "max_turns": 200,
+          "quiet_sec": 30,
+          "bg_wait_sec": 600
+        }
+      }
+    }
   }
 }

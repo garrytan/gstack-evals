@@ -1,0 +1,70 @@
+diff --git a/pkg/utils/utils.go b/pkg/utils/utils.go
+index 72b57f2..082fa8d 100644
+--- a/pkg/utils/utils.go
++++ b/pkg/utils/utils.go
+@@ -301,9 +301,32 @@ func SanitizeFilePath(path string, safedir string) (string, error) {
+ 	if normalizedPath != path {
+ 		return "", errors.New("invalid path")
+ 	}
+-	// check if the path is under the safe directory
+-	if !strings.HasPrefix(normalizedPath, safedir) {
++	// check if the path is under the safe directory, honoring path-separator
++	// boundaries (a lexical prefix check would accept sibling directories such
++	// as "/packages-extra" for a safe dir of "/packages").
++	if !IsPathUnder(normalizedPath, safedir) {
+ 		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
+ 	}
+ 	return normalizedPath, nil
+ }
++
++// IsPathUnder reports whether path is equal to or located inside dir,
++// using directory boundaries rather than a lexical string prefix.
++func IsPathUnder(path, dir string) bool {
++	if path == "" || dir == "" {
++		return false
++	}
++	cleanPath := filepath.Clean(path)
++	cleanDir := filepath.Clean(dir)
++	if filepath.IsAbs(cleanPath) != filepath.IsAbs(cleanDir) {
++		return false
++	}
++	rel, err := filepath.Rel(cleanDir, cleanPath)
++	if err != nil {
++		return false
++	}
++	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
++		return false
++	}
++	return true
++}
+diff --git a/pkg/utils/utils_test.go b/pkg/utils/utils_test.go
+index be4cf74..9961c41 100644
+--- a/pkg/utils/utils_test.go
++++ b/pkg/utils/utils_test.go
+@@ -250,3 +250,26 @@ func TestDownloadUrl_OverwriteAllowed(t *testing.T) {
+ 		t.Fatalf("mode after overwrite: got %#o, want 0600", mode)
+ 	}
+ }
++
++func TestSanitizeFilePathBoundary(t *testing.T) {
++	cases := []struct {
++		path, safe string
++		ok         bool
++	}{
++		{"/packages/foo", "/packages", true},
++		{"/packages/a/b", "/packages/", true},
++		{"/packages", "/packages", true},
++		{"/packages-extra/evil", "/packages", false},
++		{"/packagesevil", "/packages", false},
++		{"/etc/passwd", "/packages", false},
++		{"/packages/../etc", "/packages", false},
++		{"", "/packages", false},
++		{"/packages/x", "", false},
++	}
++	for _, c := range cases {
++		_, err := SanitizeFilePath(c.path, c.safe)
++		if (err == nil) != c.ok {
++			t.Errorf("SanitizeFilePath(%q, %q) err=%v, want ok=%v", c.path, c.safe, err, c.ok)
++		}
++	}
++}

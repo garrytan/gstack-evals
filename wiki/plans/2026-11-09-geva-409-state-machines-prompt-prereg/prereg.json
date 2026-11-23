@@ -1,0 +1,26 @@
+{
+  "schema": "sm-prereg.v1",
+  "post": "2026-11-09-geva-409-state-machines-prompt-prereg",
+  "draw_seed": 1080188076,
+  "bootstrap_seed": 107511492,
+  "order_seed": 1512176772,
+  "seed_use": {
+    "draw_seed": "section 3: the seeded draw of admission, retry, test and reserve units",
+    "bootstrap_seed": "section 14: every bootstrap over repositories (10,000 resamples)",
+    "order_seed": "sections 9 and 13: the seeded order of a unit's sessions within its part"
+  },
+  "minted_at": "2026-11-09T06:27:17.295Z",
+  "mint_command": "node -e 'const c=require(\"crypto\");const b=c.randomBytes(12);console.log(JSON.stringify({minted_at:new Date().toISOString(),draw_seed:b.readUInt32BE(0),bootstrap_seed:b.readUInt32BE(4),order_seed:b.readUInt32BE(8)}))'",
+  "mint_rule": "Minted once from crypto random bytes as unsigned 32-bit integers before any draw. Never re-minted.",
+  "pins": {
+    "swe_bench_live_multilang": {
+      "dataset": "SWE-bench-Live/MultiLang",
+      "revision": "eb09c2e5db6e4c5a95e01c903c8fd1d5da33c4f3"
+    },
+    "swe_rebench_pool": {
+      "path": "quick/laneb/tasks/swerebench-r3a4.json",
+      "sha256": "7d2b2735cd50836364cc2c1fba9a2dd07a5ce42e9ea0f9c4b8d699b9e81ea1af",
+      "created_from": "2026-03-01"
+    }
+  }
+}

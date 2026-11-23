@@ -1,0 +1,4938 @@
+{
+  "schema": "h2h-analysis.v1",
+  "stage": "stage2",
+  "bootstrap_seed": 3169101723,
+  "units": {
+    "O": 100,
+    "B": 60,
+    "B1": 0,
+    "B2": 60
+  },
+  "family": [
+    {
+      "class": "O",
+      "other": "none",
+      "test": {
+        "n": 99,
+        "n_repos": 73,
+        "a_rate": 0.6161616161616161,
+        "b_rate": 0.5757575757575758,
+        "delta": -0.04040404040404041,
+        "b_only": 3,
+        "a_only": 7,
+        "discordant_share": 0.10101010101010101,
+        "se_cluster": 0.034679924721864576,
+        "z": -1.165055597094966,
+        "p": 0.24399648880135594,
+        "p_exact": 0.34375,
+        "ci95": [
+          -0.11,
+          0.021739130434782608
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 0.24399648880135594,
+      "p_holm": 1,
+      "holm_rank": 2,
+      "holm_alpha": 0.004545454545454546,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "no_difference",
+      "idea_to_study": false,
+      "exposure_other": null,
+      "exposure_gstack": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.95,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 100,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 100,
+          "gaps": 1,
+          "gap_share": 0.01,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.61,
+        "b_rate": 0.58,
+        "delta": -0.03,
+        "b_only": 4,
+        "a_only": 7,
+        "discordant_share": 0.11,
+        "se_cluster": 0.035924364990908314,
+        "z": -0.8350878298779214,
+        "p": 0.40366825842396215,
+        "p_exact": 0.548828125,
+        "ci95": [
+          -0.10227272727272728,
+          0.03773584905660377
+        ]
+      }
+    },
+    {
+      "class": "O",
+      "other": "superpowers",
+      "test": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.61,
+        "b_rate": 0.58,
+        "delta": -0.03,
+        "b_only": 4,
+        "a_only": 7,
+        "discordant_share": 0.11,
+        "se_cluster": 0.03325758333546002,
+        "z": -0.9020499083591949,
+        "p": 0.36703035639281945,
+        "p_exact": 0.548828125,
+        "ci95": [
+          -0.09482758620689655,
+          0.031914893617021274
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 0.36703035639281945,
+      "p_holm": 1,
+      "holm_rank": 5,
+      "holm_alpha": 0.00625,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "run_as_published",
+      "idea_to_study": false,
+      "exposure_other": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "exposure_gstack": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.95,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 100,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 100,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.61,
+        "b_rate": 0.58,
+        "delta": -0.03,
+        "b_only": 4,
+        "a_only": 7,
+        "discordant_share": 0.11,
+        "se_cluster": 0.03325758333546002,
+        "z": -0.9020499083591949,
+        "p": 0.36703035639281945,
+        "p_exact": 0.548828125,
+        "ci95": [
+          -0.09482758620689655,
+          0.031914893617021274
+        ]
+      }
+    },
+    {
+      "class": "O",
+      "other": "agent-skills",
+      "test": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.61,
+        "b_rate": 0.58,
+        "delta": -0.03,
+        "b_only": 4,
+        "a_only": 7,
+        "discordant_share": 0.11,
+        "se_cluster": 0.03288978689793808,
+        "z": -0.9121372568662265,
+        "p": 0.3616964678607104,
+        "p_exact": 0.548828125,
+        "ci95": [
+          -0.0970873786407767,
+          0.031578947368421054
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 0.3616964678607104,
+      "p_holm": 1,
+      "holm_rank": 4,
+      "holm_alpha": 0.005555555555555556,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "not_exercised",
+      "idea_to_study": false,
+      "exposure_other": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.28,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "exposure_gstack": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.95,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 100,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 100,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.61,
+        "b_rate": 0.58,
+        "delta": -0.03,
+        "b_only": 4,
+        "a_only": 7,
+        "discordant_share": 0.11,
+        "se_cluster": 0.03288978689793808,
+        "z": -0.9121372568662265,
+        "p": 0.3616964678607104,
+        "p_exact": 0.548828125,
+        "ci95": [
+          -0.0970873786407767,
+          0.031578947368421054
+        ]
+      }
+    },
+    {
+      "class": "O",
+      "other": "gsd",
+      "test": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.62,
+        "b_rate": 0.58,
+        "delta": -0.04,
+        "b_only": 3,
+        "a_only": 7,
+        "discordant_share": 0.1,
+        "se_cluster": 0.034096784084888504,
+        "z": -1.1731311639365944,
+        "p": 0.24074321100259488,
+        "p_exact": 0.34375,
+        "ci95": [
+          -0.10909090909090909,
+          0.021505376344086023
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 0.24074321100259488,
+      "p_holm": 1,
+      "holm_rank": 1,
+      "holm_alpha": 0.004166666666666667,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "not_exercised",
+      "idea_to_study": false,
+      "exposure_other": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.01,
+        "missing": 0,
+        "foreign_reads": 1
+      },
+      "exposure_gstack": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.95,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 100,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 100,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.62,
+        "b_rate": 0.58,
+        "delta": -0.04,
+        "b_only": 3,
+        "a_only": 7,
+        "discordant_share": 0.1,
+        "se_cluster": 0.034096784084888504,
+        "z": -1.1731311639365944,
+        "p": 0.24074321100259488,
+        "p_exact": 0.34375,
+        "ci95": [
+          -0.10909090909090909,
+          0.021505376344086023
+        ]
+      }
+    },
+    {
+      "class": "O",
+      "other": "pstack",
+      "test": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.56,
+        "b_rate": 0.58,
+        "delta": 0.02,
+        "b_only": 5,
+        "a_only": 3,
+        "discordant_share": 0.08,
+        "se_cluster": 0.028383209391160565,
+        "z": 0.7046419495544657,
+        "p": 0.4810330855676348,
+        "p_exact": 0.7265625,
+        "ci95": [
+          -0.034482758620689655,
+          0.07692307692307693
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 0.4810330855676348,
+      "p_holm": 1,
+      "holm_rank": 6,
+      "holm_alpha": 0.0071428571428571435,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "not_exercised",
+      "idea_to_study": false,
+      "exposure_other": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 1
+      },
+      "exposure_gstack": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.95,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 100,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 100,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.56,
+        "b_rate": 0.58,
+        "delta": 0.02,
+        "b_only": 5,
+        "a_only": 3,
+        "discordant_share": 0.08,
+        "se_cluster": 0.028383209391160565,
+        "z": 0.7046419495544657,
+        "p": 0.4810330855676348,
+        "p_exact": 0.7265625,
+        "ci95": [
+          -0.034482758620689655,
+          0.07692307692307693
+        ]
+      }
+    },
+    {
+      "class": "O",
+      "other": "tstack",
+      "test": {
+        "n": 98,
+        "n_repos": 74,
+        "a_rate": 0.5612244897959183,
+        "b_rate": 0.5816326530612245,
+        "delta": 0.02040816326530612,
+        "b_only": 8,
+        "a_only": 6,
+        "discordant_share": 0.14285714285714285,
+        "se_cluster": 0.038251637439763946,
+        "z": 0.533523912471551,
+        "p": 0.5936709626061665,
+        "p_exact": 0.79052734375,
+        "ci95": [
+          -0.05434782608695652,
+          0.09473684210526316
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 0.5936709626061665,
+      "p_holm": 1,
+      "holm_rank": 8,
+      "holm_alpha": 0.01,
+      "mdd": 0.14,
+      "half_mdd": 0.07,
+      "state": "no_difference",
+      "idea_to_study": false,
+      "exposure_other": {
+        "sessions": 98,
+        "loaded": 1,
+        "procedure": 0.8367346938775511,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "exposure_gstack": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.95,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 100,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 100,
+          "gaps": 2,
+          "gap_share": 0.02,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.55,
+        "b_rate": 0.58,
+        "delta": 0.03,
+        "b_only": 9,
+        "a_only": 6,
+        "discordant_share": 0.15,
+        "se_cluster": 0.03848552120558786,
+        "z": 0.779513933038386,
+        "p": 0.43567703330589147,
+        "p_exact": 0.60723876953125,
+        "ci95": [
+          -0.046296296296296294,
+          0.10416666666666667
+        ]
+      }
+    },
+    {
+      "class": "B",
+      "other": "none",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.48333333333333334,
+        "delta": 0,
+        "b_only": 2,
+        "a_only": 2,
+        "discordant_share": 0.06666666666666667,
+        "se_cluster": 0.033718702590591544,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.06779661016949153,
+          0.06666666666666667
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 1,
+      "p_holm": 1,
+      "holm_rank": 10,
+      "holm_alpha": 0.016666666666666666,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "no_difference",
+      "idea_to_study": false,
+      "exposure_other": null,
+      "exposure_gstack": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 1,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.48333333333333334,
+        "delta": 0,
+        "b_only": 2,
+        "a_only": 2,
+        "discordant_share": 0.06666666666666667,
+        "se_cluster": 0.033718702590591544,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.06779661016949153,
+          0.06666666666666667
+        ]
+      }
+    },
+    {
+      "class": "B",
+      "other": "superpowers",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.48333333333333334,
+        "delta": 0,
+        "b_only": 2,
+        "a_only": 2,
+        "discordant_share": 0.06666666666666667,
+        "se_cluster": 0.033718702590591544,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.06779661016949153,
+          0.06666666666666667
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 1,
+      "p_holm": 1,
+      "holm_rank": 11,
+      "holm_alpha": 0.025,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "run_as_published",
+      "idea_to_study": false,
+      "exposure_other": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "exposure_gstack": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 1,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.48333333333333334,
+        "delta": 0,
+        "b_only": 2,
+        "a_only": 2,
+        "discordant_share": 0.06666666666666667,
+        "se_cluster": 0.033718702590591544,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.06779661016949153,
+          0.06666666666666667
+        ]
+      }
+    },
+    {
+      "class": "B",
+      "other": "agent-skills",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.5,
+        "b_rate": 0.48333333333333334,
+        "delta": -0.016666666666666666,
+        "b_only": 0,
+        "a_only": 1,
+        "discordant_share": 0.016666666666666666,
+        "se_cluster": 0.016234270418844086,
+        "z": -1.0266347816481283,
+        "p": 0.304592469688197,
+        "p_exact": 1,
+        "ci95": [
+          -0.05084745762711865,
+          0
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 0.304592469688197,
+      "p_holm": 1,
+      "holm_rank": 3,
+      "holm_alpha": 0.005,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "not_exercised",
+      "idea_to_study": false,
+      "exposure_other": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 0.31666666666666665,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "exposure_gstack": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 1,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.5,
+        "b_rate": 0.48333333333333334,
+        "delta": -0.016666666666666666,
+        "b_only": 0,
+        "a_only": 1,
+        "discordant_share": 0.016666666666666666,
+        "se_cluster": 0.016234270418844086,
+        "z": -1.0266347816481283,
+        "p": 0.304592469688197,
+        "p_exact": 1,
+        "ci95": [
+          -0.05084745762711865,
+          0
+        ]
+      }
+    },
+    {
+      "class": "B",
+      "other": "gsd",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.5,
+        "b_rate": 0.48333333333333334,
+        "delta": -0.016666666666666666,
+        "b_only": 2,
+        "a_only": 3,
+        "discordant_share": 0.08333333333333333,
+        "se_cluster": 0.03754966086790747,
+        "z": -0.44385664960588633,
+        "p": 0.6571462281666887,
+        "p_exact": 1,
+        "ci95": [
+          -0.08955223880597014,
+          0.05454545454545454
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 0.6571462281666887,
+      "p_holm": 1,
+      "holm_rank": 9,
+      "holm_alpha": 0.0125,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "not_exercised",
+      "idea_to_study": false,
+      "exposure_other": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "exposure_gstack": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 1,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.5,
+        "b_rate": 0.48333333333333334,
+        "delta": -0.016666666666666666,
+        "b_only": 2,
+        "a_only": 3,
+        "discordant_share": 0.08333333333333333,
+        "se_cluster": 0.03754966086790747,
+        "z": -0.44385664960588633,
+        "p": 0.6571462281666887,
+        "p_exact": 1,
+        "ci95": [
+          -0.08955223880597014,
+          0.05454545454545454
+        ]
+      }
+    },
+    {
+      "class": "B",
+      "other": "pstack",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.4666666666666667,
+        "b_rate": 0.48333333333333334,
+        "delta": 0.016666666666666666,
+        "b_only": 2,
+        "a_only": 1,
+        "discordant_share": 0.05,
+        "se_cluster": 0.028844878024157757,
+        "z": 0.5778033331501085,
+        "p": 0.5633969046812273,
+        "p_exact": 1,
+        "ci95": [
+          -0.03636363636363636,
+          0.07272727272727272
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 0.5633969046812273,
+      "p_holm": 1,
+      "holm_rank": 7,
+      "holm_alpha": 0.008333333333333333,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "not_exercised",
+      "idea_to_study": false,
+      "exposure_other": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "exposure_gstack": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 1,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.4666666666666667,
+        "b_rate": 0.48333333333333334,
+        "delta": 0.016666666666666666,
+        "b_only": 2,
+        "a_only": 1,
+        "discordant_share": 0.05,
+        "se_cluster": 0.028844878024157757,
+        "z": 0.5778033331501085,
+        "p": 0.5633969046812273,
+        "p_exact": 1,
+        "ci95": [
+          -0.03636363636363636,
+          0.07272727272727272
+        ]
+      }
+    },
+    {
+      "class": "B",
+      "other": "tstack",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.48333333333333334,
+        "delta": 0,
+        "b_only": 2,
+        "a_only": 2,
+        "discordant_share": 0.06666666666666667,
+        "se_cluster": 0.023842723254619686,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.05,
+          0.047619047619047616
+        ]
+      },
+      "incomplete": false,
+      "p_holm_input": 1,
+      "p_holm": 1,
+      "holm_rank": 12,
+      "holm_alpha": 0.05,
+      "mdd": null,
+      "half_mdd": null,
+      "state": "not_exercised",
+      "idea_to_study": false,
+      "exposure_other": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 0.6666666666666666,
+        "missing": 0,
+        "foreign_reads": 1
+      },
+      "exposure_gstack": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 1,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "cells": {
+        "gstack": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        },
+        "other": {
+          "units": 60,
+          "gaps": 0,
+          "gap_share": 0,
+          "incomplete": false
+        }
+      },
+      "worst_case": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.48333333333333334,
+        "delta": 0,
+        "b_only": 2,
+        "a_only": 2,
+        "discordant_share": 0.06666666666666667,
+        "se_cluster": 0.023842723254619686,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.05,
+          0.047619047619047616
+        ]
+      }
+    }
+  ],
+  "fix_method_exposure": {
+    "O": false,
+    "B": false
+  },
+  "why_null": [
+    {
+      "class": "O",
+      "other": "none",
+      "state": "no_difference",
+      "reads": "one Why-null cycle due: exposure, task fit, power and headroom, and whether Opus does it unaided"
+    },
+    {
+      "class": "O",
+      "other": "tstack",
+      "state": "no_difference",
+      "reads": "one Why-null cycle due: exposure, task fit, power and headroom, and whether Opus does it unaided"
+    },
+    {
+      "class": "B",
+      "other": "none",
+      "state": "no_difference",
+      "reads": "one Why-null cycle due: exposure, task fit, power and headroom, and whether Opus does it unaided"
+    }
+  ],
+  "arms": [
+    {
+      "class": "O",
+      "arm": "none",
+      "cell": {
+        "units": 100,
+        "gaps": 1,
+        "gap_share": 0.01,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 61,
+        "n": 99,
+        "rate": 0.6161616161616161,
+        "ci95": [
+          0.5177316729322248,
+          0.7059135402939662
+        ]
+      },
+      "worst_case_rate": 0.61,
+      "without_new_test_rule": 0.6161616161616161,
+      "adapted": 0.6891891891891891,
+      "exposure": {
+        "sessions": 99,
+        "loaded": 0,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 47.39393939393939,
+        "median": 22,
+        "verified_mean": 35.77049180327869
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 38.491457000000004,
+        "per_verified_fix": 0.6310074918032788,
+        "mean": 0.38491457000000007,
+        "median": 0.280244,
+        "p95": 0.7986702499999994
+      },
+      "wall_ms": {
+        "mean": 288648.92,
+        "median": 217048
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 3,
+        "files": 3
+      }
+    },
+    {
+      "class": "O",
+      "arm": "gstack",
+      "cell": {
+        "units": 100,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 58,
+        "n": 100,
+        "rate": 0.58,
+        "ci95": [
+          0.48206486626332634,
+          0.6720161739336342
+        ]
+      },
+      "worst_case_rate": 0.58,
+      "without_new_test_rule": 0.58,
+      "adapted": 0.6842105263157895,
+      "exposure": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.95,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 44.43,
+        "median": 20.5,
+        "verified_mean": 37.86206896551724
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 37.789004999999996,
+        "per_verified_fix": 0.6515345689655172,
+        "mean": 0.37789005,
+        "median": 0.3237225,
+        "p95": 0.7126195499999999
+      },
+      "wall_ms": {
+        "mean": 291617.12,
+        "median": 238345.5
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 3,
+        "files": 3
+      }
+    },
+    {
+      "class": "O",
+      "arm": "superpowers",
+      "cell": {
+        "units": 100,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 61,
+        "n": 100,
+        "rate": 0.61,
+        "ci95": [
+          0.5120301696819712,
+          0.6998312605888496
+        ]
+      },
+      "worst_case_rate": 0.61,
+      "without_new_test_rule": 0.61,
+      "adapted": 0.6533333333333333,
+      "exposure": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 38.99,
+        "median": 21,
+        "verified_mean": 28.39344262295082
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 36.73769500000002,
+        "per_verified_fix": 0.6022572950819676,
+        "mean": 0.36737695000000026,
+        "median": 0.2897015,
+        "p95": 0.8356405499999998
+      },
+      "wall_ms": {
+        "mean": 305651.07,
+        "median": 222868.5
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 3,
+        "files": 3
+      }
+    },
+    {
+      "class": "O",
+      "arm": "agent-skills",
+      "cell": {
+        "units": 100,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 61,
+        "n": 100,
+        "rate": 0.61,
+        "ci95": [
+          0.5120301696819712,
+          0.6998312605888496
+        ]
+      },
+      "worst_case_rate": 0.61,
+      "without_new_test_rule": 0.62,
+      "adapted": 0.6375,
+      "exposure": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.28,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 56.8,
+        "median": 24,
+        "verified_mean": 53.19672131147541
+      },
+      "planning_lines": {
+        "mean": 2.28,
+        "sessions_with": 5
+      },
+      "dollars": {
+        "total": 50.38404799999998,
+        "per_verified_fix": 0.8259679999999997,
+        "mean": 0.5038404799999998,
+        "median": 0.381053,
+        "p95": 0.9588603499999998
+      },
+      "wall_ms": {
+        "mean": 366257.6,
+        "median": 287989
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 6,
+      "spurious_continuations": 5,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 4,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 5,
+        "files": 5
+      }
+    },
+    {
+      "class": "O",
+      "arm": "gsd",
+      "cell": {
+        "units": 100,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 62,
+        "n": 100,
+        "rate": 0.62,
+        "ci95": [
+          0.5220975521761144,
+          0.7090240081193264
+        ]
+      },
+      "worst_case_rate": 0.62,
+      "without_new_test_rule": 0.62,
+      "adapted": 0.676056338028169,
+      "exposure": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.01,
+        "missing": 0,
+        "foreign_reads": 1
+      },
+      "lines": {
+        "mean": 50.98,
+        "median": 21.5,
+        "verified_mean": 25.548387096774192
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 52.256772999999995,
+        "per_verified_fix": 0.8428511774193548,
+        "mean": 0.52256773,
+        "median": 0.3821375,
+        "p95": 1.2445985999999996
+      },
+      "wall_ms": {
+        "mean": 324963.62,
+        "median": 240326.5
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 10,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 3,
+        "files": 3
+      }
+    },
+    {
+      "class": "O",
+      "arm": "pstack",
+      "cell": {
+        "units": 100,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 56,
+        "n": 100,
+        "rate": 0.56,
+        "ci95": [
+          0.46228104575723733,
+          0.6532797343904831
+        ]
+      },
+      "worst_case_rate": 0.56,
+      "without_new_test_rule": 0.56,
+      "adapted": 0.5769230769230769,
+      "exposure": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 1
+      },
+      "lines": {
+        "mean": 27.4,
+        "median": 16.5,
+        "verified_mean": 22.285714285714285
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 48.55097100000001,
+        "per_verified_fix": 0.8669816250000002,
+        "mean": 0.4855097100000001,
+        "median": 0.38506850000000004,
+        "p95": 0.9904411999999999
+      },
+      "wall_ms": {
+        "mean": 333193.96,
+        "median": 252883.5
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 8,
+        "files": 8
+      }
+    },
+    {
+      "class": "O",
+      "arm": "tstack",
+      "cell": {
+        "units": 100,
+        "gaps": 2,
+        "gap_share": 0.02,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 55,
+        "n": 98,
+        "rate": 0.5612244897959183,
+        "ci95": [
+          0.4625100203245,
+          0.6553201848966064
+        ]
+      },
+      "worst_case_rate": 0.55,
+      "without_new_test_rule": 0.5612244897959183,
+      "adapted": 0.5675675675675675,
+      "exposure": {
+        "sessions": 98,
+        "loaded": 1,
+        "procedure": 0.8367346938775511,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 30.663265306122447,
+        "median": 16.5,
+        "verified_mean": 20.545454545454547
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 47.822551000000004,
+        "per_verified_fix": 0.8695009272727273,
+        "mean": 0.47822551,
+        "median": 0.336102,
+        "p95": 0.98203215
+      },
+      "wall_ms": {
+        "mean": 356848.36,
+        "median": 287091
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 3,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 8,
+        "files": 8
+      }
+    },
+    {
+      "class": "O",
+      "arm": "gstack-pony",
+      "cell": {
+        "units": 100,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 63,
+        "n": 100,
+        "rate": 0.63,
+        "ci95": [
+          0.5322052950281534,
+          0.7181763952919077
+        ]
+      },
+      "worst_case_rate": 0.63,
+      "without_new_test_rule": 0.63,
+      "adapted": 0.684931506849315,
+      "exposure": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 1,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 22.92,
+        "median": 14,
+        "verified_mean": 17.523809523809526
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 38.690113000000004,
+        "per_verified_fix": 0.6141287777777779,
+        "mean": 0.38690113000000004,
+        "median": 0.31483700000000003,
+        "p95": 0.8888731999999998
+      },
+      "wall_ms": {
+        "mean": 286502.76,
+        "median": 233750
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 4,
+        "files": 4
+      }
+    },
+    {
+      "class": "O",
+      "arm": "gstack-oneline",
+      "cell": {
+        "units": 100,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 61,
+        "n": 100,
+        "rate": 0.61,
+        "ci95": [
+          0.5120301696819712,
+          0.6998312605888496
+        ]
+      },
+      "worst_case_rate": 0.61,
+      "without_new_test_rule": 0.61,
+      "adapted": 0.6413043478260869,
+      "exposure": {
+        "sessions": 100,
+        "loaded": 1,
+        "procedure": 0.9,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 18.96,
+        "median": 9.5,
+        "verified_mean": 17.704918032786885
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 28.187832999999983,
+        "per_verified_fix": 0.4620956229508194,
+        "mean": 0.28187832999999984,
+        "median": 0.2175225,
+        "p95": 0.7251848999999999
+      },
+      "wall_ms": {
+        "mean": 224168,
+        "median": 179927.5
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 2,
+        "files": 2
+      }
+    },
+    {
+      "class": "B",
+      "arm": "none",
+      "cell": {
+        "units": 60,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 29,
+        "n": 60,
+        "rate": 0.48333333333333334,
+        "ci95": [
+          0.36175049450337826,
+          0.6069219005977627
+        ]
+      },
+      "worst_case_rate": 0.48333333333333334,
+      "without_new_test_rule": 0.5,
+      "adapted": 0.5405405405405406,
+      "exposure": {
+        "sessions": 60,
+        "loaded": 0,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 32.5,
+        "median": 21.5,
+        "verified_mean": 28.517241379310345
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 12.209675999999998,
+        "per_verified_fix": 0.42102331034482754,
+        "mean": 0.20349459999999997,
+        "median": 0.1745915,
+        "p95": 0.45525409999999994
+      },
+      "wall_ms": {
+        "mean": 152801.88333333333,
+        "median": 138198.5
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 2,
+        "files": 2
+      }
+    },
+    {
+      "class": "B",
+      "arm": "gstack",
+      "cell": {
+        "units": 60,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 29,
+        "n": 60,
+        "rate": 0.48333333333333334,
+        "ci95": [
+          0.36175049450337826,
+          0.6069219005977627
+        ]
+      },
+      "worst_case_rate": 0.48333333333333334,
+      "without_new_test_rule": 0.5,
+      "adapted": 0.5384615384615384,
+      "exposure": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 1,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 33.4,
+        "median": 24,
+        "verified_mean": 24.03448275862069
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 14.608887,
+        "per_verified_fix": 0.503754724137931,
+        "mean": 0.24348145,
+        "median": 0.21340949999999997,
+        "p95": 0.4518273999999996
+      },
+      "wall_ms": {
+        "mean": 173796.16666666666,
+        "median": 152621
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 2,
+        "files": 2
+      }
+    },
+    {
+      "class": "B",
+      "arm": "superpowers",
+      "cell": {
+        "units": 60,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 29,
+        "n": 60,
+        "rate": 0.48333333333333334,
+        "ci95": [
+          0.36175049450337826,
+          0.6069219005977627
+        ]
+      },
+      "worst_case_rate": 0.48333333333333334,
+      "without_new_test_rule": 0.5,
+      "adapted": 0.5609756097560976,
+      "exposure": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 34.983333333333334,
+        "median": 22.5,
+        "verified_mean": 26.689655172413794
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 13.407374999999996,
+        "per_verified_fix": 0.46232327586206884,
+        "mean": 0.22345624999999994,
+        "median": 0.199357,
+        "p95": 0.4920023499999999
+      },
+      "wall_ms": {
+        "mean": 174336.58333333334,
+        "median": 142157.5
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 2,
+        "files": 2
+      }
+    },
+    {
+      "class": "B",
+      "arm": "agent-skills",
+      "cell": {
+        "units": 60,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 30,
+        "n": 60,
+        "rate": 0.5,
+        "ci95": [
+          0.377350241506325,
+          0.622649758493675
+        ]
+      },
+      "worst_case_rate": 0.5,
+      "without_new_test_rule": 0.5166666666666667,
+      "adapted": 0.5714285714285714,
+      "exposure": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 0.31666666666666665,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 37.95,
+        "median": 24.5,
+        "verified_mean": 27.066666666666666
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 20.774026999999997,
+        "per_verified_fix": 0.6924675666666665,
+        "mean": 0.34623378333333327,
+        "median": 0.305433,
+        "p95": 0.6528454999999997
+      },
+      "wall_ms": {
+        "mean": 196220.15,
+        "median": 177657.5
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 4,
+        "files": 4
+      }
+    },
+    {
+      "class": "B",
+      "arm": "gsd",
+      "cell": {
+        "units": 60,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 30,
+        "n": 60,
+        "rate": 0.5,
+        "ci95": [
+          0.377350241506325,
+          0.622649758493675
+        ]
+      },
+      "worst_case_rate": 0.5,
+      "without_new_test_rule": 0.5166666666666667,
+      "adapted": 0.5945945945945946,
+      "exposure": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 37.05,
+        "median": 25,
+        "verified_mean": 29.3
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 19.641507,
+        "per_verified_fix": 0.6547169,
+        "mean": 0.32735845,
+        "median": 0.27637500000000004,
+        "p95": 0.7132438999999999
+      },
+      "wall_ms": {
+        "mean": 187981.4,
+        "median": 165856
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 3,
+        "files": 3
+      }
+    },
+    {
+      "class": "B",
+      "arm": "pstack",
+      "cell": {
+        "units": 60,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 28,
+        "n": 60,
+        "rate": 0.4666666666666667,
+        "ci95": [
+          0.3462790595365474,
+          0.5910657306657343
+        ]
+      },
+      "worst_case_rate": 0.4666666666666667,
+      "without_new_test_rule": 0.48333333333333334,
+      "adapted": 0.5333333333333333,
+      "exposure": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 0,
+        "missing": 0,
+        "foreign_reads": 0
+      },
+      "lines": {
+        "mean": 27.916666666666668,
+        "median": 16.5,
+        "verified_mean": 21.178571428571427
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 21.276483000000006,
+        "per_verified_fix": 0.7598743928571431,
+        "mean": 0.3546080500000001,
+        "median": 0.319144,
+        "p95": 0.6440345
+      },
+      "wall_ms": {
+        "mean": 216590.45,
+        "median": 169389
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 0,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 4,
+        "files": 4
+      }
+    },
+    {
+      "class": "B",
+      "arm": "tstack",
+      "cell": {
+        "units": 60,
+        "gaps": 0,
+        "gap_share": 0,
+        "incomplete": false
+      },
+      "verified": {
+        "k": 29,
+        "n": 60,
+        "rate": 0.48333333333333334,
+        "ci95": [
+          0.36175049450337826,
+          0.6069219005977627
+        ]
+      },
+      "worst_case_rate": 0.48333333333333334,
+      "without_new_test_rule": 0.5,
+      "adapted": 0.5135135135135135,
+      "exposure": {
+        "sessions": 60,
+        "loaded": 1,
+        "procedure": 0.6666666666666666,
+        "missing": 0,
+        "foreign_reads": 1
+      },
+      "lines": {
+        "mean": 30.5,
+        "median": 20.5,
+        "verified_mean": 20.379310344827587
+      },
+      "planning_lines": {
+        "mean": 0,
+        "sessions_with": 0
+      },
+      "dollars": {
+        "total": 20.840216,
+        "per_verified_fix": 0.7186281379310345,
+        "mean": 0.3473369333333334,
+        "median": 0.293088,
+        "p95": 0.6896697999999998
+      },
+      "wall_ms": {
+        "mean": 223614.21666666667,
+        "median": 179831
+      },
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "continuations": 0,
+      "spurious_continuations": 0,
+      "reservation_refusals": 0,
+      "allowance_stops": 0,
+      "safety_stops": 0,
+      "questions": 3,
+      "worktree": {
+        "candidates": 0,
+        "passes": 0,
+        "passes_main_not": 0
+      },
+      "dropped_arm_tests": {
+        "sessions": 3,
+        "files": 3
+      }
+    }
+  ],
+  "none_vs_pack": [
+    {
+      "label": "O: superpowers minus none",
+      "test": {
+        "n": 99,
+        "n_repos": 73,
+        "a_rate": 0.6161616161616161,
+        "b_rate": 0.6060606060606061,
+        "delta": -0.010101010101010102,
+        "b_only": 6,
+        "a_only": 7,
+        "discordant_share": 0.13131313131313133,
+        "se_cluster": 0.03658169868506854,
+        "z": -0.27612195343823676,
+        "p": 0.7824543994959614,
+        "p_exact": 1,
+        "ci95": [
+          -0.08163265306122448,
+          0.061946902654867256
+        ]
+      }
+    },
+    {
+      "label": "O: agent-skills minus none",
+      "test": {
+        "n": 99,
+        "n_repos": 73,
+        "a_rate": 0.6161616161616161,
+        "b_rate": 0.6060606060606061,
+        "delta": -0.010101010101010102,
+        "b_only": 4,
+        "a_only": 5,
+        "discordant_share": 0.09090909090909091,
+        "se_cluster": 0.02694244064709046,
+        "z": -0.3749107303721914,
+        "p": 0.7077268584973853,
+        "p_exact": 1,
+        "ci95": [
+          -0.06315789473684211,
+          0.04081632653061224
+        ]
+      }
+    },
+    {
+      "label": "O: gsd minus none",
+      "test": {
+        "n": 99,
+        "n_repos": 73,
+        "a_rate": 0.6161616161616161,
+        "b_rate": 0.6161616161616161,
+        "delta": 0,
+        "b_only": 3,
+        "a_only": 3,
+        "discordant_share": 0.06060606060606061,
+        "se_cluster": 0.024913549809678016,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.04950495049504951,
+          0.04950495049504951
+        ]
+      }
+    },
+    {
+      "label": "O: pstack minus none",
+      "test": {
+        "n": 99,
+        "n_repos": 73,
+        "a_rate": 0.6161616161616161,
+        "b_rate": 0.5555555555555556,
+        "delta": -0.06060606060606061,
+        "b_only": 2,
+        "a_only": 8,
+        "discordant_share": 0.10101010101010101,
+        "se_cluster": 0.03415984970682532,
+        "z": -1.7741899079243078,
+        "p": 0.07603174297326909,
+        "p_exact": 0.109375,
+        "ci95": [
+          -0.12871287128712872,
+          0
+        ]
+      }
+    },
+    {
+      "label": "O: tstack minus none",
+      "test": {
+        "n": 97,
+        "n_repos": 73,
+        "a_rate": 0.6185567010309279,
+        "b_rate": 0.5567010309278351,
+        "delta": -0.061855670103092786,
+        "b_only": 4,
+        "a_only": 10,
+        "discordant_share": 0.14432989690721648,
+        "se_cluster": 0.04003799282064279,
+        "z": -1.5449243517322686,
+        "p": 0.12236456241671645,
+        "p_exact": 0.1795654296875,
+        "ci95": [
+          -0.14130434782608695,
+          0.011363636363636364
+        ]
+      }
+    },
+    {
+      "label": "B: superpowers minus none",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.48333333333333334,
+        "delta": 0,
+        "b_only": 1,
+        "a_only": 1,
+        "discordant_share": 0.03333333333333333,
+        "se_cluster": 0.023842723254619686,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.04838709677419355,
+          0.047619047619047616
+        ]
+      }
+    },
+    {
+      "label": "B: agent-skills minus none",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.5,
+        "delta": 0.016666666666666666,
+        "b_only": 3,
+        "a_only": 2,
+        "discordant_share": 0.08333333333333333,
+        "se_cluster": 0.037296485753418936,
+        "z": 0.44686962672183794,
+        "p": 0.6549691953710799,
+        "p_exact": 1,
+        "ci95": [
+          -0.05555555555555555,
+          0.08620689655172414
+        ]
+      }
+    },
+    {
+      "label": "B: gsd minus none",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.5,
+        "delta": 0.016666666666666666,
+        "b_only": 2,
+        "a_only": 1,
+        "discordant_share": 0.05,
+        "se_cluster": 0.028844878024157757,
+        "z": 0.5778033331501085,
+        "p": 0.5633969046812273,
+        "p_exact": 1,
+        "ci95": [
+          -0.03636363636363636,
+          0.07407407407407407
+        ]
+      }
+    },
+    {
+      "label": "B: pstack minus none",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.4666666666666667,
+        "delta": -0.016666666666666666,
+        "b_only": 2,
+        "a_only": 3,
+        "discordant_share": 0.08333333333333333,
+        "se_cluster": 0.03754966086790747,
+        "z": -0.44385664960588633,
+        "p": 0.6571462281666887,
+        "p_exact": 1,
+        "ci95": [
+          -0.08955223880597014,
+          0.05357142857142857
+        ]
+      }
+    },
+    {
+      "label": "B: tstack minus none",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.48333333333333334,
+        "delta": 0,
+        "b_only": 2,
+        "a_only": 2,
+        "discordant_share": 0.06666666666666667,
+        "se_cluster": 0.023842723254619686,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.04918032786885246,
+          0.04918032786885246
+        ]
+      }
+    }
+  ],
+  "pack_pairs": [
+    {
+      "label": "O: agent-skills minus superpowers",
+      "test": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.61,
+        "b_rate": 0.61,
+        "delta": 0,
+        "b_only": 6,
+        "a_only": 6,
+        "discordant_share": 0.12,
+        "se_cluster": 0.03487747634454626,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.0707070707070707,
+          0.0673076923076923
+        ]
+      }
+    },
+    {
+      "label": "O: gsd minus superpowers",
+      "test": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.61,
+        "b_rate": 0.62,
+        "delta": 0.01,
+        "b_only": 6,
+        "a_only": 5,
+        "discordant_share": 0.11,
+        "se_cluster": 0.03615725168365355,
+        "z": 0.2765696930588597,
+        "p": 0.7821105386726499,
+        "p_exact": 1,
+        "ci95": [
+          -0.06,
+          0.08163265306122448
+        ]
+      }
+    },
+    {
+      "label": "O: pstack minus superpowers",
+      "test": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.61,
+        "b_rate": 0.56,
+        "delta": -0.05,
+        "b_only": 4,
+        "a_only": 9,
+        "discordant_share": 0.13,
+        "se_cluster": 0.038628543637595804,
+        "z": -1.2943796294545455,
+        "p": 0.19553432339318189,
+        "p_exact": 0.266845703125,
+        "ci95": [
+          -0.12264150943396226,
+          0.02857142857142857
+        ]
+      }
+    },
+    {
+      "label": "O: tstack minus superpowers",
+      "test": {
+        "n": 98,
+        "n_repos": 74,
+        "a_rate": 0.6122448979591837,
+        "b_rate": 0.5612244897959183,
+        "delta": -0.05102040816326531,
+        "b_only": 5,
+        "a_only": 10,
+        "discordant_share": 0.15306122448979592,
+        "se_cluster": 0.03898078266151521,
+        "z": -1.3088605379295406,
+        "p": 0.1905815959835475,
+        "p_exact": 0.3017578125,
+        "ci95": [
+          -0.1262135922330097,
+          0.026785714285714284
+        ]
+      }
+    },
+    {
+      "label": "O: gsd minus agent-skills",
+      "test": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.61,
+        "b_rate": 0.62,
+        "delta": 0.01,
+        "b_only": 5,
+        "a_only": 4,
+        "discordant_share": 0.09,
+        "se_cluster": 0.026593932771855545,
+        "z": 0.3760256177898982,
+        "p": 0.706897851052114,
+        "p_exact": 1,
+        "ci95": [
+          -0.04040404040404041,
+          0.0625
+        ]
+      }
+    },
+    {
+      "label": "O: pstack minus agent-skills",
+      "test": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.61,
+        "b_rate": 0.56,
+        "delta": -0.05,
+        "b_only": 2,
+        "a_only": 7,
+        "discordant_share": 0.09,
+        "se_cluster": 0.029041302661450524,
+        "z": -1.7216858548969323,
+        "p": 0.08512644107514378,
+        "p_exact": 0.1796875,
+        "ci95": [
+          -0.10891089108910891,
+          0
+        ]
+      }
+    },
+    {
+      "label": "O: tstack minus agent-skills",
+      "test": {
+        "n": 98,
+        "n_repos": 74,
+        "a_rate": 0.6122448979591837,
+        "b_rate": 0.5612244897959183,
+        "delta": -0.05102040816326531,
+        "b_only": 5,
+        "a_only": 10,
+        "discordant_share": 0.15306122448979592,
+        "se_cluster": 0.038564106448898766,
+        "z": -1.3230024720233662,
+        "p": 0.18583455575368468,
+        "p_exact": 0.3017578125,
+        "ci95": [
+          -0.12631578947368421,
+          0.02197802197802198
+        ]
+      }
+    },
+    {
+      "label": "O: pstack minus gsd",
+      "test": {
+        "n": 100,
+        "n_repos": 74,
+        "a_rate": 0.62,
+        "b_rate": 0.56,
+        "delta": -0.06,
+        "b_only": 1,
+        "a_only": 7,
+        "discordant_share": 0.08,
+        "se_cluster": 0.03027986355626956,
+        "z": -1.9815148733580332,
+        "p": 0.04753356308740808,
+        "p_exact": 0.0703125,
+        "ci95": [
+          -0.12121212121212122,
+          -0.009259259259259259
+        ]
+      }
+    },
+    {
+      "label": "O: tstack minus gsd",
+      "test": {
+        "n": 98,
+        "n_repos": 74,
+        "a_rate": 0.6224489795918368,
+        "b_rate": 0.5612244897959183,
+        "delta": -0.061224489795918366,
+        "b_only": 4,
+        "a_only": 10,
+        "discordant_share": 0.14285714285714285,
+        "se_cluster": 0.03931038469375851,
+        "z": -1.5574635118144557,
+        "p": 0.11936047718409992,
+        "p_exact": 0.1795654296875,
+        "ci95": [
+          -0.13861386138613863,
+          0.011235955056179775
+        ]
+      }
+    },
+    {
+      "label": "O: tstack minus pstack",
+      "test": {
+        "n": 98,
+        "n_repos": 74,
+        "a_rate": 0.5612244897959183,
+        "b_rate": 0.5612244897959183,
+        "delta": 0,
+        "b_only": 5,
+        "a_only": 5,
+        "discordant_share": 0.10204081632653061,
+        "se_cluster": 0.03248840228360681,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.06315789473684211,
+          0.06451612903225806
+        ]
+      }
+    },
+    {
+      "label": "B: agent-skills minus superpowers",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.5,
+        "delta": 0.016666666666666666,
+        "b_only": 3,
+        "a_only": 2,
+        "discordant_share": 0.08333333333333333,
+        "se_cluster": 0.03729648575341894,
+        "z": 0.44686962672183783,
+        "p": 0.6549691953710799,
+        "p_exact": 1,
+        "ci95": [
+          -0.05454545454545454,
+          0.08771929824561403
+        ]
+      }
+    },
+    {
+      "label": "B: gsd minus superpowers",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.5,
+        "delta": 0.016666666666666666,
+        "b_only": 2,
+        "a_only": 1,
+        "discordant_share": 0.05,
+        "se_cluster": 0.03742328740804209,
+        "z": 0.4453554944263148,
+        "p": 0.6560628696166997,
+        "p_exact": 1,
+        "ci95": [
+          -0.04918032786885246,
+          0.1
+        ]
+      }
+    },
+    {
+      "label": "B: pstack minus superpowers",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.4666666666666667,
+        "delta": -0.016666666666666666,
+        "b_only": 2,
+        "a_only": 3,
+        "discordant_share": 0.08333333333333333,
+        "se_cluster": 0.03754966086790747,
+        "z": -0.44385664960588633,
+        "p": 0.6571462281666887,
+        "p_exact": 1,
+        "ci95": [
+          -0.09090909090909091,
+          0.05357142857142857
+        ]
+      }
+    },
+    {
+      "label": "B: tstack minus superpowers",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.48333333333333334,
+        "b_rate": 0.48333333333333334,
+        "delta": 0,
+        "b_only": 2,
+        "a_only": 2,
+        "discordant_share": 0.06666666666666667,
+        "se_cluster": 0.033718702590591544,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.06557377049180328,
+          0.06779661016949153
+        ]
+      }
+    },
+    {
+      "label": "B: gsd minus agent-skills",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.5,
+        "b_rate": 0.5,
+        "delta": 0,
+        "b_only": 3,
+        "a_only": 3,
+        "discordant_share": 0.1,
+        "se_cluster": 0.041296808067805287,
+        "z": 0,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": [
+          -0.08064516129032258,
+          0.08333333333333333
+        ]
+      }
+    },
+    {
+      "label": "B: pstack minus agent-skills",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.5,
+        "b_rate": 0.4666666666666667,
+        "delta": -0.03333333333333333,
+        "b_only": 1,
+        "a_only": 3,
+        "discordant_share": 0.06666666666666667,
+        "se_cluster": 0.03246854083768819,
+        "z": -1.0266347816481278,
+        "p": 0.3045924696881972,
+        "p_exact": 0.625,
+        "ci95": [
+          -0.09615384615384616,
+          0.03333333333333333
+        ]
+      }
+    },
+    {
+      "label": "B: tstack minus agent-skills",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.5,
+        "b_rate": 0.48333333333333334,
+        "delta": -0.016666666666666666,
+        "b_only": 2,
+        "a_only": 3,
+        "discordant_share": 0.08333333333333333,
+        "se_cluster": 0.02868017429093832,
+        "z": -0.5811215265847461,
+        "p": 0.5611585513457349,
+        "p_exact": 1,
+        "ci95": [
+          -0.06896551724137931,
+          0.037037037037037035
+        ]
+      }
+    },
+    {
+      "label": "B: pstack minus gsd",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.5,
+        "b_rate": 0.4666666666666667,
+        "delta": -0.03333333333333333,
+        "b_only": 2,
+        "a_only": 4,
+        "discordant_share": 0.1,
+        "se_cluster": 0.04051704305677904,
+        "z": -0.8226990623827427,
+        "p": 0.4106791486625556,
+        "p_exact": 0.6875,
+        "ci95": [
+          -0.1111111111111111,
+          0.04918032786885246
+        ]
+      }
+    },
+    {
+      "label": "B: tstack minus gsd",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.5,
+        "b_rate": 0.48333333333333334,
+        "delta": -0.016666666666666666,
+        "b_only": 2,
+        "a_only": 3,
+        "discordant_share": 0.08333333333333333,
+        "se_cluster": 0.03742328740804209,
+        "z": -0.4453554944263148,
+        "p": 0.6560628696166997,
+        "p_exact": 1,
+        "ci95": [
+          -0.08771929824561403,
+          0.05454545454545454
+        ]
+      }
+    },
+    {
+      "label": "B: tstack minus pstack",
+      "test": {
+        "n": 60,
+        "n_repos": 44,
+        "a_rate": 0.4666666666666667,
+        "b_rate": 0.48333333333333334,
+        "delta": 0.016666666666666666,
+        "b_only": 3,
+        "a_only": 2,
+        "discordant_share": 0.08333333333333333,
+        "se_cluster": 0.029008646626453964,
+        "z": 0.5745413387009848,
+        "p": 0.5656015350758357,
+        "p_exact": 1,
+        "ci95": [
+          -0.03508771929824561,
+          0.07547169811320754
+        ]
+      }
+    }
+  ],
+  "qa": [
+    {
+      "label": "B1: gstack-qa minus gstack",
+      "test": {
+        "n": 0,
+        "n_repos": 0,
+        "a_rate": null,
+        "b_rate": null,
+        "delta": null,
+        "b_only": 0,
+        "a_only": 0,
+        "discordant_share": null,
+        "se_cluster": null,
+        "z": null,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": null
+      },
+      "state": "infeasible"
+    },
+    {
+      "label": "B1: gstack-qa minus none",
+      "test": {
+        "n": 0,
+        "n_repos": 0,
+        "a_rate": null,
+        "b_rate": null,
+        "delta": null,
+        "b_only": 0,
+        "a_only": 0,
+        "discordant_share": null,
+        "se_cluster": null,
+        "z": null,
+        "p": 1,
+        "p_exact": 1,
+        "ci95": null
+      },
+      "state": "infeasible"
+    }
+  ],
+  "strata": [
+    {
+      "name": "O July 2026",
+      "class": "O",
+      "units": 18,
+      "rates": {
+        "none": 0.7058823529411765,
+        "gstack": 0.7777777777777778,
+        "superpowers": 0.6666666666666666,
+        "agent-skills": 0.7222222222222222,
+        "gsd": 0.8333333333333334,
+        "pstack": 0.7777777777777778,
+        "tstack": 0.6470588235294118
+      },
+      "gstack_minus": [
+        {
+          "label": "O July 2026: gstack minus none",
+          "test": {
+            "n": 17,
+            "n_repos": 11,
+            "a_rate": 0.7058823529411765,
+            "b_rate": 0.7647058823529411,
+            "delta": 0.058823529411764705,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.058823529411764705,
+            "se_cluster": 0.057610118721847514,
+            "z": 1.0210624577216334,
+            "p": 0.3072248484266593,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.1875
+            ]
+          }
+        },
+        {
+          "label": "O July 2026: gstack minus superpowers",
+          "test": {
+            "n": 18,
+            "n_repos": 12,
+            "a_rate": 0.6666666666666666,
+            "b_rate": 0.7777777777777778,
+            "delta": 0.1111111111111111,
+            "b_only": 2,
+            "a_only": 0,
+            "discordant_share": 0.1111111111111111,
+            "se_cluster": 0.07121298352060744,
+            "z": 1.560264794676915,
+            "p": 0.11869731926719584,
+            "p_exact": 0.5,
+            "ci95": [
+              0,
+              0.25
+            ]
+          }
+        },
+        {
+          "label": "O July 2026: gstack minus agent-skills",
+          "test": {
+            "n": 18,
+            "n_repos": 12,
+            "a_rate": 0.7222222222222222,
+            "b_rate": 0.7777777777777778,
+            "delta": 0.05555555555555555,
+            "b_only": 2,
+            "a_only": 1,
+            "discordant_share": 0.16666666666666666,
+            "se_cluster": 0.05432608893504354,
+            "z": 1.0226312374885307,
+            "p": 0.3064822343187763,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.16666666666666666
+            ]
+          }
+        },
+        {
+          "label": "O July 2026: gstack minus gsd",
+          "test": {
+            "n": 18,
+            "n_repos": 12,
+            "a_rate": 0.8333333333333334,
+            "b_rate": 0.7777777777777778,
+            "delta": -0.05555555555555555,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.05555555555555555,
+            "se_cluster": 0.05432608893504354,
+            "z": -1.0226312374885307,
+            "p": 0.3064822343187763,
+            "p_exact": 1,
+            "ci95": [
+              -0.17647058823529413,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O July 2026: gstack minus pstack",
+          "test": {
+            "n": 18,
+            "n_repos": 12,
+            "a_rate": 0.7777777777777778,
+            "b_rate": 0.7777777777777778,
+            "delta": 0,
+            "b_only": 1,
+            "a_only": 1,
+            "discordant_share": 0.1111111111111111,
+            "se_cluster": 0.08206099398622183,
+            "z": 0,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              -0.15789473684210525,
+              0.15789473684210525
+            ]
+          }
+        },
+        {
+          "label": "O July 2026: gstack minus tstack",
+          "test": {
+            "n": 17,
+            "n_repos": 11,
+            "a_rate": 0.6470588235294118,
+            "b_rate": 0.7647058823529411,
+            "delta": 0.11764705882352941,
+            "b_only": 2,
+            "a_only": 0,
+            "discordant_share": 0.11764705882352941,
+            "se_cluster": 0.08098660084193017,
+            "z": 1.4526731286469623,
+            "p": 0.14631453121713456,
+            "p_exact": 0.5,
+            "ci95": [
+              0,
+              0.29411764705882354
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "O bug",
+      "class": "O",
+      "units": 90,
+      "rates": {
+        "none": 0.6179775280898876,
+        "gstack": 0.5888888888888889,
+        "superpowers": 0.6,
+        "agent-skills": 0.6222222222222222,
+        "gsd": 0.6222222222222222,
+        "pstack": 0.5666666666666667,
+        "tstack": 0.5681818181818182
+      },
+      "gstack_minus": [
+        {
+          "label": "O bug: gstack minus none",
+          "test": {
+            "n": 89,
+            "n_repos": 67,
+            "a_rate": 0.6179775280898876,
+            "b_rate": 0.5842696629213483,
+            "delta": -0.033707865168539325,
+            "b_only": 3,
+            "a_only": 6,
+            "discordant_share": 0.10112359550561797,
+            "se_cluster": 0.037251434213942496,
+            "z": -0.904874292220489,
+            "p": 0.3655319877548808,
+            "p_exact": 0.5078125,
+            "ci95": [
+              -0.10843373493975904,
+              0.033707865168539325
+            ]
+          }
+        },
+        {
+          "label": "O bug: gstack minus superpowers",
+          "test": {
+            "n": 90,
+            "n_repos": 68,
+            "a_rate": 0.6,
+            "b_rate": 0.5888888888888889,
+            "delta": -0.011111111111111112,
+            "b_only": 4,
+            "a_only": 5,
+            "discordant_share": 0.1,
+            "se_cluster": 0.033614778633352264,
+            "z": -0.33054244480690326,
+            "p": 0.740990126791482,
+            "p_exact": 1,
+            "ci95": [
+              -0.07692307692307693,
+              0.05319148936170213
+            ]
+          }
+        },
+        {
+          "label": "O bug: gstack minus agent-skills",
+          "test": {
+            "n": 90,
+            "n_repos": 68,
+            "a_rate": 0.6222222222222222,
+            "b_rate": 0.5888888888888889,
+            "delta": -0.03333333333333333,
+            "b_only": 4,
+            "a_only": 7,
+            "discordant_share": 0.12222222222222222,
+            "se_cluster": 0.036493748866967525,
+            "z": -0.9133984413288146,
+            "p": 0.36103302504040125,
+            "p_exact": 0.548828125,
+            "ci95": [
+              -0.10714285714285714,
+              0.03571428571428571
+            ]
+          }
+        },
+        {
+          "label": "O bug: gstack minus gsd",
+          "test": {
+            "n": 90,
+            "n_repos": 68,
+            "a_rate": 0.6222222222222222,
+            "b_rate": 0.5888888888888889,
+            "delta": -0.03333333333333333,
+            "b_only": 3,
+            "a_only": 6,
+            "discordant_share": 0.1,
+            "se_cluster": 0.03660801826946425,
+            "z": -0.9105473311331245,
+            "p": 0.3625339323202881,
+            "p_exact": 0.5078125,
+            "ci95": [
+              -0.10869565217391304,
+              0.03529411764705882
+            ]
+          }
+        },
+        {
+          "label": "O bug: gstack minus pstack",
+          "test": {
+            "n": 90,
+            "n_repos": 68,
+            "a_rate": 0.5666666666666667,
+            "b_rate": 0.5888888888888889,
+            "delta": 0.022222222222222223,
+            "b_only": 5,
+            "a_only": 3,
+            "discordant_share": 0.08888888888888889,
+            "se_cluster": 0.031539225955568205,
+            "z": 0.7045899684896649,
+            "p": 0.4810654430839083,
+            "p_exact": 0.7265625,
+            "ci95": [
+              -0.038461538461538464,
+              0.08602150537634409
+            ]
+          }
+        },
+        {
+          "label": "O bug: gstack minus tstack",
+          "test": {
+            "n": 88,
+            "n_repos": 68,
+            "a_rate": 0.5681818181818182,
+            "b_rate": 0.5909090909090909,
+            "delta": 0.022727272727272728,
+            "b_only": 8,
+            "a_only": 6,
+            "discordant_share": 0.1590909090909091,
+            "se_cluster": 0.04259565568153221,
+            "z": 0.5335584665533479,
+            "p": 0.593647050108628,
+            "p_exact": 0.79052734375,
+            "ci95": [
+              -0.060240963855421686,
+              0.10465116279069768
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "O feature",
+      "class": "O",
+      "units": 10,
+      "rates": {
+        "none": 0.6,
+        "gstack": 0.5,
+        "superpowers": 0.7,
+        "agent-skills": 0.5,
+        "gsd": 0.6,
+        "pstack": 0.5,
+        "tstack": 0.5
+      },
+      "gstack_minus": [
+        {
+          "label": "O feature: gstack minus none",
+          "test": {
+            "n": 10,
+            "n_repos": 8,
+            "a_rate": 0.6,
+            "b_rate": 0.5,
+            "delta": -0.1,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.1,
+            "se_cluster": 0.09196272536817761,
+            "z": -1.0873970905021002,
+            "p": 0.27686135646092414,
+            "p_exact": 1,
+            "ci95": [
+              -0.2727272727272727,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O feature: gstack minus superpowers",
+          "test": {
+            "n": 10,
+            "n_repos": 8,
+            "a_rate": 0.7,
+            "b_rate": 0.5,
+            "delta": -0.2,
+            "b_only": 0,
+            "a_only": 2,
+            "discordant_share": 0.2,
+            "se_cluster": 0.12467099559583675,
+            "z": -1.6042223697993696,
+            "p": 0.1086650455569722,
+            "p_exact": 0.5,
+            "ci95": [
+              -0.4444444444444444,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O feature: gstack minus agent-skills",
+          "test": {
+            "n": 10,
+            "n_repos": 8,
+            "a_rate": 0.5,
+            "b_rate": 0.5,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O feature: gstack minus gsd",
+          "test": {
+            "n": 10,
+            "n_repos": 8,
+            "a_rate": 0.6,
+            "b_rate": 0.5,
+            "delta": -0.1,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.1,
+            "se_cluster": 0.09196272536817761,
+            "z": -1.0873970905021002,
+            "p": 0.27686135646092414,
+            "p_exact": 1,
+            "ci95": [
+              -0.2727272727272727,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O feature: gstack minus pstack",
+          "test": {
+            "n": 10,
+            "n_repos": 8,
+            "a_rate": 0.5,
+            "b_rate": 0.5,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O feature: gstack minus tstack",
+          "test": {
+            "n": 10,
+            "n_repos": 8,
+            "a_rate": 0.5,
+            "b_rate": 0.5,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "B B1",
+      "class": "B",
+      "units": 0,
+      "rates": {
+        "none": null,
+        "gstack": null,
+        "superpowers": null,
+        "agent-skills": null,
+        "gsd": null,
+        "pstack": null,
+        "tstack": null
+      },
+      "gstack_minus": [
+        {
+          "label": "B B1: gstack minus none",
+          "test": {
+            "n": 0,
+            "n_repos": 0,
+            "a_rate": null,
+            "b_rate": null,
+            "delta": null,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": null,
+            "se_cluster": null,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": null
+          }
+        },
+        {
+          "label": "B B1: gstack minus superpowers",
+          "test": {
+            "n": 0,
+            "n_repos": 0,
+            "a_rate": null,
+            "b_rate": null,
+            "delta": null,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": null,
+            "se_cluster": null,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": null
+          }
+        },
+        {
+          "label": "B B1: gstack minus agent-skills",
+          "test": {
+            "n": 0,
+            "n_repos": 0,
+            "a_rate": null,
+            "b_rate": null,
+            "delta": null,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": null,
+            "se_cluster": null,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": null
+          }
+        },
+        {
+          "label": "B B1: gstack minus gsd",
+          "test": {
+            "n": 0,
+            "n_repos": 0,
+            "a_rate": null,
+            "b_rate": null,
+            "delta": null,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": null,
+            "se_cluster": null,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": null
+          }
+        },
+        {
+          "label": "B B1: gstack minus pstack",
+          "test": {
+            "n": 0,
+            "n_repos": 0,
+            "a_rate": null,
+            "b_rate": null,
+            "delta": null,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": null,
+            "se_cluster": null,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": null
+          }
+        },
+        {
+          "label": "B B1: gstack minus tstack",
+          "test": {
+            "n": 0,
+            "n_repos": 0,
+            "a_rate": null,
+            "b_rate": null,
+            "delta": null,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": null,
+            "se_cluster": null,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "B B2",
+      "class": "B",
+      "units": 60,
+      "rates": {
+        "none": 0.48333333333333334,
+        "gstack": 0.48333333333333334,
+        "superpowers": 0.48333333333333334,
+        "agent-skills": 0.5,
+        "gsd": 0.5,
+        "pstack": 0.4666666666666667,
+        "tstack": 0.48333333333333334
+      },
+      "gstack_minus": [
+        {
+          "label": "B B2: gstack minus none",
+          "test": {
+            "n": 60,
+            "n_repos": 44,
+            "a_rate": 0.48333333333333334,
+            "b_rate": 0.48333333333333334,
+            "delta": 0,
+            "b_only": 2,
+            "a_only": 2,
+            "discordant_share": 0.06666666666666667,
+            "se_cluster": 0.033718702590591544,
+            "z": 0,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              -0.06779661016949153,
+              0.06666666666666667
+            ]
+          }
+        },
+        {
+          "label": "B B2: gstack minus superpowers",
+          "test": {
+            "n": 60,
+            "n_repos": 44,
+            "a_rate": 0.48333333333333334,
+            "b_rate": 0.48333333333333334,
+            "delta": 0,
+            "b_only": 2,
+            "a_only": 2,
+            "discordant_share": 0.06666666666666667,
+            "se_cluster": 0.033718702590591544,
+            "z": 0,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              -0.06779661016949153,
+              0.06666666666666667
+            ]
+          }
+        },
+        {
+          "label": "B B2: gstack minus agent-skills",
+          "test": {
+            "n": 60,
+            "n_repos": 44,
+            "a_rate": 0.5,
+            "b_rate": 0.48333333333333334,
+            "delta": -0.016666666666666666,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.016666666666666666,
+            "se_cluster": 0.016234270418844086,
+            "z": -1.0266347816481283,
+            "p": 0.304592469688197,
+            "p_exact": 1,
+            "ci95": [
+              -0.05084745762711865,
+              0
+            ]
+          }
+        },
+        {
+          "label": "B B2: gstack minus gsd",
+          "test": {
+            "n": 60,
+            "n_repos": 44,
+            "a_rate": 0.5,
+            "b_rate": 0.48333333333333334,
+            "delta": -0.016666666666666666,
+            "b_only": 2,
+            "a_only": 3,
+            "discordant_share": 0.08333333333333333,
+            "se_cluster": 0.03754966086790747,
+            "z": -0.44385664960588633,
+            "p": 0.6571462281666887,
+            "p_exact": 1,
+            "ci95": [
+              -0.08955223880597014,
+              0.05454545454545454
+            ]
+          }
+        },
+        {
+          "label": "B B2: gstack minus pstack",
+          "test": {
+            "n": 60,
+            "n_repos": 44,
+            "a_rate": 0.4666666666666667,
+            "b_rate": 0.48333333333333334,
+            "delta": 0.016666666666666666,
+            "b_only": 2,
+            "a_only": 1,
+            "discordant_share": 0.05,
+            "se_cluster": 0.028844878024157757,
+            "z": 0.5778033331501085,
+            "p": 0.5633969046812273,
+            "p_exact": 1,
+            "ci95": [
+              -0.03636363636363636,
+              0.07272727272727272
+            ]
+          }
+        },
+        {
+          "label": "B B2: gstack minus tstack",
+          "test": {
+            "n": 60,
+            "n_repos": 44,
+            "a_rate": 0.48333333333333334,
+            "b_rate": 0.48333333333333334,
+            "delta": 0,
+            "b_only": 2,
+            "a_only": 2,
+            "discordant_share": 0.06666666666666667,
+            "se_cluster": 0.023842723254619686,
+            "z": 0,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              -0.05,
+              0.047619047619047616
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "O c",
+      "class": "O",
+      "units": 3,
+      "rates": {
+        "none": 0.6666666666666666,
+        "gstack": 0.6666666666666666,
+        "superpowers": 0.3333333333333333,
+        "agent-skills": 0.6666666666666666,
+        "gsd": 1,
+        "pstack": 1,
+        "tstack": 0.6666666666666666
+      },
+      "gstack_minus": [
+        {
+          "label": "O c: gstack minus none",
+          "test": {
+            "n": 3,
+            "n_repos": 2,
+            "a_rate": 0.6666666666666666,
+            "b_rate": 0.6666666666666666,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O c: gstack minus superpowers",
+          "test": {
+            "n": 3,
+            "n_repos": 2,
+            "a_rate": 0.3333333333333333,
+            "b_rate": 0.6666666666666666,
+            "delta": 0.3333333333333333,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.3333333333333333,
+            "se_cluster": 0.22222222222222224,
+            "z": 1.4999999999999998,
+            "p": 0.13361440253771617,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.5
+            ]
+          }
+        },
+        {
+          "label": "O c: gstack minus agent-skills",
+          "test": {
+            "n": 3,
+            "n_repos": 2,
+            "a_rate": 0.6666666666666666,
+            "b_rate": 0.6666666666666666,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O c: gstack minus gsd",
+          "test": {
+            "n": 3,
+            "n_repos": 2,
+            "a_rate": 1,
+            "b_rate": 0.6666666666666666,
+            "delta": -0.3333333333333333,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.3333333333333333,
+            "se_cluster": 0.22222222222222224,
+            "z": -1.4999999999999998,
+            "p": 0.13361440253771617,
+            "p_exact": 1,
+            "ci95": [
+              -0.5,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O c: gstack minus pstack",
+          "test": {
+            "n": 3,
+            "n_repos": 2,
+            "a_rate": 1,
+            "b_rate": 0.6666666666666666,
+            "delta": -0.3333333333333333,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.3333333333333333,
+            "se_cluster": 0.22222222222222224,
+            "z": -1.4999999999999998,
+            "p": 0.13361440253771617,
+            "p_exact": 1,
+            "ci95": [
+              -0.5,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O c: gstack minus tstack",
+          "test": {
+            "n": 3,
+            "n_repos": 2,
+            "a_rate": 0.6666666666666666,
+            "b_rate": 0.6666666666666666,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "O cpp",
+      "class": "O",
+      "units": 4,
+      "rates": {
+        "none": 0.75,
+        "gstack": 0.75,
+        "superpowers": 0.75,
+        "agent-skills": 0.75,
+        "gsd": 0.75,
+        "pstack": 0.75,
+        "tstack": 0.75
+      },
+      "gstack_minus": [
+        {
+          "label": "O cpp: gstack minus none",
+          "test": {
+            "n": 4,
+            "n_repos": 4,
+            "a_rate": 0.75,
+            "b_rate": 0.75,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O cpp: gstack minus superpowers",
+          "test": {
+            "n": 4,
+            "n_repos": 4,
+            "a_rate": 0.75,
+            "b_rate": 0.75,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O cpp: gstack minus agent-skills",
+          "test": {
+            "n": 4,
+            "n_repos": 4,
+            "a_rate": 0.75,
+            "b_rate": 0.75,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O cpp: gstack minus gsd",
+          "test": {
+            "n": 4,
+            "n_repos": 4,
+            "a_rate": 0.75,
+            "b_rate": 0.75,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O cpp: gstack minus pstack",
+          "test": {
+            "n": 4,
+            "n_repos": 4,
+            "a_rate": 0.75,
+            "b_rate": 0.75,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O cpp: gstack minus tstack",
+          "test": {
+            "n": 4,
+            "n_repos": 4,
+            "a_rate": 0.75,
+            "b_rate": 0.75,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "O csharp",
+      "class": "O",
+      "units": 25,
+      "rates": {
+        "none": 0.76,
+        "gstack": 0.6,
+        "superpowers": 0.68,
+        "agent-skills": 0.72,
+        "gsd": 0.76,
+        "pstack": 0.56,
+        "tstack": 0.52
+      },
+      "gstack_minus": [
+        {
+          "label": "O csharp: gstack minus none",
+          "test": {
+            "n": 25,
+            "n_repos": 13,
+            "a_rate": 0.76,
+            "b_rate": 0.6,
+            "delta": -0.16,
+            "b_only": 0,
+            "a_only": 4,
+            "discordant_share": 0.16,
+            "se_cluster": 0.08643702910211572,
+            "z": -1.8510585296838213,
+            "p": 0.06416113328801343,
+            "p_exact": 0.125,
+            "ci95": [
+              -0.3333333333333333,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O csharp: gstack minus superpowers",
+          "test": {
+            "n": 25,
+            "n_repos": 13,
+            "a_rate": 0.68,
+            "b_rate": 0.6,
+            "delta": -0.08,
+            "b_only": 1,
+            "a_only": 3,
+            "discordant_share": 0.16,
+            "se_cluster": 0.07696648621315644,
+            "z": -1.0394134374075794,
+            "p": 0.2986124972498878,
+            "p_exact": 0.625,
+            "ci95": [
+              -0.20833333333333334,
+              0.07407407407407407
+            ]
+          }
+        },
+        {
+          "label": "O csharp: gstack minus agent-skills",
+          "test": {
+            "n": 25,
+            "n_repos": 13,
+            "a_rate": 0.72,
+            "b_rate": 0.6,
+            "delta": -0.12,
+            "b_only": 1,
+            "a_only": 4,
+            "discordant_share": 0.2,
+            "se_cluster": 0.09930746866844072,
+            "z": -1.2083683292809098,
+            "p": 0.22690561627638628,
+            "p_exact": 0.375,
+            "ci95": [
+              -0.3076923076923077,
+              0.07692307692307693
+            ]
+          }
+        },
+        {
+          "label": "O csharp: gstack minus gsd",
+          "test": {
+            "n": 25,
+            "n_repos": 13,
+            "a_rate": 0.76,
+            "b_rate": 0.6,
+            "delta": -0.16,
+            "b_only": 0,
+            "a_only": 4,
+            "discordant_share": 0.16,
+            "se_cluster": 0.08643702910211572,
+            "z": -1.8510585296838213,
+            "p": 0.06416113328801343,
+            "p_exact": 0.125,
+            "ci95": [
+              -0.3333333333333333,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O csharp: gstack minus pstack",
+          "test": {
+            "n": 25,
+            "n_repos": 13,
+            "a_rate": 0.56,
+            "b_rate": 0.6,
+            "delta": 0.04,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.04,
+            "se_cluster": 0.04193200845813772,
+            "z": 0.9539252106164551,
+            "p": 0.3401215011356671,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.14285714285714285
+            ]
+          }
+        },
+        {
+          "label": "O csharp: gstack minus tstack",
+          "test": {
+            "n": 25,
+            "n_repos": 13,
+            "a_rate": 0.52,
+            "b_rate": 0.6,
+            "delta": 0.08,
+            "b_only": 3,
+            "a_only": 1,
+            "discordant_share": 0.16,
+            "se_cluster": 0.08048917111429754,
+            "z": 0.9939225226508681,
+            "p": 0.32026058836823923,
+            "p_exact": 0.625,
+            "ci95": [
+              -0.07692307692307693,
+              0.25
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "O go",
+      "class": "O",
+      "units": 28,
+      "rates": {
+        "none": 0.5357142857142857,
+        "gstack": 0.5714285714285714,
+        "superpowers": 0.6071428571428571,
+        "agent-skills": 0.5357142857142857,
+        "gsd": 0.4642857142857143,
+        "pstack": 0.5,
+        "tstack": 0.6296296296296297
+      },
+      "gstack_minus": [
+        {
+          "label": "O go: gstack minus none",
+          "test": {
+            "n": 28,
+            "n_repos": 26,
+            "a_rate": 0.5357142857142857,
+            "b_rate": 0.5714285714285714,
+            "delta": 0.03571428571428571,
+            "b_only": 2,
+            "a_only": 1,
+            "discordant_share": 0.10714285714285714,
+            "se_cluster": 0.06200186747331966,
+            "z": 0.5760195163420538,
+            "p": 0.56460199016548,
+            "p_exact": 1,
+            "ci95": [
+              -0.07692307692307693,
+              0.15384615384615385
+            ]
+          }
+        },
+        {
+          "label": "O go: gstack minus superpowers",
+          "test": {
+            "n": 28,
+            "n_repos": 26,
+            "a_rate": 0.6071428571428571,
+            "b_rate": 0.5714285714285714,
+            "delta": -0.03571428571428571,
+            "b_only": 1,
+            "a_only": 2,
+            "discordant_share": 0.10714285714285714,
+            "se_cluster": 0.06351169926365487,
+            "z": -0.5623260931190913,
+            "p": 0.5738938635222008,
+            "p_exact": 1,
+            "ci95": [
+              -0.15384615384615385,
+              0.07142857142857142
+            ]
+          }
+        },
+        {
+          "label": "O go: gstack minus agent-skills",
+          "test": {
+            "n": 28,
+            "n_repos": 26,
+            "a_rate": 0.5357142857142857,
+            "b_rate": 0.5714285714285714,
+            "delta": 0.03571428571428571,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.03571428571428571,
+            "se_cluster": 0.03585976202205221,
+            "z": 0.995943188142826,
+            "p": 0.3192777495476422,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.1111111111111111
+            ]
+          }
+        },
+        {
+          "label": "O go: gstack minus gsd",
+          "test": {
+            "n": 28,
+            "n_repos": 26,
+            "a_rate": 0.4642857142857143,
+            "b_rate": 0.5714285714285714,
+            "delta": 0.10714285714285714,
+            "b_only": 3,
+            "a_only": 0,
+            "discordant_share": 0.10714285714285714,
+            "se_cluster": 0.05770496128815794,
+            "z": 1.8567356211855688,
+            "p": 0.0633487769711798,
+            "p_exact": 0.25,
+            "ci95": [
+              0,
+              0.2222222222222222
+            ]
+          }
+        },
+        {
+          "label": "O go: gstack minus pstack",
+          "test": {
+            "n": 28,
+            "n_repos": 26,
+            "a_rate": 0.5,
+            "b_rate": 0.5714285714285714,
+            "delta": 0.07142857142857142,
+            "b_only": 2,
+            "a_only": 0,
+            "discordant_share": 0.07142857142857142,
+            "se_cluster": 0.04797003785119656,
+            "z": 1.4890247043403098,
+            "p": 0.1364808634900696,
+            "p_exact": 0.5,
+            "ci95": [
+              0,
+              0.1724137931034483
+            ]
+          }
+        },
+        {
+          "label": "O go: gstack minus tstack",
+          "test": {
+            "n": 27,
+            "n_repos": 26,
+            "a_rate": 0.6296296296296297,
+            "b_rate": 0.5925925925925926,
+            "delta": -0.037037037037037035,
+            "b_only": 2,
+            "a_only": 3,
+            "discordant_share": 0.18518518518518517,
+            "se_cluster": 0.08416730599174899,
+            "z": -0.440040661877283,
+            "p": 0.6599076574163467,
+            "p_exact": 1,
+            "ci95": [
+              -0.20689655172413793,
+              0.11538461538461539
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "O java",
+      "class": "O",
+      "units": 15,
+      "rates": {
+        "none": 0.5,
+        "gstack": 0.4666666666666667,
+        "superpowers": 0.4,
+        "agent-skills": 0.4666666666666667,
+        "gsd": 0.4666666666666667,
+        "pstack": 0.4666666666666667,
+        "tstack": 0.42857142857142855
+      },
+      "gstack_minus": [
+        {
+          "label": "O java: gstack minus none",
+          "test": {
+            "n": 14,
+            "n_repos": 9,
+            "a_rate": 0.5,
+            "b_rate": 0.42857142857142855,
+            "delta": -0.07142857142857142,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.07142857142857142,
+            "se_cluster": 0.07537391174843958,
+            "z": -0.9476564207913777,
+            "p": 0.34330439316987205,
+            "p_exact": 1,
+            "ci95": [
+              -0.26666666666666666,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O java: gstack minus superpowers",
+          "test": {
+            "n": 15,
+            "n_repos": 10,
+            "a_rate": 0.4,
+            "b_rate": 0.4666666666666667,
+            "delta": 0.06666666666666667,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.06666666666666667,
+            "se_cluster": 0.06491526607468637,
+            "z": 1.0269797953221862,
+            "p": 0.3044299781228319,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.2
+            ]
+          }
+        },
+        {
+          "label": "O java: gstack minus agent-skills",
+          "test": {
+            "n": 15,
+            "n_repos": 10,
+            "a_rate": 0.4666666666666667,
+            "b_rate": 0.4666666666666667,
+            "delta": 0,
+            "b_only": 1,
+            "a_only": 1,
+            "discordant_share": 0.13333333333333333,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O java: gstack minus gsd",
+          "test": {
+            "n": 15,
+            "n_repos": 10,
+            "a_rate": 0.4666666666666667,
+            "b_rate": 0.4666666666666667,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O java: gstack minus pstack",
+          "test": {
+            "n": 15,
+            "n_repos": 10,
+            "a_rate": 0.4666666666666667,
+            "b_rate": 0.4666666666666667,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O java: gstack minus tstack",
+          "test": {
+            "n": 14,
+            "n_repos": 10,
+            "a_rate": 0.42857142857142855,
+            "b_rate": 0.42857142857142855,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "O js",
+      "class": "O",
+      "units": 9,
+      "rates": {
+        "none": 0.4444444444444444,
+        "gstack": 0.5555555555555556,
+        "superpowers": 0.5555555555555556,
+        "agent-skills": 0.4444444444444444,
+        "gsd": 0.5555555555555556,
+        "pstack": 0.4444444444444444,
+        "tstack": 0.4444444444444444
+      },
+      "gstack_minus": [
+        {
+          "label": "O js: gstack minus none",
+          "test": {
+            "n": 9,
+            "n_repos": 6,
+            "a_rate": 0.4444444444444444,
+            "b_rate": 0.5555555555555556,
+            "delta": 0.1111111111111111,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.1111111111111111,
+            "se_cluster": 0.10648819087826086,
+            "z": 1.0434125154603786,
+            "p": 0.2967572795312683,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.3333333333333333
+            ]
+          }
+        },
+        {
+          "label": "O js: gstack minus superpowers",
+          "test": {
+            "n": 9,
+            "n_repos": 6,
+            "a_rate": 0.5555555555555556,
+            "b_rate": 0.5555555555555556,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O js: gstack minus agent-skills",
+          "test": {
+            "n": 9,
+            "n_repos": 6,
+            "a_rate": 0.4444444444444444,
+            "b_rate": 0.5555555555555556,
+            "delta": 0.1111111111111111,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.1111111111111111,
+            "se_cluster": 0.10648819087826086,
+            "z": 1.0434125154603786,
+            "p": 0.2967572795312683,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.3333333333333333
+            ]
+          }
+        },
+        {
+          "label": "O js: gstack minus gsd",
+          "test": {
+            "n": 9,
+            "n_repos": 6,
+            "a_rate": 0.5555555555555556,
+            "b_rate": 0.5555555555555556,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O js: gstack minus pstack",
+          "test": {
+            "n": 9,
+            "n_repos": 6,
+            "a_rate": 0.4444444444444444,
+            "b_rate": 0.5555555555555556,
+            "delta": 0.1111111111111111,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.1111111111111111,
+            "se_cluster": 0.10648819087826086,
+            "z": 1.0434125154603786,
+            "p": 0.2967572795312683,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.3333333333333333
+            ]
+          }
+        },
+        {
+          "label": "O js: gstack minus tstack",
+          "test": {
+            "n": 9,
+            "n_repos": 6,
+            "a_rate": 0.4444444444444444,
+            "b_rate": 0.5555555555555556,
+            "delta": 0.1111111111111111,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.1111111111111111,
+            "se_cluster": 0.10648819087826086,
+            "z": 1.0434125154603786,
+            "p": 0.2967572795312683,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.3333333333333333
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "O rust",
+      "class": "O",
+      "units": 13,
+      "rates": {
+        "none": 0.6923076923076923,
+        "gstack": 0.6153846153846154,
+        "superpowers": 0.7692307692307693,
+        "agent-skills": 0.7692307692307693,
+        "gsd": 0.7692307692307693,
+        "pstack": 0.6923076923076923,
+        "tstack": 0.6153846153846154
+      },
+      "gstack_minus": [
+        {
+          "label": "O rust: gstack minus none",
+          "test": {
+            "n": 13,
+            "n_repos": 10,
+            "a_rate": 0.6923076923076923,
+            "b_rate": 0.6153846153846154,
+            "delta": -0.07692307692307693,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.07692307692307693,
+            "se_cluster": 0.07987556895982875,
+            "z": -0.9630363567333499,
+            "p": 0.33552927835968394,
+            "p_exact": 1,
+            "ci95": [
+              -0.2727272727272727,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O rust: gstack minus superpowers",
+          "test": {
+            "n": 13,
+            "n_repos": 10,
+            "a_rate": 0.7692307692307693,
+            "b_rate": 0.6153846153846154,
+            "delta": -0.15384615384615385,
+            "b_only": 0,
+            "a_only": 2,
+            "discordant_share": 0.15384615384615385,
+            "se_cluster": 0.11122581601476672,
+            "z": -1.3831874591572222,
+            "p": 0.16660739402832636,
+            "p_exact": 0.5,
+            "ci95": [
+              -0.4,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O rust: gstack minus agent-skills",
+          "test": {
+            "n": 13,
+            "n_repos": 10,
+            "a_rate": 0.7692307692307693,
+            "b_rate": 0.6153846153846154,
+            "delta": -0.15384615384615385,
+            "b_only": 0,
+            "a_only": 2,
+            "discordant_share": 0.15384615384615385,
+            "se_cluster": 0.11122581601476672,
+            "z": -1.3831874591572222,
+            "p": 0.16660739402832636,
+            "p_exact": 0.5,
+            "ci95": [
+              -0.4,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O rust: gstack minus gsd",
+          "test": {
+            "n": 13,
+            "n_repos": 10,
+            "a_rate": 0.7692307692307693,
+            "b_rate": 0.6153846153846154,
+            "delta": -0.15384615384615385,
+            "b_only": 0,
+            "a_only": 2,
+            "discordant_share": 0.15384615384615385,
+            "se_cluster": 0.11122581601476672,
+            "z": -1.3831874591572222,
+            "p": 0.16660739402832636,
+            "p_exact": 0.5,
+            "ci95": [
+              -0.4,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O rust: gstack minus pstack",
+          "test": {
+            "n": 13,
+            "n_repos": 10,
+            "a_rate": 0.6923076923076923,
+            "b_rate": 0.6153846153846154,
+            "delta": -0.07692307692307693,
+            "b_only": 1,
+            "a_only": 2,
+            "discordant_share": 0.23076923076923078,
+            "se_cluster": 0.13974745233860633,
+            "z": -0.5504435010141957,
+            "p": 0.5820152187887089,
+            "p_exact": 1,
+            "ci95": [
+              -0.36363636363636365,
+              0.18181818181818182
+            ]
+          }
+        },
+        {
+          "label": "O rust: gstack minus tstack",
+          "test": {
+            "n": 13,
+            "n_repos": 10,
+            "a_rate": 0.6153846153846154,
+            "b_rate": 0.6153846153846154,
+            "delta": 0,
+            "b_only": 2,
+            "a_only": 2,
+            "discordant_share": 0.3076923076923077,
+            "se_cluster": 0.16216808513683997,
+            "z": 0,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              -0.3076923076923077,
+              0.3333333333333333
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "O ts",
+      "class": "O",
+      "units": 3,
+      "rates": {
+        "none": 0.6666666666666666,
+        "gstack": 0.6666666666666666,
+        "superpowers": 0.6666666666666666,
+        "agent-skills": 0.6666666666666666,
+        "gsd": 0.6666666666666666,
+        "pstack": 0.6666666666666666,
+        "tstack": 0.6666666666666666
+      },
+      "gstack_minus": [
+        {
+          "label": "O ts: gstack minus none",
+          "test": {
+            "n": 3,
+            "n_repos": 3,
+            "a_rate": 0.6666666666666666,
+            "b_rate": 0.6666666666666666,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O ts: gstack minus superpowers",
+          "test": {
+            "n": 3,
+            "n_repos": 3,
+            "a_rate": 0.6666666666666666,
+            "b_rate": 0.6666666666666666,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O ts: gstack minus agent-skills",
+          "test": {
+            "n": 3,
+            "n_repos": 3,
+            "a_rate": 0.6666666666666666,
+            "b_rate": 0.6666666666666666,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O ts: gstack minus gsd",
+          "test": {
+            "n": 3,
+            "n_repos": 3,
+            "a_rate": 0.6666666666666666,
+            "b_rate": 0.6666666666666666,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O ts: gstack minus pstack",
+          "test": {
+            "n": 3,
+            "n_repos": 3,
+            "a_rate": 0.6666666666666666,
+            "b_rate": 0.6666666666666666,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "O ts: gstack minus tstack",
+          "test": {
+            "n": 3,
+            "n_repos": 3,
+            "a_rate": 0.6666666666666666,
+            "b_rate": 0.6666666666666666,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "B go",
+      "class": "B",
+      "units": 41,
+      "rates": {
+        "none": 0.4878048780487805,
+        "gstack": 0.4634146341463415,
+        "superpowers": 0.4878048780487805,
+        "agent-skills": 0.4878048780487805,
+        "gsd": 0.4634146341463415,
+        "pstack": 0.43902439024390244,
+        "tstack": 0.4878048780487805
+      },
+      "gstack_minus": [
+        {
+          "label": "B go: gstack minus none",
+          "test": {
+            "n": 41,
+            "n_repos": 31,
+            "a_rate": 0.4878048780487805,
+            "b_rate": 0.4634146341463415,
+            "delta": -0.024390243902439025,
+            "b_only": 1,
+            "a_only": 2,
+            "discordant_share": 0.07317073170731707,
+            "se_cluster": 0.042879542261768044,
+            "z": -0.568808401767518,
+            "p": 0.5694861722969684,
+            "p_exact": 1,
+            "ci95": [
+              -0.11363636363636363,
+              0.05405405405405406
+            ]
+          }
+        },
+        {
+          "label": "B go: gstack minus superpowers",
+          "test": {
+            "n": 41,
+            "n_repos": 31,
+            "a_rate": 0.4878048780487805,
+            "b_rate": 0.4634146341463415,
+            "delta": -0.024390243902439025,
+            "b_only": 1,
+            "a_only": 2,
+            "discordant_share": 0.07317073170731707,
+            "se_cluster": 0.042879542261768044,
+            "z": -0.568808401767518,
+            "p": 0.5694861722969684,
+            "p_exact": 1,
+            "ci95": [
+              -0.11363636363636363,
+              0.05405405405405406
+            ]
+          }
+        },
+        {
+          "label": "B go: gstack minus agent-skills",
+          "test": {
+            "n": 41,
+            "n_repos": 31,
+            "a_rate": 0.4878048780487805,
+            "b_rate": 0.4634146341463415,
+            "delta": -0.024390243902439025,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.024390243902439025,
+            "se_cluster": 0.023436214943428037,
+            "z": -1.0407074675374794,
+            "p": 0.298011336397626,
+            "p_exact": 1,
+            "ci95": [
+              -0.07317073170731707,
+              0
+            ]
+          }
+        },
+        {
+          "label": "B go: gstack minus gsd",
+          "test": {
+            "n": 41,
+            "n_repos": 31,
+            "a_rate": 0.4634146341463415,
+            "b_rate": 0.4634146341463415,
+            "delta": 0,
+            "b_only": 2,
+            "a_only": 2,
+            "discordant_share": 0.0975609756097561,
+            "se_cluster": 0.049586831486103766,
+            "z": 0,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              -0.1,
+              0.0975609756097561
+            ]
+          }
+        },
+        {
+          "label": "B go: gstack minus pstack",
+          "test": {
+            "n": 41,
+            "n_repos": 31,
+            "a_rate": 0.43902439024390244,
+            "b_rate": 0.4634146341463415,
+            "delta": 0.024390243902439025,
+            "b_only": 2,
+            "a_only": 1,
+            "discordant_share": 0.07317073170731707,
+            "se_cluster": 0.04217443656162089,
+            "z": 0.5783181920356552,
+            "p": 0.56304931442138,
+            "p_exact": 1,
+            "ci95": [
+              -0.05555555555555555,
+              0.10526315789473684
+            ]
+          }
+        },
+        {
+          "label": "B go: gstack minus tstack",
+          "test": {
+            "n": 41,
+            "n_repos": 31,
+            "a_rate": 0.4878048780487805,
+            "b_rate": 0.4634146341463415,
+            "delta": -0.024390243902439025,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.024390243902439025,
+            "se_cluster": 0.024682548818206078,
+            "z": -0.9881574258023367,
+            "p": 0.3230755551479949,
+            "p_exact": 1,
+            "ci95": [
+              -0.08333333333333333,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "B ts",
+      "class": "B",
+      "units": 19,
+      "rates": {
+        "none": 0.47368421052631576,
+        "gstack": 0.5263157894736842,
+        "superpowers": 0.47368421052631576,
+        "agent-skills": 0.5263157894736842,
+        "gsd": 0.5789473684210527,
+        "pstack": 0.5263157894736842,
+        "tstack": 0.47368421052631576
+      },
+      "gstack_minus": [
+        {
+          "label": "B ts: gstack minus none",
+          "test": {
+            "n": 19,
+            "n_repos": 13,
+            "a_rate": 0.47368421052631576,
+            "b_rate": 0.5263157894736842,
+            "delta": 0.05263157894736842,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.05263157894736842,
+            "se_cluster": 0.05125277594230071,
+            "z": 1.0269020161292324,
+            "p": 0.3044666048706466,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.15789473684210525
+            ]
+          }
+        },
+        {
+          "label": "B ts: gstack minus superpowers",
+          "test": {
+            "n": 19,
+            "n_repos": 13,
+            "a_rate": 0.47368421052631576,
+            "b_rate": 0.5263157894736842,
+            "delta": 0.05263157894736842,
+            "b_only": 1,
+            "a_only": 0,
+            "discordant_share": 0.05263157894736842,
+            "se_cluster": 0.05125277594230071,
+            "z": 1.0269020161292324,
+            "p": 0.3044666048706466,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.15789473684210525
+            ]
+          }
+        },
+        {
+          "label": "B ts: gstack minus agent-skills",
+          "test": {
+            "n": 19,
+            "n_repos": 13,
+            "a_rate": 0.5263157894736842,
+            "b_rate": 0.5263157894736842,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "B ts: gstack minus gsd",
+          "test": {
+            "n": 19,
+            "n_repos": 13,
+            "a_rate": 0.5789473684210527,
+            "b_rate": 0.5263157894736842,
+            "delta": -0.05263157894736842,
+            "b_only": 0,
+            "a_only": 1,
+            "discordant_share": 0.05263157894736842,
+            "se_cluster": 0.05125277594230071,
+            "z": -1.0269020161292324,
+            "p": 0.3044666048706466,
+            "p_exact": 1,
+            "ci95": [
+              -0.15789473684210525,
+              0
+            ]
+          }
+        },
+        {
+          "label": "B ts: gstack minus pstack",
+          "test": {
+            "n": 19,
+            "n_repos": 13,
+            "a_rate": 0.5263157894736842,
+            "b_rate": 0.5263157894736842,
+            "delta": 0,
+            "b_only": 0,
+            "a_only": 0,
+            "discordant_share": 0,
+            "se_cluster": 0,
+            "z": null,
+            "p": 1,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "label": "B ts: gstack minus tstack",
+          "test": {
+            "n": 19,
+            "n_repos": 13,
+            "a_rate": 0.47368421052631576,
+            "b_rate": 0.5263157894736842,
+            "delta": 0.05263157894736842,
+            "b_only": 2,
+            "a_only": 1,
+            "discordant_share": 0.15789473684210525,
+            "se_cluster": 0.05125277594230071,
+            "z": 1.0269020161292324,
+            "p": 0.3044666048706466,
+            "p_exact": 1,
+            "ci95": [
+              0,
+              0.15789473684210525
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "piece_g": {
+    "verified": {
+      "n": 100,
+      "n_repos": 74,
+      "a_rate": 0.58,
+      "b_rate": 0.63,
+      "delta": 0.05,
+      "b_only": 8,
+      "a_only": 3,
+      "discordant_share": 0.11,
+      "se_cluster": 0.03250036880718033,
+      "z": 1.5384440803315889,
+      "p": 0.12394007132697094,
+      "p_exact": 0.2265625,
+      "ci95": [
+        -0.010638297872340425,
+        0.11428571428571428
+      ]
+    },
+    "incomplete": false,
+    "lines": {
+      "both_fixed": 55,
+      "zero_excluded": 0,
+      "n": 55,
+      "n_repos": 47,
+      "mean_log": -0.43064853574023665,
+      "sd_log": 0.4938878502146554,
+      "ratio": 0.6500873530980801,
+      "ci95": [
+        0.5683395112064948,
+        0.7381865101685237
+      ],
+      "p": 0
+    },
+    "oneline": {
+      "both_fixed": 53,
+      "zero_excluded": 0,
+      "n": 53,
+      "n_repos": 46,
+      "mean_log": -0.8205714565091318,
+      "sd_log": 0.7402089731162141,
+      "ratio": 0.44018003887074775,
+      "ci95": [
+        0.36551516420443103,
+        0.5301147128150822
+      ],
+      "p": 0
+    },
+    "p_holm": [
+      0,
+      0.12394007132697094
+    ],
+    "less_code": true,
+    "more_correct": false,
+    "exposure_pony": {
+      "sessions": 100,
+      "loaded": 1,
+      "procedure": 1,
+      "missing": 0,
+      "foreign_reads": 0
+    },
+    "exercised": true,
+    "adopt": "oneline"
+  },
+  "triggers": [
+    "gstack ties plain Opus on ordinary bugs (O)",
+    "gstack ties or trails plain Opus on B",
+    "A pack not exercised as designed: agent-skills on O",
+    "A pack not exercised as designed: gsd on O",
+    "A pack not exercised as designed: pstack on O",
+    "A pack not exercised as designed: agent-skills on B",
+    "A pack not exercised as designed: gsd on B",
+    "A pack not exercised as designed: pstack on B",
+    "A pack not exercised as designed: tstack on B",
+    "gstack's dollars per verified fix above plain Opus's, with no correctness gain on O",
+    "gstack's dollars per verified fix above plain Opus's, with no correctness gain on B",
+    "Piece G"
+  ],
+  "ideas_to_study": []
+}

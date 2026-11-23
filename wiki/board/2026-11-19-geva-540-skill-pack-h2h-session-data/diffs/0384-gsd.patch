@@ -1,0 +1,280 @@
+diff --git a/internal/codegen/golang/result.go b/internal/codegen/golang/result.go
+index 0820488..cbd9c81 100644
+--- a/internal/codegen/golang/result.go
++++ b/internal/codegen/golang/result.go
+@@ -268,9 +268,29 @@ func buildQueries(req *plugin.GenerateRequest, options *opts.Options, structs []
+ 			c := query.Columns[0]
+ 			name := columnName(c, 0)
+ 			name = strings.Replace(name, "$", "_", -1)
++			dbName := name
++			// For :one queries, avoid reusing a method parameter as the scan
++			// destination when the column and the parameter share the same
++			// name. Otherwise, on error (e.g. sql.ErrNoRows) the input value
++			// would be returned instead of the zero value.
++			argNames := map[string]struct{}{}
++			if query.Cmd == metadata.CmdOne {
++				for _, a := range gq.Arg.Pairs() {
++					argNames[a.Name] = struct{}{}
++				}
++			}
++			if _, found := argNames[escape(name)]; found {
++				base := name
++				for i := 2; ; i++ {
++					name = fmt.Sprintf("%s_%d", base, i)
++					if _, found := argNames[escape(name)]; !found {
++						break
++					}
++				}
++			}
+ 			gq.Ret = QueryValue{
+ 				Name:      escape(name),
+-				DBName:    name,
++				DBName:    dbName,
+ 				Typ:       goType(req, options, c),
+ 				SQLDriver: sqlpkg,
+ 			}
+diff --git a/internal/endtoend/testdata/single_param_conflict/mysql/go/query.sql.go b/internal/endtoend/testdata/single_param_conflict/mysql/go/query.sql.go
+index e3ba139..44385a7 100644
+--- a/internal/endtoend/testdata/single_param_conflict/mysql/go/query.sql.go
++++ b/internal/endtoend/testdata/single_param_conflict/mysql/go/query.sql.go
+@@ -32,8 +32,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetAuthorIDByID(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRowContext(ctx, getAuthorIDByID, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+ 
+ const getUser = `-- name: GetUser :one
+@@ -45,6 +46,7 @@ LIMIT   1
+ 
+ func (q *Queries) GetUser(ctx context.Context, sub string) (string, error) {
+ 	row := q.db.QueryRowContext(ctx, getUser, sub)
+-	err := row.Scan(&sub)
+-	return sub, err
++	var sub_2 string
++	err := row.Scan(&sub_2)
++	return sub_2, err
+ }
+diff --git a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v4/go/query.sql.go b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v4/go/query.sql.go
+index 1912659..05f0540 100644
+--- a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v4/go/query.sql.go
++++ b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v4/go/query.sql.go
+@@ -34,8 +34,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetAuthorIDByID(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRow(ctx, getAuthorIDByID, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+ 
+ const getUser = `-- name: GetUser :one
+@@ -47,8 +48,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetUser(ctx context.Context, sub uuid.UUID) (uuid.UUID, error) {
+ 	row := q.db.QueryRow(ctx, getUser, sub)
+-	err := row.Scan(&sub)
+-	return sub, err
++	var sub_2 uuid.UUID
++	err := row.Scan(&sub_2)
++	return sub_2, err
+ }
+ 
+ const setDefaultName = `-- name: SetDefaultName :one
+@@ -62,6 +64,7 @@ RETURNING id
+ // https://github.com/sqlc-dev/sqlc/issues/1235
+ func (q *Queries) SetDefaultName(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRow(ctx, setDefaultName, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+diff --git a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/models.go b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/models.go
+index 29daab3..88d78f8 100644
+--- a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/models.go
++++ b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/models.go
+@@ -8,6 +8,10 @@ import (
+ 	"github.com/jackc/pgx/v5/pgtype"
+ )
+ 
++type Account struct {
++	Email string
++}
++
+ type Author struct {
+ 	ID   int64
+ 	Name string
+diff --git a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/query.sql.go b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/query.sql.go
+index daa903d..9058e57 100644
+--- a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/query.sql.go
++++ b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/go/query.sql.go
+@@ -11,6 +11,21 @@ import (
+ 	"github.com/jackc/pgx/v5/pgtype"
+ )
+ 
++const getAccountEmail = `-- name: GetAccountEmail :one
++
++SELECT email
++FROM accounts
++WHERE email = $1
++`
++
++// Column and sqlc.arg share the same name
++func (q *Queries) GetAccountEmail(ctx context.Context, email string) (string, error) {
++	row := q.db.QueryRow(ctx, getAccountEmail, email)
++	var email_2 string
++	err := row.Scan(&email_2)
++	return email_2, err
++}
++
+ const getAuthorByID = `-- name: GetAuthorByID :one
+ SELECT  id, name, bio
+ FROM    authors
+@@ -34,8 +49,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetAuthorIDByID(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRow(ctx, getAuthorIDByID, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+ 
+ const getUser = `-- name: GetUser :one
+@@ -47,8 +63,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetUser(ctx context.Context, sub pgtype.UUID) (pgtype.UUID, error) {
+ 	row := q.db.QueryRow(ctx, getUser, sub)
+-	err := row.Scan(&sub)
+-	return sub, err
++	var sub_2 pgtype.UUID
++	err := row.Scan(&sub_2)
++	return sub_2, err
+ }
+ 
+ const setDefaultName = `-- name: SetDefaultName :one
+@@ -62,6 +79,7 @@ RETURNING id
+ // https://github.com/sqlc-dev/sqlc/issues/1235
+ func (q *Queries) SetDefaultName(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRow(ctx, setDefaultName, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+diff --git a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/query.sql b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/query.sql
+index ca3fc5c..00439d9 100644
+--- a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/query.sql
++++ b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/query.sql
+@@ -23,3 +23,10 @@ UPDATE  authors
+ SET     name = 'Default Name'
+ WHERE   id = $1
+ RETURNING id;
++
++-- Column and sqlc.arg share the same name
++
++-- name: GetAccountEmail :one
++SELECT email
++FROM accounts
++WHERE email = sqlc.arg(email);
+diff --git a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/schema.sql b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/schema.sql
+index 0c4555a..55b6819 100644
+--- a/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/schema.sql
++++ b/internal/endtoend/testdata/single_param_conflict/postgresql/pgx/v5/schema.sql
+@@ -9,3 +9,8 @@ CREATE TABLE authors (
+ CREATE TABLE users (
+   sub UUID PRIMARY KEY
+ );
++
++-- Column and sqlc.arg share the same name
++CREATE TABLE accounts (
++  email TEXT PRIMARY KEY
++);
+diff --git a/internal/endtoend/testdata/single_param_conflict/postgresql/stdlib/go/query.sql.go b/internal/endtoend/testdata/single_param_conflict/postgresql/stdlib/go/query.sql.go
+index 0b99078..4f4bd17 100644
+--- a/internal/endtoend/testdata/single_param_conflict/postgresql/stdlib/go/query.sql.go
++++ b/internal/endtoend/testdata/single_param_conflict/postgresql/stdlib/go/query.sql.go
+@@ -34,8 +34,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetAuthorIDByID(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRowContext(ctx, getAuthorIDByID, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+ 
+ const getUser = `-- name: GetUser :one
+@@ -47,8 +48,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetUser(ctx context.Context, sub uuid.UUID) (uuid.UUID, error) {
+ 	row := q.db.QueryRowContext(ctx, getUser, sub)
+-	err := row.Scan(&sub)
+-	return sub, err
++	var sub_2 uuid.UUID
++	err := row.Scan(&sub_2)
++	return sub_2, err
+ }
+ 
+ const setDefaultName = `-- name: SetDefaultName :one
+@@ -62,6 +64,7 @@ RETURNING id
+ // https://github.com/sqlc-dev/sqlc/issues/1235
+ func (q *Queries) SetDefaultName(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRowContext(ctx, setDefaultName, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+diff --git a/internal/endtoend/testdata/single_param_conflict/sqlite/go/query.sql.go b/internal/endtoend/testdata/single_param_conflict/sqlite/go/query.sql.go
+index e3ba139..44385a7 100644
+--- a/internal/endtoend/testdata/single_param_conflict/sqlite/go/query.sql.go
++++ b/internal/endtoend/testdata/single_param_conflict/sqlite/go/query.sql.go
+@@ -32,8 +32,9 @@ LIMIT   1
+ 
+ func (q *Queries) GetAuthorIDByID(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRowContext(ctx, getAuthorIDByID, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }
+ 
+ const getUser = `-- name: GetUser :one
+@@ -45,6 +46,7 @@ LIMIT   1
+ 
+ func (q *Queries) GetUser(ctx context.Context, sub string) (string, error) {
+ 	row := q.db.QueryRowContext(ctx, getUser, sub)
+-	err := row.Scan(&sub)
+-	return sub, err
++	var sub_2 string
++	err := row.Scan(&sub_2)
++	return sub_2, err
+ }
+diff --git a/internal/endtoend/testdata/vet_explain/mysql/db/query.sql.go b/internal/endtoend/testdata/vet_explain/mysql/db/query.sql.go
+index cef6fbf..9a11dd5 100644
+--- a/internal/endtoend/testdata/vet_explain/mysql/db/query.sql.go
++++ b/internal/endtoend/testdata/vet_explain/mysql/db/query.sql.go
+@@ -438,6 +438,7 @@ WHERE id = ? LIMIT 1
+ 
+ func (q *Queries) SelectById(ctx context.Context, id int64) (int64, error) {
+ 	row := q.db.QueryRowContext(ctx, selectById, id)
+-	err := row.Scan(&id)
+-	return id, err
++	var id_2 int64
++	err := row.Scan(&id_2)
++	return id_2, err
+ }

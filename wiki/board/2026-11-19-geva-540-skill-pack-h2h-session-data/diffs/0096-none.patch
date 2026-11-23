@@ -1,0 +1,139 @@
+diff --git a/src/lib/ares_private.h b/src/lib/ares_private.h
+index 3dbdf7a..d45cff0 100644
+--- a/src/lib/ares_private.h
++++ b/src/lib/ares_private.h
+@@ -542,6 +542,13 @@ void ares_gethostbyaddr_nolock(ares_channel_t *channel, const void *addr,
+ ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
+                                   ares_bool_t is_hostname);
+ 
++/*! Same as ares_dns_name_parse() but rejects names that use compression
++ *  pointers (returns ARES_EBADNAME).  Used for fields where compression is
++ *  prohibited, such as the SRV TARGET (RFC 2782).
++ */
++ares_status_t ares_dns_name_parse_nocomp(ares_buf_t *buf, char **name,
++                                         ares_bool_t is_hostname);
++
+ /*! Write the DNS name to the buffer in the DNS domain-name syntax as a
+  *  series of labels.  The maximum domain name length is 255 characters with
+  *  each label being a maximum of 63 characters.  If the validate_hostname
+diff --git a/src/lib/record/ares_dns_name.c b/src/lib/record/ares_dns_name.c
+index 134f3ed..6a1b764 100644
+--- a/src/lib/record/ares_dns_name.c
++++ b/src/lib/record/ares_dns_name.c
+@@ -548,8 +548,9 @@ fail:
+   return status;
+ }
+ 
+-ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
+-                                  ares_bool_t is_hostname)
++static ares_status_t ares_dns_name_parse_int(ares_buf_t *buf, char **name,
++                                             ares_bool_t is_hostname,
++                                             ares_bool_t allow_compression)
+ {
+   size_t        save_offset = 0;
+   unsigned char c;
+@@ -592,6 +593,12 @@ ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
+ 
+     /* Pointer/Redirect */
+     if ((c & 0xc0) == 0xc0) {
++      /* Some record types (e.g. SRV per RFC 2782) prohibit name compression */
++      if (!allow_compression) {
++        status = ARES_EBADNAME;
++        goto fail;
++      }
++
+       /* The pointer takes the form of a two octet sequence:
+        *
+        *   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+@@ -715,3 +722,15 @@ fail:
+   ares_buf_destroy(namebuf);
+   return status;
+ }
++
++ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
++                                  ares_bool_t is_hostname)
++{
++  return ares_dns_name_parse_int(buf, name, is_hostname, ARES_TRUE);
++}
++
++ares_status_t ares_dns_name_parse_nocomp(ares_buf_t *buf, char **name,
++                                         ares_bool_t is_hostname)
++{
++  return ares_dns_name_parse_int(buf, name, is_hostname, ARES_FALSE);
++}
+diff --git a/src/lib/record/ares_dns_parse.c b/src/lib/record/ares_dns_parse.c
+index 113438f..442a229 100644
+--- a/src/lib/record/ares_dns_parse.c
++++ b/src/lib/record/ares_dns_parse.c
+@@ -404,9 +404,19 @@ static ares_status_t ares_dns_parse_rr_srv(ares_buf_t *buf, ares_dns_rr_t *rr,
+     return status;
+   }
+ 
+-  /* TARGET */
+-  return ares_dns_parse_and_set_dns_name(buf, ARES_FALSE, rr,
+-                                         ARES_RR_SRV_TARGET);
++  /* TARGET: RFC 2782: "name compression is not to be used for this field" */
++  {
++    char *name = NULL;
++    status     = ares_dns_name_parse_nocomp(buf, &name, ARES_FALSE);
++    if (status != ARES_SUCCESS) {
++      return status;
++    }
++    status = ares_dns_rr_set_str_own(rr, ARES_RR_SRV_TARGET, name);
++    if (status != ARES_SUCCESS) {
++      ares_free(name);
++    }
++    return status;
++  }
+ }
+ 
+ static ares_status_t ares_dns_parse_rr_naptr(ares_buf_t *buf, ares_dns_rr_t *rr,
+diff --git a/test/ares-test-parse-srv.cc b/test/ares-test-parse-srv.cc
+index 6956beb..0ffdb63 100644
+--- a/test/ares-test-parse-srv.cc
++++ b/test/ares-test-parse-srv.cc
+@@ -118,6 +118,44 @@ TEST_F(LibraryTest, ParseSrvReplyMalformed) {
+   ASSERT_EQ(nullptr, srv);
+ }
+ 
++TEST_F(LibraryTest, ParseSrvReplyCompressedTarget) {
++  /* RFC 2782: name compression is not to be used for the SRV TARGET field */
++  std::vector<byte> data = {
++    0x12, 0x34,  // qid
++    0x84, // response + query + AA + not-TC + not-RD
++    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError
++    0x00, 0x01,  // num questions
++    0x00, 0x01,  // num answer RRs
++    0x00, 0x00,  // num authority RRs
++    0x00, 0x00,  // num additional RRs
++    // Question
++    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',
++    0x03, 'c', 'o', 'm',
++    0x00,
++    0x00, 0x21,  // type SRV
++    0x00, 0x01,  // class IN
++    // Answer 1
++    0xC0, 0x0C,  // compressed owner name (allowed)
++    0x00, 0x21,  // RR type
++    0x00, 0x01,  // class IN
++    0x01, 0x02, 0x03, 0x04, // TTL
++    0x00, 0x08,  // rdata length
++    0x00, 0x0A,  // priority
++    0x00, 0x14,  // weight
++    0x00, 0x1E,  // port
++    0xC0, 0x0C,  // TARGET as compression pointer -- prohibited
++  };
++
++  struct ares_srv_reply* srv = nullptr;
++  EXPECT_NE(ARES_SUCCESS, ares_parse_srv_reply(data.data(), (int)data.size(), &srv));
++  EXPECT_EQ(nullptr, srv);
++
++  ares_dns_record_t *dnsrec = nullptr;
++  EXPECT_NE(ARES_SUCCESS, ares_dns_parse(data.data(), data.size(), 0, &dnsrec));
++  EXPECT_EQ(nullptr, dnsrec);
++  ares_dns_record_destroy(dnsrec);
++}
++
+ TEST_F(LibraryTest, ParseSrvReplyMultiple) {
+   DNSPacket pkt;
+   pkt.set_qid(0x1234).set_response().set_ra().set_rd()

@@ -20,7 +20,7 @@ import type { SessionEnd, Termination, TokenUsage, TrialRecord } from "../types.
 import { removeTree, type CleanupOptions } from "./cleanup.ts";
 import { importDelta, PLACEHOLDER, snapshot, type Delta } from "./delta.ts";
 import { DELTA_VAR, trialEnv, TrialEnvError } from "./env.ts";
-import type { AgentSession, Sandbox, StepResult } from "./sandbox.ts";
+import type { AgentSession, ReadOnlyMount, Sandbox, StepResult } from "./sandbox.ts";
 import { seedStateRoot, type Proactive } from "./state-root.ts";
 
 /** What a host adapter (U10) or the replay driver reports for one session. */
@@ -41,6 +41,8 @@ export interface AgentOutcome {
   opened: boolean | null;
   files_read: string[];
   asked: (Category | null)[];
+  /** Questions the session asked through its host's question tool that got no answer; set by drivers where that can happen (Codex). */
+  unanswered?: number;
   usage: TokenUsage | null;
   cost_micros: number | null;
   agent_turns: number | null;
@@ -77,6 +79,9 @@ export interface TrialSpec {
   /** Before the trees are removed, after copyOut: copies out a session's gate record from the work dir and returns trial.json's
    * gate and any copy failures, which join logs.copy_out (an enforced ceo-outcome session; src/trial/review/skill-gates.ts). */
   gate?: (work: string) => { copy_out: string[]; gate: unknown };
+  /** Before the trees are removed, after copyOut: the directory <work dir>/from is copied to to, regular files and
+   * directories only, symlinks skipped, such as a product-value session's gstack state root. Failures join logs.copy_out. */
+  copyDir?: { from: string; to: string };
   /** How the trees are removed (src/trial/cleanup.ts): an image removes root-owned leftovers. */
   cleanup?: CleanupOptions;
   /** Keys appended to the gstack state root's config.yaml after the seed: a stack cell's gstack config (src/arms/cells.ts). */
@@ -87,6 +92,14 @@ export interface TrialSpec {
   stateProjectFiles?: Record<string, string>;
   /** A directory copied into the work dir before setup, such as a review unit's repository; it never holds an answer key. */
   seed?: string;
+  /** The agent sees the work dir at the sandbox's work root (/work in docker) instead of under its task id. */
+  root?: boolean;
+  /** Host files and directories the agent sees read-only, such as an eng-review eng phase session's rendered input. */
+  mounts?: readonly ReadOnlyMount[];
+  /** false: no gstack state root is seeded and no GSTACK_STATE_ROOT or GSTACK_HOME is set (an arm with no gstack). */
+  stateRoot?: false;
+  /** Like copyDir, for more directories, after it. */
+  copyDirs?: ReadonlyArray<{ from: string; to: string }>;
 }
 
 export interface TrialRun {
@@ -126,6 +139,29 @@ export function copyNamed(root: string, name: string, to: string, rel = ""): str
   });
 }
 
+/** Copies the tree at from to to, regular files and directories only; a symlink is skipped, never followed, and a missing from copies nothing. Returns one line per entry it could not copy. */
+export function copyDir(from: string, to: string, rel = ""): string[] {
+  if (!rel && !lstatSync(from, { throwIfNoEntry: false })?.isDirectory()) return [];
+  let entries;
+  try {
+    mkdirSync(join(to, rel), { recursive: true });
+    entries = readdirSync(join(from, rel), { withFileTypes: true });
+  } catch (e) {
+    return [String(e)];
+  }
+  return entries.flatMap((e) => {
+    const path = join(rel, e.name);
+    if (e.isDirectory()) return copyDir(from, to, path);
+    if (!e.isFile()) return [];
+    try {
+      copyFileSync(join(from, path), join(to, path));
+      return [];
+    } catch (err) {
+      return [String(err)];
+    }
+  });
+}
+
 export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   const started = Date.now();
   const { task, sandbox } = spec;
@@ -138,7 +174,7 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   mkdirSync(work, { recursive: true });
   if (spec.seed) cpSync(spec.seed, work, { recursive: true, verbatimSymlinks: true });
   cpSync(spec.tasksDir, fixtures, { recursive: true });
-  const workPath = sandbox.workPath(work, task.id);
+  const workPath = sandbox.workPath(work, task.id, spec.root);
   const home = sandbox.homePath(spec.dir);
   const declared = spec.entry?.env ?? [];
   const source = spec.source ?? process.env;
@@ -152,6 +188,10 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     if (spec.copyOut) {
       const failures = copyNamed(work, spec.copyOut.name, spec.copyOut.to);
       if (failures.length) logs.copy_out = failures;
+    }
+    for (const c of [...(spec.copyDir ? [spec.copyDir] : []), ...(spec.copyDirs ?? [])]) {
+      const failures = copyDir(join(work, c.from), c.to).map((f) => c.from + ": " + f);
+      if (failures.length) logs.copy_out = [...((logs.copy_out as string[] | undefined) ?? []), ...failures];
     }
     const gate = spec.gate?.(work);
     if (gate?.copy_out.length) logs.copy_out = [...((logs.copy_out as string[] | undefined) ?? []), ...gate.copy_out];
@@ -174,16 +214,16 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
       logs.setup = { exitCode: r.exitCode, timedOut: r.timedOut, stderr: tail(r) };
       if (r.exitCode !== 0) return missing("E_TASKS_INVALID", "setup " + (r.timedOut ? "timed out" : "exited " + r.exitCode) + ": " + tail(r));
     }
-    const stateEnv = seedStateRoot(work, workPath, spec.proactive ?? "core", spec.stateConfig, spec.stateFiles, spec.stateProjectFiles);
+    const stateEnv = spec.stateRoot === false ? {} : seedStateRoot(work, workPath, spec.proactive ?? "core", spec.stateConfig, spec.stateFiles, spec.stateProjectFiles);
     snapshot(work, baseline);
-    const session = sandbox.agent(task.id, { work, env: trialEnv("agent", { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", ...stateEnv, ...spec.agent.env }, declared, source), network: spec.network ?? null });
+    const session = sandbox.agent(task.id, { work, env: trialEnv("agent", { PATH, HOME: home, LANG: "C.UTF-8", TERM: "dumb", ...stateEnv, ...spec.agent.env }, declared, source), network: spec.network ?? null, ...(spec.root ? { root: true } : {}), ...(spec.mounts?.length ? { mounts: spec.mounts } : {}) });
     let outcome: AgentOutcome;
     try {
       outcome = await spec.agent.run(session, task, timeoutMs);
     } finally {
       session.stop();
     }
-    Object.assign(record, { turns: outcome.turns, termination: outcome.termination, model_output: outcome.model_output, text_output: outcome.text_output, exit_code: outcome.exit_code, signal: outcome.signal, credited_stall_ms: outcome.credited_stall_ms, session_end: outcome.session_end, opened: outcome.opened, files_read: outcome.files_read, asked: outcome.asked, usage: outcome.usage, cost_micros: outcome.cost_micros, agent_turns: outcome.agent_turns, loaded_bytes: outcome.loaded_bytes });
+    Object.assign(record, { turns: outcome.turns, termination: outcome.termination, model_output: outcome.model_output, text_output: outcome.text_output, exit_code: outcome.exit_code, signal: outcome.signal, credited_stall_ms: outcome.credited_stall_ms, session_end: outcome.session_end, opened: outcome.opened, files_read: outcome.files_read, asked: outcome.asked, ...(outcome.unanswered === undefined ? {} : { unanswered: outcome.unanswered }), usage: outcome.usage, cost_micros: outcome.cost_micros, agent_turns: outcome.agent_turns, loaded_bytes: outcome.loaded_bytes });
     if (outcome.termination.kind !== "completed") return finish(null);
     snapshot(baseline, grade);
     const delta = importDelta(baseline, work, grade, spec.entry?.paths);

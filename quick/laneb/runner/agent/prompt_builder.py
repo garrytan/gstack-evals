@@ -7,7 +7,7 @@ PROCEDURE_LINES and CLOSING_LINES must match byte for byte.
 """
 
 PROCEDURE_LINES = {"investigate-phases": "Work through /investigate's phases in order, and finish with its DEBUG REPORT."}
-CLOSING_LINES = {"r3c-root-cause-files": "When you are done, end your last message with a ROOT CAUSE FILES block: a line that reads ROOT CAUSE FILES, then up to three file paths relative to the repository root, one per line, the file most likely to hold the root cause first."}
+CLOSING_LINES = {"r3c-root-cause-files": "When you are done, end your last message with a ROOT CAUSE FILES block: a line that reads ROOT CAUSE FILES, then up to three file paths relative to the repository root, one per line, the file most likely to hold the root cause first.", "hm-status": "When you finish, end your final message with one line: STATUS: FIXED or STATUS: NOT FIXED."}
 
 
 def build_prompt(wrapper_text, instruction, invoke, skill, invocation_sep=" ", procedure_line="", closing_line=""):

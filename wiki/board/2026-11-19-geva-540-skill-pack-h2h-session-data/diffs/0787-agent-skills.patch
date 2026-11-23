@@ -1,0 +1,132 @@
+diff --git a/.changeset/quiet-abort-untrack.md b/.changeset/quiet-abort-untrack.md
+new file mode 100644
+index 0000000..64aba30
+--- /dev/null
++++ b/.changeset/quiet-abort-untrack.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: run abort listeners outside of reactive context to avoid false positive `state_unsafe_mutation`
+diff --git a/packages/svelte/src/internal/client/reactivity/effects.js b/packages/svelte/src/internal/client/reactivity/effects.js
+index f44efa3..be307cd 100644
+--- a/packages/svelte/src/internal/client/reactivity/effects.js
++++ b/packages/svelte/src/internal/client/reactivity/effects.js
+@@ -406,7 +406,13 @@ export function destroy_effect_children(signal, remove_dom = false) {
+ 	signal.first = signal.last = null;
+ 
+ 	while (effect !== null) {
+-		effect.ac?.abort(STALE_REACTION);
++		const controller = effect.ac;
++
++		if (controller !== null) {
++			untrack(() => {
++				controller.abort(STALE_REACTION);
++			});
++		}
+ 
+ 		var next = effect.next;
+ 
+diff --git a/packages/svelte/src/internal/client/runtime.js b/packages/svelte/src/internal/client/runtime.js
+index 3d760e4..1a8a17c 100644
+--- a/packages/svelte/src/internal/client/runtime.js
++++ b/packages/svelte/src/internal/client/runtime.js
+@@ -277,9 +277,16 @@ export function update_reaction(reaction) {
+ 	untracking = false;
+ 	update_version = ++read_version;
+ 
+-	if (reaction.ac !== null) {
+-		reaction.ac.abort(STALE_REACTION);
++	const controller = reaction.ac;
++
++	if (controller !== null) {
+ 		reaction.ac = null;
++
++		// abort handlers should not run inside the reactive context of the
++		// reaction that is about to re-run (e.g. they may write to state)
++		untrack(() => {
++			controller.abort(STALE_REACTION);
++		});
+ 	}
+ 
+ 	try {
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/Component.svelte b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/Component.svelte
+new file mode 100644
+index 0000000..4ae63ca
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/Component.svelte
+@@ -0,0 +1,28 @@
++<script>
++	import { onMount, getAbortSignal } from 'svelte';
++
++	const { test } = $props();
++
++	onMount(() => {
++		const signal = getAbortSignal();
++
++		test.value = true;
++		signal.addEventListener('abort', () => {
++			test.value = false;
++		});
++	});
++
++	const value = $derived.by(() => {
++		const signal = getAbortSignal();
++		signal.addEventListener('abort', () => {
++			try {
++				test.value = false;
++			} catch (e) {
++				console.log(e.message);
++			}
++		});
++		return test.value;
++	});
++</script>
++
++{value}
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/_config.js b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/_config.js
+new file mode 100644
+index 0000000..1dc21cf
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/_config.js
+@@ -0,0 +1,18 @@
++import { flushSync } from 'svelte';
++import { test } from '../../test';
++
++export default test({
++	html: `<button>click</button>`,
++
++	test({ assert, target, logs }) {
++		const [button] = target.querySelectorAll('button');
++
++		flushSync(() => button.click());
++		assert.htmlEqual(target.innerHTML, `<button>click</button> false`);
++
++		flushSync(() => button.click());
++		assert.htmlEqual(target.innerHTML, `<button>click</button>`);
++
++		assert.deepEqual(logs, []);
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/main.svelte b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/main.svelte
+new file mode 100644
+index 0000000..7b2704b
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/main.svelte
+@@ -0,0 +1,15 @@
++<script>
++	import Component from './Component.svelte';
++
++	class Test {
++		value = $state(false);
++	}
++
++	const test = new Test();
++	let show = $state(false);
++</script>
++
++<button onclick={() => (show = !show)}>click</button>
++{#if show}
++	<Component {test} />
++{/if}

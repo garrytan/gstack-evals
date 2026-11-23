@@ -34,7 +34,7 @@ const context: VerdictContext = {
   arm_trees: { before: SHA, before2: SHA, after: "c".repeat(64), none: "d".repeat(64) },
   lock: { tasks_sha256: SHA, ext_sha256: null, commit: "e".repeat(40), post_hoc: false },
   levels: { description: { before: 40, after: 38 }, skill_md: { before: 9000, after: 6000 }, references: { before: 2000, after: 2600 } },
-  spend: { ledger: "ledger.sqlite", ledger_record: "ledger-record.json", committed: 41_000_000, reserved: 0, unknown: 0, cap: 60_000_000, line_item: "learn-diet", lease_id: "lease-1", approval: { words: "Approved, $60 cap.", by: "Approver", source: "gate" }, caps_history: [60_000_000] },
+  spend: { ledger: "ledger.sqlite", ledger_record: "ledger-record.json", committed: 41_000_000, reserved: 0, unknown: 0, cap: 60_000_000, line_item: "learn-diet", lease_id: "lease-1", approval: { words: "approve a $60 cap", by: "Approver", source: "gate" }, caps_history: [60_000_000] },
   adjudication: { blinded: true, judge_model: "openai/gpt-6.1-sol" },
   resumed_from: null,
   wall_s: 1830,
@@ -86,11 +86,23 @@ describe("verdict.json", () => {
     expect(v.arms.before!.files_loaded).toEqual({ "SKILL.md": 21 });
   });
 
+  // Value: protects=each model's arm block counts the questions its sessions asked through the host's question tool and left unanswered (a Codex tool question in a task with no user replies), zero for cells that record none (Claude Code, older records) or asked nothing, so a results post can state the host difference per arm and model; fails_when=the count is missing, mixes models or arms, or the schema refuses it; why_new=the eval owner's 1B ruling; seam=armBlock, schema/verdict.schema.json; no_claim=whether a question needed an answer
+  test("each arm block counts its unanswered questions per model, zero where none were recorded", () => {
+    let n = 0;
+    const records = metered([...grid("opus", plan("111")), ...grid("haiku", plan("111"))]).map((r) => (r.model === "opus" && r.arm === "after" && n++ < 2 ? { ...r, unanswered: n } : r.arm === "before" ? { ...r, unanswered: 0 } : r));
+    const v = run(records);
+    expect(validVerdict(v)).toEqual([]);
+    const count = (m: number) => Object.fromEntries(Object.entries(v.models[m]!.arms).map(([arm, b]) => [arm, (b as { unanswered_questions?: number }).unanswered_questions]));
+    expect(count(0)).toEqual({ before: 0, before2: 0, after: 3, none: 0 });
+    expect(count(1)).toEqual({ before: 0, before2: 0, after: 0, none: 0 });
+    expect(v.arms).toEqual(v.models[0]!.arms);
+  });
+
   test("the schema's top-level fields are exactly the ones the engine writes", () => {
     const v = run(metered(grid("opus", plan("111"))));
     expect(Object.keys(v)).toEqual(schema.required);
     expect(Object.keys(schema.properties)).toEqual(schema.required);
-    expect(schema.$comment).toStartWith("Version 1.0.0 (semver).");
+    expect(schema.$comment).toStartWith("Version 1.1.0 (semver).");
   });
 
   // The U6 brief's decision 3: the rig block is reserved for U20, which fills it with the recipe hash.

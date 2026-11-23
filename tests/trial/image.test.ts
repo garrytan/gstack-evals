@@ -1,10 +1,12 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { codexArgs } from "../../src/adapters/codex/driver.ts";
 import { recipeHash } from "../../src/rig/recipe.ts";
+import { dirTreeSha256 } from "../../src/trial/cache.ts";
 import { removeTree } from "../../src/trial/cleanup.ts";
 import { buildArmImage, buildTrialImage, checkImagePin, imageFixtures, retainImage, retainTree, trialTag, type Runner } from "../../src/trial/image.ts";
 
@@ -39,10 +41,16 @@ describe("trial image pin", () => {
   test("doctor's build pins the digest; a missing pin, a rebuilt tag, a foreign label and a recorded digest mismatch refuse", () => {
     const state = scratch("state");
     const images: Record<string, string> = {};
-    const run = fakeDocker(images);
+    const builds: string[][] = [];
+    const fake = fakeDocker(images);
+    const run: Runner = (command, args, opts) => {
+      if (args[0] === "build") builds.push(args);
+      return fake(command, args, opts);
+    };
     expect(checkImagePin({ state, run })).toMatchObject({ ok: false, code: "E_IMAGE_STALE", message: expect.stringContaining("no trial image is pinned for recipe") });
     const built = buildTrialImage({ state, run });
     if (!built.ok) throw new Error(built.message);
+    expect(builds[0]).toContain("--provenance=false");
     expect(built.tag).toBe(trialTag(recipeHash()));
     expect(readFileSync(built.log, "utf8")).toContain("docker build docker/trial.Dockerfile");
     expect(checkImagePin({ state, run })).toMatchObject({ ok: true, pin: { digest: built.digest, recipe_sha256: recipeHash() } });
@@ -162,7 +170,7 @@ describe.skipIf(!DOCKER)("trial and arm images (Docker tier, GSTACK_EVALS_DOCKER
 
   // Value: protects=a Codex trial on a gpt-6 model can run a tool: codex 0.166 offers gpt-6 models Code Mode only and spawns codex-code-mode-host from its own directory; fails_when=the trial image lacks the host, so the tool call fails closed with "Code Mode is unavailable" while the turn still completes; why_new=GST-360 (U11's Codex calibration failed silently on main's image); seam=docker/trial.Dockerfile, codexArgs; no_claim=a real model choosing the tool, or Codex's own sandbox, which the adapter bypasses
   test("a Code Mode tool call runs in the trial image under the adapter's own flags and returns its output", () => {
-    const argv = codexArgs({ model: "gpt-6.1-sol", provider: "openai", proxy: { baseUrl: "http://127.0.0.1:8080", slot: "s", token: "t" } });
+    const argv = codexArgs({ model: "gpt-6.1-sol", provider: "openai", proxy: { baseUrl: "http://127.0.0.1:8080", slot: "s", token: "t" }, effort: "low" });
     const serve = "bun /fake/responses.ts /tmp/ready & for i in $(seq 100); do [ -e /tmp/ready ] && break; sleep 0.1; done; echo 'Run echo.' | timeout 60 codex \"$@\"";
     const server = join(import.meta.dir, "fixtures", "code-mode-responses.ts");
     const r = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "1000:1000", "-v", server + ":/fake/responses.ts:ro", "-e", "OPENAI_API_KEY=t", trial, "sh", "-c", serve, "sh", ...argv], { encoding: "utf8", timeout: 120_000 });
@@ -212,4 +220,36 @@ describe.skipIf(!DOCKER)("trial and arm images (Docker tier, GSTACK_EVALS_DOCKER
     expect(removeTree(join(parent, "work"), { image: trial })).toBeNull();
     expect(existsSync(join(parent, "work"))).toBe(false);
   }, 300_000);
+});
+
+describe("retained trees under concurrent runs", () => {
+  // Value: protects=runs launched together that first retain one install tree all start, and each records the finished tar's sha256; fails_when=retainTree shares one temp path, so later renames fail with ENOENT or a manifest line hashes a tar still being written; why_new=product-value stage 1 lost two Opus smoke launches to that rename race when four items retained one gstack install at once (2026-11-09)
+  test("four processes retaining one tree at once each finish with the same whole tar", async () => {
+    const src = scratch("race-src");
+    for (let d = 0; d < 40; d++) {
+      mkdirSync(join(src, "d" + d));
+      for (let f = 0; f < 50; f++) writeFileSync(join(src, "d" + d, "f" + f + ".txt"), (d + ":" + f + "\n").repeat(400));
+    }
+    const dir = scratch("race-keep");
+    const image = join(import.meta.dir, "../../src/trial/image.ts");
+    const code = "const { retainTree } = await import(" + JSON.stringify(image) + "); console.log(JSON.stringify(retainTree(" + JSON.stringify(src) + ", " + JSON.stringify(dir) + ")));";
+    const runs = await Promise.all(
+      [0, 1, 2, 3].map(async () => {
+        const p = Bun.spawn([process.execPath, "-e", code], { stdout: "pipe", stderr: "pipe" });
+        const [out, err, status] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+        return { out, err, status };
+      }),
+    );
+    for (const r of runs) expect({ status: r.status, err: r.err }).toEqual({ status: 0, err: "" });
+    const kept = runs.map((r) => JSON.parse(r.out.trim()) as { file: string; sha256: string; ref: string });
+    const file = join(dir, kept[0]!.file);
+    const sha = createHash("sha256").update(readFileSync(file)).digest("hex");
+    expect(kept.map((k) => k.sha256)).toEqual([sha, sha, sha, sha]);
+    expect(readdirSync(join(dir, "trees"))).toEqual([kept[0]!.ref + ".tar"]);
+    const lines = readFileSync(join(dir, "MANIFEST.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { sha256: string });
+    expect(lines.every((l) => l.sha256 === sha)).toBe(true);
+    const back = scratch("race-back");
+    expect(spawnSync("tar", ["-xf", file, "-C", back]).status).toBe(0);
+    expect(dirTreeSha256(back)).toBe(kept[0]!.ref);
+  }, 120_000);
 });

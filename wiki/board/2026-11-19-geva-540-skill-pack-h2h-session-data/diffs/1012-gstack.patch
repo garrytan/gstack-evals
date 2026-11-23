@@ -1,0 +1,66 @@
+diff --git a/context.go b/context.go
+index ec7fdd9..13931ab 100644
+--- a/context.go
++++ b/context.go
+@@ -165,21 +165,34 @@ func (c *Context) Scheme() string {
+ 	if c.IsTLS() {
+ 		return "https"
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXForwardedProto); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXForwardedProto)); ok {
+ 		return scheme
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXForwardedProtocol); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXForwardedProtocol)); ok {
+ 		return scheme
+ 	}
+ 	if ssl := c.request.Header.Get(HeaderXForwardedSsl); ssl == "on" {
+ 		return "https"
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXUrlScheme); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXUrlScheme)); ok {
+ 		return scheme
+ 	}
+ 	return "http"
+ }
+ 
++// sanitizeScheme validates scheme value taken from request headers. Only `http`, `https`, `ws` and `wss` are allowed
++// as headers are client controlled and could otherwise be used to inject arbitrary schemes (e.g. `javascript`).
++func sanitizeScheme(scheme string) (string, bool) {
++	if scheme == "" {
++		return "", false
++	}
++	switch s := strings.ToLower(strings.TrimSpace(scheme)); s {
++	case "http", "https", "ws", "wss":
++		return s, true
++	}
++	return "", false
++}
++
+ // RealIP returns the client IP address using the configured extraction strategy.
+ //
+ // If Echo#IPExtractor is set, it is used to resolve the client IP from the incoming request (typically via proxy
+diff --git a/context_test.go b/context_test.go
+index 9376f0f..ef0a1fd 100644
+--- a/context_test.go
++++ b/context_test.go
+@@ -1147,6 +1147,19 @@ func TestContext_Scheme(t *testing.T) {
+ 	}
+ }
+ 
++func TestContext_Scheme_rejectsInvalidHeaderValues(t *testing.T) {
++	for _, h := range []string{HeaderXForwardedProto, HeaderXForwardedProtocol, HeaderXUrlScheme} {
++		for _, v := range []string{"javascript", "data", "file", "vbscript", "https://evil", "ftp"} {
++			c := &Context{request: &http.Request{Header: http.Header{h: []string{v}}}}
++			assert.Equal(t, "http", c.Scheme(), "%s: %s", h, v)
++		}
++		for _, v := range []string{"http", "https", "ws", "wss", "HTTPS"} {
++			c := &Context{request: &http.Request{Header: http.Header{h: []string{v}}}}
++			assert.Equal(t, strings.ToLower(v), c.Scheme(), "%s: %s", h, v)
++		}
++	}
++}
++
+ func TestContext_IsWebSocket(t *testing.T) {
+ 	tests := []struct {
+ 		c  *Context

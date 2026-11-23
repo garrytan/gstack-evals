@@ -1038,7 +1038,7 @@ describe("settle paths close the run's open sessions, a staged none stop refuses
     await Bun.sleep(1_100);
     const usageFile = join(w.root, "usage.csv");
     writeFileSync(usageFile, "date,cost\n");
-    const reconcile = () => ledger(w, "reconcile", "--lease", lease.lease_id, "--spent", "3.10", "--words", "settle it at the export", "--by", "Approver", "--source", usageFile);
+    const reconcile = () => ledger(w, "reconcile", "--lease", lease.lease_id, "--spent", "3.10", "--words", "approve settling at the export", "--by", "Approver", "--source", usageFile);
     renameSync(w.dir, w.dir + ".away");
     const away = await reconcile();
     expect(away.code).toBe(0);
@@ -1219,3 +1219,16 @@ describe("settle paths close the run's open sessions, a staged none stop refuses
   });
 });
 
+
+describe("the driver's lease size", () => {
+  // Value: protects=a stage's --cap-usd; fails_when=serveStages ignores amount_micros, or a caller that passes none stops reserving the item's cap left.
+  test("amount_micros caps each stage's lease; without it each lease reserves its item's cap left", async () => {
+    const w = world({ "i-none": 229, "i-pe": 572 });
+    const served = await w.serve([NONE, PE], { amount_micros: 100 * D });
+    expect(served.stages.map((s) => s.reserved_micros)).toEqual([100 * D, 100 * D]);
+    expect(await served.stop()).toBe(0);
+    const again = await w.serve([NONE, PE]);
+    expect(again.stages.map((s) => s.reserved_micros)).toEqual([229 * D, 572 * D]);
+    expect(await again.stop()).toBe(0);
+  });
+});

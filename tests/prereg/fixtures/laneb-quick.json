@@ -67,7 +67,7 @@
     "funding": "program",
     "line_item": "laneb-quick",
     "ledger": "captain-gstack-evals/ledger/laneb-quick.jsonl",
-    "approval": {"words":"Rec","by":"Garry Tan","source":"gate 1 of the v1 plan (first cap $500), moved up on \"It should be fast like this week\""},
+    "approval": {"words":"(paraphrase) took the recommendation","by":"Garry Tan","source":"gate 1 of the v1 plan (first cap $500), moved up at his request"},
     "reservation": "The proxy reserves each session's cap before it starts and refuses any request whose worst case would pass it.",
     "stop_rule": "When the ledger refuses a reserve, no new session starts and the run is reported incomplete; never retried to change a result.",
     "order": ["Route check","Replicate 1 on every cell","Replicates 2 and 3 on Haiku and DeepSeek","Replicate 2 on Opus, then more while money remains"]

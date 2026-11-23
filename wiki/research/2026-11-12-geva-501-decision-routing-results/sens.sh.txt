@@ -1,0 +1,20 @@
+#!/bin/bash
+# GEVA-501 sensitivity reads on the scored stage (offline, keyless): build hardlinked trial views without some sessions and rescore.
+set -uo pipefail
+G=$WORK; R=$G/runs/dr-scored@906185467619; O=$G/reading-scored; cd $G/wt
+mkview() { local name=$1; shift; rm -rf $O/$name; mkdir -p $O/$name; for b in batch1 batch1b batch1c batch2 batch3 batch4 batch5 batch6; do cp -al $R/$b/harbor $O/$name/$b; done; for t in "$@"; do rm -rf "$O/$name/$t"; done; }
+score() { local name=$1; T=$(for d in $O/$name/*/; do printf -- '--trials %s ' $d; done); J=$(for f in $R/batch*/journals/*.ndjson; do printf -- '--journal %s ' $f; done); bun bin/gstack-evals decision-routing score $T $J --prices lanes/decision-routing/config/prices.json --planned $O/planned.json --admission $G/runs/dr-pilot@cc1b24e015de/reading/admission.json --json $O/score-$name.json > $O/score-$name.txt 2>&1; echo "== $name rc=$? $(head -1 $O/score-$name.txt)"; grep -E '^== |^Primary|^P against|^cut|^success|^bill|^verdict' $O/score-$name.txt; }
+A=$(python3 -c "import json;print(' '.join(p.replace('batch4/harbor/','batch4/') for p in json.load(open('$O/sens404-exclude.json'))))")
+mkview sens404 $A; score sens404
+B=$(python3 - <<'EOF'
+import json,glob,os
+out=[]
+for s in glob.glob('$WORK/runs/dr-scored@906185467619/batch4/harbor/*/*/agent/dr/dr-summary.json'):
+  df=json.load(open(s)).get('decider_failures') or 0
+  if df: out.append(os.path.relpath(os.path.dirname(os.path.dirname(os.path.dirname(s))), '$WORK/runs/dr-scored@906185467619').replace('batch4/harbor/','batch4/'))
+print(' '.join(sorted(out)))
+EOF
+)
+mkview sens27 $B; score sens27
+rm -rf $O/no1c; mkdir -p $O/no1c; for b in batch1 batch1b batch2 batch3 batch4 batch5 batch6; do cp -al $R/$b/harbor $O/no1c/$b; done; score no1c
+echo ALL-DONE

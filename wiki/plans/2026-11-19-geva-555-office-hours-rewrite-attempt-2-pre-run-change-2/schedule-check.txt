@@ -1,0 +1,23 @@
+# The lane's own schedule check (lanes/office-hours-rewrite/ledger.ts) at other Sol central figures.
+# Run from the repository root at 15202b99 with bun. It reads the lane's code and changes nothing on disk.
+
+// Scratch: the lane's own schedule check (lanes/office-hours-rewrite/ledger.ts) at other Sol central figures. Reads only.
+import { CENTRAL, SCHEDULES, finishesUpTo, scheduleProblems } from "/workspace/gstack-evals/lanes/office-hours-rewrite/ledger.ts";
+const base = { ...CENTRAL.session.sol };
+// Sol's figures per reading, from project.txt (the higher of the current and new arms' figures).
+const cases: [string, number, number][] = [["planning", 2.0, 0.3], ["central", 2.041, 0.3], ["no cache hits", 2.219, 0.3], ["bound", 2.383, 0.3]];
+for (const [name, skill, none] of cases) {
+  (CENTRAL.session as any).sol = { skill, none };
+  console.log(name, skill, none, SCHEDULES.map((s) => s.name + " finishes up to " + finishesUpTo(s)).join("; "), "| problems:", JSON.stringify(scheduleProblems()));
+}
+let lo = 2.0, hi = 3.0;
+for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; (CENTRAL.session as any).sol = { skill: mid, none: 0.3 }; const ok = SCHEDULES.filter((s) => s.finish).every((s) => finishesUpTo(s) >= s.finish!); if (ok) lo = mid; else hi = mid; }
+console.log("largest Sol skill central with none at 0.30 at which every schedule finishes at its multiple:", lo.toFixed(4));
+(CENTRAL.session as any).sol = base;
+
+# Printed:
+planning 2 0.3 stage1 finishes up to 1.353; stage1-repair finishes up to 0.057; stage2 finishes up to 1.354; stage2-particle finishes up to 1.363 | problems: []
+central 2.041 0.3 stage1 finishes up to 1.345; stage1-repair finishes up to 0.056; stage2 finishes up to 1.354; stage2-particle finishes up to 1.363 | problems: ["stage1: does not finish at 1.35 times central; ohr-s1-arms holds $151 and needs $151.43, so the launch stops after 21 of 24 rounds"]
+no cache hits 2.219 0.3 stage1 finishes up to 1.307; stage1-repair finishes up to 0.055; stage2 finishes up to 1.318; stage2-particle finishes up to 1.363 | problems: ["stage1: does not finish at 1.35 times central; ohr-s1-arms holds $151 and needs $154.79, so the launch stops after 21 of 24 rounds","stage2: does not finish at 1.35 times central; ohr-s2-arms holds $1308 and needs $1338.18, so the launch stops after 156 of 160 rounds"]
+bound 2.383 0.3 stage1 finishes up to 1.275; stage1-repair finishes up to 0.054; stage2 finishes up to 1.284; stage2-particle finishes up to 1.363 | problems: ["stage1: does not finish at 1.35 times central; ohr-s1-arms holds $151 and needs $157.89, so the launch stops after 21 of 24 rounds","stage2: does not finish at 1.35 times central; ohr-s2-arms holds $1308 and needs $1373.16, so the launch stops after 152 of 160 rounds"]
+largest Sol skill central with none at 0.30 at which every schedule finishes at its multiple: 2.0184

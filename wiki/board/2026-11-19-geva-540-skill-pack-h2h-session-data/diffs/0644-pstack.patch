@@ -1,0 +1,76 @@
+diff --git a/changelogs/unreleased/9999-claude b/changelogs/unreleased/9999-claude
+new file mode 100644
+index 0000000..f304d10
+--- /dev/null
++++ b/changelogs/unreleased/9999-claude
+@@ -0,0 +1 @@
++Fix Service restore failing when last-applied-configuration has "healthCheckNodePort": null
+diff --git a/pkg/restore/actions/service_action.go b/pkg/restore/actions/service_action.go
+index 9de7522..9f27298 100644
+--- a/pkg/restore/actions/service_action.go
++++ b/pkg/restore/actions/service_action.go
+@@ -101,15 +101,19 @@ func deleteHealthCheckNodePort(service *corev1api.Service) error {
+ 			return errors.WithStack(err)
+ 		}
+ 
+-		healthCheckNodePort, exist, err := unstructured.NestedFloat64(*appliedServiceUnstructured, "spec", "healthCheckNodePort")
+-		if err != nil {
+-			return errors.WithStack(err)
+-		}
++		// A null value means the user did not specify a port, same as absent.
++		raw, exist, _ := unstructured.NestedFieldNoCopy(*appliedServiceUnstructured, "spec", "healthCheckNodePort")
++		if exist && raw != nil {
++			healthCheckNodePort, ok := raw.(float64)
++			if !ok {
++				return errors.Errorf(".spec.healthCheckNodePort accessor error: %v is of the type %T, expected float64", raw, raw)
++			}
+ 
+-		// Found healthCheckNodePort in lastAppliedConfig annotation,
+-		// and the value is not 0. No need to delete, return.
+-		if exist && healthCheckNodePort != 0 {
+-			return nil
++			// Found healthCheckNodePort in lastAppliedConfig annotation,
++			// and the value is not 0. No need to delete, return.
++			if healthCheckNodePort != 0 {
++				return nil
++			}
+ 		}
+ 	}
+ 
+diff --git a/pkg/restore/actions/service_action_test.go b/pkg/restore/actions/service_action_test.go
+index 42c0d29..31ea47a 100644
+--- a/pkg/restore/actions/service_action_test.go
++++ b/pkg/restore/actions/service_action_test.go
+@@ -606,6 +606,32 @@ func TestServiceActionExecute(t *testing.T) {
+ 				},
+ 			},
+ 		},
++		{
++			name: "If PreserveNodePorts is false in restore spec and HealthCheckNodePort is null in Annotation, then it should be cleaned.",
++			obj: corev1api.Service{
++				ObjectMeta: metav1.ObjectMeta{
++					Name:        "svc-1",
++					Annotations: map[string]string{annotationLastAppliedConfig: `{"spec":{"externalTrafficPolicy":"Local","healthCheckNodePort":null,"type":"LoadBalancer"}}`},
++				},
++				Spec: corev1api.ServiceSpec{
++					HealthCheckNodePort:   8080,
++					ExternalTrafficPolicy: corev1api.ServiceExternalTrafficPolicyTypeLocal,
++					Type:                  corev1api.ServiceTypeLoadBalancer,
++				},
++			},
++			restore: builder.ForRestore(api.DefaultNamespace, "").PreserveNodePorts(false).Result(),
++			expectedRes: corev1api.Service{
++				ObjectMeta: metav1.ObjectMeta{
++					Name:        "svc-1",
++					Annotations: map[string]string{annotationLastAppliedConfig: `{"spec":{"externalTrafficPolicy":"Local","healthCheckNodePort":null,"type":"LoadBalancer"}}`},
++				},
++				Spec: corev1api.ServiceSpec{
++					HealthCheckNodePort:   0,
++					ExternalTrafficPolicy: corev1api.ServiceExternalTrafficPolicyTypeLocal,
++					Type:                  corev1api.ServiceTypeLoadBalancer,
++				},
++			},
++		},
+ 		{
+ 			name: "If PreserveNodePorts is false in restore spec, but HealthCheckNodePort can be found in ManagedFields, then it should be kept.",
+ 			obj: corev1api.Service{

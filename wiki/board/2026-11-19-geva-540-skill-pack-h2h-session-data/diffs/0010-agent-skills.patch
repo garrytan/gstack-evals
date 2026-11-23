@@ -1,0 +1,99 @@
+diff --git a/rust/src/dashboard/routes/helpers.rs b/rust/src/dashboard/routes/helpers.rs
+index dc848c6..7b0836b 100644
+--- a/rust/src/dashboard/routes/helpers.rs
++++ b/rust/src/dashboard/routes/helpers.rs
+@@ -172,10 +172,92 @@ fn promote_to_git_root(path: &str) -> String {
+ fn git_root_for(path: &str) -> Option<String> {
+     let mut p = Path::new(path);
+     loop {
+-        let git = p.join(".git");
+-        if git.exists() {
++        if is_valid_git_boundary(&p.join(".git")) {
+             return Some(p.to_string_lossy().to_string());
+         }
+         p = p.parent()?;
+     }
+ }
++
++/// A `.git` entry marks a repository boundary if it is a directory, or a
++/// gitfile whose `gitdir:` target resolves to an existing directory. Broken
++/// gitfiles (e.g. stale worktree pointers) are ignored so they cannot promote
++/// a project root to an unrelated ancestor such as `$HOME`.
++fn is_valid_git_boundary(git: &Path) -> bool {
++    if git.is_dir() {
++        return true;
++    }
++    if !git.is_file() {
++        return false;
++    }
++    let Ok(content) = std::fs::read_to_string(git) else {
++        return false;
++    };
++    let Some(target) = content
++        .lines()
++        .find_map(|l| l.trim().strip_prefix("gitdir:"))
++        .map(str::trim)
++        .filter(|t| !t.is_empty())
++    else {
++        return false;
++    };
++    let target = Path::new(target);
++    let resolved = if target.is_absolute() {
++        target.to_path_buf()
++    } else {
++        match git.parent() {
++            Some(parent) => parent.join(target),
++            None => return false,
++        }
++    };
++    resolved.is_dir()
++}
++
++#[cfg(test)]
++mod git_root_tests {
++    use super::*;
++
++    #[test]
++    fn broken_ancestor_gitfile_is_not_promoted() {
++        let tmp = tempfile::tempdir().unwrap();
++        let workspace = tmp.path().join("workspace");
++        let project = workspace.join("project");
++        std::fs::create_dir_all(&project).unwrap();
++        std::fs::write(workspace.join(".git"), "gitdir: ../missing/git-dir\n").unwrap();
++
++        let project_str = project.to_string_lossy().to_string();
++        assert_eq!(promote_to_git_root(&project_str), project_str);
++    }
++
++    #[test]
++    fn valid_gitfile_worktree_is_promoted_to_checkout_root() {
++        let tmp = tempfile::tempdir().unwrap();
++        let gitdir = tmp.path().join("repo.git").join("worktrees").join("wt");
++        std::fs::create_dir_all(&gitdir).unwrap();
++        let checkout = tmp.path().join("checkout");
++        let nested = checkout.join("src");
++        std::fs::create_dir_all(&nested).unwrap();
++        std::fs::write(checkout.join(".git"), "gitdir: ../repo.git/worktrees/wt\n").unwrap();
++
++        let nested_str = nested.to_string_lossy().to_string();
++        assert_eq!(
++            promote_to_git_root(&nested_str),
++            checkout.to_string_lossy().to_string()
++        );
++    }
++
++    #[test]
++    fn git_directory_is_promoted() {
++        let tmp = tempfile::tempdir().unwrap();
++        let repo = tmp.path().join("repo");
++        let nested = repo.join("a").join("b");
++        std::fs::create_dir_all(repo.join(".git")).unwrap();
++        std::fs::create_dir_all(&nested).unwrap();
++
++        let nested_str = nested.to_string_lossy().to_string();
++        assert_eq!(
++            promote_to_git_root(&nested_str),
++            repo.to_string_lossy().to_string()
++        );
++    }
++}

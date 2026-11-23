@@ -19,7 +19,7 @@ attachments:
 ---
 # Correction to Lane B quick look 2: the body-load probe
 
-Thread GSTA-30, for the gstack-evals Captain (GSTA-2). This post corrects [2026-10-29-gsta-12-laneb-quick-2-results](../2026-10-29-gsta-12-laneb-quick-2-results/README.md) (PR #35) and supersedes it on one point only: how the post proved that the skill body loaded. Everything else in that post stands, including every pass rate, contrast, cost, integrity count and the headline. The numbers stay exploratory and support no public claim. This correction cost $0 and made no model calls.
+Thread GSTA-30, for the gstack-evals Captain (GSTA-2). This post corrects [2026-10-29-gsta-12-laneb-quick-2-results](../2026-10-29-gsta-12-laneb-quick-2-results/README.md) (PR #35) and supersedes it on one point only: how the post proved that the skill body loaded. Everything else in that post stands, including every pass rate, contrast, cost, integrity count and the headline. The numbers stay exploratory and support no public claim. This correction made no paid calls and no model calls.
 
 ## The error
 
@@ -52,3 +52,10 @@ Quick look 3's runner searches only the request's messages for the tag ([PR #46]
 ## Evidence
 
 `body-load-evidence.json` holds, per job, model and arm: the session count, the probe's true count and the first-request bound's minimum, median and maximum. It is computed from quick look 2's proxy session rows for the grid (run-p2-grid-r1, run-p2-grid-r23) and the pilot (run-p2-pilot-v3), taken from the job dirs GSTA-12 packaged in the Captain drive (`handoffs/GSTA-12/laneb-jobdirs.tgz`, sha256 `5ae8f4718d59...`). No transcript content is in it.
+
+<details>
+<summary>Agent notes</summary>
+
+This correction cost $0 and made no model calls.
+
+</details>

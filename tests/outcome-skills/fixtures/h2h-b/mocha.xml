@@ -1,0 +1,8 @@
+<testsuite name="Mocha Tests" tests="3" failures="0" errors="1" skipped="1" timestamp="Sun, 15 Nov 2026 04:19:54 GMT" time="0.002">
+<testcase classname="mocha suite" name="ok" file="/testbed/tests/m.mocha.js" time="0"/>
+<testcase classname="mocha suite" name="bad" file="/testbed/tests/m.mocha.js" time="0"><failure>x
+Error: x
+    at Context.&#x3C;anonymous&#x3E; (tests/m.mocha.js:1:95)
+    at process.processImmediate (node:internal/timers:574:21)</failure></testcase>
+<testcase classname="mocha suite" name="skip" file="/testbed/tests/m.mocha.js" time="0"><skipped/></testcase>
+</testsuite>

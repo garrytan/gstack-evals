@@ -1,0 +1,51 @@
+diff --git a/index.js b/index.js
+index 8ddc89b..0c8e512 100644
+--- a/index.js
++++ b/index.js
+@@ -38,7 +38,12 @@ var UNSAFE_CHARS_REGEXP   = /[<>\/\u2028\u2029]/g;
+ // longer contain a second `<`, every `</script` in the source is either the
+ // start of its own match or is followed by a non-delimiter — and the latter
+ // the tokenizer never treats as an end tag.
+-var SCRIPT_CLOSE_REGEXP = /<\/script[^<>]*>|<\/script(?=[\t\n\f\r \/>])/gi;
++//
++// The bare-prefix form also matches at end of input (`$`): each function body
++// is escaped on its own, so a body ending exactly at `</script` has no
++// following character here, but the delimiter (and a later `>`) can be
++// supplied by the surrounding serialized output (GHSA-m5mm-p8h7-m29v).
++var SCRIPT_CLOSE_REGEXP = /<\/script[^<>]*>|<\/script(?=[\t\n\f\r \/>]|$)/gi;
+ 
+ var RESERVED_SYMBOLS = ['*', 'async'];
+ 
+diff --git a/test/unit/serialize.js b/test/unit/serialize.js
+index 3d4de00..d519c3e 100644
+--- a/test/unit/serialize.js
++++ b/test/unit/serialize.js
+@@ -764,6 +764,28 @@ describe('serialize( obj )', function () {
+             strictEqual(typeof deserialized.b, 'function');
+         });
+ 
++        it('should encode a bare </script at the very end of a function body', function () {
++            function f() {}
++            f.toString = function () { return 'function f(){ return 1 }//</script'; };
++            function g() {}
++            g.toString = function () { return 'function g(x){ return x } > <img src=x onerror=alert(1)>'; };
++
++            var serialized = serialize({ a: { f: f }, g: g }, { space: 2 });
++            strictEqual(/<\/script/i.test(serialized), false);
++
++            // `g`'s spoofed source is not valid JS, so only round-trip `f`.
++            var deserialized; eval('deserialized = ' + serialize({ f: f }, { space: 2 }));
++            strictEqual(typeof deserialized.f, 'function');
++            strictEqual(deserialized.f(), 1);
++        });
++
++        it('should encode a bare </script at the end of a function body in plain code', function () {
++            function f() {}
++            f.toString = function () { return 'function f(){ return 1 }</SCRIPT'; };
++            var serialized = serialize({ f: f });
++            strictEqual(/<\/script/i.test(serialized), false);
++        });
++
+         it('should not corrupt `<` used as a comparison operator followed by a regex literal', function () {
+             // `</script` here is not an HTML closing tag: it's the token
+             // sequence `<` (less-than) followed by the regex literal

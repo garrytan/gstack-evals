@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# GEVA-540 kit (not committed): starts stage 2's driver: one run (geva540-s2-7700a8f) serving h2h-opus and h2h-pony, 1,120
+# planned sessions per stage (h2h-opus has 1,120; h2h-pony 200) and as many reruns (one whole-session retry each, prereg
+# section 7 step 6), lease time to live 96 hours. Writes control= and proxy= to the run dir's serve-urls.txt.
+set -euo pipefail
+R=$HOME/h2h/run/geva540-s2-7700a8f
+mkdir -p $R
+[ -s $R/serve-urls.txt ] && { echo "serve-urls.txt exists; a driver may already serve this run"; exit 3; }
+bash $HOME/kit/serve-r.sh --item h2h-opus,h2h-pony --run geva540-s2-7700a8f --planned 1120 --reruns 1120 --ttl-hours 96 --dir $R/driver > $R/serve-urls.tmp
+grep -q '^control=' $R/serve-urls.tmp && grep -q '^proxy=h2h-opus=.*,h2h-pony=' $R/serve-urls.tmp || { cat $R/serve-urls.tmp; echo "no control or proxies"; exit 3; }
+mv $R/serve-urls.tmp $R/serve-urls.txt
+sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/IP/g' $R/serve-urls.txt

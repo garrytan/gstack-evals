@@ -1,0 +1,99 @@
+diff --git a/crates/obscura-cdp/src/domains/page.rs b/crates/obscura-cdp/src/domains/page.rs
+index dd84b5e..b78238d 100644
+--- a/crates/obscura-cdp/src/domains/page.rs
++++ b/crates/obscura-cdp/src/domains/page.rs
+@@ -84,6 +84,13 @@ pub fn emit_navigation_events(
+     } else {
+         ctx.isolated_worlds.clone()
+     };
++    // Runtime.executionContextsCleared above tells the client every prior
++    // context is gone, so drop them from the validation set too: only the
++    // re-emitted default context (2) and the isolated worlds minted below stay
++    // live. Without this, pre-navigation ids keep passing Runtime.evaluate /
++    // callFunctionOn validation and the set grows by one id per navigation.
++    ctx.valid_context_ids.clear();
++    ctx.valid_context_ids.insert(2);
+     // Issue #192: fresh, monotonically increasing executionContextId per re-create.
+     for world_name in &world_names {
+         let world_ctx_id = ctx.next_isolated_context();
+@@ -681,4 +688,66 @@ mod tests {
+         );
+         assert_eq!(info["canAccessOpener"], json!(false));
+     }
++
++    /// Collect the isolated-world context ids announced by the most recent
++    /// navigation (i.e. after the last Runtime.executionContextsCleared).
++    fn isolated_ids_since_last_clear(ctx: &CdpContext) -> Vec<i64> {
++        let start = ctx
++            .pending_events
++            .iter()
++            .rposition(|e| e.method == "Runtime.executionContextsCleared")
++            .expect("navigation must emit executionContextsCleared");
++        ctx.pending_events[start..]
++            .iter()
++            .filter(|e| e.method == "Runtime.executionContextCreated")
++            .filter(|e| e.params["context"]["auxData"]["type"] == "isolated")
++            .map(|e| e.params["context"]["id"].as_i64().unwrap())
++            .collect()
++    }
++
++    #[tokio::test]
++    async fn navigation_prunes_cleared_context_ids() {
++        // Every navigation emits Runtime.executionContextsCleared; contexts
++        // announced before it must stop validating for Runtime.evaluate /
++        // callFunctionOn, and the set must not grow without bound.
++        let mut ctx = CdpContext::new();
++        let page_id = ctx.create_page();
++        let session_id = Some(format!("{}-session", page_id));
++        ctx.sessions.insert(session_id.clone().unwrap(), page_id.clone());
++
++        let params = json!({"url": "data:text/html,<p>one</p>", "waitUntil": "load"});
++        handle("navigate", &params, &mut ctx, &session_id).await.expect("nav 1");
++        let first_ids = isolated_ids_since_last_clear(&ctx);
++        assert!(!first_ids.is_empty());
++
++        let params = json!({"url": "data:text/html,<p>two</p>", "waitUntil": "load"});
++        handle("navigate", &params, &mut ctx, &session_id).await.expect("nav 2");
++        let live_ids = isolated_ids_since_last_clear(&ctx);
++
++        let mut expected: std::collections::HashSet<i64> = live_ids.iter().copied().collect();
++        expected.insert(2);
++        assert_eq!(
++            ctx.valid_context_ids, expected,
++            "only the default context and freshly minted isolated worlds may stay valid"
++        );
++
++        for stale in first_ids.iter().copied().chain([1]) {
++            let err = crate::domains::runtime::handle(
++                "evaluate",
++                &json!({"expression": "1", "contextId": stale}),
++                &mut ctx,
++                &session_id,
++            )
++            .await
++            .expect_err("stale context must be rejected after navigation");
++            assert!(err.contains("Cannot find context with specified id"), "{err}");
++        }
++
++        // Bounded: many navigations keep the set at default + live worlds.
++        for i in 0..20 {
++            let params = json!({"url": format!("data:text/html,<p>{i}</p>"), "waitUntil": "load"});
++            handle("navigate", &params, &mut ctx, &session_id).await.expect("nav");
++        }
++        assert_eq!(ctx.valid_context_ids.len(), 1 + isolated_ids_since_last_clear(&ctx).len());
++    }
+ }
+diff --git a/crates/obscura-cdp/src/domains/runtime.rs b/crates/obscura-cdp/src/domains/runtime.rs
+index fd102c3..b06aab3 100644
+--- a/crates/obscura-cdp/src/domains/runtime.rs
++++ b/crates/obscura-cdp/src/domains/runtime.rs
+@@ -79,6 +79,9 @@ pub async fn handle(
+                         session_id: session_id.clone(),
+                     };
+                     ctx.pending_events.push(event);
++                    // We just (re-)announced context 1; keep it valid even if a
++                    // prior navigation pruned it from the set.
++                    ctx.valid_context_ids.insert(1);
+                 }
+                 None => {
+                     // No session attached yet — that's fine. Just ack.

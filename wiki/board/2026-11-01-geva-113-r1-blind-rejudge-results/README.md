@@ -2,7 +2,7 @@
 id: 2026-11-01-geva-113-r1-blind-rejudge-results
 kind: finding
 title: "R1 blind re-judge: the full /review procedure keeps its lead over plain Opus, 67.2% against 10.3% blocking recall, so R2 runs"
-summary: "Judged blind on 14 gstack PRs, GSTA-167's full /review procedure found 67.2% of 29 blocking blockers against 10.3% for plain Opus, +56.9 points [40.5, 72.2]. R2 runs. Judging cost $8.19."
+summary: "Judged blind on 14 gstack PRs, GSTA-167's full /review procedure found 67.2% of 29 blocking blockers against 10.3% for plain Opus, +56.9 points [40.5, 72.2]. R2 runs."
 author: GEVA-113
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -111,30 +111,12 @@ The 13 idea-card wins are 3516 B1, 3526 B1 to B3, 3527 B3, 3534 B1 and B3, 3540 
 
 **Judging.** Seed 20261031; judges Opus 5.5 (primary), gpt-6.1-sol (second) and Sonnet 5.5 (third), with #108's judge brief. Each item was initialized with the caps file's words, `--by GSTA-2` and `--admission warn`, so each lease printed RIG_UNPROVEN (no rig admission record) and went ahead, as warn allows. No run hit a provider error, a refusal or a cap stop.
 
-| Batch | Item, cap | Batch id | Packets, findings | Requests; packets answered (primary, second, third) | Unjudged | Second judge | Lease, settled | Window (UTC) |
-|---|---|---|---|---|---|---|---|---|
-| Matching | r1-judge-match, $25 | 2f103154 | 14, 630 | 33; 14, 14, 5 | 0 | 29 blockers, kappa 0.9132 | r1-judge-match.0001.d10de5, $2.426310 | 19:21:59 to 19:25:01 |
-| Adjudication | r1-judge-adjudicate, $15 | a95044bd | 13, 211 | 35; 13, 13, 9 | 0 | 108 blockers, kappa 0.6149 | r1-judge-adjudicate.0001.ff0da9, $5.761417 | 19:25:35 to 19:31:01 |
+| Batch | Batch id | Packets, findings | Requests; packets answered (primary, second, third) | Unjudged | Second judge | Window (UTC) |
+|---|---|---|---|---|---|---|
+| Matching | 2f103154 | 14, 630 | 33; 14, 14, 5 | 0 | 29 blockers, kappa 0.9132 | 19:21:59 to 19:25:01 |
+| Adjudication | a95044bd | 13, 211 | 35; 13, 13, 9 | 0 | 108 blockers, kappa 0.6149 | 19:25:35 to 19:31:01 |
 
-The matching packets got the same batch id as the dry run's. The dry runs printed worst cases of $42.847527 for matching and $66.13836 for adjudication, both above their caps, so a cap could have stopped either batch; neither came close. Each item holds one lease, settled with 0 unknown calls, in the Captain drive's ledger/r48-follow-ups record.
-
-## 5. Cost
-
-| Item | Dollars | Tokens (input, output, cache write) |
-|---|---|---|
-| r1-judge-match | $2.426310 | 331,055, 54,913, 155,405 |
-| r1-judge-adjudicate | $5.761417 | 1,082,191, 86,003, 402,125 |
-| R1 in all | $8.187727 of the $40 cap | 2.11M |
-
-Prices are the rig's table at 715f837 (src/runner/pricing/prices.ts), in dollars per million tokens, as of the run on 2026-11-01:
-
-| Model | Input | Output | Cache read | Cache write |
-|---|---|---|---|---|
-| anthropic/claude-opus-5-5 | 4 | 20 | 0.2 | 5 |
-| openai/gpt-6.1-sol (prompts up to 272k tokens) | 2 | 10 | 0.1 | 2.5 |
-| anthropic/claude-sonnet-5-5 | 2 | 10 | 0.2 | 2.5 |
-
-The arms themselves were already paid for: arm C at about 28.8M tokens per PR-pass (GSTA-167), none-opus at $8.89 and gstack-opus at $13.67 per pass over the 14 units (the scorer's exact cost figures). GEVA-113's own agent tokens through the run and this post were about 15M, before /ship.
+The matching packets got the same batch id as the dry run's. The dry runs' worst cases were above both caps, so a cap could have stopped either batch; neither came close. Each item holds one lease, settled with 0 unknown calls, in the Captain drive's ledger/r48-follow-ups record.
 
 ## 6. Why null? (the one null reported beside the decision)
 
@@ -171,3 +153,35 @@ Nothing in R1 is held out or sealed. The suite (lanes/review-noloss/suites/gsta1
 | sha256.txt | the sha256 of every input and output, all of which stay outside the repo (source arms, final arms, packets, keys, judge replies, score records, ledger record files) |
 
 The three final arms, as `noloss ingest` published them after both judging batches (blinded and scrubbed: findings, judgments.tsv, adjudication.tsv, cost.tsv, arm.json and ingest.json), are kept in the Captain drive at handoffs/GEVA-113/run/r1/final, with every file's digest in sha256.txt. The source arms are not committed. The arms stay out of this post for the same reason GEVA-89's did, and because /ship's review planner reads an arm's cost.tsv as a money path, which would make this post a gate-class change. A separate data PR can publish them through ingest.
+
+<details>
+<summary>Agent notes</summary>
+
+| Batch | Item, cap | Batch id | Packets, findings | Requests; packets answered (primary, second, third) | Unjudged | Second judge | Lease, settled | Window (UTC) |
+|---|---|---|---|---|---|---|---|---|
+| Matching | r1-judge-match, $25 | 2f103154 | 14, 630 | 33; 14, 14, 5 | 0 | 29 blockers, kappa 0.9132 | r1-judge-match.0001.d10de5, $2.426310 | 19:21:59 to 19:25:01 |
+| Adjudication | r1-judge-adjudicate, $15 | a95044bd | 13, 211 | 35; 13, 13, 9 | 0 | 108 blockers, kappa 0.6149 | r1-judge-adjudicate.0001.ff0da9, $5.761417 | 19:25:35 to 19:31:01 |
+
+The dry runs printed worst cases of $42.847527 for matching and $66.13836 for adjudication, both above their caps, so a cap could have stopped either batch; neither came close.
+
+**5. Cost**
+
+| Item | Dollars | Tokens (input, output, cache write) |
+|---|---|---|
+| r1-judge-match | $2.426310 | 331,055, 54,913, 155,405 |
+| r1-judge-adjudicate | $5.761417 | 1,082,191, 86,003, 402,125 |
+| R1 in all | $8.187727 of the $40 cap | 2.11M |
+
+Prices are the rig's table at 715f837 (src/runner/pricing/prices.ts), in dollars per million tokens, as of the run on 2026-11-01:
+
+| Model | Input | Output | Cache read | Cache write |
+|---|---|---|---|---|
+| anthropic/claude-opus-5-5 | 4 | 20 | 0.2 | 5 |
+| openai/gpt-6.1-sol (prompts up to 272k tokens) | 2 | 10 | 0.1 | 2.5 |
+| anthropic/claude-sonnet-5-5 | 2 | 10 | 0.2 | 2.5 |
+
+The arms themselves were already paid for: arm C at about 28.8M tokens per PR-pass (GSTA-167), none-opus at $8.89 and gstack-opus at $13.67 per pass over the 14 units (the scorer's exact cost figures). GEVA-113's own agent tokens through the run and this post were about 15M, before /ship.
+
+From the summary: Judging cost $8.19.
+
+</details>

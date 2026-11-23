@@ -1,0 +1,148 @@
+diff --git a/src/lib/ares_private.h b/src/lib/ares_private.h
+index 3dbdf7a..f9fc546 100644
+--- a/src/lib/ares_private.h
++++ b/src/lib/ares_private.h
+@@ -537,10 +537,13 @@ void ares_gethostbyaddr_nolock(ares_channel_t *channel, const void *addr,
+  *                         ares_free()'d by the caller.
+  *  \param[in] is_hostname if ARES_TRUE, will validate the character set for
+  *                         a valid hostname or will return error.
++ *  \param[in] allow_compress if ARES_FALSE, a compression pointer anywhere in
++ *                         the name is rejected with ARES_EBADNAME.
+  *  \return ARES_SUCCESS on success
+  */
+ ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
+-                                  ares_bool_t is_hostname);
++                                  ares_bool_t is_hostname,
++                                  ares_bool_t allow_compress);
+ 
+ /*! Write the DNS name to the buffer in the DNS domain-name syntax as a
+  *  series of labels.  The maximum domain name length is 255 characters with
+diff --git a/src/lib/legacy/ares_expand_name.c b/src/lib/legacy/ares_expand_name.c
+index 72668f4..ee1d700 100644
+--- a/src/lib/legacy/ares_expand_name.c
++++ b/src/lib/legacy/ares_expand_name.c
+@@ -69,7 +69,7 @@ ares_status_t ares_expand_name_validated(const unsigned char *encoded,
+   }
+ 
+   start_len = ares_buf_len(buf);
+-  status    = ares_dns_name_parse(buf, s, is_hostname);
++  status    = ares_dns_name_parse(buf, s, is_hostname, ARES_TRUE);
+   if (status != ARES_SUCCESS) {
+     goto done;
+   }
+diff --git a/src/lib/record/ares_dns_name.c b/src/lib/record/ares_dns_name.c
+index 134f3ed..1c7af66 100644
+--- a/src/lib/record/ares_dns_name.c
++++ b/src/lib/record/ares_dns_name.c
+@@ -549,7 +549,8 @@ fail:
+ }
+ 
+ ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
+-                                  ares_bool_t is_hostname)
++                                  ares_bool_t is_hostname,
++                                  ares_bool_t allow_compress)
+ {
+   size_t        save_offset = 0;
+   unsigned char c;
+@@ -608,6 +609,11 @@ ares_status_t ares_dns_name_parse(ares_buf_t *buf, char **name,
+        */
+       size_t offset = (size_t)((c & 0x3F) << 8);
+ 
++      if (!allow_compress) {
++        status = ARES_EBADNAME;
++        goto fail;
++      }
++
+       /* Fetch second byte of the redirect length */
+       status = ares_buf_fetch_bytes(buf, &c, 1);
+       if (status != ARES_SUCCESS) {
+diff --git a/src/lib/record/ares_dns_parse.c b/src/lib/record/ares_dns_parse.c
+index 113438f..7b3fb7f 100644
+--- a/src/lib/record/ares_dns_parse.c
++++ b/src/lib/record/ares_dns_parse.c
+@@ -47,7 +47,9 @@ static ares_status_t ares_dns_parse_and_set_dns_name(ares_buf_t    *buf,
+   ares_status_t status;
+   char         *name = NULL;
+ 
+-  status = ares_dns_name_parse(buf, &name, is_hostname);
++  status = ares_dns_name_parse(
++    buf, &name, is_hostname,
++    ares_dns_rec_allow_name_comp(ares_dns_rr_get_type(rr)));
+   if (status != ARES_SUCCESS) {
+     return status;
+   }
+@@ -1399,7 +1401,7 @@ static ares_status_t ares_dns_parse_qd(ares_buf_t        *buf,
+    */
+ 
+   /* Name */
+-  status = ares_dns_name_parse(buf, &name, ARES_FALSE);
++  status = ares_dns_name_parse(buf, &name, ARES_FALSE, ARES_TRUE);
+   if (status != ARES_SUCCESS) {
+     goto done;
+   }
+@@ -1470,7 +1472,7 @@ static ares_status_t ares_dns_parse_rr(ares_buf_t *buf, unsigned int flags,
+    */
+ 
+   /* Name */
+-  status = ares_dns_name_parse(buf, &name, ARES_FALSE);
++  status = ares_dns_name_parse(buf, &name, ARES_FALSE, ARES_TRUE);
+   if (status != ARES_SUCCESS) {
+     goto done;
+   }
+diff --git a/test/ares-test-parse-srv.cc b/test/ares-test-parse-srv.cc
+index 6956beb..9991262 100644
+--- a/test/ares-test-parse-srv.cc
++++ b/test/ares-test-parse-srv.cc
+@@ -118,6 +118,52 @@ TEST_F(LibraryTest, ParseSrvReplyMalformed) {
+   ASSERT_EQ(nullptr, srv);
+ }
+ 
++TEST_F(LibraryTest, ParseSrvReplyCompressedTarget) {
++  std::vector<byte> data = {
++    0x12, 0x34,  // qid
++    0x84, // response + query + AA + not-TC + not-RD
++    0x00, // not-RA + not-Z + not-AD + not-CD + rc=NoError
++    0x00, 0x01,  // num questions
++    0x00, 0x01,  // num answer RRs
++    0x00, 0x00,  // num authority RRs
++    0x00, 0x00,  // num additional RRs
++    // Question
++    0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',
++    0x03, 'c', 'o', 'm',
++    0x00,
++    0x00, 0x21,  // type SRV
++    0x00, 0x01,  // class IN
++    // Answer 1
++    0xC0, 0x0C,  // owner name is a pointer, which RFC 1035 permits
++    0x00, 0x21,  // RR type
++    0x00, 0x01,  // class IN
++    0x01, 0x02, 0x03, 0x04, // TTL
++    0x00, 0x08,  // rdata length
++    0x00, 0x0A,  // priority
++    0x00, 0x14,  // weight
++    0x00, 0x1E,  // port
++    0xC0, 0x0C,  // target is a pointer, which RFC 2782 forbids
++  };
++
++  struct ares_srv_reply* srv = nullptr;
++  EXPECT_NE(ARES_SUCCESS, ares_parse_srv_reply(data.data(), (int)data.size(), &srv));
++  EXPECT_EQ(nullptr, srv);
++
++  ares_dns_record_t *dnsrec = nullptr;
++  EXPECT_NE(ARES_SUCCESS, ares_dns_parse(data.data(), data.size(), 0, &dnsrec));
++  EXPECT_EQ(nullptr, dnsrec);
++
++  // The same pointer is legal in an MX exchange, since RFC 1035 allows it.
++  data[32] = 0x0F;
++  data[40] = 0x04;
++  data.erase(data.begin() + 43, data.begin() + 47);
++  ASSERT_EQ(ARES_SUCCESS, ares_dns_parse(data.data(), data.size(), 0, &dnsrec));
++  const ares_dns_rr_t *rr = ares_dns_record_rr_get(dnsrec, ARES_SECTION_ANSWER, 0);
++  EXPECT_EQ(ARES_REC_TYPE_MX, ares_dns_rr_get_type(rr));
++  EXPECT_EQ("example.com", std::string(ares_dns_rr_get_str(rr, ARES_RR_MX_EXCHANGE)));
++  ares_dns_record_destroy(dnsrec);
++}
++
+ TEST_F(LibraryTest, ParseSrvReplyMultiple) {
+   DNSPacket pkt;
+   pkt.set_qid(0x1234).set_response().set_ra().set_rd()

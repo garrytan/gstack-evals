@@ -1,0 +1,103 @@
+diff --git a/layers/sflow.go b/layers/sflow.go
+index 70fd787..d6b37cb 100644
+--- a/layers/sflow.go
++++ b/layers/sflow.go
+@@ -1270,15 +1270,22 @@ func (asd SFlowASDestination) String() string {
+ 	}
+ }
+ 
+-func (ad *SFlowASDestination) decodePath(data *[]byte) {
++func (ad *SFlowASDestination) decodePath(data *[]byte) error {
++	if len(*data) < 8 {
++		return errors.New("sflow: AS path truncated")
++	}
+ 	*data, ad.Type = (*data)[4:], SFlowASPathType(binary.BigEndian.Uint32((*data)[:4]))
+ 	*data, ad.Count = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
++	if uint64(ad.Count) > uint64(len(*data)/4) {
++		return fmt.Errorf("sflow: AS path member count %d exceeds remaining data", ad.Count)
++	}
+ 	ad.Members = make([]uint32, ad.Count)
+ 	for i := uint32(0); i < ad.Count; i++ {
+ 		var member uint32
+ 		*data, member = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
+ 		ad.Members[i] = member
+ 	}
++	return nil
+ }
+ 
+ func decodeExtendedGatewayFlowRecord(data *[]byte) (SFlowExtendedGatewayFlowRecord, error) {
+@@ -1299,10 +1306,18 @@ func decodeExtendedGatewayFlowRecord(data *[]byte) (SFlowExtendedGatewayFlowReco
+ 	*data, eg.ASPathCount = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
+ 	for i := uint32(0); i < eg.ASPathCount; i++ {
+ 		asPath := SFlowASDestination{}
+-		asPath.decodePath(data)
++		if err := asPath.decodePath(data); err != nil {
++			return eg, err
++		}
+ 		eg.ASPath = append(eg.ASPath, asPath)
+ 	}
++	if len(*data) < 4 {
++		return eg, errors.New("sflow: extended gateway record truncated")
++	}
+ 	*data, communitiesLength = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
++	if uint64(communitiesLength) > uint64(len(*data)/4) {
++		return eg, fmt.Errorf("sflow: communities length %d exceeds remaining data", communitiesLength)
++	}
+ 	eg.Communities = make([]uint32, communitiesLength)
+ 	for j := uint32(0); j < communitiesLength; j++ {
+ 		*data, community = (*data)[4:], binary.BigEndian.Uint32((*data)[:4])
+diff --git a/layers/sflow_alloc_test.go b/layers/sflow_alloc_test.go
+new file mode 100644
+index 0000000..b9b212c
+--- /dev/null
++++ b/layers/sflow_alloc_test.go
+@@ -0,0 +1,49 @@
++package layers
++
++import (
++	"encoding/binary"
++	"testing"
++)
++
++func buildGatewayDatagram(asPathCount, asCount, commLen uint32) []byte {
++	var d []byte
++	u32 := func(v uint32) { d = binary.BigEndian.AppendUint32(d, v) }
++	u32(5)
++	u32(1)
++	u32(0x7f000001)
++	u32(0)
++	u32(0)
++	u32(0)
++	u32(1) // SampleCount
++	u32(1) // FlowSample
++	for i := 0; i < 8; i++ {
++		u32(0)
++	}
++	u32(1)    // RecordCount
++	u32(1003) // ExtendedGatewayFlow
++	u32(0)
++	u32(1)
++	u32(0x08080808)
++	u32(0)
++	u32(0)
++	u32(0)
++	u32(asPathCount)
++	if asPathCount > 0 {
++		u32(uint32(SFlowASSequence))
++		u32(asCount)
++	}
++	u32(commLen)
++	return d
++}
++
++func TestSFlowExtendedGatewayHugeCounts(t *testing.T) {
++	for _, d := range [][]byte{
++		buildGatewayDatagram(0, 0, 0xFFFFFFFF),
++		buildGatewayDatagram(1, 0xFFFFFFFF, 0),
++	} {
++		var s SFlowDatagram
++		if err := s.DecodeFromBytes(d, nil); err == nil {
++			t.Fatal("expected error for oversized count")
++		}
++	}
++}

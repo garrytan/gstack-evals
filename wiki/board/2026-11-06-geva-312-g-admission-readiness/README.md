@@ -40,7 +40,7 @@ Before admission's first session, the host checks out the run commit again and r
 |---|---|
 | 1. The prereg has merged | Yes |
 | 2. O6 merged with its concurrency test; the envelope host is initialized, awake and named in the approvals entry | Yes; the host is below |
-| 3. The Captain recorded the stage caps in approvals/ | Yes: g-tg $60, g-none $229, g-pe $572, g-ap $1,287, g-vm $24 |
+| 3. The Captain recorded the stage caps | Yes; the caps are in Agent notes |
 | 4. O6 admits and reserves each stage; every paid stage spends through a U4 lease | Enforced by the session driver at the run commit |
 | 5. O1, O2 and O4 merged | Yes |
 | 6. O5's keyless dry run passed | Yes (O5 pin post) |
@@ -66,7 +66,7 @@ Before admission's first session, the host checks out the run commit again and r
 
 **GitHub reads.** `rig admit` reads ci.yml's runs from GitHub. The host holds no GitHub credential. During an admit, and only then, an ssh reverse tunnel carries its reads to a relay on the controlling machine. The relay answers GET only, only for garrytan/gstack-evals, and only the REST paths src/rig/admission.ts reads. The tunnel and relay are stopped once the admit prints its record.
 
-**Host hours.** From creation until T-G was sealed (2026-11-05T22:57Z), the host's hours settled on g-tg inside the T-G lease: 5.656 hours. From the seal until admission settles, they are reserved on g-vm (at most 80 hours, $24) at $0.30 an hour, and settle at the hours the host was up.
+**Host hours.** From creation until T-G was sealed (2026-11-05T22:57Z), the host's hours settled on g-tg inside the T-G lease: 5.656 hours.
 
 ## Run rules
 
@@ -85,7 +85,7 @@ The manifest stays sealed, encrypted beside the T-G bundle. Its sha256 is **7b1a
 
 The 13 images moved to the envelope host with `docker save` and `docker load`, which keep each image's id. `images check` then passed there at c52f510: every row's image present with exactly its pinned id, and cleanRoomPreflight clean in each. The build VM's plaintext was deleted, checked absent, and the VM destroyed. The custody log records the opening and the deletion.
 
-The build VM was up 1.187 hours. They settled at $0.30 an hour ($0.356) on g-tg, in a second lease opened after the green admit above and settled at once. g-tg's settled total is $4.348313 of its $60 cap. The wave-1 envelope reads $698.873313 committed, all settled, nothing open.
+The build VM was up 1.187 hours.
 
 ## The admission rule's moving parts
 
@@ -110,3 +110,23 @@ src/runner/stats/g-resize.ts refuses a missing M_PER, M_AP or AUTH_PAID, and ref
 
 1. **Task binding in the scorer.** `real score trial` checks that a trial ran in the image it logged, but not that it ran the task it is graded against. Run rule 4 covers this until a later change logs task_label in the image event and the scorer checks it.
 2. **t1 writes undercount on a lost t1 turn.** At c52f510, t1OutsidePlan returns null when a trial has no message record, but false when it has phased records and none from t1, as when the t1 turn was lost. admitG's report-only t1-writes line then undercounts. Whatever wires admitG for the admission run adds the guard: null unless at least one t1 message record exists, with a test in both directions. If that wiring needs code on main, the guard goes in the same pull request. Until then, the t1-writes line is read with this gap named beside it.
+
+<details>
+<summary>Agent notes</summary>
+
+| Rule | State |
+|---|---|
+| 1. The prereg has merged | Yes |
+| 2. O6 merged with its concurrency test; the envelope host is initialized, awake and named in the approvals entry | Yes; the host is below |
+| 3. The Captain recorded the stage caps in approvals/ | Yes: g-tg $60, g-none $229, g-pe $572, g-ap $1,287, g-vm $24 |
+| 4. O6 admits and reserves each stage; every paid stage spends through a U4 lease | Enforced by the session driver at the run commit |
+| 5. O1, O2 and O4 merged | Yes |
+| 6. O5's keyless dry run passed | Yes (O5 pin post) |
+| 7. The run names an awake host for its controller and its one U4 ledger file, with host hours on a ledger item | Yes; hours below |
+| 8. For admission: T-G is sealed with custody and its counts and digests recorded | Yes (T-G yield post); the image pin below |
+
+From the seal until admission settles, they are reserved on g-vm (at most 80 hours, $24) at $0.30 an hour, and settle at the hours the host was up.
+
+They settled at $0.30 an hour ($0.356) on g-tg, in a second lease opened after the green admit above and settled at once. g-tg's settled total is $4.348313 of its $60 cap. The wave-1 envelope reads $698.873313 committed, all settled, nothing open.
+
+</details>

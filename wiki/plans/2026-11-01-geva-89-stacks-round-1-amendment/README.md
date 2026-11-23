@@ -78,6 +78,8 @@ Every other reading of #95 and #104 runs on the new file: the reading without fl
 
 ## 4. Allowance and caps
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 **The allowance.** #95 section 9 froze each slot's allowance at "twice the pilot's largest unit-pass" for its arm: $2.60 for none and gstack, and $2.17 for tstack. The ruling replaces it with a fixed $15 a session (`--allowance 15`). The pilot units ran light on the rig, and the metering proxy reserves each call's worst case, so the frozen value would refuse larger reviews and void arms through coverage gaps.
 
 **Grid items and caps.** Each invocation runs at `--timeout 7200`.

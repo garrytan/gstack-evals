@@ -1,0 +1,20 @@
+H1 READING: RIG (R48: FIX-METHOD (rig))
+n 39 tasks with a valid trial; s 92/117 = 0.7863; UB 0.9039 (t 2.024394, computed); UB >= 0.80 true
+trials read 126: solved 91, unsolved 25, budget stops 0, gaps 0, tripwire 0, contaminated 10; reruns run 0 of 6
+histogram (tasks with 3 valid trials): 0 of 3: 5, 1 of 3: 3, 2 of 3: 4, 3 of 3: 26; tasks with fewer valid trials: 2 of 2 1
+refusals by code (every none trial, outlived ones included): E_ALLOWANCE route 92
+budget stops by cause: none
+gaps by cause (as read): none; first trials that were gaps: 0
+cost per none session (126 closed): mean $1.8808, median $1.4454, p95 $4.5958, total $236.9805; tokens input 10274, output 3656374, cache read 465000824, cache write 14161960; median over G's none mean ($0.9325): 1.5501 (printed, not applied)
+wall time per session (s): mean 566.7444, median 446.9500, max 3748.3000; turns: mean 41.8571, median 35.0000, max 91.0000
+G_B over tagged tasks (budget stops read 0): 6 tagged tasks with a valid trial, mean 0.9667
+first none sessions opened 126 of 126; h1-none cap stop false
+told smoke h1-told-th117fd136bb-t1: cost $19.1495, turns 171, wall 2752.3 s, termination completed, class solved
+told smoke h1-told-th5c1d188c05-t1: cost $34.9989, turns 260, wall 4605.3 s, termination completed, class unsolved
+smoke e3-read: h1-told-th117fd136bb-t1 exposed false failed review_skills_loaded config=true scope=true review_skills_loaded=false findings_in_order=true phases ceo,dx,eng published ceo,dx,eng loads_t2 1 t2_end quiet termination completed proxy_refused 0 | gate: report exit 0 fired 1 blocked 3 (missing ceo,dx,eng) released 1 exhausted 0 errors 0 skipped none denied 5 refused ceo:no-report,ceo:no-report,ceo:no-report,dx:no-report,dx:no-report step eng step_blocks 1 ceiling false
+smoke e3-read: h1-told-th5c1d188c05-t1 exposed true failed none config=true scope=true review_skills_loaded=true findings_in_order=true phases ceo,dx,eng published ceo,dx,eng loads_t2 1 t2_end quiet termination completed proxy_refused 0 | gate: report exit 0 fired 1 blocked 3 (missing ceo,dx,eng) released 1 exhausted 0 errors 0 skipped none denied 5 refused ceo:no-report,ceo:no-report,dx:no-report,dx:no-report,eng:no-report step eng step_blocks 1 ceiling false
+smoke e3-read: exposed 1 of 2 read, verdict undecided under 3 of 4
+smoke e3-read exit 0 (its last line counts against E3's 3 of 4 and does not apply to two smoke sessions)
+C1 re-projected (section 7.3 formulas): c1-told cap $8280.00 (168 sessions at the smoke mean $4548.47), c1-none cap $856.00 (168 sessions at H1's none mean $315.97)
+C1 R48 reach: m = smoke mean $27.0742 over H1's none mean $1.8808 = 14.3951; KEEP needs told's solve rate at least m x s / 1.5 = 7.5461, so KEEP and a cost-settled helps are out of reach: helps reads CUT-CANDIDATE on cost (diet track) or FIX-METHOD (cost unsettled) if the ratio's interval reaches 1.5; not distinguished reads CUT-CANDIDATE on cost, CUT-CANDIDATE or Why-null; hurts reads CUT-CANDIDATE
+READ_EXIT 0 2026-11-10T10:38:50Z

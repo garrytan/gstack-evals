@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // K1 escaped-bug pairs. SZZ: for a later fix that adds or changes a test, blame the source lines it deletes or edits
 // (git blame -w -M at the fix's parent, skipping blank and comment-only lines) and map each blamed commit to the
-// first-parent change that brought it in; an in-window change that owns blamed lines is a candidate introducer, and
+// first-parent change that brought it in (consecutive lines go to blame as one -L a,b range, so a large edit in a large
+// file stays one short command); an in-window change that owns blamed lines is a candidate introducer, and
 // the one owning the most lines is the pair's introducer. Reverts: a revert that cites a defect pairs the reverted
 // change with its re-land, whose tests become the escaped-defect tests; a revert for product reasons pairs nothing.
 import type { Change } from "./changes.ts";
@@ -42,10 +43,21 @@ export function editedOldLines(repoDir: string, c: Change): Map<string, number[]
   return out;
 }
 
-/** The commit that last changed each given line at rev, from git blame -w -M --porcelain. */
+/** Line numbers merged into runs of consecutive lines, sorted and deduplicated: one blame range per run. */
+export function lineRanges(lines: number[]): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const n of [...new Set(lines)].sort((a, b) => a - b)) {
+    const last = out.at(-1);
+    if (last && n === last[1] + 1) last[1] = n;
+    else out.push([n, n]);
+  }
+  return out;
+}
+
+/** The commit that last changed each given line at rev, from git blame -w -M --porcelain with one -L a,b per run. */
 export function blame(repoDir: string, rev: string, path: string, lines: number[]): Map<number, string> {
   const args = ["blame", "-w", "-M", "--porcelain"];
-  for (const n of lines) args.push("-L", n + "," + n);
+  for (const [a, b] of lineRanges(lines)) args.push("-L", a + "," + b);
   const r = gitRun(repoDir, [...args, rev, "--", path]);
   const out = new Map<number, string>();
   if (r.status !== 0) return out;

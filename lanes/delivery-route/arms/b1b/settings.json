@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "_gstack_source": "gstack-skill-route",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/root/.claude/skills/gstack/hosts/claude/hooks/skill-route-hook",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

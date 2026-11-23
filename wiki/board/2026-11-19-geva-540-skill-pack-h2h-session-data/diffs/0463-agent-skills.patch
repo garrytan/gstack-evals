@@ -1,0 +1,126 @@
+diff --git a/internal/chezmoi/format.go b/internal/chezmoi/format.go
+index 341ac66..083eb98 100644
+--- a/internal/chezmoi/format.go
++++ b/internal/chezmoi/format.go
+@@ -10,6 +10,7 @@ import (
+ 	"slices"
+ 	"strings"
+ 
++	burntsushitoml "github.com/BurntSushi/toml"
+ 	"github.com/goccy/go-yaml"
+ 	"github.com/pelletier/go-toml/v2"
+ 	"github.com/tailscale/hujson"
+@@ -159,9 +160,33 @@ func (formatTOML) Name() string {
+ 
+ // Unmarshal implements Format.Unmarshal.
+ func (formatTOML) Unmarshal(data []byte, value any) error {
+-	decoder := toml.NewDecoder(bytes.NewReader(data))
+-	decoder.DisallowUnknownFields()
+-	return decoder.Decode(value)
++	// Use github.com/BurntSushi/toml for decoding as it supports TOML v1.1.0.
++	metaData, err := burntsushitoml.NewDecoder(bytes.NewReader(data)).Decode(value)
++	if err != nil {
++		return err
++	}
++	// Emulate strict mode by reporting undecoded keys. BurntSushi/toml
++	// reports the children of inline tables decoded into an interface value
++	// as undecoded, so ignore keys whose parent key was decoded.
++	undecoded := metaData.Undecoded()
++	undecodedSet := make(map[string]struct{}, len(undecoded))
++	for _, key := range undecoded {
++		undecodedSet[key.String()] = struct{}{}
++	}
++	var unknownKeys []string
++FOR:
++	for _, key := range undecoded {
++		for i := 1; i < len(key); i++ {
++			if _, ok := undecodedSet[key[:i].String()]; !ok {
++				continue FOR
++			}
++		}
++		unknownKeys = append(unknownKeys, key.String())
++	}
++	if len(unknownKeys) > 0 {
++		return fmt.Errorf("toml: unknown fields: %s", strings.Join(unknownKeys, ", "))
++	}
++	return nil
+ }
+ 
+ // Name implements Format.Name.
+diff --git a/internal/chezmoi/format_test.go b/internal/chezmoi/format_test.go
+index f212c26..111f01c 100644
+--- a/internal/chezmoi/format_test.go
++++ b/internal/chezmoi/format_test.go
+@@ -162,13 +162,19 @@ func TestFormatEdgeCases(t *testing.T) {
+ 			name:        "toml_unknown_field",
+ 			format:      FormatTOML,
+ 			data:        `unknown = "value"`,
+-			expectedErr: "strict mode: fields in the document are missing in the target struct",
++			expectedErr: "toml: unknown fields: unknown",
++		},
++		{
++			name:        "toml_unknown_table",
++			format:      FormatTOML,
++			data:        "key = \"value\"\n[unknown]\nsubkey = 1\n",
++			expectedErr: "toml: unknown fields: unknown, unknown.subkey",
+ 		},
+ 		{
+ 			name:        "toml_unexpected_eof",
+ 			format:      FormatTOML,
+ 			data:        `[`,
+-			expectedErr: "expected key but found none",
++			expectedErr: "unexpected end of table name",
+ 		},
+ 		{
+ 			name:   "toml_whitespace",
+@@ -222,3 +228,22 @@ func TestFormatEdgeCases(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestFormatTOMLV1_1(t *testing.T) {
++	data := []byte(`
++table = {
++  key1 = "value1",
++  key2 = "value2",
++}
++escapes = "\e\x41"
++`)
++	var actual map[string]any
++	assert.NoError(t, FormatTOML.Unmarshal(data, &actual))
++	assert.Equal(t, map[string]any{
++		"table": map[string]any{
++			"key1": "value1",
++			"key2": "value2",
++		},
++		"escapes": "\x1bA",
++	}, actual)
++}
+diff --git a/internal/cmd/testdata/scripts/init.txtar b/internal/cmd/testdata/scripts/init.txtar
+index ebb0413..52e6767 100644
+--- a/internal/cmd/testdata/scripts/init.txtar
++++ b/internal/cmd/testdata/scripts/init.txtar
+@@ -73,7 +73,7 @@ chhome home8/user
+ # test that chezmoi init fails if the generated config is not valid
+ mkgitconfig
+ ! exec chezmoi init
+-stderr 'toml: expected character ='
++stderr 'toml: line 2 \(last key "diff"\): expected '
+ ! exists .config/chezmoi
+ 
+ chhome home/user
+diff --git a/internal/cmd/testdata/scripts/toml11.txtar b/internal/cmd/testdata/scripts/toml11.txtar
+new file mode 100644
+index 0000000..c3c22e5
+--- /dev/null
++++ b/internal/cmd/testdata/scripts/toml11.txtar
+@@ -0,0 +1,9 @@
++# test that .chezmoidata files can use TOML v1.1.0 syntax
++exec chezmoi execute-template '{{ .table.key1 }} {{ .table.key2 }}'
++stdout '^value1 value2$'
++
++-- home/user/.local/share/chezmoi/.chezmoidata.toml --
++table = {
++  key1 = "value1",
++  key2 = "value2",
++}

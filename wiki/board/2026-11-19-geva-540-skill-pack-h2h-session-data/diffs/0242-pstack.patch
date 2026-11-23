@@ -1,0 +1,90 @@
+diff --git a/NAudio.Core.Tests/WaveFormats/WaveFormatSerializeTests.cs b/NAudio.Core.Tests/WaveFormats/WaveFormatSerializeTests.cs
+new file mode 100644
+index 0000000..42ea797
+--- /dev/null
++++ b/NAudio.Core.Tests/WaveFormats/WaveFormatSerializeTests.cs
+@@ -0,0 +1,58 @@
++using System.IO;
++using NAudio.Utils;
++using NAudio.Wave;
++using NUnit.Framework;
++
++namespace NAudio.Core.Tests.WaveFormats
++{
++    [TestFixture]
++    [Category("UnitTest")]
++    public class WaveFormatSerializeTests
++    {
++        private static byte[] Serialize(WaveFormat format)
++        {
++            using var ms = new MemoryStream();
++            using var writer = new BinaryWriter(ms);
++            format.Serialize(writer);
++            writer.Flush();
++            return ms.ToArray();
++        }
++
++        [Test]
++        public void PcmFormatChunkOmitsCbSize()
++        {
++            var bytes = Serialize(new WaveFormat(44100, 16, 2));
++            Assert.That(bytes.Length, Is.EqualTo(4 + 16));
++            Assert.That(System.BitConverter.ToInt32(bytes, 0), Is.EqualTo(16));
++        }
++
++        [Test]
++        public void IeeeFloatFormatChunkIncludesCbSize()
++        {
++            var bytes = Serialize(WaveFormat.CreateIeeeFloatWaveFormat(44100, 2));
++            Assert.That(bytes.Length, Is.EqualTo(4 + 18));
++            Assert.That(System.BitConverter.ToInt32(bytes, 0), Is.EqualTo(18));
++            Assert.That(System.BitConverter.ToInt16(bytes, 20), Is.EqualTo(0));
++        }
++
++        [Test]
++        public void PcmWaveFileRoundTrips()
++        {
++            var format = new WaveFormat(22050, 16, 1);
++            var ms = new MemoryStream();
++            using (var writer = new WaveFileWriter(new IgnoreDisposeStream(ms), format))
++            {
++                writer.Write(new byte[] { 1, 2, 3, 4 }, 0, 4);
++            }
++            var bytes = ms.ToArray();
++            Assert.That(System.Text.Encoding.ASCII.GetString(bytes, 12, 4), Is.EqualTo("fmt "));
++            Assert.That(System.BitConverter.ToInt32(bytes, 16), Is.EqualTo(16));
++            Assert.That(System.Text.Encoding.ASCII.GetString(bytes, 36, 4), Is.EqualTo("data"));
++
++            ms.Position = 0;
++            using var reader = new WaveFileReader(ms);
++            Assert.That(reader.WaveFormat, Is.EqualTo(format));
++            Assert.That(reader.Length, Is.EqualTo(4));
++        }
++    }
++}
+diff --git a/NAudio.Core/Wave/WaveFormats/WaveFormat.cs b/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
+index 423e1b0..38550ab 100644
+--- a/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
++++ b/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
+@@ -302,14 +302,19 @@ namespace NAudio.Wave
+         /// <param name="writer">the output stream</param>
+         public virtual void Serialize(BinaryWriter writer)
+         {
+-            writer.Write((int)(18 + extraSize)); // wave format length
++            // PCMWAVEFORMAT has no cbSize field; every other format tag requires it
++            bool writeExtraSize = Encoding != WaveFormatEncoding.Pcm || extraSize != 0;
++            writer.Write(writeExtraSize ? 18 + extraSize : 16); // wave format length
+             writer.Write((short)Encoding);
+             writer.Write((short)Channels);
+             writer.Write((int)SampleRate);
+             writer.Write((int)AverageBytesPerSecond);
+             writer.Write((short)BlockAlign);
+             writer.Write((short)BitsPerSample);
+-            writer.Write((short)extraSize);
++            if (writeExtraSize)
++            {
++                writer.Write((short)extraSize);
++            }
+         }
+ 
+         /// <summary>

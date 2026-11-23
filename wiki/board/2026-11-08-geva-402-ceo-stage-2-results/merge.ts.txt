@@ -1,0 +1,67 @@
+// The CEO stage 2 results post: joins the Opus held completion's readings to stage 2's, by the Captain's ruling of
+// 2026-11-08 on the end of stage 2 (item 1). Stage 2's opus-p item cap-stopped in its held launch after 9 of 84 sessions,
+// and its readings (stage2-j) hold the 75 unstarted sessions as incomplete rows in Opus's none, standalone and lens cells
+// on held units. The completion item ran exactly those 75 from the same build, with its own run id, packets, key and
+// judges, so its readings hold them as scored rows and every other planned row as gap. compare reads one readings file,
+// so this script writes two from the pair:
+//   joined: stage 2's readings with each incomplete row replaced by the completion's row for the same session.
+//   completion view: stage 2's readings with all 84 rows of those three held cells taken from the completion, so the
+//     stopped part's 9 sessions read as the completion's gap rows and only the completion's 25 held units count.
+// Stage 2's readings as they are give the third view, the stopped part alone. Every other row, the units, the order, the
+// plan fields and the stock rows (stage 2's judges' labels; the completion's judges labelled stock again in their own
+// packets) come from stage 2. Rows pair by id, which ceo rows builds from the session. Only the completion's scored rows
+// count; its gap rows never enter. The script rereads what it wrote, checks every row against its source and exits 1
+// with E_MERGE on any difference. It prints counts, dollar sums and digests only, never review text or unit ids.
+//   bun merge.ts build <stage 2 readings.json> <completion readings.json> <joined.json> <completion-view.json>
+//   bun merge.ts verify <stage 2 readings.json> <completion readings.json> <joined.json> <completion-view.json>
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+const [mode, sFile, cFile, jFile, vFile] = process.argv.slice(2) as [string, string, string, string, string];
+if ((mode !== "build" && mode !== "verify") || !vFile) throw new Error("E_USAGE merge.ts build|verify <stage 2 readings.json> <completion readings.json> <joined.json> <completion-view.json>");
+const fail = (m: string): never => { console.error("E_MERGE " + m); process.exit(1); };
+const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+const s = (v: unknown) => JSON.stringify(v);
+const parse = (text: string, name: string) => JSON.parse(text, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? fail("a number in the " + name + " is not finite") : v));
+const S = parse(readFileSync(sFile, "utf8"), "stage 2 file"), C = parse(readFileSync(cFile, "utf8"), "completion file");
+const TOP = ["stage", "order", "suite", "exposure_sha256", "units", "reviews", "stock", "family", "passes", "held_passes", "lens"];
+for (const [name, f] of [["stage 2 file", S], ["completion file", C]] as const) if (!Array.isArray(f?.units) || !Array.isArray(f.reviews) || !Array.isArray(f.stock)) fail("the " + name + "'s units, reviews or stock are not arrays");
+if (s(Object.keys(S)) !== s(TOP) || S.stage !== 2) fail("the stage 2 file is not stage 2 readings");
+if (s(Object.keys(C)) !== s(TOP) || C.stage !== 2) fail("the completion file is not stage 2 readings");
+for (const k of TOP) if (k !== "reviews" && k !== "stock" && s(S[k]) !== s(C[k])) fail("the two files differ on " + k);
+const held = new Set(S.units.filter((u: any) => u.kind === "held").map((u: any) => u.id));
+const inCell = (r: any) => r.model === "opus" && ["none", "standalone", "lens"].includes(r.arm) && held.has(r.unit) && r.pass === 1 && !r.smoke;
+const cById = new Map<string, any>(C.reviews.map((r: any) => [r.id, r]));
+if (cById.size !== C.reviews.length || C.reviews.length !== S.reviews.length || new Set(S.reviews.map((r: any) => r.id)).size !== S.reviews.length) fail("the two files don't hold the same count of distinct rows");
+S.reviews.forEach((r: any, i: number) => {
+  const c = cById.get(r.id);
+  if (!c || s([c.unit, c.arm, c.model, c.pass, !!c.smoke]) !== s([r.unit, r.arm, r.model, r.pass, !!r.smoke])) fail("the completion holds no row for stage 2's row " + (i + 1) + " as stage 2 plans it");
+});
+const cells = S.reviews.filter(inCell), inc = S.reviews.filter((r: any) => r.status === "incomplete");
+if (cells.length !== 84) fail("stage 2 holds " + cells.length + " rows in Opus's none, standalone and lens held cells, not 84");
+if (inc.length !== 75 || inc.some((r: any) => !inCell(r))) fail("stage 2's incomplete rows are not 75 rows inside Opus's none, standalone and lens held cells");
+const stopped = cells.filter((r: any) => r.status !== "incomplete");
+if (stopped.length !== 9 || stopped.some((r: any) => r.status !== "scored")) fail("the stopped part's rows in those cells are not 9 scored rows");
+const incIds = new Set(inc.map((r: any) => r.id));
+const scored = C.reviews.filter((r: any) => r.status !== "gap");
+if (scored.length !== 75 || scored.some((r: any) => r.status !== "scored" || !incIds.has(r.id))) fail("the completion's rows other than gap are not 75 scored rows on stage 2's 75 incomplete sessions");
+const VIEWS = { "joined file": (r: any) => incIds.has(r.id), "completion view": inCell } as const;
+const pick = (from: (r: any) => boolean) => S.reviews.map((r: any) => (from(r) ? cById.get(r.id) : r));
+if (mode === "build") {
+  writeFileSync(jFile, JSON.stringify({ ...S, reviews: pick(VIEWS["joined file"]) }, null, 2) + "\n");
+  writeFileSync(vFile, JSON.stringify({ ...S, reviews: pick(VIEWS["completion view"]) }, null, 2) + "\n");
+}
+const digests: string[] = [];
+for (const [name, file] of [["joined file", jFile], ["completion view", vFile]] as const) {
+  const raw = readFileSync(file), M = parse(raw.toString("utf8"), name);
+  if (s(Object.keys(M)) !== s(TOP)) fail("the " + name + "'s top level differs from stage 2's");
+  if (!Array.isArray(M.reviews)) fail("the " + name + "'s reviews are not an array");
+  for (const k of TOP) if (k !== "reviews" && s(M[k]) !== s(S[k])) fail("the " + name + " differs from stage 2 on " + k);
+  const want = pick(VIEWS[name]);
+  if (M.reviews.length !== want.length) fail("the " + name + " holds " + M.reviews.length + " rows, not " + want.length);
+  M.reviews.forEach((r: any, i: number) => { if (s(r) !== s(want[i])) fail("the " + name + "'s row " + (i + 1) + " differs from its source row"); });
+  digests.push(name + " " + sha(raw));
+}
+const heldScored = (rs: any[]) => ["none", "standalone", "lens"].map((a) => a + " " + rs.filter((r) => inCell(r) && r.arm === a && r.status === "scored").length).join(", ");
+console.log("merge " + mode + ": OK; inputs stage 2 " + sha(readFileSync(sFile)) + ", completion " + sha(readFileSync(cFile)) + "; outputs " + digests.join(", "));
+console.log("  completion: " + scored.length + " scored rows on stage 2's " + inc.length + " incomplete sessions, usd sum " + scored.reduce((a: number, r: any) => a + r.usd, 0).toFixed(6) + "; " + (C.reviews.length - scored.length) + " gap rows left out");
+console.log("  held scored rows per Opus cell (28 units each): stopped part " + heldScored(S.reviews) + "; joined " + heldScored(pick(VIEWS["joined file"])) + "; completion view " + heldScored(pick(VIEWS["completion view"])));

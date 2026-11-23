@@ -1,0 +1,91 @@
+diff --git a/lib/dispatcher/client-h2.js b/lib/dispatcher/client-h2.js
+index 3fc6384..34c5247 100644
+--- a/lib/dispatcher/client-h2.js
++++ b/lib/dispatcher/client-h2.js
+@@ -292,7 +292,17 @@ function writeH2 (client, request) {
+     const key = reqHeaders[n + 0]
+     const val = reqHeaders[n + 1]
+ 
+-    if (Array.isArray(val)) {
++    if (key === 'cookie' || key.toLowerCase() === 'cookie') {
++      // https://www.rfc-editor.org/rfc/rfc9113#section-8.2.3
++      // Cookie crumbs must not be joined with ', '; send each as its own
++      // header field (node:http2 emits one field per array element).
++      const existing = headers.cookie
++      if (existing != null) {
++        headers.cookie = (Array.isArray(existing) ? existing : [existing]).concat(val)
++      } else {
++        headers.cookie = Array.isArray(val) ? val.slice() : val
++      }
++    } else if (Array.isArray(val)) {
+       for (let i = 0; i < val.length; i++) {
+         if (headers[key]) {
+           headers[key] += `, ${val[i]}`
+diff --git a/test/h2c-client.js b/test/h2c-client.js
+index 2265cb0..cfff3ba 100644
+--- a/test/h2c-client.js
++++ b/test/h2c-client.js
+@@ -119,3 +119,63 @@ test('Should reject request if not h2c supported', async t => {
+     'SocketError: other side closed'
+   )
+ })
++
++test('Should send multiple cookie values as separate cookie header fields (RFC 9113 8.2.3)', async t => {
++  const planner = tspl(t, { plan: 3 })
++
++  const server = createServer((req, res) => {
++    // Node joins multiple cookie fields with '; '
++    planner.equal(req.headers.cookie, 'a=b; c=d; e=f')
++    const rawCookies = []
++    for (let i = 0; i < req.rawHeaders.length; i += 2) {
++      if (req.rawHeaders[i].toLowerCase() === 'cookie') rawCookies.push(req.rawHeaders[i + 1])
++    }
++    planner.deepStrictEqual(rawCookies, ['a=b', 'c=d', 'e=f'])
++    res.end('ok')
++  })
++
++  server.listen()
++  await once(server, 'listening')
++  const client = new H2CClient(`http://localhost:${server.address().port}/`)
++
++  t.after(() => client.close())
++  t.after(() => server.close())
++
++  const response = await client.request({
++    path: '/',
++    method: 'GET',
++    headers: { cookie: ['a=b', 'c=d', 'e=f'] }
++  })
++  planner.equal(await response.body.text(), 'ok')
++
++  await planner.completed
++})
++
++test('Should merge mixed-case cookie headers into separate cookie header fields', async t => {
++  const planner = tspl(t, { plan: 1 })
++
++  const server = createServer((req, res) => {
++    const rawCookies = []
++    for (let i = 0; i < req.rawHeaders.length; i += 2) {
++      if (req.rawHeaders[i].toLowerCase() === 'cookie') rawCookies.push(req.rawHeaders[i + 1])
++    }
++    planner.deepStrictEqual(rawCookies, ['a=b', 'c=d', 'e=f'])
++    res.end()
++  })
++
++  server.listen()
++  await once(server, 'listening')
++  const client = new H2CClient(`http://localhost:${server.address().port}/`)
++
++  t.after(() => client.close())
++  t.after(() => server.close())
++
++  const response = await client.request({
++    path: '/',
++    method: 'GET',
++    headers: ['Cookie', 'a=b', 'cookie', ['c=d', 'e=f']]
++  })
++  await response.body.dump()
++
++  await planner.completed
++})

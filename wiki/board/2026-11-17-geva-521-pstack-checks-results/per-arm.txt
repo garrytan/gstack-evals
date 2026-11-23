@@ -1,0 +1,15 @@
+sessions 278 records 278
+task keys sample {"end": "completed", "turns": null, "wall_ms": 869800, "spent_micros": 995847}
+questions sample {"ask_user_question": 0, "prose": 0}
+wrapup sample {"ends": ["completed"], "turns": null, "spent_micros": 183278}
+model arm n task_end wrapup_end wall_min_median catch ask_q prose_q sessions_with_q cap_stop force_captured listed inline names_nothing beyond_cap run no_manifest zero_listed scoring_min_median
+claude-opus-5-5 C 30 {"completed": 30} {"completed": 30} 6.1 18 0 0 0 0 67 326 78 14 12 222 0 1 11.6
+claude-opus-5-5 N 30 {"completed": 30} {"completed": 30} 1.2 21 0 0 0 0 15 44 0 2 0 42 0 0 7.3
+claude-opus-5-5 P 30 {"completed": 30} {"completed": 30} 9.9 10 0 0 0 0 37 378 74 2 7 295 0 0 6.7
+claude-opus-5-5 blind 8 {"completed": 5, "limit_allowance": 3} {"completed": 8} 37.1 0 0 0 0 0 3214 362 60 26 129 147 0 0 20.6
+openai/gpt-6.1-sol C 30 {"completed": 30} {"completed": 28, "limit_wall": 1, "limit_turns": 1} 11.1 5 0 0 0 0 1093 1292 757 16 172 347 0 0 4.7
+openai/gpt-6.1-sol N 30 {"completed": 30} {"completed": 30} 1.9 20 0 0 0 0 11 67 2 3 0 62 0 0 7.2
+openai/gpt-6.1-sol P 30 {"completed": 30} {"completed": 29, "limit_wall": 1} 14.2 9 0 0 0 0 7 457 254 15 12 176 0 0 2.4
+particle-ai/particle-1 C 30 {"completed": 30} {"completed": 30} 6.0 19 0 0 0 0 822 168 13 11 0 144 0 0 10.0
+particle-ai/particle-1 N 30 {"completed": 30} {"completed": 30} 2.1 20 0 0 0 0 11 41 0 5 0 36 0 0 6.8
+particle-ai/particle-1 P 30 {"completed": 30} {"completed": 30} 5.7 9 0 0 0 0 16 107 18 3 0 86 0 0 4.2

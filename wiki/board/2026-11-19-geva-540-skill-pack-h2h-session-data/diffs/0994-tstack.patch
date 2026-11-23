@@ -1,0 +1,48 @@
+diff --git a/col.go b/col.go
+index ee7f6e6..ca7d862 100644
+--- a/col.go
++++ b/col.go
+@@ -561,7 +561,10 @@ func flatCols(col xlsxCol, cols []xlsxCol, replacer func(fc, c xlsxCol) xlsxCol)
+ 		return -1, false
+ 	}
+ 	for _, column := range cols {
+-		for i := column.Min; i <= column.Max; i++ {
++		// Clamp the column range loaded from the worksheet to the valid
++		// bounds, to avoid unbounded expansion with crafted attributes.
++		minCol, maxCol := max(column.Min, MinColumns), min(column.Max, MaxColumns)
++		for i := minCol; i <= maxCol; i++ {
+ 			if idx, ok := inFlat(i, fc); ok {
+ 				fc[idx] = replacer(fc[idx], column)
+ 				continue
+diff --git a/col_test.go b/col_test.go
+index fcea60f..93fb5f1 100644
+--- a/col_test.go
++++ b/col_test.go
+@@ -2,6 +2,7 @@ package excelize
+ 
+ import (
+ 	"fmt"
++	"math"
+ 	"path/filepath"
+ 	"sort"
+ 	"strings"
+@@ -585,3 +586,19 @@ func TestAutoFitColWidth(t *testing.T) {
+ 	_, err = f.autoFitColWidth("Sheet1", 1, 1, &Font{})
+ 	assert.Equal(t, err, newInvalidStyleID(1))
+ }
++
++func TestFlatColsOutOfRange(t *testing.T) {
++	f := NewFile()
++	ws, ok := f.Sheet.Load("xl/worksheets/sheet1.xml")
++	assert.True(t, ok)
++	ws.(*xlsxWorksheet).Cols = &xlsxCols{Col: []xlsxCol{{Min: -5, Max: math.MaxInt32, Width: float64Ptr(9)}}}
++	assert.NoError(t, f.SetColWidth("Sheet1", "A", "A", 12))
++	assert.Len(t, ws.(*xlsxWorksheet).Cols.Col, MaxColumns)
++	assert.NoError(t, f.SetColStyle("Sheet1", "B", 0))
++	assert.NoError(t, f.SetColVisible("Sheet1", "C", false))
++	assert.NoError(t, f.SetColOutlineLevel("Sheet1", "D", 1))
++	assert.Len(t, ws.(*xlsxWorksheet).Cols.Col, MaxColumns)
++	width, err := f.GetColWidth("Sheet1", "A")
++	assert.NoError(t, err)
++	assert.Equal(t, 12.0, width)
++}

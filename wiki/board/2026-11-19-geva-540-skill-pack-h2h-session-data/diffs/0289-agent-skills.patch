@@ -1,0 +1,62 @@
+diff --git a/src/MudBlazor.UnitTests/Components/DialogTests.cs b/src/MudBlazor.UnitTests/Components/DialogTests.cs
+index 0e855c1..29bf384 100644
+--- a/src/MudBlazor.UnitTests/Components/DialogTests.cs
++++ b/src/MudBlazor.UnitTests/Components/DialogTests.cs
+@@ -1540,6 +1540,44 @@ namespace MudBlazor.UnitTests.Components
+             await comp.InvokeAsync(() => service.Close(dialogReference));
+         }
+ 
++        [Test]
++        public async Task DialogProvider_BackgroundClass_ShouldApplyToMessageBox_WhenNoOptionsGiven()
++        {
++            var comp = Context.Render<MudDialogProvider>(parameters => parameters
++                .Add(p => p.BackgroundClass, "global-background"));
++            var service = Context.Services.GetRequiredService<IDialogService>();
++
++            _ = comp.InvokeAsync(() => service.ShowMessageBoxAsync("Title", "Message"));
++
++            comp.WaitForAssertion(() => comp.Find("div.mud-overlay-dialog").ClassList.Should().Contain("global-background"));
++        }
++
++        [Test]
++        public async Task DialogProvider_BackgroundClass_ShouldApplyToDialog_WhenNoOptionsGiven()
++        {
++            var comp = Context.Render<MudDialogProvider>(parameters => parameters
++                .Add(p => p.BackgroundClass, "global-background"));
++            var service = Context.Services.GetRequiredService<IDialogService>();
++
++            await comp.InvokeAsync(() => service.ShowAsync<DialogOkCancel>("Title"));
++
++            comp.Find("div.mud-overlay-dialog").ClassList.Should().Contain("global-background");
++        }
++
++        [Test]
++        public async Task DialogOptions_BackgroundClass_ShouldOverrideProviderBackgroundClass()
++        {
++            var comp = Context.Render<MudDialogProvider>(parameters => parameters
++                .Add(p => p.BackgroundClass, "global-background"));
++            var service = Context.Services.GetRequiredService<IDialogService>();
++
++            await comp.InvokeAsync(() => service.ShowAsync<DialogOkCancel>("Title", new DialogOptions { BackgroundClass = "local-background" }));
++
++            var classList = comp.Find("div.mud-overlay-dialog").ClassList;
++            classList.Should().Contain("local-background");
++            classList.Should().NotContain("global-background");
++        }
++
+         /// <summary>
+         /// Test that MudDialog respects explicit DefaultFocus parameter over global setting
+         /// </summary>
+diff --git a/src/MudBlazor/Components/Dialog/MudDialogContainer.razor.cs b/src/MudBlazor/Components/Dialog/MudDialogContainer.razor.cs
+index 01ccad6..918c6c1 100644
+--- a/src/MudBlazor/Components/Dialog/MudDialogContainer.razor.cs
++++ b/src/MudBlazor/Components/Dialog/MudDialogContainer.razor.cs
+@@ -125,7 +125,7 @@ namespace MudBlazor
+             new CssBuilder("mud-overlay-dialog")
+                 .AddClass($"mud-skip-overlay-section") // dialog overlay remains outside of Section
+                 .AddClass("mud-skip-overlay-positioning") // popovers try to position the overlay by zindex, this skips that behavior if a user puts the dialog provider above the popover provider
+-                .AddClass(GetDialogOptionsOrDefault.BackgroundClass)
++                .AddClass(GetDialogOptionsOrDefault.BackgroundClass ?? GlobalDialogOptions.BackgroundClass)
+                 .Build();
+ 
+         protected override async Task OnAfterRenderAsync(bool firstRender)

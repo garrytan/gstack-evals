@@ -1,0 +1,35 @@
+diff --git a/plugins/inputs/turbostat/turbostat.go b/plugins/inputs/turbostat/turbostat.go
+index 48671e6..fee4bd0 100644
+--- a/plugins/inputs/turbostat/turbostat.go
++++ b/plugins/inputs/turbostat/turbostat.go
+@@ -10,6 +10,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"regexp"
++	"slices"
+ 	"strconv"
+ 	"strings"
+ 	"time"
+@@ -122,17 +123,17 @@ func (t *Turbostat) Start(acc telegraf.Accumulator) error {
+ 			acc.AddError(scanner.Err())
+ 			return
+ 		}
+-		header := scanner.Text()
++		header := strings.Fields(scanner.Text())
+ 		columns := make([]column, 0, 50)
+-		for _, s := range strings.Fields(header) {
++		for _, s := range header {
+ 			columns = append(columns, createColumn(s))
+ 		}
+ 		for scanner.Scan() {
+-			line := scanner.Text()
+-			if line == header {
++			values := strings.Fields(scanner.Text())
++			// Skip repeated header lines, ignoring whitespace differences.
++			if slices.Equal(values, header) {
+ 				continue
+ 			}
+-			values := strings.Fields(line)
+ 			acc.AddError(processValues(acc, columns, values))
+ 		}
+ 		acc.AddError(scanner.Err())

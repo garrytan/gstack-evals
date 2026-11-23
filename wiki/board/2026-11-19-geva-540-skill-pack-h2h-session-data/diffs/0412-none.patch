@@ -1,0 +1,203 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 8f2a460..14eee05 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -10,6 +10,7 @@
+ * Add support for `advertisedPortTemplate` in listener configuration to add more flexibility when configuring advertised ports.
+ * Remove PreferredLeaderElectionGoal from Cruise Control's default.goals list
+ * Add `topologySpreadConstraints` support to the Strimzi Helm chart operator Deployment
++* Add `@ExternalLink` CRD annotation for linking to arbitrary external documentation (e.g. Gateway API) from the generated API reference
+ 
+ ### Major changes, deprecations, and removals
+ 
+diff --git a/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java b/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java
+index b1b3123..9143791 100644
+--- a/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java
++++ b/crd-generator/src/main/java/io/strimzi/crdgenerator/DocGenerator.java
+@@ -13,6 +13,7 @@ import io.strimzi.crdgenerator.annotations.AddedIn;
+ import io.strimzi.crdgenerator.annotations.Crd;
+ import io.strimzi.crdgenerator.annotations.Description;
+ import io.strimzi.crdgenerator.annotations.DescriptionFile;
++import io.strimzi.crdgenerator.annotations.ExternalLink;
+ import io.strimzi.crdgenerator.annotations.KubeLink;
+ import io.strimzi.crdgenerator.annotations.PresentInVersions;
+ 
+@@ -89,7 +90,7 @@ class DocGenerator {
+         Set<Property> memorableProperties = new HashSet<>();
+ 
+         for (Property property : properties(crApiVersion, cls).values()) {
+-            if (property.isAnnotationPresent(KubeLink.class)) {
++            if (property.isAnnotationPresent(KubeLink.class) || property.isAnnotationPresent(ExternalLink.class)) {
+                 continue;
+             }
+ 
+@@ -153,7 +154,13 @@ class DocGenerator {
+         
+             // Set the external link to Kubernetes docs or the link for fields distinguished by `type`
+             KubeLink kubeLink = property.getAnnotation(KubeLink.class);
+-            String externalUrl = linker != null && kubeLink != null ? linker.link(kubeLink) : null;
++            ExternalLink externalLink = property.getAnnotation(ExternalLink.class);
++            String externalUrl;
++            if (externalLink != null) {
++                externalUrl = externalLink.value();
++            } else {
++                externalUrl = linker != null && kubeLink != null ? linker.link(kubeLink) : null;
++            }
+         
+             // Add the property name
+             out.append("|").append(propertyName);
+diff --git a/crd-generator/src/main/java/io/strimzi/crdgenerator/annotations/ExternalLink.java b/crd-generator/src/main/java/io/strimzi/crdgenerator/annotations/ExternalLink.java
+new file mode 100644
+index 0000000..16fd7e3
+--- /dev/null
++++ b/crd-generator/src/main/java/io/strimzi/crdgenerator/annotations/ExternalLink.java
+@@ -0,0 +1,25 @@
++/*
++ * Copyright Strimzi authors.
++ * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
++ */
++package io.strimzi.crdgenerator.annotations;
++
++import java.lang.annotation.ElementType;
++import java.lang.annotation.Retention;
++import java.lang.annotation.RetentionPolicy;
++import java.lang.annotation.Target;
++
++/**
++ * Configures a link to an external documentation (for example to the Gateway API documentation). Unlike
++ * {@link KubeLink}, the URL is used as-is and does not depend on any Linker.
++ */
++@Retention(RetentionPolicy.RUNTIME)
++@Target({ElementType.METHOD, ElementType.FIELD})
++public @interface ExternalLink {
++    /**
++     * Gets the URL to which the link should point.
++     *
++     * @return  URL to which the link should point
++     */
++    String value();
++}
+diff --git a/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleCrd.java b/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleCrd.java
+index 4620827..a5eef27 100644
+--- a/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleCrd.java
++++ b/crd-generator/src/test/java/io/strimzi/crdgenerator/ExampleCrd.java
+@@ -18,6 +18,7 @@ import io.strimzi.crdgenerator.annotations.CelValidation;
+ import io.strimzi.crdgenerator.annotations.Crd;
+ import io.strimzi.crdgenerator.annotations.Description;
+ import io.strimzi.crdgenerator.annotations.Example;
++import io.strimzi.crdgenerator.annotations.ExternalLink;
+ import io.strimzi.crdgenerator.annotations.KubeLink;
+ import io.strimzi.crdgenerator.annotations.Minimum;
+ import io.strimzi.crdgenerator.annotations.MinimumItems;
+@@ -61,7 +62,7 @@ import java.util.Map;
+ @OneOf({@OneOf.Alternative(@OneOf.Alternative.Property("either")), @OneOf.Alternative(@OneOf.Alternative.Property("or")), @OneOf.Alternative({@OneOf.Alternative.Property("mapStringString"), @OneOf.Alternative.Property("mapStringObject")})})
+ @JsonInclude(JsonInclude.Include.NON_NULL)
+ @JsonPropertyOrder({"ignored", "stringProperty", "intProperty", "longProperty", "booleanProperty", "normalEnum", "customisedEnum",
+-    "objectProperty", "mapStringObject", "mapStringString", "mapStringQuantity", "polymorphicProperty", "affinity", "fieldProperty",
++    "objectProperty", "mapStringObject", "mapStringString", "mapStringQuantity", "polymorphicProperty", "affinity", "externalLinkProperty", "fieldProperty",
+     "arrayProperty", "arrayProperty2", "listOfInts", "listOfInts2", "listOfObjects", "listOfPolymorphic",
+     "rawList", "listOfRawList", "arrayOfList", "arrayOfRawList", "listOfArray", "arrayOfTypeVar", "listOfTypeVar",
+     "arrayOfBoundTypeVar", "listOfBoundTypeVar", "arrayOfBoundTypeVar2", "listOfBoundTypeVar2",
+@@ -87,6 +88,8 @@ public class ExampleCrd<T, U extends Number, V extends U> extends CustomResource
+ 
+     private Affinity affinity;
+ 
++    private String externalLinkProperty;
++
+     @Description("Example of field property.")
+     public String fieldProperty;
+ 
+@@ -353,4 +356,13 @@ public class ExampleCrd<T, U extends Number, V extends U> extends CustomResource
+     public void setAffinity(Affinity affinity) {
+         this.affinity = affinity;
+     }
++
++    @ExternalLink("https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.ParentReference")
++    public String getExternalLinkProperty() {
++        return externalLinkProperty;
++    }
++
++    public void setExternalLinkProperty(String externalLinkProperty) {
++        this.externalLinkProperty = externalLinkProperty;
++    }
+ }
+diff --git a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.adoc b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.adoc
+index 838d824..4bf2bbc 100644
+--- a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.adoc
++++ b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.adoc
+@@ -41,6 +41,9 @@
+ |affinity
+ |{KubeApiReferenceBase}#affinity-v1-core[Affinity]
+ |
++|externalLinkProperty
++|https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.ParentReference[String]
++|
+ |fieldProperty
+ |string
+ |Example of field property.
+diff --git a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.yaml b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.yaml
+index f1f84a2..65e926a 100644
+--- a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.yaml
++++ b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTest.yaml
+@@ -443,6 +443,8 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          externalLinkProperty:
++            type: string
+           fieldProperty:
+             type: string
+             description: Example of field property.
+@@ -1054,6 +1056,8 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          externalLinkProperty:
++            type: string
+           fieldProperty:
+             type: string
+             description: Example of field property.
+diff --git a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestHelmMetadata.yaml b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestHelmMetadata.yaml
+index 54516c3..8d12269 100644
+--- a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestHelmMetadata.yaml
++++ b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestHelmMetadata.yaml
+@@ -449,6 +449,8 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          externalLinkProperty:
++            type: string
+           fieldProperty:
+             type: string
+             description: Example of field property.
+@@ -1060,6 +1062,8 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          externalLinkProperty:
++            type: string
+           fieldProperty:
+             type: string
+             description: Example of field property.
+diff --git a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestWithoutDescriptions.yaml b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestWithoutDescriptions.yaml
+index 09062a6..69a9650 100644
+--- a/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestWithoutDescriptions.yaml
++++ b/crd-generator/src/test/resources/io/strimzi/crdgenerator/simpleTestWithoutDescriptions.yaml
+@@ -439,6 +439,8 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          externalLinkProperty:
++            type: string
+           fieldProperty:
+             type: string
+           arrayProperty:
+@@ -1044,6 +1046,8 @@ spec:
+                             type: string
+                         topologyKey:
+                           type: string
++          externalLinkProperty:
++            type: string
+           fieldProperty:
+             type: string
+           arrayProperty:

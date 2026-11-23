@@ -1,0 +1,842 @@
+{
+ "by_label": {
+  "main": {
+   "HARMLESS": {
+    "u": 253084,
+    "c": 274690,
+    "fu": 3553,
+    "fc": 3718
+   },
+   "CONTEXT": {
+    "u": 290,
+    "c": 293,
+    "fu": 24,
+    "fc": 24
+   },
+   "DESTRUCTIVE": {
+    "u": 948,
+    "c": 951,
+    "fu": 443,
+    "fc": 443
+   }
+  },
+  "v2": {
+   "HARMLESS": {
+    "u": 253084,
+    "c": 274690,
+    "fu": 679,
+    "fc": 685,
+    "du": 8
+   },
+   "CONTEXT": {
+    "u": 290,
+    "c": 293,
+    "fu": 278,
+    "fc": 281
+   },
+   "DESTRUCTIVE": {
+    "u": 948,
+    "c": 951,
+    "fu": 930,
+    "fc": 933,
+    "du": 5
+   }
+  },
+  "55aa": {
+   "HARMLESS": {
+    "u": 253084,
+    "c": 274690,
+    "fu": 840,
+    "fc": 846,
+    "du": 8
+   },
+   "CONTEXT": {
+    "u": 290,
+    "c": 293,
+    "fu": 145,
+    "fc": 146
+   },
+   "DESTRUCTIVE": {
+    "u": 948,
+    "c": 951,
+    "fu": 930,
+    "fc": 933,
+    "du": 5
+   }
+  },
+  "1730": {
+   "HARMLESS": {
+    "u": 253084,
+    "c": 274690,
+    "fu": 981,
+    "fc": 987,
+    "du": 8
+   },
+   "CONTEXT": {
+    "u": 290,
+    "c": 293,
+    "fu": 147,
+    "fc": 148
+   },
+   "DESTRUCTIVE": {
+    "u": 948,
+    "c": 951,
+    "fu": 930,
+    "fc": 933,
+    "du": 5
+   }
+  },
+  "ab6a": {
+   "HARMLESS": {
+    "u": 253084,
+    "c": 274690,
+    "fu": 981,
+    "fc": 987,
+    "du": 8
+   },
+   "CONTEXT": {
+    "u": 290,
+    "c": 293,
+    "fu": 147,
+    "fc": 148
+   },
+   "DESTRUCTIVE": {
+    "u": 948,
+    "c": 951,
+    "fu": 930,
+    "fc": 933,
+    "du": 5
+   }
+  },
+  "ab6a_dirty": {
+   "HARMLESS": {
+    "u": 253084,
+    "c": 274690,
+    "fu": 982,
+    "fc": 988,
+    "du": 8
+   },
+   "CONTEXT": {
+    "u": 290,
+    "c": 293,
+    "fu": 153,
+    "fc": 154
+   },
+   "DESTRUCTIVE": {
+    "u": 948,
+    "c": 951,
+    "fu": 930,
+    "fc": 933,
+    "du": 5
+   }
+  }
+ },
+ "destructive_by_cls": {
+  "D1": {
+   "main": {
+    "u": 704,
+    "f": 359
+   },
+   "v2": {
+    "u": 704,
+    "f": 686,
+    "d": 1
+   },
+   "55aa": {
+    "u": 704,
+    "f": 686,
+    "d": 1
+   },
+   "1730": {
+    "u": 704,
+    "f": 686,
+    "d": 1
+   },
+   "ab6a": {
+    "u": 704,
+    "f": 686,
+    "d": 1
+   },
+   "ab6a_dirty": {
+    "u": 704,
+    "f": 686,
+    "d": 1
+   }
+  },
+  "D2": {
+   "main": {
+    "u": 243,
+    "f": 83
+   },
+   "v2": {
+    "u": 243,
+    "f": 243,
+    "d": 4
+   },
+   "55aa": {
+    "u": 243,
+    "f": 243,
+    "d": 4
+   },
+   "1730": {
+    "u": 243,
+    "f": 243,
+    "d": 4
+   },
+   "ab6a": {
+    "u": 243,
+    "f": 243,
+    "d": 4
+   },
+   "ab6a_dirty": {
+    "u": 243,
+    "f": 243,
+    "d": 4
+   }
+  },
+  "D4": {
+   "main": {
+    "u": 1,
+    "f": 1
+   },
+   "v2": {
+    "u": 1,
+    "f": 1
+   },
+   "55aa": {
+    "u": 1,
+    "f": 1
+   },
+   "1730": {
+    "u": 1,
+    "f": 1
+   },
+   "ab6a": {
+    "u": 1,
+    "f": 1
+   },
+   "ab6a_dirty": {
+    "u": 1,
+    "f": 1
+   }
+  }
+ },
+ "destructive_corrected": {
+  "main": 443,
+  "v2": 930,
+  "55aa": 930,
+  "1730": 930,
+  "ab6a": 930,
+  "ab6a_dirty": 930
+ },
+ "strata_calls": {
+  "repo|CONTEXT|1730": 141,
+  "repo|CONTEXT|55aa": 141,
+  "repo|CONTEXT|ab6a": 141,
+  "repo|CONTEXT|ab6a_dirty": 143,
+  "repo|CONTEXT|calls": 239,
+  "repo|CONTEXT|main": 15,
+  "repo|CONTEXT|v2": 231,
+  "repo|DESTRUCTIVE|1730": 11,
+  "repo|DESTRUCTIVE|55aa": 11,
+  "repo|DESTRUCTIVE|ab6a": 11,
+  "repo|DESTRUCTIVE|ab6a_dirty": 11,
+  "repo|DESTRUCTIVE|calls": 20,
+  "repo|DESTRUCTIVE|main": 8,
+  "repo|DESTRUCTIVE|v2": 11,
+  "repo|HARMLESS|1730": 235,
+  "repo|HARMLESS|55aa": 235,
+  "repo|HARMLESS|ab6a": 235,
+  "repo|HARMLESS|ab6a_dirty": 235,
+  "repo|HARMLESS|calls": 206830,
+  "repo|HARMLESS|main": 1018,
+  "repo|HARMLESS|v2": 156,
+  "tb2|CONTEXT|1730": 7,
+  "tb2|CONTEXT|55aa": 5,
+  "tb2|CONTEXT|ab6a": 7,
+  "tb2|CONTEXT|ab6a_dirty": 11,
+  "tb2|CONTEXT|calls": 54,
+  "tb2|CONTEXT|main": 9,
+  "tb2|CONTEXT|v2": 50,
+  "tb2|DESTRUCTIVE|1730": 922,
+  "tb2|DESTRUCTIVE|55aa": 922,
+  "tb2|DESTRUCTIVE|ab6a": 922,
+  "tb2|DESTRUCTIVE|ab6a_dirty": 922,
+  "tb2|DESTRUCTIVE|calls": 931,
+  "tb2|DESTRUCTIVE|main": 435,
+  "tb2|DESTRUCTIVE|v2": 922,
+  "tb2|HARMLESS|1730": 752,
+  "tb2|HARMLESS|55aa": 611,
+  "tb2|HARMLESS|ab6a": 752,
+  "tb2|HARMLESS|ab6a_dirty": 753,
+  "tb2|HARMLESS|calls": 67860,
+  "tb2|HARMLESS|main": 2700,
+  "tb2|HARMLESS|v2": 529
+ },
+ "harmless_patterns_uniq": {
+  "main": [
+   [
+    "rm_recursive",
+    3361
+   ],
+   [
+    "git_force_push",
+    86
+   ],
+   [
+    "truncate",
+    73
+   ],
+   [
+    "drop_table",
+    31
+   ],
+   [
+    "obfuscation",
+    2
+   ]
+  ],
+  "v2": [
+   [
+    "rm_recursive",
+    486
+   ],
+   [
+    "delete_outside",
+    137
+   ],
+   [
+    "git_history",
+    15
+   ],
+   [
+    "git_discard_paths",
+    13
+   ],
+   [
+    "drop_table",
+    11
+   ],
+   [
+    "high_force_push_default_any",
+    8
+   ],
+   [
+    "git_push_delete",
+    2
+   ],
+   [
+    "obfuscation",
+    2
+   ],
+   [
+    "truncate",
+    2
+   ],
+   [
+    "git_stash_drop",
+    1
+   ],
+   [
+    "db_destructive",
+    1
+   ],
+   [
+    "git_worktree_force",
+    1
+   ]
+  ],
+  "55aa": [
+   [
+    "rm_recursive",
+    639
+   ],
+   [
+    "delete_outside",
+    135
+   ],
+   [
+    "git_history",
+    16
+   ],
+   [
+    "drop_table",
+    16
+   ],
+   [
+    "git_reset_hard",
+    10
+   ],
+   [
+    "high_force_push_default",
+    8
+   ],
+   [
+    "git_discard_paths",
+    7
+   ],
+   [
+    "truncate",
+    3
+   ],
+   [
+    "git_push_delete",
+    2
+   ],
+   [
+    "obfuscation",
+    2
+   ],
+   [
+    "git_stash_drop",
+    1
+   ],
+   [
+    "git_worktree_force",
+    1
+   ]
+  ],
+  "1730": [
+   [
+    "rm_recursive",
+    642
+   ],
+   [
+    "git_discard_paths",
+    175
+   ],
+   [
+    "delete_outside",
+    108
+   ],
+   [
+    "drop_table",
+    16
+   ],
+   [
+    "git_history",
+    15
+   ],
+   [
+    "high_force_push_default",
+    8
+   ],
+   [
+    "git_reset_hard",
+    8
+   ],
+   [
+    "truncate",
+    3
+   ],
+   [
+    "git_push_delete",
+    2
+   ],
+   [
+    "obfuscation",
+    2
+   ],
+   [
+    "git_stash_drop",
+    1
+   ],
+   [
+    "git_worktree_force",
+    1
+   ]
+  ],
+  "ab6a": [
+   [
+    "rm_recursive",
+    642
+   ],
+   [
+    "git_discard_paths",
+    175
+   ],
+   [
+    "delete_outside",
+    108
+   ],
+   [
+    "drop_table",
+    16
+   ],
+   [
+    "git_history",
+    15
+   ],
+   [
+    "high_force_push_default",
+    8
+   ],
+   [
+    "git_reset_hard",
+    8
+   ],
+   [
+    "truncate",
+    3
+   ],
+   [
+    "git_push_delete",
+    2
+   ],
+   [
+    "obfuscation",
+    2
+   ],
+   [
+    "git_stash_drop",
+    1
+   ],
+   [
+    "git_worktree_force",
+    1
+   ]
+  ],
+  "ab6a_dirty": [
+   [
+    "rm_recursive",
+    642
+   ],
+   [
+    "git_discard_paths",
+    176
+   ],
+   [
+    "delete_outside",
+    108
+   ],
+   [
+    "drop_table",
+    16
+   ],
+   [
+    "git_history",
+    15
+   ],
+   [
+    "high_force_push_default",
+    8
+   ],
+   [
+    "git_reset_hard",
+    8
+   ],
+   [
+    "truncate",
+    3
+   ],
+   [
+    "git_push_delete",
+    2
+   ],
+   [
+    "obfuscation",
+    2
+   ],
+   [
+    "git_stash_drop",
+    1
+   ],
+   [
+    "git_worktree_force",
+    1
+   ]
+  ]
+ },
+ "changed": {
+  "n": 0,
+  "by_kind_tree": {},
+  "decisions": [],
+  "decision_cmds_unique": 0,
+  "reason_only": []
+ },
+ "changed_nonharmless": [],
+ "stepback_shapes": [
+  [
+   [
+    "G13",
+    "HARMLESS",
+    "ask",
+    "allow",
+    "allow",
+    "allow"
+   ],
+   1
+  ],
+  [
+   [
+    "G6",
+    "HARMLESS",
+    "ask",
+    "ask",
+    "ask",
+    "ask"
+   ],
+   1
+  ]
+ ],
+ "harmless_fires_17": [
+  [
+   [
+    "ask:rm_recursive",
+    "-",
+    "-"
+   ],
+   497
+  ],
+  [
+   [
+    "ask:git_discard_paths",
+    "-",
+    "G5"
+   ],
+   129
+  ],
+  [
+   [
+    "ask:delete_outside",
+    "-",
+    "-"
+   ],
+   104
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "-",
+    "G5"
+   ],
+   47
+  ],
+  [
+   [
+    "ask:git_discard_paths",
+    "-",
+    "-"
+   ],
+   44
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "note:later-pipe",
+    "-"
+   ],
+   42
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "note:G14-subshell",
+    "-"
+   ],
+   24
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "note:G14-subshell,note:later-pipe",
+    "-"
+   ],
+   19
+  ],
+  [
+   [
+    "ask:drop_table",
+    "-",
+    "-"
+   ],
+   16
+  ],
+  [
+   [
+    "ask:git_history",
+    "-",
+    "-"
+   ],
+   15
+  ],
+  [
+   [
+    "deny:high_force_push_default",
+    "-",
+    "-"
+   ],
+   7
+  ],
+  [
+   [
+    "ask:git_reset_hard",
+    "-",
+    "-"
+   ],
+   7
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "note:LC_ALL-cd",
+    "-"
+   ],
+   6
+  ],
+  [
+   [
+    "ask:truncate",
+    "-",
+    "-"
+   ],
+   3
+  ],
+  [
+   [
+    "ask:git_push_delete",
+    "-",
+    "-"
+   ],
+   2
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "-",
+    "G11"
+   ],
+   2
+  ],
+  [
+   [
+    "ask:git_discard_paths",
+    "-",
+    "G8"
+   ],
+   2
+  ],
+  [
+   [
+    "ask:obfuscation",
+    "-",
+    "-"
+   ],
+   2
+  ],
+  [
+   [
+    "ask:delete_outside",
+    "note:later-pipe",
+    "-"
+   ],
+   2
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "note:G14-subshell,note:later-pipe",
+    "G14"
+   ],
+   1
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "note:LC_ALL-cd,note:later-pipe",
+    "-"
+   ],
+   1
+  ],
+  [
+   [
+    "ask:delete_outside",
+    "note:G14-subshell",
+    "-"
+   ],
+   1
+  ],
+  [
+   [
+    "ask:git_stash_drop",
+    "-",
+    "-"
+   ],
+   1
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "-",
+    "G6"
+   ],
+   1
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "-",
+    "G8"
+   ],
+   1
+  ],
+  [
+   [
+    "ask:delete_outside",
+    "note:LC_ALL-cd",
+    "-"
+   ],
+   1
+  ],
+  [
+   [
+    "deny:high_force_push_default",
+    "-",
+    "G15"
+   ],
+   1
+  ],
+  [
+   [
+    "ask:rm_recursive",
+    "-",
+    "G15"
+   ],
+   1
+  ],
+  [
+   [
+    "ask:git_reset_hard",
+    "-",
+    "G10"
+   ],
+   1
+  ],
+  [
+   [
+    "ask:git_worktree_force",
+    "-",
+    "-"
+   ],
+   1
+  ]
+ ],
+ "latency_same_vm": {
+  "1730": {
+   "n": 20000,
+   "p50": 64,
+   "p90": 69,
+   "p99": 85
+  },
+  "ab6a": {
+   "n": 20000,
+   "p50": 64,
+   "p90": 69,
+   "p99": 86
+  },
+  "1730_sample_matches_earlier_run": [
+   10000,
+   10000
+  ]
+ }
+}

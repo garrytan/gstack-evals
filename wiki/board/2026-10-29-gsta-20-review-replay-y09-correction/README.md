@@ -31,7 +31,7 @@ The results post counted decoy y09 as a clean PR. It is not. y09 is gstack PR #2
 
 The defect is in `handoff()` in browse/src/browser-manager.ts. Before `restoreState()` runs, the method points `this.browser` and `this.context` at the new headed browser, clears `this.pages` and attaches the `disconnected` handler that calls `process.exit(1)`. If the restore throws, the catch block calls `newBrowser.close()`, which fires that handler and kills the browse server. With the exit suppressed, the manager is left on a closed browser while the old headless browser is orphaned, and the returned "Headless browser still running" is false.
 
-GStack Minder's thread GSTA-159 reproduced it at 2d97ab99 by injecting a restore failure: the process exited with code 1 and `handoff()` never returned. gstack #2959 (v1.91.2.0) fixed it on main: it saves the previous browser and puts it back on failure, and it attaches the handler only after the restore succeeds. Its evidence and repro are in GStack Minder's drive at reports/GSTA-159.md and handoffs/GSTA-159/repro201.ts and repro201b.ts. That drive is not mounted on this thread's machine, so I read GSTA-159's final report in its thread instead, and I read `handoff()` at 2d97ab99 and #2959's change to it myself.
+the gstack Captain's thread GSTA-159 reproduced it at 2d97ab99 by injecting a restore failure: the process exited with code 1 and `handoff()` never returned. gstack #2959 (v1.91.2.0) fixed it on main: it saves the previous browser and puts it back on failure, and it attaches the handler only after the restore succeeds. Its evidence and repro are in the gstack Captain's drive at reports/GSTA-159.md and handoffs/GSTA-159/repro201.ts and repro201b.ts. That drive is not mounted on this thread's machine, so I read GSTA-159's final report in its thread instead, and I read `handoff()` at 2d97ab99 and #2959's change to it myself.
 
 The decoy screen kept #201 because its gstack review receipt said "No issues found" and no fix to it was found. The fix landed later, inside #2959, a consolidated release of many fixes. The results post itself said y09 "may hold a real defect; nobody has checked" and still counted it.
 
@@ -121,7 +121,7 @@ y09 leaves this stratum's decoys in both variants, so recall does not change and
 - The results post said gstack's prompts double Haiku's false alarms. The gap holds at +18 pts [3, 33], but "double" no longer describes it: the corrected rates are 9% plain and 27% with gstack.
 - DeepSeek's answered-only false-alarm gap over decoys with answered units in both arms goes from -28 pts [-61, -6] over 6 decoys to -33 pts [-67, -7] over 5. Its answered-only recall gap stays at 0 pts, over 5 defects in (a) and 4 in (b).
 - Counting findings below confidence 5 (ungated), Opus with gstack reaches 54% recall under (a) and DeepSeek with gstack 41%, against the published 50% and 36%.
-- Cost per catch falls under (a), because each cell gains three catches. All cases: Opus plain $0.18 (was $0.21), Opus with gstack $0.99 ($1.09), Haiku plain $0.009 ($0.010), Haiku with gstack $0.035 ($0.040), DeepSeek plain $0.11 ($0.15), DeepSeek with gstack $0.20 ($0.25).
+- Cost per catch falls under (a), because each cell gains three catches. The per-cell figures are in Agent notes.
 - Item 6 of the results post's next runs, checking y09, is done. Four of the seven escaped PRs now carry a passing gstack review receipt.
 
 ## What holds
@@ -130,7 +130,7 @@ y09 leaves this stratum's decoys in both variants, so recall does not change and
 - Three DeepSeek subgroup contrasts move 3 to 5 points: escaped recall from +22 to +19 pts [0, 48] under (a), unchanged under (b); review-caught false alarms from -17 to -20 [-47, 0]; and the all-case answered-only false-alarm gap from -28 to -33 [-67, -7]. None changes sign, and each interval keeps its relation to zero. The review-caught false-alarm gaps also move 2 points for Opus (-11 to -13) and Haiku (+11 to +13). One gap moves more and rests on the review-caught decoys DeepSeek answered in both arms: the answered-only DeepSeek false-alarm gap there goes from -33 [-75, 0] to -44 [-100, 0].
 - gstack's prompts still raise Haiku's false alarms with an interval above zero, on all cases and on the escaped decoys (+22 pts [6, 44], unchanged).
 - With gstack's prompts, Opus still rates most of its catches below CRITICAL: 18% recall at CRITICAL against 33% plain under (a), and on escaped defects 33% against 62%.
-- Neither cheap model with gstack matched Opus, and no parity claim is made. Haiku with gstack against Opus plain is -3 pts [-21, 10] under (a). Haiku with gstack still costs much less per catch than Opus plain ($0.035 against $0.18) and still has more false alarms (27% against 21%).
+- Neither cheap model with gstack matched Opus, and no parity claim is made. Haiku with gstack against Opus plain is -3 pts [-21, 10] under (a). Haiku with gstack still costs much less per catch than Opus plain and still has more false alarms (27% against 21%).
 - Most of DeepSeek's lift still comes from the plain prompt not finishing, by the answered-only gap above.
 - The review-caught recall and its explanation do not change: y09 was never a review-caught defect.
 
@@ -148,3 +148,12 @@ y09 leaves this stratum's decoys in both variants, so recall does not change and
 - `y09-verdicts.json`: the 141 hand verdicts, keyed by the scorer's finding key, with the rule and categories.
 
 To rerun: unpack results.tgz, check out 7f8fffd, put the verdicts in judge/y09.json in the scorer's cache format, and run `bun quick/replay/score.ts --no-judge` with `CASES_FILE` and `PLAN_FILE` pointing at the edited files for (a), or `CASES_FILE` alone for (b). The scripts, the blind list with each finding's summary and the cache-format verdicts are in the Captain drive at handoffs/GSTA-20/.
+
+<details>
+<summary>Agent notes</summary>
+
+All cases: Opus plain $0.18 (was $0.21), Opus with gstack $0.99 ($1.09), Haiku plain $0.009 ($0.010), Haiku with gstack $0.035 ($0.040), DeepSeek plain $0.11 ($0.15), DeepSeek with gstack $0.20 ($0.25).
+
+Haiku with gstack still costs much less per catch than Opus plain ($0.035 against $0.18) and still has more false alarms (27% against 21%).
+
+</details>

@@ -1,0 +1,59 @@
+{
+  "arm": "r-on",
+  "spec": "r-on:tar=r-on:session_kind=unattended:strip_snapshot=true:closing_line=hm-status",
+  "codex": "0.170.0",
+  "gstack": {
+    "sha": "a0534ce6db39a8da1f3c23ec070aac2479e44be9",
+    "tag": "v1.102.0.0"
+  },
+  "routing": "on",
+  "switches": {
+    "skill_routing": "on",
+    "skill_contracts": "on",
+    "destructive_guard": "on"
+  },
+  "prove_it": {
+    "path": ".codex/skills/prove-it/SKILL.md",
+    "sha256": "3e6c46b4c9e8eee71bfdd5f88da23cb22b355794480abe7a02029839f9084f26"
+  },
+  "tar_command": "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu",
+  "tar": {
+    "file": "r-on.tar",
+    "bytes": 1367664640,
+    "sha256": "42c80b2b4d286ef748ecd8a9d1f78447538b9f48a9db3cba440be2376ee86e48"
+  },
+  "tree": {
+    "files": 14245,
+    "symlinks": 129,
+    "dirs": 1796,
+    "digest": "30d8e6eeb4afc221c30c7ba142ac39b7ef5559770d01b9f286cf3df33a33967a"
+  },
+  "prompt_input": {
+    "sha256": "2c2fb330b13d261f3e64b7a025699f5781edf5008463f3a1e746affcc33c6b1f",
+    "skills": 63,
+    "prove_it_line": "- prove-it: Use when fixing a bug: prove the bug with a failing test before the fix. (gstack) (file: r0/prove-it/SKILL.md)"
+  },
+  "build": {
+    "markers": [
+      ".completeness-intro-seen",
+      ".telemetry-prompted",
+      ".proactive-prompted",
+      ".activated",
+      ".first-loop-tip-shown",
+      ".feature-prompted-model-overlay",
+      ".writing-style-prompted",
+      ".question-tuning-prompted",
+      ".redact-prepush-prompted",
+      ".declared-setup-prompted"
+    ],
+    "seed": {
+      "telemetry": "off",
+      "update_check": "false",
+      "artifacts_sync_mode": "off",
+      "artifacts_sync_mode_prompted": "true",
+      "codex_reviews": "disabled",
+      "routing_declined": "true",
+      "proactive": "core"
+    }
+  }
+}

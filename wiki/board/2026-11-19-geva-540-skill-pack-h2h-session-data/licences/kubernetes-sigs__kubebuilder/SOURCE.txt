@@ -1,0 +1,3 @@
+https://github.com/kubernetes-sigs/kubebuilder at d99a836f7687f9dac1f983cfea4bbd0888bafd4f
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): Apache-2.0
+Root licence and notice files at that commit: LICENSE

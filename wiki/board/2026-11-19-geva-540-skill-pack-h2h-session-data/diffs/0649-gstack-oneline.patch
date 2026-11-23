@@ -1,0 +1,25 @@
+diff --git a/execution/rerun/rerun.go b/execution/rerun/rerun.go
+index 9ac1725..7616ff0 100644
+--- a/execution/rerun/rerun.go
++++ b/execution/rerun/rerun.go
+@@ -97,10 +97,17 @@ func ListenFailedScenarios(wg *sync.WaitGroup, specDirs []string) {
+ }
+ 
+ func prepareScenarioFailedMetadata(res *result.ScenarioResult, sce *gauge.Scenario, executionInfo *gauge_messages.ExecutionInfo) {
++	specPath := executionInfo.GetCurrentSpec().GetFileName()
++	failedScenario := util.RelPathToProjectRoot(specPath)
++	item := fmt.Sprintf("%s:%v", failedScenario, sce.Span.Start)
+ 	if res.GetFailed() {
+-		specPath := executionInfo.GetCurrentSpec().GetFileName()
+-		failedScenario := util.RelPathToProjectRoot(specPath)
+-		failedMeta.addFailedItem(specPath, fmt.Sprintf("%s:%v", failedScenario, sce.Span.Start))
++		failedMeta.addFailedItem(specPath, item)
++	} else if items, ok := failedMeta.failedItemsMap[specPath]; ok {
++		// scenario passed on a retry, remove the earlier failed attempt
++		delete(items, item)
++		if len(items) == 0 {
++			delete(failedMeta.failedItemsMap, specPath)
++		}
+ 	}
+ }
+ 

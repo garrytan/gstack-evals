@@ -1,0 +1,47 @@
+diff --git a/pkg/limatmpl/embed.go b/pkg/limatmpl/embed.go
+index c95b29a..ee7b17a 100644
+--- a/pkg/limatmpl/embed.go
++++ b/pkg/limatmpl/embed.go
+@@ -224,9 +224,6 @@ const mergeDocuments = `
+ # (note $b, not $c, because we merge lists from $b)
+ | $b | select((.base | tag == "!!str") and ($a.base | tag == "!!seq")) | .base = [ "" + .base ]
+ 
+-# Delete base DNS entries if the template list is not empty.
+-| $a | select(.dns) | del($b.dns, $c.dns)
+-
+ # Mark all new list fields with a custom tag. This is needed to avoid appending
+ # newly copied lists to themselves again when we merge lists.
+ | $c | .. | select(tag == "!!seq") tag = "!!tag"
+@@ -242,7 +239,8 @@ const mergeDocuments = `
+ # copied lists because they have a custom !!tag instead of !!seq.
+ # Append the elements from the same path in $b.
+ # Exception: base templates, provision scripts and probes are prepended instead.
+-| $a | (.. | select(tag == "!!seq" and (path[0] | test("^(base|provision|probes)$") | not))) |=
++# Exception: dns lists are never merged; an existing template list is kept as-is.
++| $a | (.. | select(tag == "!!seq" and (path[0] | test("^(base|dns|provision|probes)$") | not))) |=
+    (. + (path[] as $p ireduce ($b; .[$p])))
+ | $a | (.. | select(tag == "!!seq" and (path[0] | test("^(base|provision|probes)$")))) |=
+    ((path[] as $p ireduce ($b; .[$p])) + .)
+diff --git a/pkg/limatmpl/embed_test.go b/pkg/limatmpl/embed_test.go
+index 5c82fe0..0d4b5be 100644
+--- a/pkg/limatmpl/embed_test.go
++++ b/pkg/limatmpl/embed_test.go
+@@ -100,6 +100,18 @@ minimumLimaVersion: 1.0.2  # or later
+ 		"dns: [8.8.8.8, 1.2.3.4]",
+ 		"dns: [1.1.1.1]",
+ 	},
++	{
++		"dns list is copied from the base when the template has no dns entries",
++		"arch: aarch64",
++		"dns: [1.1.1.1, 8.8.8.8]\nhostResolver: {enabled: false}",
++		"arch: aarch64\ndns: [1.1.1.1, 8.8.8.8]\nhostResolver: {enabled: false}",
++	},
++	{
++		"dns list is copied from the base when the template is otherwise empty",
++		"",
++		"dns: [1.1.1.1, 8.8.8.8]\nhostResolver: {enabled: false}",
++		"dns: [1.1.1.1, 8.8.8.8]\nhostResolver: {enabled: false}",
++	},
+ 	{
+ 		"Update comments on existing maps and lists that don't have comments yet",
+ 		`#

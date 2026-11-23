@@ -111,6 +111,8 @@ It passes only if every particle-1 call's settled spend is within its reservatio
 
 ## Spend and caps
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 Garry's cap is $500, with a $480 hard stop across the shakedown's line items. Expected spend is about $150 as the planning figure, $95 with no rerun and $260 at the high end. GSTA-41's projection, from the rig's price table applied to GSTA-13's metered sessions:
 
 | Line | Basis | Projected |

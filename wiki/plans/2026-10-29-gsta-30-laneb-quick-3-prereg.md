@@ -21,13 +21,13 @@ GSTA-30, for the gstack-evals Captain (GSTA-2). Written 2026-10-29. Exploratory:
 
 ## Approval
 
-Garry approved the cap on 2026-10-29, in GSTA-2's thread, answering GST-234 about this preregistration's pull request (#46). His words: "approve, make it $300". The Captain then amended the design to what this post describes: 40 tasks, a full same-day DeepSeek V4.1 Flash grid in place of a one-replicate anchor, a full same-day Haiku 5.5 grid, and a $280 hard stop under the $300 cap. Garry then added: "i'm also curious about the relative performance of each model too". So the Captain added a same-day Opus 5.5 none arm as the frontier reference and the model comparison section below, with the stop unchanged. The ledger's approval row quotes Garry's approval and names this post's commit.
+Garry approved the cap on 2026-10-29, in GSTA-2's thread, answering GST-234 about this preregistration's pull request (#46). He approved it with a $300 cap. The Captain then amended the design to what this post describes: 40 tasks, a full same-day DeepSeek V4.1 Flash grid in place of a one-replicate anchor, a full same-day Haiku 5.5 grid, and a $280 hard stop under the $300 cap. Garry then asked to see how the models compare with each other too. So the Captain added a same-day Opus 5.5 none arm as the frontier reference and the model comparison section below, with the stop unchanged. The ledger's approval row quotes Garry's approval and names this post's commit.
 
 ## Why
 
 Quick look 2 ([prereg](2026-10-28-gsta-12-laneb-quick-2-prereg.md), [results](../board/2026-10-29-gsta-12-laneb-quick-2-results/README.md)) invoked gstack's `/investigate` body on every gstack trial. On Opus 5.5, Haiku 5.5 and DeepSeek V4.1 Flash it did no better than a length-matched placebo body, and on Haiku it did worse, by 20 points.
 
-Garry asked to "add particle-1 as a model everywhere" and allowed Sonnet 5.5 as a model under test ("yes, ok sonnet then"). This run asks quick look 2's question for those two rungs. particle-ai/particle-1 is post-trained on DeepSeek V4.1 Flash for fewer tokens per task, so its most useful comparison is beside DeepSeek, run the same day and paired by task. Haiku runs again to check quick look 2's 20-point loss on twice the tasks. Opus 5.5 runs only its none arm, as the frontier reference for comparing the models; its gstack and placebo arms stay out on cost. These are fixed rungs, so the open-weight ranking rule does not apply; the open-weight slots are outside this run's brief, and the OpenRouter ranking was not re-read.
+Garry asked for particle-1 as a model everywhere and allowed Sonnet 5.5 as a model under test. This run asks quick look 2's question for those two rungs. particle-ai/particle-1 is post-trained on DeepSeek V4.1 Flash for fewer tokens per task, so its most useful comparison is beside DeepSeek, run the same day and paired by task. Haiku runs again to check quick look 2's 20-point loss on twice the tasks. Opus 5.5 runs only its none arm, as the frontier reference for comparing the models; its gstack and placebo arms stay out on cost. These are fixed rungs, so the open-weight ranking rule does not apply; the open-weight slots are outside this run's brief, and the OpenRouter ranking was not re-read.
 
 ## Question
 
@@ -111,6 +111,8 @@ Quick look 2's pilot shape on the two new rungs: Sonnet 5.5 and particle-1, arms
 - Tool use: at least 8 of the model's 10 pilot trials contain at least one tool call that got a tool result back, read from the trial's SDK message log. A model under it is dropped before the grid with the reason "tool-use incompatibility found in the pilot", and its grid cells do not run. If particle-1 is dropped, the particle-1 minus DeepSeek contrast is not computed and DeepSeek's grid still runs. If both models are dropped, the run stops after the pilot and GSTA-30 reports to the Captain.
 
 ### Money and the ledger
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 The route check and the pilot count toward the cap. The cap is $300, as Garry approved. The hard stop is $280: the ledger line item `laneb-quick-3` (a fresh exploratory jsonl ledger in the Captain drive) is approved at $280, so no session can reserve past it. Every ledger row carries this post's commit sha: the runner's ledger service stamps it on every reserve and settle row, and the approval and close rows name it. A cap stop is reported as an incomplete run and is never retried. The run also stops at 12:00 PT on Thursday 2026-11-05, whichever comes first.
 

@@ -108,6 +108,9 @@ describe("vm-run.sh during the paid batch", () => {
       const line = s.sg().split("\n").find((l) => l.includes("job.resolved.json"))!;
       if (ordered) expect(line).toContain(`LANEB_TRIAL_ORDER='${s.run}/order.json' harbor run -y -c`);
       else expect(line).not.toContain("LANEB_TRIAL_ORDER");
+      // The judge proxy's key is unset for Harbor, so a judge-bearing host's TYPESAFE never reaches Harbor or the task
+      // containers; only the metering proxies (which source ~/.laneb-keys in their own subshells) ever read it.
+      expect(line).toContain("-u TYPESAFE_API_KEY");
       expect(s.sg()).toContain("pkill -INT -f /bin/harbor run");
     }
   }, 90_000);
@@ -239,7 +242,7 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
   }
   // A run whose tasks' environment Dockerfiles are the test's, against the fake hub, with fake curl, sleep and sg (whose
   // docker pull asks the hub). The oracle trials pass and the proxy never turns healthy, so a run past the gate exits 8.
-  async function pulls(fake: ReturnType<typeof hub>, tasks: Record<string, string>, opts: { side?: string; stopOnSleep?: boolean; stopOnPull?: boolean; hangPull?: boolean; env?: Record<string, string>; killAfterMs?: number } = {}) {
+  async function pulls(fake: ReturnType<typeof hub>, tasks: Record<string, string>, opts: { side?: string; gost?: string | null; stopOnSleep?: boolean; stopOnPull?: boolean; hangPull?: boolean; env?: Record<string, string>; killAfterMs?: number } = {}) {
     const s = setup(Object.fromEntries(Object.keys(tasks).map((t) => [t, "1"])));
     const root = join(s.run, "..");
     const url = fake.h.url;
@@ -251,6 +254,7 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
       const d = join(root, "home/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/harbor-docker-egress-control-sidecar");
       mkdirSync(d, { recursive: true });
       writeFileSync(join(d, "Dockerfile"), opts.side);
+      if (opts.gost !== null) writeFileSync(join(d, "gost.yaml"), opts.gost ?? GOST);
     }
     fake.h.sleepLog = join(root, "sleeps.log");
     const bin = (name: string, body: string) => { writeFileSync(join(root, "bin", name), "#!/usr/bin/env bash\n" + body); chmodSync(join(root, "bin", name), 0o755); };
@@ -267,6 +271,8 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     return { ...s, code, stdout, stderr, log: s.sg(), out, waited: fake.sleeps().filter((x) => x >= 1).reduce((a, x) => a + x, 0), pulls: fake.h.pulls };
   }
   const HEAD = "status\ttries\trate_limit_wait_s\timage\n";
+  const GOST = "services:\n  - name: transparent-egress\n    addr: \":12345\"\n    handler:\n      type: red\n      metadata:\n        sniffing: true\n        sniffing.timeout: 5s\n        sniffing.fallback: true\n    listener:\n      type: red\n";
+  const SIDE_DIR = "home/.local/share/uv/tools/harbor/lib/python3.12/site-packages/harbor/environments/harbor-docker-egress-control-sidecar";
 
   test("a pull refused at the rate limit waits out the window the registry gives and pulls again: no try spent, the task stays in", async () => {
     const r = await pulls(hub({ limitedUntil: 120, reset: true }), { a: "FROM img-a\n" });
@@ -316,6 +322,46 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     expect(r.log.lastIndexOf("docker pull")).toBeLessThan(r.log.indexOf("oracle.json"));
     expect(r.code).toBe(8);
   }, 60_000);
+
+  test("D12: the sidecar's gost.yaml gets readTimeout: 900s under sniffing before the pulls, and the run goes on", async () => {
+    const fake = hub();
+    const r = await pulls(fake, { a: "FROM img-a\n" }, { side: "FROM alpine:3.20\n" });
+    const gost = readFileSync(join(r.run, "..", SIDE_DIR, "gost.yaml"), "utf8");
+    expect(gost).toBe(GOST.replace("        sniffing: true\n", "        sniffing: true\n        readTimeout: 900s\n"));
+    expect(r.pulls).toEqual({ "alpine:3.20": 1, "img-a": 1 });
+    expect(r.code).toBe(8);
+    expect(r.stderr).toContain("metering proxy not healthy");
+  }, 60_000);
+
+  test("D12: sed writes a new file, so uv's hard-linked cache copy of gost.yaml is left as published", async () => {
+    const root = mkdtempSync(join(tmpdir(), "laneb-gost-"));
+    const f = join(root, "gost.yaml"), cache = join(root, "cache.yaml");
+    writeFileSync(f, GOST);
+    Bun.spawnSync(["ln", f, cache]);
+    const step = readFileSync(join(import.meta.dir, "../runner/vm-run.sh"), "utf8").split("\n").find((l) => l.includes("sed -i 's/") && l.includes("readTimeout"))!.trim();
+    expect(Bun.spawnSync(["bash", "-c", "set -euo pipefail; gost_yaml=" + f + "; " + step]).exitCode).toBe(0);
+    expect(readFileSync(cache, "utf8")).toBe(GOST);
+    expect(readFileSync(f, "utf8")).toContain("        sniffing: true\n        readTimeout: 900s\n");
+  });
+
+  test("D12: a gost.yaml already at readTimeout: 900s is left alone and the run goes on", async () => {
+    const done = GOST.replace("        sniffing: true\n", "        sniffing: true\n        readTimeout: 900s\n");
+    const r = await pulls(hub(), { a: "FROM img-a\n" }, { side: "FROM alpine:3.20\n", gost: done });
+    expect(readFileSync(join(r.run, "..", SIDE_DIR, "gost.yaml"), "utf8")).toBe(done);
+    expect(r.pulls).toEqual({ "alpine:3.20": 1, "img-a": 1 });
+    expect(r.code).toBe(8);
+    expect(r.stderr).toContain("metering proxy not healthy");
+  }, 60_000);
+
+  for (const [what, gost] of [["its own readTimeout of 30s", GOST.replace("        sniffing: true\n", "        sniffing: true\n        readTimeout: 30s\n")], ["no sniffing line to set it under", GOST.replace("        sniffing: true\n", "")], ["no gost.yaml at all", null]] as const) {
+    test("D12: a sidecar with " + what + " exits 8 before any pull, and no paid trial starts", async () => {
+      const r = await pulls(hub(), { a: "FROM img-a\n" }, { side: "FROM alpine:3.20\n", gost });
+      expect(r.code).toBe(8);
+      expect(r.stderr).toContain("could not set readTimeout: 900s in Harbor's egress sidecar");
+      expect(r.pulls).toEqual({});
+      expect(r.log).not.toContain("harbor run");
+    }, 60_000);
+  }
 
   test("a STOP file during a wait at the rate limit ends the pulls before the oracle gate (exit 130)", async () => {
     const r = await pulls(hub({ limitedUntil: Infinity }), { a: "FROM img-a\n", b: "FROM img-b\n" }, { stopOnSleep: true });
@@ -446,4 +492,115 @@ describe("task-hooks.sh (L1 Amendment C): which task images register their own U
     expect(r.stdout.toString()).toContain("oracle: every task passed on this host");
     expect(s.sg().indexOf("run --rm --pull never")).toBeLessThan(s.sg().indexOf("harbor run -y -c"));
   });
+});
+
+// The judge launch block (harness-mechanics Stage 3): with a judge arm in job.json, vm-run.sh starts the judge metering
+// proxy (the self-contained bundle prepare-run.ts drops in the run dir, built here by the same `bun build` command) and
+// exports HM_JUDGE_MGMT_SOCKET/HM_JUDGE_PROXY_BASE/HM_JUDGE_STOP_FILE/HM_JUDGE_JOURNAL into Harbor's env so the host-side agent can bind a
+// slot and forward the per-slot proxy URL. The real judge proxy runs (loopback gateway, no provider keys needed to start);
+// only the Lane B proxy and Harbor are faked. The skip path (no judge arm) is covered by the rest of this file, which runs
+// vm-run.sh with job.json "{}" and never starts a judge proxy.
+describe("vm-run.sh's judge launch block (judge arms only)", () => {
+  const freePort = () => {
+    const s = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
+    const p = s.port;
+    s.stop(true);
+    return p;
+  };
+  function judgeSetup(opts: { keys?: string; job?: string } = {}) {
+    const [dataPort, controlPort, ledgerPort, judgePort] = [freePort(), freePort(), freePort(), freePort()];
+    const root = mkdtempSync(join(tmpdir(), "laneb-vmrun-judge-"));
+    const bin = join(root, "bin"), run = join(root, "run"), home = join(root, "home"), log = join(root, "sg.log");
+    for (const d of [bin, run, home]) mkdirSync(d, { recursive: true });
+    writeFileSync(join(home, ".laneb-keys"), opts.keys ?? "");
+    const built = Bun.spawnSync([process.execPath, "build", join(import.meta.dir, "../../../lanes/harness-mechanics/judge/judge-proxy.ts"), "--target=bun", "--outfile", join(run, "judge-proxy.js")]);
+    if (built.exitCode !== 0) throw new Error("judge-proxy bundle failed: " + built.stderr.toString());
+    const fakes: Record<string, string> = {
+      // The judge proxy binds the gateway the way the Lane B proxy does, so a loopback gateway keeps the bind bindable.
+      sg: `#!/usr/bin/env bash\necho "$3" >> "${log}"\ncase "$3" in *"network inspect"*) echo 127.0.0.1 ;; *"harbor run"*job.resolved.json*) eval "$3" ;; esac\n`,
+      curl: `#!/usr/bin/env bash\necho "curl $*" >> "${log}"\necho '{}'\n`,
+      // Only the judge proxy is a real bun; the Lane B proxy (bun proxy.ts) exits, and the faked curl reports it healthy. The
+      // judge proxy's launch env (it sourced ~/.laneb-keys in its own subshell) is dumped so a test can read what keys it got.
+      bun: `#!/usr/bin/env bash\ncase "$*" in *judge-proxy.js*) env > "${run}/out/judge-proxy-env.txt"; echo "$*" > "${run}/out/judge-proxy-args.txt"; exec "${process.execPath}" "$@" ;; *) exit 1 ;; esac\n`,
+      sleep: "#!/usr/bin/env bash\nPATH=/usr/bin:/bin exec sleep 0.05\n",
+      // The token is never echoed; the three forwarded-slot env vars are, to prove they reach Harbor's process. Harbor's full
+      // env is dumped so a test can prove no provider key value from ~/.laneb-keys reaches it or the task containers.
+      harbor: `#!/usr/bin/env bash\ntrap 'echo "harbor got INT" >> "${log}"; exit 130' INT\nenv > "${run}/out/harbor-env.txt"\necho "JUDGEENV mgmt=$HM_JUDGE_MGMT_SOCKET base=$HM_JUDGE_PROXY_BASE stop=$HM_JUDGE_STOP_FILE" >> "${log}"\necho "harbor running" >> "${log}"\nfor _ in $(seq 1 600); do [ -e "${run}/HARBOR_DONE" ] && break; PATH=/usr/bin:/bin sleep 0.1; done\necho "harbor finished" >> "${log}"\n`,
+      pkill: `#!/usr/bin/env bash\necho "pkill $*" >> "${log}"\nexec /usr/bin/pkill "\${@:1:$#-1}" "${bin}/harbor run"\n`,
+    };
+    for (const [name, body] of Object.entries(fakes)) {
+      writeFileSync(join(bin, name), body);
+      chmodSync(join(bin, name), 0o755);
+    }
+    writeFileSync(join(run, "manifest.json"), JSON.stringify({ arms: [] }));
+    writeFileSync(join(run, "job.json"), opts.job ?? JSON.stringify({ agents: [{ name: "laneb-claude-code", kwargs: { judge_backend: "p1" } }] }));
+    return {
+      run, judgePort,
+      cmd: ["bash", join(import.meta.dir, "../runner/vm-run.sh"), run, "p-", "5"],
+      env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, PROXY_DATA_PORT: String(dataPort), PROXY_CONTROL_PORT: String(controlPort), LEDGER_TUNNEL_PORT: String(ledgerPort), JUDGE_PROXY_DATA_PORT: String(judgePort) },
+      sg: () => (existsSync(log) ? readFileSync(log, "utf8") : ""),
+    };
+  }
+
+  test("starts the judge proxy from the run-dir bundle and hands HM_JUDGE_* to Harbor before the paid batch", async () => {
+    const s = judgeSetup();
+    const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });
+    try {
+      for (let i = 0; i < 300 && !s.sg().includes("harbor running"); i++) await Bun.sleep(50);
+      expect(s.sg()).toContain("harbor running");
+      expect(readFileSync(join(s.run, "out", "judge-proxy.log"), "utf8")).toContain("HM_JUDGE_PROXY_READY");
+      expect(s.sg()).toContain(`base=http://127.0.0.1:${s.judgePort}`);
+      expect(s.sg()).toContain(`mgmt=${s.run}/out/judge-mgmt.sock`);
+      expect(s.sg()).toContain(`stop=${s.run}/STOP`);
+      // E1: the judge proxy meters under "judge:" plus this part's ledger prefix (vm-run.sh's second argument, "p-"), and
+      // Harbor's env names the journal the agent checks after each session.
+      const args = readFileSync(join(s.run, "out", "judge-proxy-args.txt"), "utf8");
+      expect(args).toContain(`--journal ${s.run}/out/judge-journal.ndjson `);
+      expect(args).toContain("--ledger-prefix judge:p-");
+      // D11: four attempts for a judge call, so with the decider's one retry a judgment gets 8 attempts inside the hook's 30 s.
+      expect(args).toContain("--retry-attempts 4");
+      expect(args).not.toContain("--ledger-prefix judge ");
+      expect(readFileSync(join(s.run, "out", "harbor-env.txt"), "utf8").split("\n")).toContain(`HM_JUDGE_JOURNAL=${s.run}/out/judge-journal.ndjson`);
+      writeFileSync(join(s.run, "HARBOR_DONE"), "");
+      const timer = setTimeout(() => proc.kill("SIGKILL"), 20_000);
+      await proc.exited;
+      clearTimeout(timer);
+    } finally {
+      proc.kill("SIGKILL");
+    }
+  }, 60_000);
+
+  test("a part VM's provider keys reach the judge proxy but never Harbor or the task containers, judge batch or not", async () => {
+    // Plant real-looking provider keys in ~/.laneb-keys (what a judge host ships). The proxies source it in their own
+    // subshells, so the judge proxy's process holds every key; Harbor runs under env -u for each, so its process holds none
+    // of the planted values and neither does the task container it starts. This holds whether or not the batch has a judge
+    // arm, which is why the host may ship the judge keys without them ever reaching a scored session's container.
+    const stubs = { ANTHROPIC_API_KEY: "sk-ant-STUB-not-a-key", OPENROUTER_API_KEY: "sk-or-STUB-not-a-key", TYPESAFE_API_KEY: "ts-STUB-not-a-key" };
+    const keys = Object.entries(stubs).map(([k, v]) => `${k}=${v}\n`).join("");
+    const stubValues = Object.values(stubs);
+    const runBatch = async (job: string | undefined, judge: boolean) => {
+      const s = judgeSetup({ keys, job });
+      const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });
+      try {
+        for (let i = 0; i < 300 && !s.sg().includes("harbor running"); i++) await Bun.sleep(50);
+        expect(s.sg()).toContain("harbor running");
+        const harborEnv = readFileSync(join(s.run, "out", "harbor-env.txt"), "utf8");
+        for (const v of stubValues) expect(harborEnv).not.toContain(v);
+        if (judge) {
+          const proxyEnv = readFileSync(join(s.run, "out", "judge-proxy-env.txt"), "utf8");
+          for (const v of stubValues) expect(proxyEnv).toContain(v);
+        } else {
+          expect(existsSync(join(s.run, "out", "judge-proxy-env.txt"))).toBe(false);
+        }
+        writeFileSync(join(s.run, "HARBOR_DONE"), "");
+        const timer = setTimeout(() => proc.kill("SIGKILL"), 20_000);
+        await proc.exited;
+        clearTimeout(timer);
+      } finally {
+        proc.kill("SIGKILL");
+      }
+    };
+    await runBatch(undefined, true); // judge batch (job.json carries judge_backend)
+    await runBatch("{}", false); // non-judge batch (no judge arm, no judge proxy)
+  }, 120_000);
 });

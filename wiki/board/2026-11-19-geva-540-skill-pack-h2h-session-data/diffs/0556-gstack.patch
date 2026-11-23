@@ -1,0 +1,269 @@
+diff --git a/changelog.md b/changelog.md
+index 3e5bed2..6146576 100644
+--- a/changelog.md
++++ b/changelog.md
+@@ -6,6 +6,7 @@
+ 
+ ### BREAKING CHANGES
+ 
++  * **TaskSchedulingThreadPool.GetDefaultScheduler()** now takes a **CancellationToken** that is cancelled when the thread pool is shut down, which fixes threads leaking from **DedicatedThreadPool** after scheduler shutdown
+   * A lot of types were sealed and/or internalized, these can be opened later on if needed. We are just trying to minimize API surface that needs to be maintained
+   * netstandard2.0 build no longer reference System.Configuration.ConfigurationManager and thus there's no support for Full Framework style .config files
+   * **JobKey** and **TriggerKey** now throw an **ArgumentNullException** when you specify **null** for _name_ or _group_ (#1359)
+diff --git a/src/Quartz.Tests.Unit/Simpl/TaskSchedulingThreadPoolTest.cs b/src/Quartz.Tests.Unit/Simpl/TaskSchedulingThreadPoolTest.cs
+index 3ccdc89..9699b45 100644
+--- a/src/Quartz.Tests.Unit/Simpl/TaskSchedulingThreadPoolTest.cs
++++ b/src/Quartz.Tests.Unit/Simpl/TaskSchedulingThreadPoolTest.cs
+@@ -60,6 +60,55 @@ public class TaskSchedulingThreadPoolTest
+        
+     }
+ 
++    [Test]
++    public void DedicatedThreadPoolThreadsStopOnShutdown()
++    {
++        var threadPool = new DedicatedThreadPool { MaxConcurrency = 1 };
++        threadPool.Initialize();
++
++        Thread workerThread = null;
++        var taskDone = new ManualResetEventSlim(false);
++
++        threadPool.RunInThread(async () =>
++        {
++            workerThread = Thread.CurrentThread;
++            // continuation runs on the dedicated scheduler
++            await Task.Delay(TimeSpan.FromMilliseconds(100));
++            taskDone.Set();
++        });
++
++        threadPool.Shutdown(waitForJobsToComplete: true);
++
++        Assert.That(taskDone.IsSet, Is.True);
++        Assert.That(workerThread, Is.Not.Null);
++        Assert.That(workerThread.Join(TimeSpan.FromSeconds(5)), Is.True, "dedicated thread should stop after shutdown");
++    }
++
++    [Test]
++    public void DedicatedThreadPoolThreadsStopOnShutdownWithoutWaiting()
++    {
++        var threadPool = new DedicatedThreadPool { MaxConcurrency = 1 };
++        threadPool.Initialize();
++
++        Thread workerThread = null;
++        var started = new ManualResetEventSlim(false);
++        var taskDone = new ManualResetEventSlim(false);
++
++        threadPool.RunInThread(async () =>
++        {
++            workerThread = Thread.CurrentThread;
++            started.Set();
++            await Task.Delay(TimeSpan.FromMilliseconds(200));
++            taskDone.Set();
++        });
++
++        Assert.That(started.Wait(TimeSpan.FromSeconds(5)), Is.True);
++        threadPool.Shutdown(waitForJobsToComplete: false);
++
++        Assert.That(taskDone.Wait(TimeSpan.FromSeconds(5)), Is.True, "running job should still complete");
++        Assert.That(workerThread.Join(TimeSpan.FromSeconds(5)), Is.True, "dedicated thread should stop after shutdown");
++    }
++
+     private class CustomTaskSchedulingThreadPool : TaskSchedulingThreadPool
+     {
+         private readonly TaskScheduler taskScheduler;
+@@ -70,7 +119,7 @@ public class TaskSchedulingThreadPoolTest
+             this.taskScheduler = taskScheduler;
+         }
+ 
+-        protected override TaskScheduler GetDefaultScheduler()
++        protected override TaskScheduler GetDefaultScheduler(CancellationToken cancellationToken)
+         {
+             return taskScheduler;
+         }
+diff --git a/src/Quartz/Simpl/DedicatedThreadPool.cs b/src/Quartz/Simpl/DedicatedThreadPool.cs
+index 3ee9082..4cb766a 100644
+--- a/src/Quartz/Simpl/DedicatedThreadPool.cs
++++ b/src/Quartz/Simpl/DedicatedThreadPool.cs
+@@ -11,9 +11,10 @@ internal sealed class DedicatedThreadPool : TaskSchedulingThreadPool
+     /// <summary>
+     /// Returns a QueuedTaskScheduler
+     /// </summary>
++    /// <param name="cancellationToken">Token that stops the dedicated threads when the thread pool is shut down.</param>
+     /// <returns>QueuedTaskScheduler with threadCount == MaxConcurrency</returns>
+-    protected override TaskScheduler GetDefaultScheduler()
++    protected override TaskScheduler GetDefaultScheduler(CancellationToken cancellationToken)
+     {
+-        return new QueuedTaskScheduler(MaxConcurrency);
++        return new QueuedTaskScheduler(MaxConcurrency, cancellationToken);
+     }
+ }
+\ No newline at end of file
+diff --git a/src/Quartz/Simpl/DefaultThreadPool.cs b/src/Quartz/Simpl/DefaultThreadPool.cs
+index c413deb..3e7b788 100644
+--- a/src/Quartz/Simpl/DefaultThreadPool.cs
++++ b/src/Quartz/Simpl/DefaultThreadPool.cs
+@@ -8,8 +8,9 @@ public sealed class DefaultThreadPool : TaskSchedulingThreadPool
+     /// <summary>
+     /// Returns TaskScheduler.Default
+     /// </summary>
++    /// <param name="cancellationToken">Token that is cancelled when the thread pool is shut down.</param>
+     /// <returns>TaskScheduler.Default</returns>
+-    protected override TaskScheduler GetDefaultScheduler()
++    protected override TaskScheduler GetDefaultScheduler(CancellationToken cancellationToken)
+     {
+         return TaskScheduler.Default;
+     }
+diff --git a/src/Quartz/Simpl/TaskSchedulingThreadPool.cs b/src/Quartz/Simpl/TaskSchedulingThreadPool.cs
+index 5ed0c5e..872f325 100644
+--- a/src/Quartz/Simpl/TaskSchedulingThreadPool.cs
++++ b/src/Quartz/Simpl/TaskSchedulingThreadPool.cs
+@@ -20,6 +20,14 @@ public abstract class TaskSchedulingThreadPool : IThreadPool
+     // only to the thread pool functions themselves (such as scheduling tasks).
+     private readonly CancellationTokenSource shutdownCancellation = new CancellationTokenSource();
+ 
++    // The token source passed to the default task scheduler; it is cancelled once the thread pool
++    // has shut down and no more tasks are running, so that resources owned by the task scheduler
++    // (such as dedicated threads) are released. It is cancelled after running tasks have completed
++    // because their (async) continuations may still need to be executed by the task scheduler.
++    private readonly CancellationTokenSource schedulerCancellation = new CancellationTokenSource();
++
++    private int shutdownStarted;
++
+     /// <summary>
+     /// Allows us to wait until no running tasks remain.
+     /// </summary>
+@@ -80,11 +88,15 @@ public abstract class TaskSchedulingThreadPool : IThreadPool
+     /// The TaskScheduler is provided through this factory method instead of as a property
+     /// so that it can take respect MaxConcurrency changes prior to initialization time
+     /// </remarks>
++    /// <param name="cancellationToken">
++    /// A token that is cancelled when the thread pool is shut down. Implementations that own
++    /// resources such as dedicated threads should release them when this token is cancelled.
++    /// </param>
+     /// <returns>
+     /// The default TaskScheduler the thread pool will use if users do
+     /// not specify a different TaskScheduler prior to initialization
+     /// </returns>
+-    protected abstract TaskScheduler GetDefaultScheduler();
++    protected abstract TaskScheduler GetDefaultScheduler(CancellationToken cancellationToken);
+ 
+     /// <summary>
+     /// Gets or sets the maximum number of thread pool tasks which can be
+@@ -140,7 +152,7 @@ public abstract class TaskSchedulingThreadPool : IThreadPool
+         // If this is undesirable, the scheduler should be set here unconditionally.
+         if (Scheduler is null)
+         {
+-            Scheduler = GetDefaultScheduler();
++            Scheduler = GetDefaultScheduler(schedulerCancellation.Token);
+         }
+ 
+         // Initialize the concurrency semaphore with the proper initial count
+@@ -270,24 +282,52 @@ public abstract class TaskSchedulingThreadPool : IThreadPool
+         // Cancel using our shutdown token
+         shutdownCancellation.Cancel();
+ 
+-        // If waitForJobsToComplete is true, wait for running tasks to complete
+-        if (waitForJobsToComplete)
++        if (!isInitialized)
+         {
+-            lock (runningTasksCountdown)
+-            {
+-                // Cancellation has been signaled, so no new tasks will begin once
+-                // shutdown has acquired this lock
+-                logger.LogDebug("Waiting for {ThreadCount} threads to complete.", runningTasksCountdown.CurrentCount.ToString());
+-            }
++            // Nothing was ever scheduled; just make sure scheduler resources are released
++            schedulerCancellation.Cancel();
++            logger.LogDebug("Shutdown of threadpool complete.");
++            return;
++        }
++
++        lock (runningTasksCountdown)
++        {
++            // Cancellation has been signaled, so no new tasks will begin once
++            // shutdown has acquired this lock
++            logger.LogDebug("Waiting for {ThreadCount} threads to complete.", runningTasksCountdown.CurrentCount.ToString());
++        }
+ 
++        if (Interlocked.Exchange(ref shutdownStarted, 1) == 0)
++        {
+             // Signal the initial count that we used to make sure the CountDownEvent didn't start
+             // in "signaled" state
+             runningTasksCountdown.Signal();
++        }
+ 
++        // If waitForJobsToComplete is true, wait for running tasks to complete
++        if (waitForJobsToComplete)
++        {
+             // Wait for pending tasks to complete
+             runningTasksCountdown.Wait();
+ 
+             logger.LogDebug("No executing jobs remaining, all threads stopped.");
++
++            // Release the resources (e.g. dedicated threads) of the task scheduler
++            schedulerCancellation.Cancel();
++        }
++        else if (runningTasksCountdown.IsSet)
++        {
++            schedulerCancellation.Cancel();
++        }
++        else
++        {
++            // Release the resources of the task scheduler once the running tasks have completed
++            ThreadPool.RegisterWaitForSingleObject(
++                runningTasksCountdown.WaitHandle,
++                static (state, _) => ((CancellationTokenSource) state!).Cancel(),
++                schedulerCancellation,
++                Timeout.Infinite,
++                executeOnlyOnce: true);
+         }
+ 
+         logger.LogDebug("Shutdown of threadpool complete.");
+diff --git a/src/Quartz/Util/QueuedTaskScheduler.cs b/src/Quartz/Util/QueuedTaskScheduler.cs
+index 3ec5938..71d0dc3 100644
+--- a/src/Quartz/Util/QueuedTaskScheduler.cs
++++ b/src/Quartz/Util/QueuedTaskScheduler.cs
+@@ -46,7 +46,7 @@ internal sealed class QueuedTaskScheduler : TaskScheduler, IDisposable
+     }
+ 
+     /// <summary>Cancellation token used for disposal.</summary>
+-    private readonly CancellationTokenSource _disposeCancellation = new CancellationTokenSource();
++    private readonly CancellationTokenSource _disposeCancellation;
+ 
+     /// <summary>
+     /// The maximum allowed concurrency level of this scheduler.  If custom threads are
+@@ -84,7 +84,35 @@ internal sealed class QueuedTaskScheduler : TaskScheduler, IDisposable
+         string threadName = "",
+         bool useForegroundThreads = false,
+         ThreadPriority threadPriority = ThreadPriority.Normal)
++        : this(threadCount, threadName, useForegroundThreads, threadPriority, CancellationToken.None)
+     {
++    }
++
++    /// <summary>Initializes the scheduler.</summary>
++    /// <param name="threadCount">The number of threads to create and use for processing work items.</param>
++    /// <param name="cancellationToken">A token that, when cancelled, stops the threads of the scheduler.</param>
++    public QueuedTaskScheduler(int threadCount, CancellationToken cancellationToken)
++        : this(threadCount, string.Empty, false, ThreadPriority.Normal, cancellationToken)
++    {
++    }
++
++    /// <summary>Initializes the scheduler.</summary>
++    /// <param name="threadCount">The number of threads to create and use for processing work items.</param>
++    /// <param name="threadName">The name to use for each of the created threads.</param>
++    /// <param name="useForegroundThreads">A Boolean value that indicates whether to use foreground threads instead of background.</param>
++    /// <param name="threadPriority">The priority to assign to each thread.</param>
++    /// <param name="cancellationToken">A token that, when cancelled, stops the threads of the scheduler.</param>
++    public QueuedTaskScheduler(
++        int threadCount,
++        string threadName,
++        bool useForegroundThreads,
++        ThreadPriority threadPriority,
++        CancellationToken cancellationToken)
++    {
++        _disposeCancellation = cancellationToken.CanBeCanceled
++            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
++            : new CancellationTokenSource();
++
+         // Validates arguments (some validation is left up to the Thread type itself).
+         // If the thread count is 0, default to the number of logical processors.
+         if (threadCount < 0)

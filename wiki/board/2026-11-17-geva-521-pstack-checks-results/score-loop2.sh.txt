@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# score-loop2.sh <list> <out root>: scores the test-run sessions named in <list> (one session.json path a line), one at a
+# time in list order, with --breaks (section 9's secondary is a test-run reading). Writes <out root>/score-<part>/<sN>.json
+# and .log. Skips a session whose record exists. Stops before the next session when <list>.stop exists. The command is
+# score-loop.sh's, unchanged apart from --breaks and the output path.
+set -uo pipefail
+list=$1 root=$2
+export PATH=$HOME/.bun/bin:$PATH
+cd "$HOME/work/gstack-evals"
+while IFS= read -r f; do
+  [ -e "$list.stop" ] && { echo "SCORE_STOPPED $(date -u +%FT%TZ)"; exit 3; }
+  s=$(basename $(dirname $f)); part=$(basename $(dirname $(dirname $f))); u=$(jq -r .unit $f); out=$root/score-$part
+  mkdir -p "$out"
+  [ -f "$out/$s.json" ] && { echo "SKIP $part/$s"; continue; }
+  t0=$(date +%s)
+  sg docker -c "bin/gstack-evals outcome pf score --s $(jq -r .s.repo $f) --ref $(jq -r '.s.ref // "HEAD"' $f) --unit $HOME/pf/units/$u --neutral $HOME/pf/neutral/$u.json --checks $(jq -r .checks $f) --session $f --out $out/$s.json --breaks" </dev/null > "$out/$s.log" 2>&1
+  rc=$?
+  echo "SCORE $part/$s $u $(jq -r '.model + " " + .arm' $f) rc=$rc s=$(( $(date +%s) - t0 )) at=$(date -u +%FT%TZ) $(tail -1 $out/$s.log | cut -c1-200)"
+done < "$list"
+echo "SCORE_DONE $(date -u +%FT%TZ)"

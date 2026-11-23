@@ -1,0 +1,112 @@
+diff --git a/plugin/aa55udp.go b/plugin/aa55udp.go
+index fed3063..552b80f 100644
+--- a/plugin/aa55udp.go
++++ b/plugin/aa55udp.go
+@@ -6,6 +6,7 @@ import (
+ 	"encoding/hex"
+ 	"errors"
+ 	"fmt"
++	"math"
+ 	"net"
+ 	"strings"
+ 	"time"
+@@ -32,7 +33,7 @@ type AA55UDP struct {
+ 	log    *util.Logger
+ 	conn   *net.UDPConn
+ 	pdu    []byte // 6-byte PDU body, no CRC
+-	decode string // int32be | uint32be | int16be | uint16be
++	decode string // int32be | uint32be | int16be | uint16be | float32be
+ 	scale  float64
+ }
+ 
+@@ -68,9 +69,11 @@ func NewAA55UDPFromConfig(_ context.Context, other map[string]interface{}) (Plug
+ 	}
+ 
+ 	switch cc.Decode {
+-	case "int32be", "uint32be", "int16be", "uint16be":
++	case "float32":
++		cc.Decode = "float32be"
++	case "int32be", "uint32be", "int16be", "uint16be", "float32be":
+ 	default:
+-		return nil, fmt.Errorf("aa55udp: unsupported decode %q (want int32be|uint32be|int16be|uint16be)", cc.Decode)
++		return nil, fmt.Errorf("aa55udp: unsupported decode %q (want int32be|uint32be|int16be|uint16be|float32be)", cc.Decode)
+ 	}
+ 
+ 	pdu := buildPDU(cc.Register, cc.Count)
+@@ -193,6 +196,11 @@ func decodeAt(payload []byte, offset int, decode string) (float64, error) {
+ 			return 0, fmt.Errorf("payload too short for uint32be at offset %d (len=%d)", offset, len(payload))
+ 		}
+ 		return float64(binary.BigEndian.Uint32(payload[offset:])), nil
++	case "float32", "float32be":
++		if len(payload) < offset+4 {
++			return 0, fmt.Errorf("payload too short for float32be at offset %d (len=%d)", offset, len(payload))
++		}
++		return float64(math.Float32frombits(binary.BigEndian.Uint32(payload[offset:]))), nil
+ 	case "int16be":
+ 		if len(payload) < offset+2 {
+ 			return 0, fmt.Errorf("payload too short for int16be at offset %d (len=%d)", offset, len(payload))
+diff --git a/plugin/aa55udp_test.go b/plugin/aa55udp_test.go
+index a617a6f..2aea575 100644
+--- a/plugin/aa55udp_test.go
++++ b/plugin/aa55udp_test.go
+@@ -3,6 +3,7 @@ package plugin
+ import (
+ 	"encoding/binary"
+ 	"encoding/hex"
++	"math"
+ 	"net"
+ 	"testing"
+ 
+@@ -153,13 +154,38 @@ func TestDecodeAt_Int16BE_Negative(t *testing.T) {
+ 	assert.InDelta(t, -300.0, v, 0)
+ }
+ 
++func TestDecodeAt_Float32BE(t *testing.T) {
++	payload := make([]byte, 4)
++	binary.BigEndian.PutUint32(payload, math.Float32bits(12345.5))
++	for _, d := range []string{"float32", "float32be"} {
++		v, err := decodeAt(payload, 0, d)
++		require.NoError(t, err)
++		assert.InDelta(t, 12345.5, v, 0)
++	}
++}
++
++func TestDecodeAt_Float32BE_TooShort(t *testing.T) {
++	_, err := decodeAt([]byte{0x00, 0x01}, 0, "float32be")
++	require.Error(t, err)
++}
++
++func TestNewAA55UDP_Float32Decode(t *testing.T) {
++	for _, d := range []string{"float32", "float32be"} {
++		p, err := NewAA55UDPFromConfig(t.Context(), map[string]any{
++			"host": "127.0.0.1", "register": 36017, "count": 2, "decode": d, "scale": 0.001,
++		})
++		require.NoError(t, err)
++		require.NotNil(t, p)
++	}
++}
++
+ func TestDecodeAt_TooShort(t *testing.T) {
+ 	_, err := decodeAt([]byte{0x00}, 0, "int32be")
+ 	require.Error(t, err)
+ }
+ 
+ func TestDecodeAt_UnknownType(t *testing.T) {
+-	_, err := decodeAt(make([]byte, 4), 0, "float32")
++	_, err := decodeAt(make([]byte, 4), 0, "float64be")
+ 	require.Error(t, err)
+ }
+ 
+diff --git a/templates/definition/meter/goodwe-wifi-et.yaml b/templates/definition/meter/goodwe-wifi-et.yaml
+index f1ffe24..46e8a5d 100644
+--- a/templates/definition/meter/goodwe-wifi-et.yaml
++++ b/templates/definition/meter/goodwe-wifi-et.yaml
+@@ -23,7 +23,7 @@ render: |
+     host: {{ .host }}
+     register: 36017
+     count: 2
+-    decode: float32
++    decode: float32be
+     scale: 0.001
+   {{- end }}
+   {{- if eq .usage "pv" }}

@@ -1,0 +1,13 @@
+# Copyright (c) 2026 Garry Tan. MIT License.
+# The arm-neutral runtime layer for every decision-routing cell. build.sh installs requirements.lock, compiled from
+# this file with:
+#   uv pip compile --generate-hashes --python-version 3.12 --python-platform x86_64-manylinux_2_28 \
+#     requirements.in -o requirements.lock
+# litellm is the newest release mini-swe-agent 2.4.6 allows (>=1.75.5, not 1.82.7 or 1.82.8); anthropic and openai are
+# the newest releases on the build day. litellm's mcp extra is needed: at this pin litellm imports mcp on every
+# chat completion that sends tools, and mini always sends its bash tool.
+mini-swe-agent==2.4.6
+typesafe-sdk==0.7.5
+litellm[mcp]==1.108.3
+anthropic==2.6.0
+openai==3.46.0

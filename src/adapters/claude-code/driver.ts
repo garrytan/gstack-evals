@@ -15,7 +15,8 @@
 //   names the slot's allowance) is allowance_stop. Without it, as before, the turn cap ends the session as completed and
 //   the allowance as a missing cell (E_ALLOWANCE). Any other E_ALLOWANCE refusal (a route, model or price the slot does
 //   not allow) stays a missing cell either way.
-//   sessionKind unattended adds GSTACK_SESSION_KIND=unattended to the agent env; unset, the adapter sets no session kind.
+//   sessionKind unattended or interactive adds GSTACK_SESSION_KIND with that value to the agent env; unset, the adapter
+//   sets no session kind.
 //   disable1mContext adds CLAUDE_CODE_DISABLE_1M_CONTEXT=1, so a model the CLI would give a 1,000,000-token window (Opus 5.5
 //   at Claude Code 2.1.314, compacting at 967,000) gets 200,000 and compacts at 167,000, as every other model does.
 //   skillGateDeadlineMs adds GSTACK_SKILL_GATE_DEADLINE_MS to the agent env. settings runs its command in the session's
@@ -35,7 +36,10 @@
 // - A question the sidecar does not answer goes to the persona's free-form source when the run passes one
 //   (src/usersim/persona.ts); a source that cannot answer ends the cell with its termination.
 // - After each turn whose last text ends in a question, the simulator's reply goes in as the next user message; the
-//   session ends when it has none.
+//   session ends when it has none. nextUser replaces that step: after each success result it gets the main agent's
+//   texts since the last result and returns the next user message, an end, or a termination that ends the session, and
+//   the session clock stops while it runs, as it does for the persona. denyAsk adds AskUserQuestion to the disallowed
+//   tools. A run that sets neither keeps today's behavior and records.
 // - The adapter writes the evaluator's records beside the trial, never into the work dir: every SDK message
 //   (transcript.ndjson), the init message's tools, skills and versions (init.json), calls[] (calls.json), the user
 //   simulator's event log (usersim.ndjson) and the CLI's stderr (cli-stderr.log), which the adapter drains itself, since
@@ -103,6 +107,10 @@
 //   messages the transcript holds) is true. Never at any other result or termination, and never twice.
 // - session.json records the session's own clock (session_ms: from the first message to the end, less credited stalls
 //   and the persona's pauses, the clock the timeout runs on), the stall credit, the pauses and whether the follow-up went.
+// - stopHook (the eng-review lens's --enforce fallback) runs as an SDK-side Stop hook on the transcript so far, the same
+//   messages the transcript holds plus, when the hook input carries it, the last assistant text as one more assistant
+//   message (the CLI can fire the hook before the SDK yields that message). A string it returns blocks the stop with that
+//   reason; null lets the session stop.
 import type { ChildProcess } from "node:child_process";
 import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -154,7 +162,7 @@ export interface ClaudeCodeOptions {
   /** The session's system prompt; sdk-default when unset. */
   systemPrompt?: SystemPrompt;
   /** GSTACK_SESSION_KIND for the agent env; unset, the adapter sets none. */
-  sessionKind?: "unattended";
+  sessionKind?: "unattended" | "interactive";
   /** GSTACK_SKILL_GATE_DEADLINE_MS for the agent env, the gstack gate hooks' own deadline; unset, the adapter sets none. */
   skillGateDeadlineMs?: number;
   /** CLAUDE_CODE_DISABLE_1M_CONTEXT=1 for the agent env, so the CLI's window is 200,000 tokens on every model; unset, the CLI's own window. */
@@ -165,26 +173,45 @@ export interface ClaudeCodeOptions {
   capStops?: boolean;
   /** The most idle time, in all, the session may wait on its background work; unset, it ends at its turn's result as before (no hold, no session_end). */
   backgroundWaitMs?: number;
+  /** Replaces the user simulator's afterTurn: after each success result, given that reply's main-agent texts, the next user message, an end, or a termination. The session clock stops while it runs. */
+  nextUser?: (texts: string[]) => Promise<NextUser>;
+  /** Adds AskUserQuestion to the disallowed tools, so every question reaches the user as text. */
+  denyAsk?: boolean;
   /** The persona's free-form answers, evaluator side; absent, an unanswered question gets the simulator's fallback. */
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
   /** The Agent SDK's query function; tests pass the real one or a stand-in. */
   query?: QueryFn;
   /** One follow-up user message, at most once: at a success result with no simulator reply and nothing holding the session, when needed(the transcript.ndjson text so far) is true. */
   followUp?: { text: string; needed: (transcript: string) => boolean };
+  /** An SDK-side Stop hook: given the transcript text so far, a reason blocks the stop, null releases it. */
+  stopHook?: (transcript: string) => string | null;
   /** Plugin roots in the agent's HOME, loaded for the session as plugin directories. */
   plugins?: string[];
-  /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs. */
-  codex?: { provider: CodexProvider; model: string };
+  /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs, and, when set, the voice's own proxy slot and bearer in place of the session's. */
+  codex?: { provider: CodexProvider; model: string; proxy?: { slot: string; token: string } };
+  /** MCP servers the session gets, by name: HTTP servers only, such as a browser container's Playwright server. */
+  mcpServers?: Record<string, { type: "http"; url: string }>;
+  /** When set, canUseTool denies every tool not named here (AskUserQuestion keeps its own rule), and ToolSearch is disallowed unless named, so the CLI declares every MCP tool up front instead of deferring it behind a search the session may not call. */
+  onlyTools?: readonly string[];
+  /** GSTACK_CODEX_NO_SANDBOX=1 for the agent env: gstack runs the Codex voice without Codex's own sandbox, which cannot start in the trial container, so the container is the sandbox. Only with codex. */
+  codexNoSandbox?: boolean;
 }
+
+/** What nextUser returns: the next user message, the session's end, or a termination that ends it. */
+export type NextUser = { reply: string } | { end: true } | { stop: Termination };
 
 // The slice of the Agent SDK this adapter uses, typed loosely so a test can stand one in.
 type SdkMessage = Record<string, any>;
+
+/** One assistant message's text as nextUser and the turn's text read it: its text blocks joined with nothing between them. */
+export const assistantText = (m: SdkMessage): string => (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
 type QueryFn = (args: { prompt: AsyncIterable<SdkMessage>; options: Record<string, unknown> }) => AsyncIterable<SdkMessage>;
 
 /** The agent env the adapter adds: proxy, bearer, model purity and host settings. Every name is on U9's agent allowlist. */
-export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex" | "sessionKind" | "skillGateDeadlineMs" | "disable1mContext">): Record<string, string> {
+export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex" | "sessionKind" | "skillGateDeadlineMs" | "disable1mContext" | "codexNoSandbox">): Record<string, string> {
   return {
-    ...(o.codex ? { OPENAI_API_KEY: o.proxy.token } : {}),
+    ...(o.codex ? { OPENAI_API_KEY: (o.codex.proxy ?? o.proxy).token } : {}),
+    ...(o.codex && o.codexNoSandbox ? { GSTACK_CODEX_NO_SANDBOX: "1" } : {}),
     ANTHROPIC_BASE_URL: o.proxy.baseUrl.replace(/\/+$/, "") + "/" + o.proxy.slot + "/" + o.provider,
     ANTHROPIC_AUTH_TOKEN: o.proxy.token,
     ANTHROPIC_MODEL: o.model,
@@ -328,6 +355,14 @@ export interface ClaudeCodeDriver extends AgentDriver {
   sim: UserSim | null;
 }
 
+/** The Stop hook's transcript: the messages so far, plus the hook input's last_assistant_message (the pinned SDK's
+ * StopHookInput field) as one more assistant message, since the CLI can fire Stop before the SDK yields that message. */
+export function stopTranscript(messages: readonly unknown[], input: { last_assistant_message?: unknown } | null | undefined): string {
+  const text = input?.last_assistant_message;
+  const last = typeof text === "string" && text ? [{ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] }, parent_tool_use_id: null }] : [];
+  return [...messages, ...last].map((m) => JSON.stringify(m)).join("\n") + "\n";
+}
+
 export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
   const stderrLog = join(o.out, "cli-stderr.log");
   const log = (line: string) => {
@@ -348,7 +383,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         return without(INFRA);
       }
       if (o.codex) {
-        const wrote = session.exec(codexConfigCommand(o.codex, o.proxy), 30_000);
+        const wrote = session.exec(codexConfigCommand(o.codex, o.codex.proxy ? { ...o.proxy, ...o.codex.proxy } : o.proxy), 30_000);
         if (wrote.exitCode !== 0) {
           log("adapter: the Codex config step exited " + wrote.exitCode + ": " + (wrote.stdout + wrote.stderr).trim().slice(-500) + "\n");
           return without({ kind: "missing", code: "E_CODEX_CONFIG" });
@@ -455,17 +490,15 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         log("adapter: the session sat idle " + waitMs + " ms in all waiting on its background work (" + holding().join("; ") + "), so it ends at that deadline as a missing cell, E_BACKGROUND_DEADLINE, not the arm's\n");
         end({ kind: "missing", code: "E_BACKGROUND_DEADLINE" });
       }, TICK_MS);
-      const persona = o.freeform;
-      const freeform = persona && (async (text: string, question: string) => {
+      const pausing = async <T>(fn: () => Promise<T>): Promise<T> => {
         if (pauses === 0) {
           stalled();
           clearTimeout(timer);
           paused = performance.now();
         }
         pauses++;
-        let a: Awaited<ReturnType<typeof persona>>;
         try {
-          a = await persona(text, question);
+          return await fn();
         } finally {
           if (--pauses === 0) {
             pausedMs += performance.now() - paused;
@@ -474,6 +507,10 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             timer = setTimeout(expire, Math.max(0, deadline - performance.now()));
           }
         }
+      };
+      const persona = o.freeform;
+      const freeform = persona && (async (text: string, question: string) => {
+        const a = await pausing(() => persona(text, question));
         if ("text" in a) return a.text;
         end(a.stop);
         return null;
@@ -483,6 +520,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       const hooked = new Set<string>();
       const canUseTool = async (name: string, input: Record<string, unknown>, options?: { toolUseID?: string }) => {
         if (options?.toolUseID) approved.add(options.toolUseID);
+        if (name !== "AskUserQuestion" && o.onlyTools && !o.onlyTools.includes(name)) return { behavior: "deny", message: "That tool is not available in this session." };
         if (name !== "AskUserQuestion") return { behavior: "allow", updatedInput: input };
         let r: Awaited<ReturnType<UserSim["answerAsk"]>>;
         try {
@@ -499,6 +537,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         return { behavior: "allow", updatedInput: { ...input, answers: r.answers } };
       };
       let turnText = "";
+      let turnTexts: string[] = [];
       try {
         const q = query({
           prompt: inbox.stream(),
@@ -508,12 +547,19 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             permissionMode: "default",
             settingSources: ["user", "project", "local"],
             ...(settings ? { settings } : {}),
-            disallowedTools: DISALLOWED_TOOLS,
+            disallowedTools: [...DISALLOWED_TOOLS, ...(o.denyAsk ? ["AskUserQuestion"] : []), ...(o.onlyTools && !o.onlyTools.includes("ToolSearch") ? ["ToolSearch"] : [])],
             ...(o.systemPrompt === "claude-code-preset" ? { systemPrompt: { type: "preset", preset: "claude_code" } } : {}),
             ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
+            ...(o.mcpServers ? { mcpServers: o.mcpServers, strictMcpConfig: true } : {}),
             abortController: abort,
             canUseTool,
-            hooks: { PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }] },
+            hooks: {
+              PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }],
+              ...(o.stopHook ? { Stop: [{ hooks: [async (input: { last_assistant_message?: unknown }) => {
+                const reason = o.stopHook!(stopTranscript(messages, input));
+                return reason === null ? {} : { decision: "block", reason };
+              }] }] } : {}),
+            },
             spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) => {
               let cli: ChildProcess;
               try {
@@ -563,7 +609,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               if (scheduled && r?.stopped === true) wakeup = null;
               else if (scheduled && typeof r?.scheduledFor === "number") wakeup = { set_at: new Date().toISOString(), delay_s: typeof r.clampedDelaySeconds === "number" ? r.clampedDelaySeconds : Math.round((r.scheduledFor - Date.now()) / 1000), fires_at: new Date(r.scheduledFor).toISOString(), running: running() };
             } else if (m.type === "assistant") {
-              const text = (m.message?.content ?? []).filter((b: SdkMessage) => b.type === "text").map((b: SdkMessage) => b.text ?? "").join("");
+              const text = assistantText(m);
               if (!m.parent_tool_use_id && idleSince !== null) {
                 waited += performance.now() - idleSince;
                 idleSince = null;
@@ -578,6 +624,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 if (!m.parent_tool_use_id) for (const b of m.message?.content ?? []) if (b.type === "tool_use" && b.name === "ScheduleWakeup") wakeupCalls.add(b.id);
                 if (!m.parent_tool_use_id && text.trim()) {
                   turnText = text;
+                  turnTexts.push(text);
                   textOutput = true;
                 }
               }
@@ -591,7 +638,14 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
                 break;
               }
               if (m.subtype === "error_max_turns" && o.capStops) stop ??= { kind: "turn_cap" };
-              const next = m.subtype === "success" ? await sim.afterTurn(turnText) : { end: "max_turns" };
+              const texts = turnTexts;
+              turnTexts = [];
+              const asked = o.nextUser && m.subtype === "success" ? await pausing(() => o.nextUser!(texts)) : null;
+              if (asked && "stop" in asked) {
+                end(asked.stop);
+                break;
+              }
+              const next = asked ?? (m.subtype === "success" ? await sim.afterTurn(turnText) : { end: "max_turns" });
               turnText = "";
               if ("reply" in next) {
                 inbox.push(userMessage(next.reply));

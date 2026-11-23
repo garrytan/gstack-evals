@@ -1,0 +1,171 @@
+diff --git a/echo.go b/echo.go
+index f22d2dd..b7766e5 100644
+--- a/echo.go
++++ b/echo.go
+@@ -589,10 +589,15 @@ func StaticDirectoryHandler(fileSystem fs.FS, disablePathUnescaping bool) Handle
+ 	return func(c *Context) error {
+ 		p := c.Param("*")
+ 		if !disablePathUnescaping { // when router is already unescaping we do not want to do is twice
++			// The router matched this request with `%2F` as part of a single segment. Decoding it into a path
++			// separator here would resolve a file under a different route prefix and bypass that route's middleware.
+ 			tmpPath, err := url.PathUnescape(p)
+ 			if err != nil {
+ 				return fmt.Errorf("failed to unescape path variable: %w", err)
+ 			}
++			if addsPathSeparator(p, tmpPath) {
++				return ErrNotFound
++			}
+ 			p = tmpPath
+ 		}
+ 
+@@ -613,6 +618,11 @@ func StaticDirectoryHandler(fileSystem fs.FS, disablePathUnescaping bool) Handle
+ 	}
+ }
+ 
++func addsPathSeparator(escaped, unescaped string) bool {
++	return strings.Count(escaped, "/") != strings.Count(unescaped, "/") ||
++		strings.Count(escaped, `\`) != strings.Count(unescaped, `\`)
++}
++
+ // FileFS registers a new route with path to serve file from the provided file system.
+ //
+ // Avoid using the leading `/` slash as most of the Go standard library fs.FS implementations require relative paths for
+diff --git a/echo_static_encoded_slash_test.go b/echo_static_encoded_slash_test.go
+new file mode 100644
+index 0000000..7b7bbd3
+--- /dev/null
++++ b/echo_static_encoded_slash_test.go
+@@ -0,0 +1,47 @@
++package echo
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"testing"
++	"testing/fstest"
++
++	"github.com/stretchr/testify/assert"
++)
++
++func TestStaticFS_EncodedSlashDoesNotBypassGroupMiddleware(t *testing.T) {
++	files := fstest.MapFS{
++		"admin/secret.txt": {Data: []byte("secret")},
++		"public.txt":       {Data: []byte("public")},
++		"a b.txt":          {Data: []byte("literal")},
++	}
++	e := New()
++	e.Group("/admin", func(next HandlerFunc) HandlerFunc {
++		return func(c *Context) error { return ErrForbidden }
++	}).GET("/*", func(c *Context) error { return c.String(http.StatusOK, "admin") })
++	e.StaticFS("/", files)
++
++	cases := []struct {
++		target string
++		code   int
++		body   string
++	}{
++		{"/public.txt", http.StatusOK, "public"},
++		{"/admin/secret.txt", http.StatusForbidden, ""},
++		{"/admin%2Fsecret.txt", http.StatusNotFound, ""},
++		{"/admin%2fsecret.txt", http.StatusNotFound, ""},
++		{"/admin%5Csecret.txt", http.StatusNotFound, ""},
++		{"/a%20b.txt", http.StatusOK, "literal"},
++	}
++	for _, tc := range cases {
++		t.Run(tc.target, func(t *testing.T) {
++			rec := httptest.NewRecorder()
++			e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.target, nil))
++			assert.Equal(t, tc.code, rec.Code)
++			if tc.body != "" {
++				assert.Equal(t, tc.body, rec.Body.String())
++			}
++			assert.NotEqual(t, "secret", rec.Body.String())
++		})
++	}
++}
+diff --git a/echo_test.go b/echo_test.go
+index 17d9b4a..7a7c235 100644
+--- a/echo_test.go
++++ b/echo_test.go
+@@ -263,9 +263,9 @@ func TestEcho_StaticFS(t *testing.T) {
+ 			givenPrefix:          "/",
+ 			givenFs:              os.DirFS("_fixture/"),
+ 			whenURL:              "/open.redirect.hackercom%2f..",
+-			expectStatus:         http.StatusMovedPermanently,
+-			expectHeaderLocation: "/open.redirect.hackercom/../", // location starting with `//open` would be very bad
+-			expectBodyStartsWith: "",
++			expectStatus:         http.StatusNotFound,
++			expectHeaderLocation: "", // encoded slash is never decoded into a separator, so no redirect to `//open` can happen
++			expectBodyStartsWith: "{\"message\":\"Not Found\"}\n",
+ 		},
+ 	}
+ 
+diff --git a/middleware/static.go b/middleware/static.go
+index 152dded..5c53444 100644
+--- a/middleware/static.go
++++ b/middleware/static.go
+@@ -205,10 +205,17 @@ func (config StaticConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
+ 				pathUnescape = !config.DisablePathUnescaping // because router could already do PathUnescape
+ 			}
+ 			if pathUnescape {
+-				p, err = url.PathUnescape(p)
++				// Router matched `%2F` as part of a single segment, decoding it into a separator would let the
++				// request reach files behind other route prefixes and their middleware.
++				unescaped, err := url.PathUnescape(p)
+ 				if err != nil {
+ 					return err
+ 				}
++				if strings.Count(p, "/") != strings.Count(unescaped, "/") ||
++					strings.Count(p, `\`) != strings.Count(unescaped, `\`) {
++					return next(c)
++				}
++				p = unescaped
+ 			}
+ 			// Security: We use path.Clean() (not filepath.Clean()) because:
+ 			// 1. HTTP URLs always use forward slashes, regardless of server OS
+diff --git a/middleware/static_encoded_slash_test.go b/middleware/static_encoded_slash_test.go
+new file mode 100644
+index 0000000..dbb6aed
+--- /dev/null
++++ b/middleware/static_encoded_slash_test.go
+@@ -0,0 +1,40 @@
++package middleware
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"testing"
++	"testing/fstest"
++
++	"github.com/labstack/echo/v5"
++	"github.com/stretchr/testify/assert"
++)
++
++func TestStatic_GroupEncodedSlashDoesNotBypassGroupMiddleware(t *testing.T) {
++	e := echo.New()
++	e.Filesystem = fstest.MapFS{
++		"admin/secret.txt": {Data: []byte("secret")},
++		"public.txt":       {Data: []byte("public")},
++	}
++	e.Group("/admin", func(next echo.HandlerFunc) echo.HandlerFunc {
++		return func(c *echo.Context) error { return echo.ErrForbidden }
++	}).GET("/*", func(c *echo.Context) error { return c.String(http.StatusOK, "admin") })
++	e.Group("/", StaticWithConfig(StaticConfig{Root: "."})).GET("*", func(c *echo.Context) error {
++		return echo.ErrNotFound
++	})
++
++	cases := map[string]int{
++		"/public.txt":         http.StatusOK,
++		"/admin/secret.txt":   http.StatusForbidden,
++		"/admin%2Fsecret.txt": http.StatusNotFound,
++		"/admin%5Csecret.txt": http.StatusNotFound,
++	}
++	for target, code := range cases {
++		t.Run(target, func(t *testing.T) {
++			rec := httptest.NewRecorder()
++			e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
++			assert.Equal(t, code, rec.Code)
++			assert.NotEqual(t, "secret", rec.Body.String())
++		})
++	}
++}

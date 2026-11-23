@@ -38,8 +38,8 @@ export interface StepOptions {
 }
 
 export interface AgentSession {
-  /** Runs one shell step in the agent's environment, in the work dir. */
-  exec(command: string, timeoutMs: number): StepResult;
+  /** Runs one shell step in the agent's environment, in the work dir; input, when given, is the step's stdin, so a value the step needs never rides in its arguments. */
+  exec(command: string, timeoutMs: number, input?: string): StepResult;
   /**
    * Starts one long-lived process in the agent's environment, in the work dir, with stdin, stdout and stderr piped: the
    * host CLI a driver streams to. env adds non-credential names on top of the session's env. The caller kills it.
@@ -51,14 +51,21 @@ export interface AgentSession {
 
 export interface Sandbox {
   isolation: "docker" | "process";
-  /** Where the work dir appears to the trial's children. */
-  workPath(work: string, task: string): string;
+  /** Where the work dir appears to the trial's children; root mounts it at the sandbox's work root itself (/work in docker). */
+  workPath(work: string, task: string, root?: boolean): string;
   /** Where the tasks directory copy appears to setup and check. */
   fixturesPath(fixtures: string): string;
   /** The HOME every child gets, given the trial's evaluator-side directory. */
   homePath(dir: string): string;
   step(role: "setup" | "check", command: string, task: string, opts: StepOptions): StepResult;
-  agent(task: string, opts: { work: string; env: Record<string, string>; network?: string | null }): AgentSession;
+  /** ram puts the agent's HOME and /tmp on tmpfs of that size, owned by the runner's uid and gid like the container's user, HOME seeded with the image's own copy; unset, both stay on the container's disk layer. */
+  agent(task: string, opts: { work: string; env: Record<string, string>; network?: string | null; root?: boolean; mounts?: readonly ReadOnlyMount[]; ram?: { size: string } }): AgentSession;
+}
+
+/** A host file or directory the agent sees read-only at path. */
+export interface ReadOnlyMount {
+  host: string;
+  path: string;
 }
 
 export class IsolationError extends Error {}
@@ -89,7 +96,7 @@ export const dockerAvailable = (docker = "docker"): boolean => spawnSync(docker,
 /** Containers for setup and check (the trial image) and for the agent (the arm image). */
 export function dockerSandbox(opts: { trialImage: string; armImage?: string; docker?: string }): Sandbox {
   const docker = opts.docker ?? "docker";
-  const workPath = (_work: string, task: string) => "/work/" + task;
+  const workPath = (_work: string, task: string, root?: boolean) => (root ? "/work" : "/work/" + task);
   return {
     isolation: "docker",
     workPath,
@@ -103,9 +110,21 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
     },
     agent(task, o) {
       const name = "gse-agent-" + randomBytes(6).toString("hex");
-      const path = workPath(o.work, task);
-      const start = dockerStep(docker, ["-d", "--network", o.network ?? "none", "--user", uid(), ...HARDENING, "-v", o.work + ":" + path, "-w", path], ["--entrypoint", "sleep", opts.armImage ?? opts.trialImage, "infinity"], name, o.env, 120_000);
+      const path = workPath(o.work, task, o.root);
+      const ro = (o.mounts ?? []).flatMap((m) => ["-v", m.host + ":" + m.path + ":ro"]);
+      const image = opts.armImage ?? opts.trialImage;
+      const owner = ",uid=" + (process.getuid?.() ?? 1000) + ",gid=" + (process.getgid?.() ?? 1000);
+      const ram = o.ram ? ["--tmpfs", "/tmp:rw,exec,mode=1777,size=" + o.ram.size + owner, "--tmpfs", "/home/agent:rw,exec,mode=1777,size=" + o.ram.size + owner] : [];
+      const start = dockerStep(docker, ["-d", "--network", o.network ?? "none", "--user", uid(), ...HARDENING, ...ram, "-v", o.work + ":" + path, ...ro, "-w", path], ["--entrypoint", "sleep", image, "infinity"], name, o.env, 120_000);
       if (start.exitCode !== 0) throw new IsolationError("could not start the agent container: " + start.stderr.trim().split("\n").slice(-1)[0]);
+      if (o.ram) {
+        const seed = 'set -o pipefail; d=$1 img=$2 n=$3; shift 3; "$d" run --rm --network none "$@" --entrypoint tar "$img" -C /home/agent -cf - . | "$d" exec -i "$n" tar -C /home/agent -xf -';
+        const seeded = spawnSync("bash", ["-c", seed, "seed", docker, image, name, ...HARDENING], { timeout: 120_000, encoding: "utf8", maxBuffer: STEP_BUFFER });
+        if (seeded.status !== 0) {
+          spawnSync(docker, ["rm", "-f", name], { stdio: "ignore" });
+          throw new IsolationError("could not seed the agent's RAM-backed home: " + String(seeded.stderr ?? seeded.error?.message ?? "").trim().split("\n").slice(-1)[0]);
+        }
+      }
       let stopped = false;
       return {
         spawn: (argv, env = {}) => {
@@ -113,8 +132,8 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
           const client = Object.fromEntries(["PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "XDG_RUNTIME_DIR"].flatMap((k) => (process.env[k] ? [[k, process.env[k]!]] : [])));
           return spawn(docker, ["exec", "-i", "-w", path, ...envArgs, name, ...argv], { env: { ...client, ...clientEnv }, stdio: ["pipe", "pipe", "pipe"] });
         },
-        exec: (command, timeoutMs) => {
-          const r = result(spawnSync(docker, ["exec", "-w", path, name, "sh", "-c", command], { timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER }));
+        exec: (command, timeoutMs, input) => {
+          const r = result(spawnSync(docker, ["exec", ...(input === undefined ? [] : ["-i"]), "-w", path, name, "sh", "-c", command], { timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER, input }));
           if (r.timedOut) spawnSync(docker, ["exec", name, "sh", "-c", "kill -9 -1"], { stdio: "ignore" });
           return r;
         },
@@ -166,8 +185,9 @@ export function processSandbox(opts: { bwrap?: string } = {}): Sandbox {
     agent(_task, o) {
       const home = o.env.HOME;
       if (!home) throw new IsolationError("the agent's env has no HOME to bind into its bubblewrap session");
+      if (o.root || o.mounts?.length) throw new IsolationError("a session with a work root or read-only mounts runs under --isolation docker");
       return {
-        exec: (command, timeoutMs) => result(spawnSync(bwrap, bwrapArgs(o.work, home, command), { env: o.env, timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER })),
+        exec: (command, timeoutMs, input) => result(spawnSync(bwrap, bwrapArgs(o.work, home, command), { env: o.env, timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER, input })),
         spawn: (argv, env = {}) => spawn(bwrap, bwrapArgv(o.work, home, argv), { env: { ...o.env, ...env }, stdio: ["pipe", "pipe", "pipe"] }),
         stop: () => {},
       };

@@ -146,8 +146,14 @@ export function loadWiki(root: string): { entries: Entry[]; problems: Problem[] 
   for (const name of readdirSync(wiki).sort()) {
     if (name === "README.md" || name === "INDEX.md") continue;
     const rel = "wiki/" + name;
+    if (name === "edits" && statSync(join(wiki, name)).isDirectory()) {
+      for (const item of readdirSync(join(wiki, name)).sort()) {
+        if (!item.endsWith(".tsv") || statSync(join(wiki, name, item)).isDirectory()) problems.push({ file: rel + "/" + item, message: "unexpected file: wiki/edits/ holds only <name>.tsv waiver files" });
+      }
+      continue;
+    }
     if (!(name in SECTIONS) || !statSync(join(wiki, name)).isDirectory()) {
-      problems.push({ file: rel, message: "unexpected file: wiki/ holds README.md, INDEX.md, board/, plans/ and research/" });
+      problems.push({ file: rel, message: "unexpected file: wiki/ holds README.md, INDEX.md, board/, plans/, research/ and edits/" });
       continue;
     }
     for (const item of readdirSync(join(wiki, name)).sort()) {
@@ -286,7 +292,36 @@ const isEntryPath = (path: string) => {
   return (parts.length === 3 && parts[2].endsWith(".md")) || (parts.length === 4 && parts[3] === "README.md");
 };
 
+const DIGEST = /^[0-9a-f]{64}$/;
+const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+const attachmentNames = (bytes: Buffer) => {
+  const parsed = parseFrontMatter(bytes.toString("utf8"));
+  const listed = "fm" in parsed ? parsed.fm.attachments : undefined;
+  return (Array.isArray(listed) ? listed : []).map((a) => a.replace(/^[0-9a-f]{64} {2}/, "")).sort().join("\n");
+};
+
 export function checkImmutable(root: string, baseFiles: Map<string, Buffer>, problems: Problem[]) {
+  const merged = new Set<string>();
+  for (const [path, bytes] of baseFiles) if (path.startsWith("wiki/edits/")) for (const line of bytes.toString("utf8").split("\n")) merged.add(line.split("\t").slice(0, 3).join("\t"));
+  const waived = new Set<string>();
+  const edits = join(root, "wiki", "edits");
+  for (const name of existsSync(edits) && statSync(edits).isDirectory() ? readdirSync(edits).sort() : []) {
+    if (!name.endsWith(".tsv") || statSync(join(edits, name)).isDirectory()) continue;
+    readFileSync(join(edits, name), "utf8").split("\n").forEach((line, i) => {
+      if (line === "") return;
+      const p = (message: string) => problems.push({ file: "wiki/edits/" + name, line: i + 1, message });
+      const f = line.split("\t");
+      if (f.length !== 4) p("a waiver row is four tab-separated fields: path, sha256 before, sha256 after, reason");
+      else if (!DIGEST.test(f[1]) || !DIGEST.test(f[2])) p("a waiver digest must be 64 lowercase hex characters");
+      else if (!f[3].trim()) p("a waiver row needs a reason");
+      else if (merged.has(f.slice(0, 3).join("\t"))) return;
+      else if (!baseFiles.has(f[0])) p('waiver path "' + f[0] + '" is not a merged file at the base');
+      else if (!(f[0].split("/")[1] in SECTIONS) || !f[0].endsWith(".md")) p('waiver path "' + f[0] + '" is not a markdown file in a wiki section; a row may waive a post, a bundle README.md or a .md attachment');
+      else if (sha256(baseFiles.get(f[0])!) !== f[1] || !existsSync(join(root, f[0])) || sha256(readFileSync(join(root, f[0]))) !== f[2]) p('waiver row for "' + f[0] + '" matches no edit in this change: before must be its sha256 at the base and after its sha256 now');
+      else if (f[0].split("/").length === 4 && f[0].endsWith("/README.md") && attachmentNames(baseFiles.get(f[0])!) !== attachmentNames(readFileSync(join(root, f[0])))) p('waiver row for "' + f[0] + "\" changes the bundle's attachment names; a waived README keeps the attachments it had at the base");
+      else waived.add(f.slice(0, 3).join("\t"));
+    });
+  }
   for (const [path, before] of baseFiles) {
     const abs = join(root, path);
     if (!existsSync(abs)) {
@@ -295,7 +330,209 @@ export function checkImmutable(root: string, baseFiles: Map<string, Buffer>, pro
     }
     const now = readFileSync(abs);
     const changed = isEntryPath(path) ? stripStatus(before.toString("utf8")) !== stripStatus(now.toString("utf8")) : !before.equals(now);
-    if (changed) problems.push({ file: path, message: "merged post was edited; only its status may change (write a new post that supersedes it)" });
+    if (changed && !waived.has([path, sha256(before), sha256(now)].join("\t"))) problems.push({ file: path, message: "merged post was edited; only its status may change (write a new post that supersedes it)" });
+  }
+}
+
+export type EvalKind = "prereg" | "quick-look" | "results";
+
+export function evalKind(e: Entry): EvalKind | null {
+  const title = str(e, "title");
+  if (/-results(?:-v?\d+)?$/.test(e.id)) return "results";
+  if (e.id.endsWith("-quick-look") || /^quick look\b/i.test(title)) return "quick-look";
+  if (/-prereg(?:-v?\d+)?$/.test(e.id) || /^preregistration\b/i.test(title)) return "prereg";
+  return null;
+}
+
+function bodyLines(text: string): string[] {
+  const lines = text.split("\n");
+  const close = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
+  let fence = "";
+  let comment = false;
+  const visible = (l: string) => {
+    let kept = "";
+    let i = 0;
+    while (i < l.length) {
+      if (l.startsWith("<!--", i)) {
+        const end = l.indexOf("-->", i + 4);
+        if (end < 0) {
+          comment = true;
+          return kept;
+        }
+        i = end + 3;
+        continue;
+      }
+      const run = l.slice(i).match(/^`+/)?.[0];
+      if (!run) {
+        kept += l[i++];
+        continue;
+      }
+      const closer = new RegExp("(?<!`)" + run + "(?!`)", "g");
+      closer.lastIndex = i + run.length;
+      const shut = closer.exec(l);
+      const stop = shut ? shut.index + run.length : i + run.length;
+      kept += l.slice(i, stop);
+      i = stop;
+    }
+    return kept;
+  };
+  return lines.slice(close + 1).flatMap((l) => {
+    const f = l.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = "";
+      return [];
+    }
+    if (comment) {
+      const end = l.indexOf("-->");
+      if (end < 0) return [];
+      comment = false;
+      return [visible(l.slice(end + 3))];
+    }
+    if (f && !(f[1][0] === "`" && f[2].includes("`"))) {
+      fence = f[1];
+      return [];
+    }
+    return [visible(l)];
+  });
+}
+
+function sectionLines(lines: string[], name: string): string[] | null {
+  const head = new RegExp("^## +(?:\\d+[.)]? +)?" + name + "(?: *\\(.*\\))? *$", "i");
+  const start = lines.findIndex((l) => head.test(l));
+  if (start < 0) return null;
+  const end = lines.findIndex((l, i) => i > start && /^#{1,2} /.test(l));
+  return lines.slice(start + 1, end < 0 ? lines.length : end);
+}
+
+function labelled(lines: string[], name: string): string[] {
+  const re = new RegExp("^(?:[-*] )?" + name + ": *(.*)$", "i");
+  return lines.flatMap((l) => {
+    const m = l.match(re);
+    return m ? [m[1].trim()] : [];
+  });
+}
+
+function tableRows(lines: string[]): string[][] {
+  const rows: string[][] = [];
+  let inBody = false;
+  for (const l of lines) {
+    if (!l.startsWith("|")) inBody = false;
+    else if (/^\|(?:\s*:?-+:?\s*\|)+\s*$/.test(l)) inBody = true;
+    else if (inBody) rows.push(l.trim().replace(/^\||\|$/g, "").split(/(?<!\\)\|/).map((c) => c.trim()));
+  }
+  return rows;
+}
+
+const dollars = (s: string | undefined) => {
+  if ((s ?? "").split("$").length !== 2 || ((s ?? "").match(/\d[\d,.]*/g) ?? []).length !== 1) return null;
+  const m = (s ?? "").match(/\$ *(\d[\d,]*(?:\.\d+)?)([km])?(?![\d.,]*(?:[a-z]|\s+(?:[km]|thousand|million|billion)\b))/i);
+  return m ? Number(m[1].replaceAll(",", "")) * (m[2] ? (m[2].toLowerCase() === "k" ? 1e3 : 1e6) : 1) : null;
+};
+const labOf = (model: string) => {
+  const parts = model.toLowerCase().split("/").filter(Boolean);
+  return (parts[0] === "openrouter" && parts.length > 2 ? parts[1] : parts[0]) ?? "";
+};
+const blank = (s: string | undefined) => !s || /^(?:-|none|n\/a)$/i.test(s.trim());
+const HOW = " (wiki/README.md, Eval plans and results, gives the format)";
+
+const MORE_LABELS_FROM = "2026-11-22";
+
+function checkPrereg(lines: string[], date: string, p: (message: string) => void) {
+  const decision = sectionLines(lines, "Decisions?");
+  if (!decision) p('practice 1: no "## Decision" section naming what we do for each way the result could come out' + HOW);
+  else {
+    const outcomes = decision.filter((l) => /^[-*] If \S.*?: \S/.test(l)).length + tableRows(decision).filter((r) => r.filter((c) => c).length >= 2).length;
+    if (outcomes < 2) p('practice 1: "## Decision" names ' + outcomes + ' outcome(s); give at least two, as "- If <outcome>: <what we do>" lines or table rows' + HOW);
+  }
+
+  const judge = sectionLines(lines, "Judge check");
+  const judges = judge ? labelled(judge, "Judge") : [];
+  const emptyJudge = (j: string) => blank(j) && !/^none$/i.test(j);
+  const hasJudge = judges.some((j) => !blank(j));
+  if (!judge) p('practice 5: no "## Judge check" section; write "Judge: none" there when no model judge scores the run' + HOW);
+  else if (!judges.length) p('practice 5: "## Judge check" has no "Judge:" line; write "Judge: none" when no model judge scores the run' + HOW);
+  if (judges.some(emptyJudge)) p('practice 5: "Judge:" line is empty; write "Judge: none" or "<lab>/<model> scores <lab>/<model>"' + HOW);
+  if (judge && hasJudge) {
+    for (const j of judges.filter((j) => !emptyJudge(j))) {
+      const m = j.match(/^(\S+\/\S+) scores (.+)$/);
+      if (!m) {
+        p('practice 5: judge line "' + j + '" must read "<lab>/<model> scores <lab>/<model>[, ...]"' + HOW);
+        continue;
+      }
+      for (const scored of m[2].split(",").map((s) => s.trim())) {
+        if (!/^\S+\/\S+$/.test(scored)) p('practice 5: scored model "' + scored + '" must be written <lab>/<model>' + HOW);
+        else if (labOf(scored) === labOf(m[1])) p('practice 5: judge "' + j.split(" ")[0] + '" is from the same model family as "' + scored + '" it scores; use a judge from another lab');
+      }
+    }
+    const labels = Number(labelled(judge, "Labelled outputs")[0]?.replaceAll(",", "").match(/^\d+/)?.[0] ?? NaN);
+    const later = date >= MORE_LABELS_FROM;
+    const floor = later ? 100 : 40;
+    const why = later ? "the plan is dated " + MORE_LABELS_FROM + " or later (plans dated earlier need 40)" : "the plan is dated before " + MORE_LABELS_FROM + " (plans dated " + MORE_LABELS_FROM + " or later need 100)";
+    if (!(labels >= floor)) p('practice 5: "Labelled outputs:" must give at least ' + floor + " labelled outputs for the judge check, because " + why + HOW);
+    const kappa = Number(labelled(judge, "Kappa at least")[0]?.match(/^\d*\.?\d+/)?.[0] ?? NaN);
+    if (!(kappa >= 0.6)) p('practice 5: "Kappa at least:" must be 0.6 or more' + HOW);
+    if (!/^per arm\b/i.test(labelled(judge, "Errors read")[0] ?? "")) p('practice 5: "Errors read: per arm" is missing; the judge\'s errors are read per arm, not pooled' + HOW);
+  }
+
+  const pilots = sectionLines(lines, "Pilots");
+  const rows = pilots ? tableRows(pilots) : [];
+  if (!pilots) p('practice 3: no "## Pilots" section with one row per arm' + HOW);
+  else if (!rows.length) p('practice 3: "## Pilots" has no table rows; give one row per arm: Arm | Budget | Pilot cap | Part ran | Judge check | Supply' + HOW);
+  for (const r of rows) {
+    if (r.length !== 6) {
+      p('practice 3: pilot row "' + r.join(" | ") + '" needs six cells: Arm | Budget | Pilot cap | Part ran | Judge check | Supply' + HOW);
+      continue;
+    }
+    const [arm, budgetCell, pilotCell, ran, judged, supply] = r;
+    const budget = dollars(budgetCell);
+    const pilot = dollars(pilotCell);
+    if (budget === null || pilot === null) p('practice 3: arm "' + arm + '" needs its budget and pilot cap in dollars, such as $400 and $40');
+    else if (pilot * 10 > budget + 1e-9) p('practice 3: arm "' + arm + '" pilot cap $' + pilot + " is more than a tenth of its budget $" + budget);
+    if (blank(ran)) p('practice 3: arm "' + arm + '" does not say how its pilot shows the part under test ran');
+    if (blank(supply)) p('practice 3: arm "' + arm + '" does not say how its pilot shows the tasks can be supplied at the planned rate');
+    if (hasJudge && blank(judged)) p('practice 3: arm "' + arm + '" does not say how its pilot shows the judge passes its check on this arm\'s outputs');
+  }
+
+  const look = sectionLines(lines, "Interim look");
+  if (!look) {
+    p('practice 6: no "## Interim look" section with a "Planned paid spend:" line' + HOW);
+    return;
+  }
+  const spend = dollars(labelled(look, "Planned paid spend")[0]);
+  if (spend === null) p('practice 6: "## Interim look" needs "Planned paid spend: $<n>", the largest counted run\'s planned paid spend' + HOW);
+  else if (spend > 500) {
+    if (!/\bhalf\b/i.test(labelled(look, "At")[0] ?? "")) p('practice 6: a run planned above $500 paid needs "At: half the units ..." for its one look' + HOW);
+    if (blank(labelled(look, "Stop bounds")[0])) p('practice 6: a run planned above $500 paid needs "Stop bounds:" fixed in the plan' + HOW);
+    if (!/^none\b/i.test(labelled(look, "Other looks")[0] ?? "")) p('practice 6: a run planned above $500 paid needs "Other looks: none"' + HOW);
+  }
+}
+
+function checkQuickLook(lines: string[], p: (message: string) => void) {
+  const q = sectionLines(lines, "Quick look");
+  if (!q) {
+    p('quick look: no "## Quick look" section with its three-line plan (Question, Decision, Stop rule)' + HOW);
+    return;
+  }
+  for (const name of ["Question", "Decision", "Stop rule"]) if (blank(labelled(q, name)[0])) p('quick look: "' + name + ':" line is missing or empty' + HOW);
+  const cap = dollars(labelled(q, "Paid cap")[0]);
+  if (cap === null) p('quick look: "Paid cap: $<n>" is missing' + HOW);
+  else if (cap > 100) p("quick look: paid cap $" + cap + " is above $100, so this is a counted run and needs a preregistration (id ending -prereg)");
+  const days = Number(labelled(q, "Days")[0]?.match(/^\d*\.?\d+/)?.[0] ?? NaN);
+  if (!(days > 0)) p('quick look: "Days: 1" is missing' + HOW);
+  else if (days > 1) p("quick look: " + days + " days is longer than one day, so this is a counted run and needs a preregistration (id ending -prereg)");
+}
+
+const CALL_SETTLED = /^Call settled: \S/;
+
+export function checkPractices(root: string, entries: Entry[], baseFiles: Map<string, Buffer>, problems: Problem[]) {
+  for (const e of entries) {
+    const kind = evalKind(e);
+    if (!kind || baseFiles.has(e.path)) continue;
+    const lines = bodyLines(readFileSync(join(root, e.path), "utf8"));
+    const p = (message: string) => problems.push({ file: e.path, message });
+    if (kind === "prereg") checkPrereg(lines, str(e, "date"), p);
+    else if (kind === "quick-look") checkQuickLook(lines, p);
+    else if (!lines.some((l) => CALL_SETTLED.test(l))) p('practice 12: no "Call settled: <the ship-or-kill call, or none>" line' + HOW);
   }
 }
 
@@ -349,7 +586,10 @@ export function checkWiki(root: string, opts: { baseFiles?: Map<string, Buffer> 
   } else if (tracked.out.toString().trim()) {
     problems.push({ file: "wiki/INDEX.md", message: "generated, so it must not be committed; run git rm --cached wiki/INDEX.md" });
   }
-  if (opts.baseFiles) checkImmutable(root, opts.baseFiles, problems);
+  if (opts.baseFiles) {
+    checkImmutable(root, opts.baseFiles, problems);
+    checkPractices(root, entries, opts.baseFiles, problems);
+  }
   return { entries, problems };
 }
 

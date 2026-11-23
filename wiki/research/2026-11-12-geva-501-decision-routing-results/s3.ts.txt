@@ -1,0 +1,115 @@
+// S3 decision share on the scored N sessions (prereg section 11): the share of N's dollars and of its time spent in turns
+// that edit no file, by kind. Turn classification and dollar alignment are admission.ts's, as admit-cli.ts used them on
+// calibration: one turn per assistant message of mini's trajectory, priced by the session's completed (2xx) main-model
+// calls in order, kind from turnKind (edit, submit, test, search, read, other); a session whose assistant messages and
+// 2xx calls don't align is left out and counted.
+// Time (not in admit-cli.ts, which reads dollars only): a turn runs from the end of the previous turn's last observation
+// (the session's t0 = end_ts - session_ms for the first turn) to the end of its own last observation (extra.timestamp
+// of the tool or user messages after it); the last turn ends at end_ts. So the turns partition session_ms exactly,
+// and each turn carries its own model call plus its own command execution.
+// Intervals: clusterRatio (sum of the part over sum of the whole) over repository clusters, seed 20261111, 10,000 draws.
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { turnsOf } from "$WORK/wt/lanes/decision-routing/score/admission.ts";
+import { bare, parse } from "$WORK/wt/lanes/decision-routing/labels/shell.ts";
+import { load, graded, cellOf, planned, callUsd, clusterRatio, BOOT, meterOf, summaryOf, trajectoryOf, noCache, loadPrices, PRICES, save, type Loaded } from "./lib.ts";
+
+const KINDS = ["edit", "submit", "test", "search", "read", "other"] as const;
+
+// Supplement, not the frozen classification: turnKind reads search and read from the first program of a turn's command,
+// and nearly every command starts "cd /testbed && ...", so cd-prefixed searches and reads land in other. This splits the
+// other turns by the programs after any leading cd (each pipeline's first program, path stripped), with copies of
+// admission.ts's SEARCHERS and READERS sets plus echo, pwd, sort, uniq and read-only git subcommands.
+const SEARCHERS = new Set(["grep", "egrep", "rg", "ag", "find", "ls", "tree", "locate", "fd"]);
+const READERS = new Set(["cat", "head", "tail", "nl", "less", "more", "wc", "sed", "awk", "diff", "stat"]);
+export const OTHER_SPLIT = ["search or read after cd", "python or other interpreter", "git", "sleep", "rest"] as const;
+const LOOK = new Set([...SEARCHERS, ...READERS, "echo", "pwd", "sort", "uniq", "git show", "git diff", "git grep", "git log", "git status"]);
+function otherSplit(commands: readonly string[]): (typeof OTHER_SPLIT)[number] {
+  const progs = commands.flatMap((c) => parse(c).map((pipe) => { const w = bare(pipe[0]?.words ?? []); const p = (w[0] ?? "").split("/").pop() ?? ""; return p === "git" ? "git " + (w[1] ?? "") : p; })).filter((w) => w && w !== "cd");
+  const first = progs[0] ?? "";
+  if (progs.length && progs.every((w) => LOOK.has(w))) return "search or read after cd";
+  if (/^(python[0-9.]*|perl|ruby|node|bash|sh)$/.test(first)) return "python or other interpreter";
+  if (first.startsWith("git ")) return "git";
+  if (first === "sleep") return "sleep";
+  return "rest";
+}
+
+const ALL = [...KINDS, ...OTHER_SPLIT.map((k) => "other: " + k)];
+
+export function s3(L: Loaded) {
+  const res: Record<string, any> = {};
+  for (const model of ["opus", "sol"]) {
+    const n = graded(cellOf(L.sessions, "N", model, planned));
+    const per: Array<{ repo: string; usd: Record<string, number>; ms: Record<string, number>; turns: Record<string, number>; total_usd: number; total_ms: number }> = [];
+    let unaligned = 0, notPartitioned = 0;
+    for (const s of n) {
+      const calls = (L.calls.get(meterOf(s)) ?? []).filter((c) => c.status !== null && c.status >= 200 && c.status < 300).map((c) => callUsd(c, L.prices));
+      const traj = trajectoryOf(s);
+      const t = traj ? turnsOf(traj, calls) : { turns: [], aligned: false };
+      if (!t.aligned) { unaligned++; continue; }
+      const sum = summaryOf(s);
+      const msgs = traj.messages as any[];
+      const idx = msgs.map((m, i) => (m.role === "assistant" ? i : -1)).filter((i) => i >= 0);
+      const t0 = sum.end_ts - sum.session_ms / 1000;
+      let prev = t0;
+      const ms: number[] = [];
+      idx.forEach((i, k) => {
+        let end: number;
+        if (k === idx.length - 1) end = sum.end_ts;
+        else {
+          const next = idx[k + 1]!;
+          const obs = msgs.slice(i + 1, next).map((m) => m.extra?.timestamp).filter((x) => typeof x === "number");
+          end = obs.length ? Math.max(...obs) : (msgs[i].extra?.timestamp ?? prev);
+        }
+        ms.push(Math.max(0, end - prev) * 1000);
+        prev = Math.max(prev, end);
+      });
+      const total_ms = ms.reduce((a, b) => a + b, 0);
+      if (Math.abs(total_ms - sum.session_ms) > 1000) notPartitioned++;
+      const usd: Record<string, number> = {}, kms: Record<string, number> = {}, turns: Record<string, number> = {};
+      const assistant = msgs.filter((m) => m.role === "assistant");
+      t.turns.forEach((tu, k) => {
+        const keys = [tu.kind, ...(tu.kind === "other" ? ["other: " + otherSplit((assistant[k].extra?.actions ?? []).map((a: any) => a.command ?? ""))] : [])];
+        for (const key of keys) { usd[key] = (usd[key] ?? 0) + tu.usd; kms[key] = (kms[key] ?? 0) + ms[k]!; turns[key] = (turns[key] ?? 0) + 1; }
+      });
+      per.push({ repo: s.repo, usd, ms: kms, turns, total_usd: t.turns.reduce((a, b) => a + b.usd, 0), total_ms });
+    }
+    const share = (f: (p: (typeof per)[number]) => number, g: (p: (typeof per)[number]) => number) => {
+      const r = clusterRatio(per.map((p) => ({ cluster: p.repo, a: g(p), b: f(p) })), BOOT);
+      return { share: r.ratio, ci: r.ci95 };
+    };
+    const noEditUsd = (p: (typeof per)[number]) => p.total_usd - (p.usd.edit ?? 0), noEditMs = (p: (typeof per)[number]) => p.total_ms - (p.ms.edit ?? 0);
+    const row: Record<string, any> = {
+      sessions_graded: n.length, sessions_read: per.length, unaligned, not_partitioned_within_1s: notPartitioned,
+      mean_usd: per.reduce((a, p) => a + p.total_usd, 0) / per.length, mean_s: per.reduce((a, p) => a + p.total_ms, 0) / per.length / 1000,
+      turns: Object.fromEntries(ALL.map((k) => [k, per.reduce((a, p) => a + (p.turns[k] ?? 0), 0)])),
+      dollars_no_edit: share(noEditUsd, (p) => p.total_usd), time_no_edit: share(noEditMs, (p) => p.total_ms),
+      dollars_by_kind: Object.fromEntries(ALL.map((k) => [k, share((p) => p.usd[k] ?? 0, (p) => p.total_usd)])),
+      time_by_kind: Object.fromEntries(ALL.map((k) => [k, share((p) => p.ms[k] ?? 0, (p) => p.total_ms)])),
+    };
+    res[model] = row;
+  }
+  return res;
+}
+
+const pct = (x: { share: number; ci: [number, number] | null }) => (100 * x.share).toFixed(1) + "% (" + (x.ci ? (100 * x.ci[0]).toFixed(1) + " to " + (100 * x.ci[1]).toFixed(1) : "no interval") + ")";
+export function printS3(res: Record<string, any>, title: string): string[] {
+  const lines = ["## " + title, ""];
+  for (const [m, r] of Object.entries(res)) {
+    lines.push("### " + m + ": " + r.sessions_read + " of " + r.sessions_graded + " graded N sessions read (" + r.unaligned + " not aligned to the journal; " + r.not_partitioned_within_1s + " whose turn times miss session_ms by over 1 s); mean $" + r.mean_usd.toFixed(3) + " and " + r.mean_s.toFixed(1) + " s a session", "");
+    lines.push("turns that edit no file: " + pct(r.dollars_no_edit) + " of dollars, " + pct(r.time_no_edit) + " of session time", "");
+    lines.push("| kind | turns | share of dollars (95% interval) | share of time (95% interval) |", "|---|---|---|---|");
+    for (const k of ALL) lines.push("| " + (k.startsWith("other: ") ? "(supplement) " + k : k) + " | " + r.turns[k] + " | " + pct(r.dollars_by_kind[k]) + " | " + pct(r.time_by_kind[k]) + " |");
+    lines.push("");
+  }
+  return lines;
+}
+
+if (import.meta.main) {
+  const L = load();
+  const cached = s3(L);
+  const nc = s3(load(noCache(loadPrices(PRICES)), L.calls));
+  const lines = [...printS3(cached, "S3 at the dated prices (2026-11-08), caching on"), ...printS3(nc, "S3 with caching priced away (S6 view)")];
+  save("s3", lines.join("\n"), { cached, no_cache: nc });
+  console.log(lines.join("\n"));
+}

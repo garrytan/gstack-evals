@@ -1,0 +1,7 @@
+jev next_step: 0 labelled, ECE none (under 100)
+jev relevant: 5388 labelled, ECE 0.097
+jev tests_passed: 5 labelled, ECE none (under 100)
+jev safe: 11233 labelled, ECE 0.041
+jev done: 853 labelled, ECE 0.151
+bands: {"jev":{"next_step":{"edge":null},"tests_passed":{"edge":null},"done":{"edge":null},"safe":{"block_edge":0.5,"allow_edge":0.5},"relevant":{"drop_edge":null}},"particle_guess":{"next_step":{"edge":null},"relevant":{"drop_edge":null}},"particle_noguess":{"next_step":{"edge":null},"relevant":{"drop_edge":null}}}
+rewrite once: done (Jev right on 54.3% of 853); 853 states to re-answer by jev, particle_guess, particle_noguess

@@ -1,0 +1,3 @@
+https://github.com/amir20/dozzle at 98cc240e9940e7105e50368a9134d10913c74a7b
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

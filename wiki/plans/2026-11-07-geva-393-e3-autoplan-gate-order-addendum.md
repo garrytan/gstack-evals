@@ -120,6 +120,8 @@ The early stop ends a failing check at its second not-exposed session, so a FAIL
 
 ## 6. Money
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 | Item | Charged to | Cap | Expected |
 |---|---|---|---|
 | ap-e3, model calls: 4 sessions and at most 1 gap rerun | autoplan | $343 | $40 to $100 |

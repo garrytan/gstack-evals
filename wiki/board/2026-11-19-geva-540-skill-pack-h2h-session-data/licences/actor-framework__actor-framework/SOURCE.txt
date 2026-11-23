@@ -1,0 +1,3 @@
+https://github.com/actor-framework/actor-framework at 807dfbba0afec0db42168618ae24223c00c136c3
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): BSD-3-Clause
+Root licence and notice files at that commit: LICENSE

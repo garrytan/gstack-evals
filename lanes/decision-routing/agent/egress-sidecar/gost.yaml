@@ -1,0 +1,31 @@
+# harbor: Copyright (c) Harbor Framework Team. Licensed under the Apache License 2.0 (LICENSE in this folder).
+# harbor: Vendored from https://github.com/harbor-framework/harbor at f3a5a923f6d722472c9e797af836ae4425fb215f,
+# harbor: src/harbor/environments/docker/harbor-docker-egress-control-sidecar/gost.yaml.
+# harbor: Changed: these header lines, and the handler's readTimeout: 900s line. gost's redirect handler closes a
+# harbor: connection whose response has not started within readTimeout, 15s when unset; 900s matches the metering
+# harbor: proxy's own upstream deadline (src/runner/proxy/metering-proxy.ts UPSTREAM_DEADLINE_MS).
+# addr, so_mark, and file.path must stay in sync with the constants in
+# bin/network-policy (GOST_PORT, GOST_MARK, ALLOWLIST); the `reload` interval
+# must stay below RELOAD_WAIT there.
+services:
+  - name: transparent-egress
+    addr: ":12345"
+    bypass: allowlist
+    metadata:
+      so_mark: 114514
+    handler:
+      type: red
+      metadata:
+        sniffing: true
+        readTimeout: 900s
+        sniffing.timeout: 5s
+        sniffing.fallback: true
+    listener:
+      type: red
+
+bypasses:
+  - name: allowlist
+    whitelist: true
+    reload: 1s
+    file:
+      path: /opt/egress-sidecar/allowlist.txt

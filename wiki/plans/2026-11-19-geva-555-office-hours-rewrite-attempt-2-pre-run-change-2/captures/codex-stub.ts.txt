@@ -1,0 +1,34 @@
+// Keyless stub of the OpenAI Responses API for the token-shape captures: records every request body (auth headers dropped)
+// and streams one assistant message whose text is the next entry of a replies file, so later requests carry replies of
+// realistic length. Usage numbers in its events are placeholders; token counts come from the recorded request bodies.
+import { appendFileSync, readFileSync } from "node:fs";
+const out = process.argv[2]!;
+const port = Number(process.argv[3]);
+const replies = JSON.parse(readFileSync(process.argv[4]!, "utf8")) as string[];
+const model = "gpt-6.1-sol";
+let n = 0;
+Bun.serve({
+  port,
+  hostname: "127.0.0.1",
+  async fetch(req) {
+    const url = new URL(req.url);
+    const body = req.method === "POST" ? await req.text() : "";
+    appendFileSync(out, JSON.stringify({ method: req.method, path: url.pathname, headers: Object.fromEntries([...req.headers].filter(([k]) => !/authorization|api-key|cookie/i.test(k))), body: body ? JSON.parse(body) : null }) + "\n");
+    if (!url.pathname.endsWith("/responses")) return Response.json({ object: "list", data: [] });
+    const text = replies[n % replies.length]!;
+    n++;
+    const id = "resp_stub_" + n;
+    const usage = { input_tokens: 1000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 100, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 1100 };
+    const item = { id: "msg_" + n, type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] };
+    const ev = (type: string, data: object) => "event: " + type + "\ndata: " + JSON.stringify({ type, ...data }) + "\n\n";
+    const stream = [
+      ev("response.created", { response: { id, object: "response", model, status: "in_progress", output: [] } }),
+      ev("response.output_item.added", { output_index: 0, item: { ...item, status: "in_progress", content: [] } }),
+      ev("response.output_text.delta", { item_id: item.id, output_index: 0, content_index: 0, delta: text }),
+      ev("response.output_item.done", { output_index: 0, item }),
+      ev("response.completed", { response: { id, object: "response", model, status: "completed", output: [item], usage } }),
+    ].join("");
+    return new Response(stream, { headers: { "content-type": "text/event-stream" } });
+  },
+});
+console.log("stub listening on " + port);

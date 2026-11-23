@@ -17,7 +17,7 @@ links:
   - 2026-10-27-gsta-4-public-task-sourcing
   - lanes/review-noloss/README.md
   - src/trial/review/told.ts
-source: "Plan reviewed by gstack /autoplan run autoplan-20261031164739 (plan snapshot sha256 0456ae414549101a2b29089ab4efc5107155e1de40ebac1c3768b2f154942549), approved at gate_rev 1 with Garry's reply 'Do it', relayed by the Captain (GEVA-2). The Implementation plan section is the reviewed text. review-record.md is the run's public export with em dashes replaced by hyphens; dryrun.md is the keyless dry-run report with machine paths shortened to $D."
+source: "Plan reviewed by gstack /autoplan run autoplan-20261031164739 (plan snapshot sha256 0456ae414549101a2b29089ab4efc5107155e1de40ebac1c3768b2f154942549), approved at gate_rev 1 with Garry's approval, relayed by the Captain (GEVA-2). The Implementation plan section is the reviewed text. review-record.md is the run's public export with em dashes replaced by hyphens; dryrun.md is the keyless dry-run report with machine paths shortened to $D."
 attachments:
   - 4d0a8efaa2fd844e1abfa77d896e314c7670e562ecf3ef796203c3fb848792f7  dryrun.md
   - d0492a1e7aa4c497b94f669b792169936c31d36b304b29bf7cf7f7e94a34f213  review-record.md
@@ -26,13 +26,13 @@ attachments:
 
 Plan v1, 2026-10-31. Author GEVA-79 for the gstack-evals Captain (GEVA-2), working for Garry Tan, issue GST-515.
 
-Garry, 2026-10-31, after the review no-loss lane showed gstack's full review finding 33 of 41 known bugs against 13 for plain Opus: "Ok great. At least we are better at that. Can we show we are better at planning too?" Then, the same day: "I think that the plan and review is extremely important. Plan CEO review, I use very, very frequently and rely on it. Plan design review is great for UX and design, and plan DevEx review is really important for API companies. So, these things are really important and you shouldn't forget about them."
+Garry, 2026-10-31, after the review no-loss lane showed gstack's full review finding 33 of 41 known bugs against 13 for plain Opus, asked whether we can show gstack is better at planning too. The same day he said the plan reviews matter a great deal: he uses the CEO plan review very often and relies on it, the design review is good for UX and design, and the DevEx review matters a lot for API companies, so none of them should be forgotten.
 
 Inputs read: the GSTA-167 no-loss results and prereg (org drive handoffs/GSTA-167/noloss7-results.md, noloss-prereg.md), the review-noloss plan and lane code, the stacks round 1 plan, prereg and review record, the Lane A shakedown prereg, addenda and rerun results, the Lane A grader audit, Lane B quick look 3, the public task sourcing brief, the U14 mining rules, gstack's planning skills at v1.91.373.0, and every plan in wiki/plans/ with its review record. Nothing here builds the lane or spends money.
 
 ## Approval
 
-Approved at autoplan gate_rev 1 (run autoplan-20261031164739, rec_hash 5a84ff4b90cf) on 2026-10-31. Garry's reply, relayed by the Captain (GEVA-2, GST-515): "Do it". That takes every recommendation: A1 keeps standalone /plan-ceo-review as the gstack arm, with the harness fixes in item 3 below; B1 keeps a single reading, with the panel and harness reusable by the before/after skill eval later; C1 keeps the plan's direction, with power gates as rules (item 9); D1 adds no Sonnet cell until a lens shows a gain; E1 approves. The review ran one round per phase (CEO and Eng, two voices each: Opus 5.5 native, gpt-6.1-sol outside; UI and DX scope off), so findings left open at the cap are listed in the next section.
+Approved at autoplan gate_rev 1 (run autoplan-20261031164739, rec_hash 5a84ff4b90cf) on 2026-10-31. Garry approved it, relayed by the Captain (GEVA-2, GST-515). That takes every recommendation: A1 keeps standalone /plan-ceo-review as the gstack arm, with the harness fixes in item 3 below; B1 keeps a single reading, with the panel and harness reusable by the before/after skill eval later; C1 keeps the plan's direction, with power gates as rules (item 9); D1 adds no Sonnet cell until a lens shows a gain; E1 approves. The review ran one round per phase (CEO and Eng, two voices each: Opus 5.5 native, gpt-6.1-sol outside; UI and DX scope off), so findings left open at the cap are listed in the next section.
 
 ## Open at approval: what the build and the prereg must settle
 
@@ -111,8 +111,8 @@ gstack's planning skills at v1.91.373.0, with exact names: /office-hours (the co
 | Round | Skill under test | Reading | Why this order |
 |---|---|---|---|
 | R1a | /plan-ceo-review | Known-flaw replay, CEO panel | Garry's most used; cheapest convincing reading; scorer exists |
-| R1b | /plan-ceo-review | Downstream: fixed builder, hidden tests | Answers "does it help get tasks done" for the lens Garry relies on |
-| R2 | /plan-devex-review | Replay, then downstream with a fixed developer agent | Garry: "really important for API companies"; downstream fits devex best |
+| R1b | /plan-ceo-review | Downstream: fixed builder, hidden tests | Answers whether it helps get tasks done, for the lens Garry relies on |
+| R2 | /plan-devex-review | Replay, then downstream with a fixed developer agent | Garry rates it highly for API companies; downstream fits devex best |
 | R3 | /plan-design-review | Replay, design panel | UI plans need a UI panel; downstream design needs DOM tests, deferred |
 | R4 | /plan-eng-review, /autoplan, /office-hours | Eng replay; /autoplan on a mixed panel; office-hours corrected | Eng has the most real flaws; /autoplan costs most per session |
 
@@ -164,7 +164,7 @@ Taxonomies, written here from general product, API, design and engineering pract
 | Design | no empty, loading or error state; the main action is not obvious; accessibility gaps (contrast, keyboard, labels) | mobile ignored; breaks the stated design system; destructive action with no confirm or undo; flow forces backtracking |
 | Eng | a race or concurrency hole; a migration that can lose data; no failure handling for an external call; a security boundary crossed | the test plan misses the risky path; unbounded work or N+1 reads; an interface that does not match existing code; no rollout or rollback |
 
-Each seeded CEO plan carries one "wrong thing" flaw and one "right thing badly" flaw, which is Garry's framing of what the CEO review should catch.
+Each seeded CEO plan carries one "wrong thing" flaw and one "right thing badly" flaw, the two kinds of flaw the CEO review should catch.
 
 ### 5. Outcomes, ranked by how directly they show a better plan
 
@@ -206,6 +206,8 @@ Claims:
 
 ### 9. Cost, with sources
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 Unit prices and per-session anchors:
 
 | Item | Figure | Source |
@@ -236,6 +238,8 @@ R1a CEO replay, 34 scored units (24 seeded, 3 real, 6 decoys, plus the real flaw
 Later rounds, estimated the same way: R1b CEO downstream about $470 (192 builder sessions at an estimated $2, reviews $74; cap $800). R2 devex about $830 (replay $300, downstream $530 including the Haiku developer agent at about $0.10 per integration task; cap $1,300). R3 design replay about $300 (cap $550). R4 about $1,250: eng replay $300, /autoplan told on a mixed panel of 30 units at 2 passes and an estimated $15 per Opus session $900, office-hours corrected $12, judges $40 (cap $2,000). Every number here is an estimate to be replaced by the round's pilot; spend runs only through the ledger.
 
 ### 10. Cap, stops and start rule
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 - Each round runs only after its prereg PR merges and the Captain records the cap (org R42: the Captain approves up to $5,000 per thread). Preregistration and results never share a PR.
 - Ledger cap stop: the run ends incomplete and is never retried to change a verdict. A rerun needs a named repair.

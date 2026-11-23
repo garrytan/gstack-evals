@@ -20,7 +20,7 @@ Use Terminal-Bench 2.0 only (`terminal-bench@2.0` in Harbor's registry), with th
 
 The main caveat: Terminal-Bench 2.0 is close to saturated for the newest frontier models in the published data (Claude Opus 4.7 and GPT-5.5, April to May 2026). Only 10 tasks meet the full target window (frontier passes sometimes, cheap models mostly fail) and also fit the cost limits. The other 10 slots go to tasks that Opus 4.7 and GPT-5.5 already pass 72 to 93% of the time, and most of them are also easier for cheap models. Expect Opus 5.5 at or near ceiling on most of ranks 11 to 20. Report Opus 5.5 lift on ranks 1 to 10 separately.
 
-Estimated cost per trial: Opus 5.5 about $1.29, Haiku 5.5 about $0.05 to $0.24, DeepSeek V4.1 Flash 1017 about $0.05 to $0.16. The whole run (Opus 1 trial, cheap models 2 trials, 3 arms, 20 tasks) comes to about $150 under planning assumptions and about $251 under pessimistic ones, against the $190 cap. Gate the full run on a measured Opus 5.5 cost per trial (see "Cost estimate").
+Estimated cost per trial: Opus 5.5 about $1.29, Haiku 5.5 about $0.05 to $0.24, DeepSeek V4.1 Flash 1017 about $0.05 to $0.16. Gate the full run on a measured Opus 5.5 cost per trial (see "Cost estimate").
 
 ## Sources
 
@@ -167,14 +167,7 @@ Each task's token profile is WOZCODE's Opus 4.7 median per trial. Across the 20 
 
 ### Whole run
 
-20 tasks, 3 arms, Opus 1 trial, Haiku and DeepSeek 2 trials each:
-
-| Scenario | Opus 5.5 | Haiku 5.5 | DeepSeek | Total |
-|---|---|---|---|---|
-| Planning: gstack and placebo arms cost 1.3x the none arm | $93 | $35 | $22 | $150 |
-| High: skill arms 1.5x, and everything 1.5x again for model and harness uncertainty | $155 | $58 | $37 | $251 |
-
-Planning fits the $190 cap with about $40 to spare. High does not. The Opus cells carry most of the risk. A suggested gate: run the none arm on Opus for 2 or 3 list tasks first and read the real cost per trial. If the mean is above about $1.60, cut Opus to ranks 1 to 13 or to the 10 tier A tasks before running the skill arms. The Haiku figure depends mostly on whether prompts cross 100k tokens, which short TB 2.0 tasks mostly should not.
+The whole-run scenarios (20 tasks, 3 arms, Opus 1 trial, Haiku and DeepSeek 2 trials each) and their costs are in Agent notes. The planning scenario fits the cap. The high scenario does not. The Opus cells carry most of the risk. A suggested gate: run the none arm on Opus for 2 or 3 list tasks first and read the real cost per trial. If the mean is above the threshold given in Agent notes, cut Opus to ranks 1 to 13 or to the 10 tier A tasks before running the skill arms. The Haiku figure depends mostly on whether prompts cross 100k tokens, which short TB 2.0 tasks mostly should not.
 
 These estimates are rough. Each task's token profile rests on 5 trials from one harness. Opus 5.5 may think more or less than Opus 4.7. Claude Code adds its own system prompt and tool definitions, and the skill arms add skill text and possibly extra steps.
 
@@ -222,3 +215,23 @@ This note is wiki/research/2026-10-28-gsta-12-tb2-task-selection.md. Every other
 - internet_labels.json: network class and evidence for every TB 2.0 task.
 - Scripts, all in quick/laneb/tasks/: flatten_tb2.py, fetch_registry.py, label_network.py, check_images.py, prescreen_tb2.py, build_tasks_json.py, digest_tasks.py, prescreen_swebv.py, cost_estimate.py, report_tables.py.
 - quick/laneb/tasks/raw/: downloaded data and intermediate tables that the steps above write. Do not commit it. It holds third-party result files, some of which carried leaked credentials upstream.
+
+<details>
+<summary>Agent notes</summary>
+
+**From the Recommendation section**
+
+The whole run (Opus 1 trial, cheap models 2 trials, 3 arms, 20 tasks) comes to about $150 under planning assumptions and about $251 under pessimistic ones, against the $190 cap. Gate the full run on a measured Opus 5.5 cost per trial (see "Cost estimate").
+
+**Whole run**
+
+20 tasks, 3 arms, Opus 1 trial, Haiku and DeepSeek 2 trials each:
+
+| Scenario | Opus 5.5 | Haiku 5.5 | DeepSeek | Total |
+|---|---|---|---|---|
+| Planning: gstack and placebo arms cost 1.3x the none arm | $93 | $35 | $22 | $150 |
+| High: skill arms 1.5x, and everything 1.5x again for model and harness uncertainty | $155 | $58 | $37 | $251 |
+
+Planning fits the $190 cap with about $40 to spare. High does not. The Opus cells carry most of the risk. A suggested gate: run the none arm on Opus for 2 or 3 list tasks first and read the real cost per trial. If the mean is above about $1.60, cut Opus to ranks 1 to 13 or to the 10 tier A tasks before running the skill arms. The Haiku figure depends mostly on whether prompts cross 100k tokens, which short TB 2.0 tasks mostly should not.
+
+</details>

@@ -1,0 +1,79 @@
+Stage 2 comparison (#214, as amended)
+Frozen plan: the projection output's sha256 01fd5e8dc4b4b56c3b317afce0f4d9f92727097149fa877394d96669ceff9f57 matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form norem; family, passes, held passes and lens match its PASS line
+Units: the first 84 of 84 changed units (last <unit>) and the first 28 of 30 held units (last <unit>) of the seeded order, as the PASS line names them
+MDD: stage2-sizing.txt's 2c grid at ICC 0.843, the logit model and alpha 0.025, read at its control rate 0.50 on every model, n rounded down to a grid row (decides nothing)
+Leak drops: 0; changed units 84, held 28; MDD at Holm's first step for this n 0.09
+Stock rows: hit D on 0 of 84 changed units (at most 3)
+Stock fix: scores rem on 0 of 84 keyed changed units (at most 3); G_R form norem
+Agreement, Sol vs Opus on D: n 4577; both D 270, Sol only 29, Opus only 102, neither 4176; positive agreement on D 0.805, raw 0.971, PABAK 0.943, kappa 0.790
+Agreement, Sol vs Opus on rem: n 3982, both yes 52, Sol only 8, Opus only 38, positive agreement 0.693 (decides nothing in stage 2)
+Model opus: none hit@3 0.341 on 167 unit-passes at 2 passes; Holm family standalone, enforced
+  standalone - none: 0.343 - 0.343 = +0.000, 95% CI n/a, p 1.000 (degenerate), Holm p 1.000, exposure 0.825, coverage 0.988 -> not distinguished (below grid: MDD at least 0.18)
+    cross-family judge (sol) alone: -0.006 (decides nothing)
+    G_R (secondary): -0.002, 95% CI n/a, Holm p 1.000, coverage 0.988, not distinguished (MDD n/a, under 36 units) (decides nothing)
+    G_R bounds: no unjudged rem on opus's changed units
+  enforced - none: 0.341 - 0.341 = +0.000, 95% CI n/a, p 1.000 (degenerate), Holm p 1.000, exposure 0.857, coverage 0.994 -> not distinguished (below grid: MDD at least 0.18)
+    cross-family judge (sol) alone: -0.012 (decides nothing)
+    G_R (secondary): +0.008, 95% CI n/a, Holm p 1.000, coverage 0.994, not distinguished (MDD n/a, under 36 units) (decides nothing)
+    G_R bounds: no unjudged rem on opus's changed units
+Model sol: none hit@3 0.155 on 84 unit-passes at 1 pass; Holm family standalone, enforced
+  standalone - none: 0.155 - 0.155 = +0.000, 95% CI n/a, p 1.000 (degenerate), Holm p 1.000, exposure 1.000, coverage 1.000 -> not distinguished (below grid: MDD at least 0.25)
+    cross-family judge (opus) alone: +0.012 (decides nothing)
+    G_R (secondary): -0.016, 95% CI n/a, Holm p 1.000, coverage 1.000, not distinguished (MDD n/a, under 36 units) (decides nothing)
+    G_R bounds: no unjudged rem on sol's changed units
+  enforced - none: 0.190 - 0.155 = +0.036, 95% CI n/a, p 1.000 (degenerate), Holm p 1.000, exposure 1.000, coverage 1.000 -> not distinguished (below grid: MDD at least 0.25)
+    cross-family judge (opus) alone: +0.048 (decides nothing)
+    G_R (secondary): +0.032, 95% CI n/a, Holm p 1.000, coverage 1.000, not distinguished (MDD n/a, under 36 units) (decides nothing)
+    G_R bounds: no unjudged rem on sol's changed units
+Model particle: none hit@3 0.226 on 84 unit-passes at 1 pass; Holm family standalone, enforced
+  standalone - none: 0.131 - 0.226 = -0.095, 95% CI n/a, p 1.000 (degenerate), Holm p 1.000, exposure 0.964, coverage 1.000 -> not distinguished (below grid: MDD at least 0.25)
+    cross-family judge (sol) alone: -0.048 (decides nothing)
+    G_R (secondary): -0.075, 95% CI n/a, Holm p 1.000, coverage 1.000, not distinguished (MDD n/a, under 36 units) (decides nothing)
+    G_R bounds: no unjudged rem on particle's changed units
+  enforced - none: 0.214 - 0.226 = -0.012, 95% CI n/a, p 1.000 (degenerate), Holm p 1.000, exposure 0.976, coverage 1.000 -> not distinguished (below grid: MDD at least 0.25)
+    cross-family judge (sol) alone: +0.012 (decides nothing)
+    G_R (secondary): -0.020, 95% CI n/a, Holm p 1.000, coverage 1.000, not distinguished (MDD n/a, under 36 units) (decides nothing)
+    G_R bounds: no unjudged rem on particle's changed units
+Secondaries (decide nothing):
+  enforced:opus: hit@3 0.339, rank-weighted 0.280, slot precision 0.268, Brier 0.141, AUC 0.685, per-protocol 0.326, strict from 2026-09-01 0.319 (72), from 2026-10-01 0.154 (26), maintainer 0.206, outside 0.373, no-block 0/196, gaps, unjudged or incomplete 0, mean issue words 33.9, cost per review $0.72, per hit $2.46
+    10x enforced:opus: G_R 0.294 (168), strict10 0.202 (168), h1 0.202 (168); rem rate n/a (0), by kind: scope n/a (0), alternative n/a (0), approach n/a (0), not_build n/a (0); decoy-first 0.125 (72); second-order hit@3 0.438 (32), G_R 0.385 (32)
+    E_ALLOWANCE stops enforced:opus: 0 of 196 sessions (decides nothing)
+  enforced:particle: hit@3 0.214, rank-weighted 0.143, slot precision 0.155, Brier 0.199, AUC 0.578, per-protocol 0.220, strict from 2026-09-01 0.194 (36), from 2026-10-01 0.077 (13), maintainer 0.176, outside 0.224, no-block 3/112, gaps, unjudged or incomplete 0, mean issue words 29.7, cost per review $0.06, per hit $0.40
+    10x enforced:particle: G_R 0.163 (84), strict10 0.060 (84), h1 0.060 (84); rem rate n/a (0), by kind: scope n/a (0), alternative n/a (0), approach n/a (0), not_build n/a (0); decoy-first 0.056 (36); second-order hit@3 0.125 (16), G_R 0.104 (16)
+    E_ALLOWANCE stops enforced:particle: 0 of 112 sessions (decides nothing)
+  enforced:sol: hit@3 0.190, rank-weighted 0.151, slot precision 0.202, Brier 0.234, AUC 0.605, per-protocol 0.190, strict from 2026-09-01 0.167 (36), from 2026-10-01 0.077 (13), maintainer 0.176, outside 0.194, no-block 0/112, gaps, unjudged or incomplete 0, mean issue words 24.5, cost per review $0.65, per hit $4.53
+    10x enforced:sol: G_R 0.167 (84), strict10 0.119 (84), h1 0.119 (84); rem rate n/a (0), by kind: scope n/a (0), alternative n/a (0), approach n/a (0), not_build n/a (0); decoy-first 0.028 (36); second-order hit@3 0.125 (16), G_R 0.083 (16)
+    E_ALLOWANCE stops enforced:sol: 0 of 112 sessions (decides nothing)
+  lens:opus: hit@3 0.389, rank-weighted 0.325, slot precision 0.271, Brier 0.097, AUC 0.885, per-protocol 0.389, strict from 2026-09-01 0.361 (72), from 2026-10-01 0.154 (26), maintainer 0.303, outside 0.410, no-block 0/171, gaps, unjudged or incomplete 26, mean issue words 34.2, cost per review $0.13, per hit $0.33
+    10x lens:opus: G_R 0.341 (167), strict10 0.246 (167), h1 0.246 (167); rem rate n/a (0), by kind: scope n/a (0), alternative n/a (0), approach n/a (0), not_build n/a (0); decoy-first 0.127 (71); second-order hit@3 0.406 (32), G_R 0.354 (32)
+    E_ALLOWANCE stops lens:opus: 0 of 196 sessions (decides nothing)
+  none:opus: hit@3 0.341, rank-weighted 0.267, slot precision 0.277, Brier 0.099, AUC 0.769, per-protocol 0.341, strict from 2026-09-01 0.361 (72), from 2026-10-01 0.115 (26), maintainer 0.121, outside 0.396, no-block 0/171, gaps, unjudged or incomplete 26, mean issue words 33.2, cost per review $0.13, per hit $0.38
+    10x none:opus: G_R 0.287 (167), strict10 0.180 (167), h1 0.180 (167); rem rate n/a (0), by kind: scope n/a (0), alternative n/a (0), approach n/a (0), not_build n/a (0); decoy-first 0.113 (71); second-order hit@3 0.344 (32), G_R 0.302 (32)
+    E_ALLOWANCE stops none:opus: 0 of 196 sessions (decides nothing)
+  none:particle: hit@3 0.226, rank-weighted 0.159, slot precision 0.175, Brier 0.172, AUC 0.668, per-protocol 0.226, strict from 2026-09-01 0.250 (36), from 2026-10-01 0.154 (13), maintainer 0.235, outside 0.224, no-block 5/112, gaps, unjudged or incomplete 0, mean issue words 30.9, cost per review $0.01, per hit $0.05
+    10x none:particle: G_R 0.183 (84), strict10 0.095 (84), h1 0.095 (84); rem rate n/a (0), by kind: scope n/a (0), alternative n/a (0), approach n/a (0), not_build n/a (0); decoy-first 0.083 (36); second-order hit@3 0.250 (16), G_R 0.187 (16)
+    E_ALLOWANCE stops none:particle: 0 of 112 sessions (decides nothing)
+  none:sol: hit@3 0.155, rank-weighted 0.131, slot precision 0.183, Brier 0.256, AUC 0.627, per-protocol 0.155, strict from 2026-09-01 0.083 (36), from 2026-10-01 0.000 (13), maintainer 0.176, outside 0.149, no-block 0/112, gaps, unjudged or incomplete 0, mean issue words 27.9, cost per review $0.07, per hit $0.64
+    10x none:sol: G_R 0.135 (84), strict10 0.095 (84), h1 0.095 (84); rem rate n/a (0), by kind: scope n/a (0), alternative n/a (0), approach n/a (0), not_build n/a (0); decoy-first 0.028 (36); second-order hit@3 0.000 (16), G_R 0.000 (16)
+    E_ALLOWANCE stops none:sol: 0 of 112 sessions (decides nothing)
+  standalone:opus: hit@3 0.343, rank-weighted 0.267, slot precision 0.245, Brier 0.110, AUC 0.836, per-protocol 0.372, strict from 2026-09-01 0.319 (72), from 2026-10-01 0.231 (26), maintainer 0.242, outside 0.368, no-block 1/171, gaps, unjudged or incomplete 27, mean issue words 34.1, cost per review $0.67, per hit $2.02
+    10x standalone:opus: G_R 0.287 (166), strict10 0.175 (166), h1 0.175 (166); rem rate n/a (0), by kind: scope n/a (0), alternative n/a (0), approach n/a (0), not_build n/a (0); decoy-first 0.113 (71); second-order hit@3 0.313 (32), G_R 0.271 (32)
+    E_ALLOWANCE stops standalone:opus: 1 of 196 sessions (decides nothing)
+  standalone:particle: hit@3 0.131, rank-weighted 0.103, slot precision 0.147, Brier 0.189, AUC 0.589, per-protocol 0.123, strict from 2026-09-01 0.139 (36), from 2026-10-01 0.077 (13), maintainer 0.118, outside 0.134, no-block 0/112, gaps, unjudged or incomplete 0, mean issue words 30.0, cost per review $0.06, per hit $0.63
+    10x standalone:particle: G_R 0.107 (84), strict10 0.060 (84), h1 0.060 (84); rem rate n/a (0), by kind: scope n/a (0), alternative n/a (0), approach n/a (0), not_build n/a (0); decoy-first 0.028 (36); second-order hit@3 0.125 (16), G_R 0.104 (16)
+    E_ALLOWANCE stops standalone:particle: 0 of 112 sessions (decides nothing)
+  standalone:sol: hit@3 0.155, rank-weighted 0.103, slot precision 0.194, Brier 0.232, AUC 0.598, per-protocol 0.155, strict from 2026-09-01 0.056 (36), from 2026-10-01 0.000 (13), maintainer 0.118, outside 0.164, no-block 0/112, gaps, unjudged or incomplete 0, mean issue words 25.6, cost per review $0.65, per hit $5.63
+    10x standalone:sol: G_R 0.119 (84), strict10 0.048 (84), h1 0.048 (84); rem rate n/a (0), by kind: scope n/a (0), alternative n/a (0), approach n/a (0), not_build n/a (0); decoy-first 0.028 (36); second-order hit@3 0.000 (16), G_R 0.000 (16)
+    E_ALLOWANCE stops standalone:sol: 0 of 112 sessions (decides nothing)
+  category ambition: enforced:opus 2/2, enforced:particle 0/1, enforced:sol 1/1, lens:opus 2/2, none:opus 2/2, none:particle 1/1, none:sol 0/1, standalone:opus 1/2, standalone:particle 0/1, standalone:sol 0/1
+  category direction or strategy fit: enforced:opus 18/70, enforced:particle 4/35, enforced:sol 4/35, lens:opus 20/69, none:opus 18/69, none:particle 5/35, none:sol 5/35, standalone:opus 18/68, standalone:particle 5/35, standalone:sol 5/35
+  category maintenance or cost burden: enforced:opus 4/12, enforced:particle 1/6, enforced:sol 1/6, lens:opus 4/12, none:opus 3/12, none:particle 2/6, none:sol 1/6, standalone:opus 4/12, standalone:particle 1/6, standalone:sol 1/6
+  category premise or demand: enforced:opus 11/38, enforced:particle 4/19, enforced:sol 4/19, lens:opus 18/38, none:opus 15/38, none:particle 2/19, none:sol 4/19, standalone:opus 9/38, standalone:particle 1/19, standalone:sol 3/19
+  category scope: enforced:opus 21/40, enforced:particle 9/20, enforced:sol 5/20, lens:opus 19/40, none:opus 17/40, none:particle 8/20, none:sol 3/20, standalone:opus 22/40, standalone:particle 4/20, standalone:sol 3/20
+  category sequencing or dependency: enforced:opus 0/2, enforced:particle 0/1, enforced:sol 0/1, lens:opus 0/2, none:opus 0/2, none:particle 0/1, none:sol 0/1, standalone:opus 0/2, standalone:particle 0/1, standalone:sol 0/1
+  category user impact or migration: enforced:opus 1/4, enforced:particle 0/2, enforced:sol 1/2, lens:opus 2/4, none:opus 2/4, none:particle 1/2, none:sol 0/2, standalone:opus 3/4, standalone:particle 0/2, standalone:sol 1/2
+  opus enforced - standalone (the gate and the pin difference): +0.000, 95% CI [-0.061, 0.061]
+  sol enforced - standalone (the gate and the pin difference): +0.036, 95% CI [-0.036, 0.107]
+  particle enforced - standalone (the gate and the pin difference): +0.083, 95% CI [0.012, 0.167]
+  opus lens - none: +0.048, 95% CI [-0.006, 0.107]
+  opus enforced - lens: -0.048, 95% CI [-0.108, 0.012]

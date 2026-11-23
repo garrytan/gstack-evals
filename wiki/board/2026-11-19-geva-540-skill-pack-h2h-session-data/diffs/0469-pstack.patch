@@ -1,0 +1,74 @@
+diff --git a/crates/core/src/operations/merge/mod.rs b/crates/core/src/operations/merge/mod.rs
+index d76fed0..74cbb9b 100644
+--- a/crates/core/src/operations/merge/mod.rs
++++ b/crates/core/src/operations/merge/mod.rs
+@@ -1547,10 +1547,8 @@ async fn execute(
+     let table_root = snapshot.table_configuration().table_root().clone();
+ 
+     for action in snapshot.log_data() {
+-        let rel_path = action.path();
+-        let rel_path_str = rel_path.as_ref();
+-
+-        if should_remove_rewritten_file(&survivors, rel_path_str, &table_root)? {
++        // Survivors are file IDs built from the raw (still percent-encoded) log path.
++        if should_remove_rewritten_file(&survivors, action.path_raw(), &table_root)? {
+             metrics.num_target_files_removed += 1;
+             actions.push(action.remove_action(true).into());
+         }
+@@ -3497,6 +3495,56 @@ mod tests {
+         assert_batches_sorted_eq!(&expected, &actual);
+     }
+ 
++    #[tokio::test]
++    async fn test_merge_partition_value_with_space_is_idempotent() {
++        let schema = get_arrow_schema(&None);
++        let mut table = setup_table(Some(vec!["modified"])).await;
++
++        let ctx = SessionContext::new();
++        let batch = RecordBatch::try_new(
++            Arc::clone(&schema),
++            vec![
++                Arc::new(arrow::array::StringArray::from(vec!["A", "B", "C"])),
++                Arc::new(arrow::array::Int32Array::from(vec![1, 2, 3])),
++                Arc::new(arrow::array::StringArray::from(vec!["foo bar"; 3])),
++            ],
++        )
++        .unwrap();
++
++        for expected_removed in [0, 1] {
++            let (merged, metrics) = table
++                .merge(
++                    ctx.read_batch(batch.clone()).unwrap(),
++                    col("target.modified")
++                        .eq(lit("foo bar"))
++                        .and(col("target.id").eq(col("source.id"))),
++                )
++                .with_source_alias("source")
++                .with_target_alias("target")
++                .when_matched_update(|update| update.update("value", col("source.value")))
++                .unwrap()
++                .when_not_matched_insert(|insert| {
++                    insert
++                        .set("id", col("source.id"))
++                        .set("value", col("source.value"))
++                        .set("modified", col("source.modified"))
++                })
++                .unwrap()
++                .await
++                .unwrap();
++            table = merged;
++            assert_eq!(metrics.num_target_files_removed, expected_removed);
++            assert_eq!(
++                get_data(&table)
++                    .await
++                    .iter()
++                    .map(|b| b.num_rows())
++                    .sum::<usize>(),
++                3
++            );
++        }
++    }
++
+     #[tokio::test]
+     async fn test_merge_partitions() {
+         /* Validate the join predicate works with table partitions */

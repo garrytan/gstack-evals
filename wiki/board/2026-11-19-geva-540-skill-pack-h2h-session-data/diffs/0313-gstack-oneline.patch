@@ -1,0 +1,15 @@
+diff --git a/internal/plugins/ai/codex/codex.go b/internal/plugins/ai/codex/codex.go
+index b1b531f..765a477 100644
+--- a/internal/plugins/ai/codex/codex.go
++++ b/internal/plugins/ai/codex/codex.go
+@@ -243,7 +243,9 @@ func (c *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, o
+ 		return "", err
+ 	}
+ 	if completedResp != nil {
+-		return c.ExtractText(completedResp), nil
++		if text := c.ExtractText(completedResp); text != "" {
++			return text, nil
++		}
+ 	}
+ 
+ 	return builder.String(), nil

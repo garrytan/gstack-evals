@@ -6,21 +6,32 @@ import { openLocalLedger } from "../../src/runner/ledger/local.ts";
 import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
 import { LedgerError } from "../../src/runner/ledger/record.ts";
 import { serveStages, type StageSpec } from "./driver/stage.ts";
+import { loadRegistry } from "./arms/registry.ts";
 import { TaskError } from "../real-outcome/task/format.ts";
 import { bind, check, pin, publicForm, readManifest } from "./images/manifest.ts";
 import { readFileSync } from "node:fs";
 
 export const HELP = `Usage: gstack-evals outcome serve --run <id> --envelope-host <machine id> --stage <item>=<arm> [--stage ...]
            --host <ip> --dir <run dir> [--planned 24] [--reruns 2] [--control-port <n>] [--ttl-hours 72]
-           [--ledger <path>] [--ledger-record <dir>]
+           [--ledger <path>] [--ledger-record <dir>] [--pf-allowance <json file>] [--registry <arms file>] [--lift-halt <session id>[,<session id>]]
+A family SM stage is --stage <item>=<model>@<arm>,<arm>: one lease on the item for that model, serving each named SM arm
+at its per-model allowance, with a proxy that refuses provider-side tools.
+A PF stage is --stage <pf item>=pf:<arm>,pf:<arm> (pf:P, pf:C, pf:N, or pf:blind on pf-blind): one lease on the item for
+the models it pays for, two slots per session (task and wrap-up), with a proxy that refuses provider-side tools.
+--pf-allowance <json file> replaces the task-turn allowance table (the doubled one admission's cost reading writes).
 
 Opens one U4 lease per stage at its line item's cap through O6's envelope, one metering proxy per lease on --host, and a
 control plane on 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. It prints control=<url> and one
 stage= line per stage, serves until POST /stop, SIGTERM or SIGINT, and settles every lease on every exit path.
-Provider keys come from its environment as the proxy reads them. Guide: wiki/plans/2026-11-04-geva-286-u4-session-driver.
+--registry names the arms file the driver reads each arm's limits from (default: arms/registry.json); real_agent's
+arms_path must name the same file. Provider keys come from its environment as the proxy reads them. Guide: wiki/plans/2026-11-04-geva-286-u4-session-driver.
+A family SM session that closes with its proxy finalize failed halts its item (E_SM_FINALIZE_HALT); --lift-halt names the
+sessions whose halt the Captain ruled on, after reading the proxy journal, so the launch serves the item again.
 
 Usage: gstack-evals outcome images pin --out <manifest.json> --set <name> --commit <sha> <task dir>...
        gstack-evals outcome images check <manifest.json> --sha256 <hex>
+       gstack-evals outcome sm <command>   the state machines family (gstack-evals outcome sm --help)
+       gstack-evals outcome pf <command>   the pstack-checks scoring core (gstack-evals outcome pf --help)
        gstack-evals outcome images public <manifest.json>
        gstack-evals outcome images bind <manifest.json> --task <task dir> --label <label> --out <run copy>
 
@@ -43,13 +54,15 @@ export async function main(argv: string[]): Promise<number> {
     return sub === undefined ? 2 : 0;
   }
   if (sub === "images") return await images(rest);
+  if (sub === "sm") return await (await import("./statemachines/cli.ts")).main(rest);
+  if (sub === "pf") return await (await import("./pfchecks/cli.ts")).main(rest);
   if (sub !== "serve") {
     console.error(lines("E_USAGE", "unknown subcommand " + JSON.stringify(sub) + "; gstack-evals outcome --help lists them"));
     return 2;
   }
   const flags = new Map<string, string>();
   const stages: StageSpec[] = [];
-  const allowed = new Set(["--run", "--envelope-host", "--stage", "--host", "--dir", "--planned", "--reruns", "--control-port", "--ttl-hours", "--ledger", "--ledger-record"]);
+  const allowed = new Set(["--run", "--envelope-host", "--stage", "--host", "--dir", "--planned", "--reruns", "--control-port", "--ttl-hours", "--ledger", "--ledger-record", "--pf-allowance", "--registry", "--lift-halt"]);
   for (let i = 0; i < rest.length; i += 2) {
     const [k, v] = [rest[i]!, rest[i + 1]];
     if (!allowed.has(k) || v === undefined) {
@@ -59,10 +72,11 @@ export async function main(argv: string[]): Promise<number> {
     if (k === "--stage") {
       const m = v.match(/^([^=]+)=(.+)$/);
       if (!m) {
-        console.error(lines("E_USAGE", "--stage takes <item>=<arm>, not " + v));
+        console.error(lines("E_USAGE", "--stage takes <item>=<arm>, for family SM <item>=<model>@<arm>,<arm>, or for PF <item>=pf:<arm>,pf:<arm>, not " + v));
         return 2;
       }
-      stages.push({ item: m[1]!, arm: m[2]! });
+      const sm = m[2]!.match(/^([^@]+)@(.+)$/);
+      stages.push(m[2]!.startsWith("pf:") ? { item: m[1]!, arm: m[1]!, arms: m[2]!.split(",") } : sm ? { item: m[1]!, arm: m[1]!, model: sm[1]!, arms: sm[2]!.split(",") } : { item: m[1]!, arm: m[2]! });
     } else flags.set(k, v);
   }
   const missing = ["--run", "--envelope-host", "--host", "--dir"].filter((k) => !flags.has(k));
@@ -77,8 +91,22 @@ export async function main(argv: string[]): Promise<number> {
   }
   const num = (k: string) => (flags.has(k) ? Number(flags.get(k)) : undefined);
   const ttlHours = num("--ttl-hours");
+  let pfAllowance: Record<"P" | "C" | "N", Record<string, number>> | undefined;
+  if (flags.has("--pf-allowance")) {
+    try {
+      pfAllowance = JSON.parse(readFileSync(flags.get("--pf-allowance")!, "utf8"));
+    } catch (e) {
+      console.error(lines("E_USAGE", "--pf-allowance " + flags.get("--pf-allowance") + " is not a readable JSON allowance table: " + (e as Error).message));
+      return 2;
+    }
+    if (!pfAllowance || typeof pfAllowance !== "object" || Array.isArray(pfAllowance)) {
+      console.error(lines("E_USAGE", "--pf-allowance holds an object of arm to model to dollars, such as costReading's allowance"));
+      return 2;
+    }
+  }
   let local: ReturnType<typeof openLocalLedger> | null = null;
   try {
+    const registry = flags.has("--registry") ? loadRegistry(flags.get("--registry")!) : undefined;
     local = openLocalLedger(ledgerPath(flags.get("--ledger")));
     const served = await serveStages({
       record: recordPath(flags.get("--ledger-record")).path,
@@ -92,6 +120,9 @@ export async function main(argv: string[]): Promise<number> {
       reruns: num("--reruns"),
       control_port: num("--control-port"),
       ttl_ms: ttlHours === undefined ? undefined : Math.round(ttlHours * 3_600_000),
+      ...(pfAllowance ? { pf_allowance: pfAllowance } : {}),
+      registry,
+      ...(flags.has("--lift-halt") ? { lift_halts: flags.get("--lift-halt")!.split(",") } : {}),
     });
     console.log("control=" + served.control);
     for (const s of served.stages) console.log("stage=" + s.item + " arm=" + s.arm + " lease=" + s.lease_id + " reserved=" + s.reserved_micros + " proxy=" + s.proxy);

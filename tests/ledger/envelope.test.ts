@@ -13,7 +13,7 @@ const LEDGER = join(import.meta.dir, "../../src/runner/ledger");
 const D = 1_000_000;
 const SKILLS = ["plan-eng-review", "plan-devex-review", "autoplan", "devex-review", "plan-design-review", "design-review"];
 const [PE, PDX, AP, DX, PDR, DR] = SKILLS as [string, string, string, string, string, string];
-const quote = { words: "Approved with every recommendation", by: "Project owner", source: "gate_rev 2 of the outcome-per-skill plan" };
+const quote = { words: "approve with every recommendation", by: "Approver", source: "gate_rev 2 of the outcome-per-skill plan" };
 const usage = { input: 10, output: 5, reasoning: 0, cache_read: 0, cache_write: 0 };
 const cell = (n: number): CellAttempt => ({ run_id: "run", arm: "told", task: "t", model: "claude-opus-5-5", trial: n, attempt: 1, meter_id: "m" });
 
@@ -516,7 +516,7 @@ describe("gstack-evals ledger envelope, crew and status --program", () => {
       const code = await ledgerCli(argv, { out: (t) => out.push(t), err: (t) => err.push(t) }, env);
       return { code, out: out.join("\n"), err: err.join("\n") };
     };
-    const words = ["--words", "Approved with every recommendation", "--by", "Project owner", "--source", "gate_rev 2"];
+    const words = ["--words", "approve with every recommendation", "--by", "Approver", "--source", "gate_rev 2"];
     const env1 = await cli("envelope", "--program", "wave1", "--cap", "10000", "--skill-cap", "2000", "--skills", SKILLS.join(","), "--credit-rate", "1", ...words);
     expect(env1).toMatchObject({ code: 0, err: "" });
     expect(env1.out).toStartWith("ENVELOPE: program=wave1 cap=$10000.00 skill_cap=$2000.00 skills=" + SKILLS.join(",") + " credit_rate=$1.00 per 1000 credits");

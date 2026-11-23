@@ -1,0 +1,105 @@
+diff --git a/context.go b/context.go
+index ec7fdd9..7b9aabc 100644
+--- a/context.go
++++ b/context.go
+@@ -165,21 +165,37 @@ func (c *Context) Scheme() string {
+ 	if c.IsTLS() {
+ 		return "https"
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXForwardedProto); scheme != "" {
++	// Proxy headers are client controllable, so only well-known schemes are accepted. Anything else would allow
++	// injecting arbitrary schemes (e.g. `javascript`) into URLs built from this value (redirects etc.).
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXForwardedProto)); ok {
+ 		return scheme
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXForwardedProtocol); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXForwardedProtocol)); ok {
+ 		return scheme
+ 	}
+ 	if ssl := c.request.Header.Get(HeaderXForwardedSsl); ssl == "on" {
+ 		return "https"
+ 	}
+-	if scheme := c.request.Header.Get(HeaderXUrlScheme); scheme != "" {
++	if scheme, ok := sanitizeScheme(c.request.Header.Get(HeaderXUrlScheme)); ok {
+ 		return scheme
+ 	}
+ 	return "http"
+ }
+ 
++// sanitizeScheme normalizes the given scheme and reports whether it is one of the allowed schemes
++// (`http`, `https`, `ws`, `wss`).
++func sanitizeScheme(scheme string) (string, bool) {
++	if scheme == "" {
++		return "", false
++	}
++	scheme = strings.ToLower(strings.TrimSpace(scheme))
++	switch scheme {
++	case "http", "https", "ws", "wss":
++		return scheme, true
++	}
++	return "", false
++}
++
+ // RealIP returns the client IP address using the configured extraction strategy.
+ //
+ // If Echo#IPExtractor is set, it is used to resolve the client IP from the incoming request (typically via proxy
+diff --git a/context_test.go b/context_test.go
+index 9376f0f..8b5ede2 100644
+--- a/context_test.go
++++ b/context_test.go
+@@ -1426,3 +1426,25 @@ func TestRouteInfo(t *testing.T) {
+ 	orgRI.Name = "changed"
+ 	assert.NotEqual(t, expect, c.RouteInfo())
+ }
++
++func TestContext_Scheme_rejectsUntrustedHeaderValues(t *testing.T) {
++	headers := []string{HeaderXForwardedProto, HeaderXForwardedProtocol, HeaderXUrlScheme}
++	invalid := []string{"javascript", "data", "vbscript", "file", "ftp", "gopher", "https://evil.com/", "http evil", "javascript:alert(1)//"}
++	for _, h := range headers {
++		for _, v := range invalid {
++			c := &Context{request: &http.Request{Header: http.Header{h: []string{v}}}}
++			assert.Equal(t, "http", c.Scheme(), "header %s value %q", h, v)
++		}
++	}
++}
++
++func TestContext_Scheme_allowsKnownSchemes(t *testing.T) {
++	headers := []string{HeaderXForwardedProto, HeaderXForwardedProtocol, HeaderXUrlScheme}
++	valid := map[string]string{"http": "http", "https": "https", "ws": "ws", "wss": "wss", "HTTPS": "https", " https ": "https"}
++	for _, h := range headers {
++		for v, expect := range valid {
++			c := &Context{request: &http.Request{Header: http.Header{h: []string{v}}}}
++			assert.Equal(t, expect, c.Scheme(), "header %s value %q", h, v)
++		}
++	}
++}
+diff --git a/middleware/redirect_test.go b/middleware/redirect_test.go
+index a127ca4..b1487f4 100644
+--- a/middleware/redirect_test.go
++++ b/middleware/redirect_test.go
+@@ -163,6 +163,12 @@ func TestRedirectWWWRedirect(t *testing.T) {
+ 			expectLocation:   "http://www.ip/",
+ 			expectStatusCode: http.StatusMovedPermanently,
+ 		},
++		{
++			whenHost:         "a.com",
++			whenHeader:       map[string][]string{echo.HeaderXForwardedProto: {"javascript"}},
++			expectLocation:   "http://www.a.com/",
++			expectStatusCode: http.StatusMovedPermanently,
++		},
+ 		{
+ 			whenHost:         "a.com",
+ 			whenHeader:       map[string][]string{echo.HeaderXForwardedProto: {"https"}},
+@@ -203,6 +209,12 @@ func TestRedirectNonWWWRedirect(t *testing.T) {
+ 			expectLocation:   "http://a.com/",
+ 			expectStatusCode: http.StatusMovedPermanently,
+ 		},
++		{
++			whenHost:         "www.a.com",
++			whenHeader:       map[string][]string{echo.HeaderXForwardedProto: {"javascript"}},
++			expectLocation:   "http://a.com/",
++			expectStatusCode: http.StatusMovedPermanently,
++		},
+ 		{
+ 			whenHost:         "www.a.com",
+ 			whenHeader:       map[string][]string{echo.HeaderXForwardedProto: {"https"}},

@@ -1,0 +1,15 @@
+#!/bin/bash
+# GEVA-501: VM7 label driver for batches 3, 2 and 1 (VM6 takes 6, 5 and 4): labelpass2.sh per batch, clear task images,
+# then rebuild that batch's sessions' marker lists from its pristine listings and refresh the replay session files.
+set -uo pipefail
+export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
+mkdir -p ~/lbl/logs ~/lbl/labels
+for K in 3 2 1; do
+  echo "== $(date -u +%T) batch $K"
+  sg docker -c "bash ~/vms4/labelpass2.sh $K 6" > ~/lbl/logs/pass-$K.log 2>&1
+  grep -c FAILED ~/lbl/logs/pass-$K.log; tail -2 ~/lbl/logs/pass-$K.log
+  sg docker -c "bash ~/vms4/clean-all.sh" > ~/lbl/logs/clean-$K.log 2>&1; tail -1 ~/lbl/logs/clean-$K.log
+  (cd ~/work/repo-r3 && bun ~/vms4/mkmarkers.ts ~/replay/sessions-all.json ~/tasks ~/scored/labels ~/replay/markers ~/scored/pristine-b$K) 2>&1 | tail -1
+  python3 ~/vms4/mksessions.py ~/lbl ~/replay/markers ~/replay 2>&1 | tail -1
+done
+echo "== $(date -u +%T) ALL-LABELS-DONE"

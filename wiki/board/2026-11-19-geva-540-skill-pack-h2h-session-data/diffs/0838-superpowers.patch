@@ -1,0 +1,195 @@
+diff --git a/springdoc-openapi-starter-common/src/main/java/org/springdoc/core/service/AbstractRequestService.java b/springdoc-openapi-starter-common/src/main/java/org/springdoc/core/service/AbstractRequestService.java
+index 681a615..0c59f99 100644
+--- a/springdoc-openapi-starter-common/src/main/java/org/springdoc/core/service/AbstractRequestService.java
++++ b/springdoc-openapi-starter-common/src/main/java/org/springdoc/core/service/AbstractRequestService.java
+@@ -490,7 +490,7 @@ public abstract class AbstractRequestService {
+ 	}
+ 
+ 	/**
+-	 * Is request body with map type
++	 * Is request body or request part with map type
+ 	 *
+ 	 * @param parameter the parameter
+ 	 * @return the boolean
+@@ -502,7 +502,8 @@ public abstract class AbstractRequestService {
+ 		}
+ 		// Check for @RequestBody annotation
+ 		org.springframework.web.bind.annotation.RequestBody requestBody = parameter.getParameterAnnotation(org.springframework.web.bind.annotation.RequestBody.class);
+-		if (requestBody == null) {
++		RequestPart requestPart = parameter.getParameterAnnotation(RequestPart.class);
++		if (requestBody == null && requestPart == null) {
+ 			return false;
+ 		}
+ 		// Check if the parameter type is assignable to Map
+diff --git a/springdoc-openapi-starter-webmvc-api/src/test/java/test/org/springdoc/api/v31/app246/HelloController.java b/springdoc-openapi-starter-webmvc-api/src/test/java/test/org/springdoc/api/v31/app246/HelloController.java
+new file mode 100644
+index 0000000..1aa2b5e
+--- /dev/null
++++ b/springdoc-openapi-starter-webmvc-api/src/test/java/test/org/springdoc/api/v31/app246/HelloController.java
+@@ -0,0 +1,23 @@
++package test.org.springdoc.api.v31.app246;
++
++import java.util.Map;
++
++import io.swagger.v3.oas.annotations.Parameter;
++
++import org.springframework.web.bind.annotation.PostMapping;
++import org.springframework.web.bind.annotation.RequestPart;
++import org.springframework.web.bind.annotation.RestController;
++
++@RestController
++public class HelloController {
++
++	@PostMapping(value = "/string", consumes = "multipart/form-data")
++	public String string(@Parameter(description = "A JSON object for file mapping", required = true) @RequestPart String fileMapping) {
++		return fileMapping;
++	}
++
++	@PostMapping(value = "/map", consumes = "multipart/form-data")
++	public String map(@Parameter(description = "A JSON object for file mapping", required = true) @RequestPart Map<String, Object> fileMapping) {
++		return String.valueOf(fileMapping.size());
++	}
++}
+diff --git a/springdoc-openapi-starter-webmvc-api/src/test/java/test/org/springdoc/api/v31/app246/SpringDocApp246Test.java b/springdoc-openapi-starter-webmvc-api/src/test/java/test/org/springdoc/api/v31/app246/SpringDocApp246Test.java
+new file mode 100644
+index 0000000..6927e5b
+--- /dev/null
++++ b/springdoc-openapi-starter-webmvc-api/src/test/java/test/org/springdoc/api/v31/app246/SpringDocApp246Test.java
+@@ -0,0 +1,37 @@
++/*
++ *
++ *  *
++ *  *  *
++ *  *  *  *
++ *  *  *  *  *
++ *  *  *  *  *  * Copyright 2019-2025 the original author or authors.
++ *  *  *  *  *  *
++ *  *  *  *  *  * Licensed under the Apache License, Version 2.0 (the "License");
++ *  *  *  *  *  * you may not use this file except in compliance with the License.
++ *  *  *  *  *  * You may obtain a copy of the License at
++ *  *  *  *  *  *
++ *  *  *  *  *  *      https://www.apache.org/licenses/LICENSE-2.0
++ *  *  *  *  *  *
++ *  *  *  *  *  * Unless required by applicable law or agreed to in writing, software
++ *  *  *  *  *  * distributed under the License is distributed on an "AS IS" BASIS,
++ *  *  *  *  *  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  *  *  *  *  * See the License for the specific language governing permissions and
++ *  *  *  *  *  * limitations under the License.
++ *  *  *  *  *
++ *  *  *  *
++ *  *  *
++ *  *
++ *
++ */
++
++package test.org.springdoc.api.v31.app246;
++
++import test.org.springdoc.api.v31.AbstractSpringDocTest;
++
++import org.springframework.boot.autoconfigure.SpringBootApplication;
++
++public class SpringDocApp246Test extends AbstractSpringDocTest {
++
++	@SpringBootApplication
++	static class SpringDocTestApp {}
++}
+\ No newline at end of file
+diff --git a/springdoc-openapi-starter-webmvc-api/src/test/resources/results/3.1.0/app246.json b/springdoc-openapi-starter-webmvc-api/src/test/resources/results/3.1.0/app246.json
+new file mode 100644
+index 0000000..8fecbfb
+--- /dev/null
++++ b/springdoc-openapi-starter-webmvc-api/src/test/resources/results/3.1.0/app246.json
+@@ -0,0 +1,93 @@
++{
++  "openapi": "3.1.0",
++  "info": {
++    "title": "OpenAPI definition",
++    "version": "v0"
++  },
++  "servers": [
++    {
++      "url": "http://localhost",
++      "description": "Generated server url"
++    }
++  ],
++  "paths": {
++    "/string": {
++      "post": {
++        "tags": [
++          "hello-controller"
++        ],
++        "operationId": "string",
++        "requestBody": {
++          "content": {
++            "multipart/form-data": {
++              "schema": {
++                "type": "object",
++                "properties": {
++                  "fileMapping": {
++                    "type": "string",
++                    "description": "A JSON object for file mapping"
++                  }
++                },
++                "required": [
++                  "fileMapping"
++                ]
++              }
++            }
++          }
++        },
++        "responses": {
++          "200": {
++            "description": "OK",
++            "content": {
++              "*/*": {
++                "schema": {
++                  "type": "string"
++                }
++              }
++            }
++          }
++        }
++      }
++    },
++    "/map": {
++      "post": {
++        "tags": [
++          "hello-controller"
++        ],
++        "operationId": "map",
++        "requestBody": {
++          "content": {
++            "multipart/form-data": {
++              "schema": {
++                "type": "object",
++                "properties": {
++                  "fileMapping": {
++                    "type": "object",
++                    "additionalProperties": {},
++                    "description": "A JSON object for file mapping"
++                  }
++                },
++                "required": [
++                  "fileMapping"
++                ]
++              }
++            }
++          }
++        },
++        "responses": {
++          "200": {
++            "description": "OK",
++            "content": {
++              "*/*": {
++                "schema": {
++                  "type": "string"
++                }
++              }
++            }
++          }
++        }
++      }
++    }
++  },
++  "components": {}
++}

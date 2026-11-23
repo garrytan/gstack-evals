@@ -126,6 +126,8 @@ admit prints the list's sha256, n, R, the MDD and the projection, and exits 0 on
 
 ## 8. Budget: /investigate's $2,000 line
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 All-in from 2026-11-03 13:30Z: paid calls, VMs and crew model use at about $1 per 1,000 credits. Paid figures are the item ledgers' settled totals; crew figures are the thread counters, read on 2026-11-05 with every thread archived except this one.
 
 | Line | Amount |
@@ -148,6 +150,8 @@ Amounts are ledger and counter values rounded to the cent, so a total can differ
 The R3b results post's tally (about $879, about $1,121 left) already read the counters. Its 13,342-credit excess over the threads' reports is inside its $155, not on top of it. GEVA-276 and GEVA-283 rose after that reading. GEVA-247 (amendment 4, started 10:29Z on 2026-11-03, 40,352 credits) is not on the line, as amendment 5 section 7 and the R3b results post counted it. The unallocated money is not a reserve; only a raise the Captain records can draw on it.
 
 ## 9. Item and cap
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 One item, r3c-opus, on its own ledger, holds cal-1a to cal-1c, cal-2 and the grid parts, with a cap of **$750**. Calibration spends about $205; the admission then spends what the rule chooses, at most the cap less settled spend less the $79.20 reserve. In validation the mean spend before reserve was $615.46 under the NPMLE truth (max $670.42) and $599.88 under the beta truth (max $668.71).
 

@@ -9,7 +9,7 @@ import type { AgentDriver } from "../trial/trial.ts";
 import type { PersonaAnswer } from "../usersim/persona.ts";
 import type { Host } from "../types.ts";
 import { claudeCodeDriver, type ClaudeCodeOptions, type SystemPrompt } from "./claude-code/driver.ts";
-import { codexDriver, type CodexProvider } from "./codex/driver.ts";
+import { codexDriver, type CodexOptions, type CodexProvider } from "./codex/driver.ts";
 
 export const SKILL_DIRS: Record<Host, string> = { claude: ".claude/skills", codex: ".codex/skills" };
 
@@ -25,15 +25,20 @@ export interface HostDriverOptions {
   interactive: boolean;
   skill: (SkillRef & { dir: string | null }) | null;
   out: string;
-  /** The persona's free-form answers for a task with a persona; Claude Code only, since Codex runs no interactive task. */
+  /** The persona's free-form answers for a task with a persona. */
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
+  /** Codex only, and every Codex session needs it: model_reasoning_effort, or null for a model Codex's catalog lacks (its driver's effort). */
+  effort?: string | null;
+  /** Codex only: the arm's hook trust, pinned CLI, extra settings, switches to record and arm record (its driver's options). */
+  codexSession?: Pick<CodexOptions, "hookTrust" | "bin" | "settings" | "switches" | "arm">;
   /** Plugin roots in the agent's HOME for the session (Claude Code only). */
   plugins?: string[];
   /** The cell's cross-family voice through the Codex CLI (Claude Code only). */
   codex?: { provider: CodexProvider; model: string };
-  /** The session's system prompt, its turn cap and its GSTACK_SESSION_KIND (Claude Code only; see its driver). */
+  /** The session's system prompt and its turn cap (Claude Code only; see its driver). */
   systemPrompt?: SystemPrompt;
   maxTurns?: number;
+  /** GSTACK_SESSION_KIND for the agent env, on either host; unset, none. */
   sessionKind?: "unattended";
   /** Claude Code only: GSTACK_SKILL_GATE_DEADLINE_MS for the agent env, and settings printed at session start (driver.ts). */
   skillGateDeadlineMs?: number;
@@ -48,14 +53,17 @@ export interface HostDriverOptions {
   backgroundWaitMs?: number;
   /** Claude Code only: one follow-up user message when needed(the transcript so far) is true (its driver's followUp). */
   followUp?: { text: string; needed: (transcript: string) => boolean };
+  /** Claude Code only: an SDK-side Stop hook on the transcript so far (its driver's stopHook). */
+  stopHook?: (transcript: string) => string | null;
 }
 
 /** The adapter for one session. Claude Code takes Anthropic and OpenRouter models; Codex takes OpenAI and OpenRouter ones. */
 export function hostDriver(o: HostDriverOptions): AgentDriver {
   if (o.host === "claude") {
     if (o.provider === "openai") throw new Error("E_INTERNAL: Claude Code cannot run the openai model " + o.model);
-    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(o.skillGateDeadlineMs ? { skillGateDeadlineMs: o.skillGateDeadlineMs } : {}), ...(o.disable1mContext ? { disable1mContext: true } : {}), ...(o.query ? { query: o.query } : {}), ...(o.settings ? { settings: o.settings } : {}), ...(o.capStops ? { capStops: o.capStops } : {}), ...(o.backgroundWaitMs !== undefined ? { backgroundWaitMs: o.backgroundWaitMs } : {}), ...(o.followUp ? { followUp: o.followUp } : {}) });
+    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(o.skillGateDeadlineMs ? { skillGateDeadlineMs: o.skillGateDeadlineMs } : {}), ...(o.disable1mContext ? { disable1mContext: true } : {}), ...(o.query ? { query: o.query } : {}), ...(o.settings ? { settings: o.settings } : {}), ...(o.capStops ? { capStops: o.capStops } : {}), ...(o.backgroundWaitMs !== undefined ? { backgroundWaitMs: o.backgroundWaitMs } : {}), ...(o.followUp ? { followUp: o.followUp } : {}), ...(o.stopHook ? { stopHook: o.stopHook } : {}) });
   }
   if (o.provider === "anthropic") throw new Error("E_INTERNAL: Codex cannot run the anthropic model " + o.model);
-  return codexDriver({ model: o.model, provider: o.provider, proxy: o.proxy, interactive: o.interactive, skill: o.skill, out: o.out });
+  if (o.effort === undefined) throw new Error("E_INTERNAL: a Codex session needs its reasoning effort, and none was passed for " + o.model);
+  return codexDriver({ model: o.model, provider: o.provider, proxy: o.proxy, effort: o.effort, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...o.codexSession });
 }

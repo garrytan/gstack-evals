@@ -21,9 +21,9 @@ attachments:
 ---
 # Review no-loss eval category
 
-Plan v1, 2026-10-30. Author GSTA-40 for the gstack-evals Captain (GSTA-2), working for Garry Tan, issue GST-276. Garry asked for this on 2026-10-30, relayed by GStack Minder: "don't forget to tell Gstack-evals about all of this since it is likely an eval cat with data we need to create."
+Plan v1, 2026-10-30. Author GSTA-40 for the gstack-evals Captain (GSTA-2), working for Garry Tan, issue GST-276. Garry asked for this on 2026-10-30, relayed by the gstack Captain: he asked that gstack-evals hear about all of this, since this is probably an eval category with data we still need to create.
 
-Approved at autoplan gate_rev 1 with Garry's reply "Rec", relayed by the Captain (GSTA-2, GST-282). The Captain ruled on Big decision 5: restate. GSTA-167's documents are crew-session text, so the build restates the cases and the cohort in our own words, keeps the originals in the drive, and commits only their digests. The plan text below is the reviewed text; where Big decision 5 and section 10 say verbatim, the ruling holds.
+Approved at autoplan gate_rev 1 with Garry's approval (recommendation taken), relayed by the Captain (GSTA-2, GST-282). The Captain ruled on Big decision 5: restate. GSTA-167's documents are crew-session text, so the build restates the cases and the cohort in our own words, keeps the originals in the drive, and commits only their digests. The plan text below is the reviewed text; where Big decision 5 and section 10 say verbatim, the ruling holds.
 
 Inputs, read from the org drive's handoffs/GSTA-167/ and pinned by sha256:
 
@@ -54,7 +54,7 @@ gstack is choosing how much review to cut to save tokens. A cut that drops block
 
 ### What caused this work
 
-GSTA-167 cut /ship's reviewers down to small packets to save tokens. The preregistered replay on 14 past gstack PRs showed the packet arms found 8 to 12 of the 29 blockers, against 19 for the old full review (C), at about 17.7M against 30.0M tokens per PR. The misses needed context outside the changed lines. gstack reverted the packets in v1.91.331.0. Arm D (round 4, the old reviewers with new orchestration) is next, and the Captain asked Minder to report it, and later arms, into this category in a fixed directory shape.
+GSTA-167 cut /ship's reviewers down to small packets to save tokens. The preregistered replay on 14 past gstack PRs showed the packet arms found 8 to 12 of the 29 blockers, against 19 for the old full review (C), at about 17.7M against 30.0M tokens per PR. The misses needed context outside the changed lines. gstack reverted the packets in v1.91.331.0. Arm D (round 4, the old reviewers with new orchestration) is next, and the Captain asked the gstack Captain to report it, and later arms, into this category in a fixed directory shape.
 
 ### Big decisions
 
@@ -71,7 +71,7 @@ In scope: the case import, the suite file, the arm contract and ingest, the scor
 
 ### 1. The cohort count: 29 blockers, not 30
 
-The prereg's table lists, per PR: 3593 two, 3596 two, 3516 two, 3524 one, 3526 four, 3527 four, 3534 four, 3540 one, 3545 one, 3564 one, 3567 three, 3573 one, 3578 one, 3583 two. That is 29. Every per-PR row in both results files has the same denominators, and the numerators sum to the stated totals (A 11, B 8, C 19, A' 12), so the totals are right and only the denominator is wrong. The category uses 29. It writes a wiki finding with the recount, quotes the original "of 30" beside each legacy number, and asks the Captain to pass it to Minder. No verdict changes: A' still missed 9 of C's 19.
+The prereg's table lists, per PR: 3593 two, 3596 two, 3516 two, 3524 one, 3526 four, 3527 four, 3534 four, 3540 one, 3545 one, 3564 one, 3567 three, 3573 one, 3578 one, 3583 two. That is 29. Every per-PR row in both results files has the same denominators, and the numerators sum to the stated totals (A 11, B 8, C 19, A' 12), so the totals are right and only the denominator is wrong. The category uses 29. It writes a wiki finding with the recount, quotes the original "of 30" beside each legacy number, and asks the Captain to pass it to the gstack Captain. No verdict changes: A' still missed 9 of C's 19.
 
 ### 2. The 29 blockers become catalog cases
 
@@ -93,7 +93,7 @@ One case per blocker, in U13's schema version 1, in lanes/review-replay/catalog/
 | receipt | The PR's Pre-Landing Review lines and the fix commit's subject, both public, plus the mechanical checks |
 | answer_key_audit | GSTA-40's hand audit (Opus 5.5), with the checks: the line exists at the pass-1 head, and the fix commit changes it |
 | shelf_life | The PR's creation date from GitHub's API; short true |
-| credit | The PR's own review, and GSTA-167 (GStack Minder) for the cohort and the judging rule |
+| credit | The PR's own review, and GSTA-167 (the gstack Captain) for the cohort and the judging rule |
 
 The suite file, lanes/review-noloss/suites/gsta167-14pr.json, holds what one case can't: the prereg path and its three digests (the full file and the two freeze prefixes), the judging rule as text, groups (a) GSTA-152 and (b) the replay set, each unit's PR, head and base, and each blocker's id, case id, every path the prereg names (a match on any of them counts as the same path) and its location. Location is computed from git: `added` when the defect line is an added line of the diff, `context` when its file is in the diff but the line is not added, `outside` when the file is not in the diff. Location is the covariate behind "the misses needed context outside the changed lines". The suite also lists the three ineligible PRs (3525, 3532, 3555), the excluded blockers with the prereg's reasons, and the frozen bars of rounds 2, 3 and 4.
 
@@ -101,7 +101,7 @@ The suite file, lanes/review-noloss/suites/gsta167-14pr.json, holds what one cas
 
 ### 3. The arm contract and ingest
 
-An arm's run is the directory Minder was asked to write: `arm-<id>/` with arm.json, findings/<pr>.jsonl, judgments.tsv and cost.tsv. Contract version 1 below keeps every field the Captain named and adds only optional ones. Unknown columns and fields are kept and ignored, so a later extension never breaks an old reader.
+An arm's run is the directory the gstack Captain was asked to write: `arm-<id>/` with arm.json, findings/<pr>.jsonl, judgments.tsv and cost.tsv. Contract version 1 below keeps every field the Captain named and adds only optional ones. Unknown columns and fields are kept and ignored, so a later extension never breaks an old reader.
 
 - **arm.json.** Required: id, label, suite, date, passes. Optional: kind (reference or variant), source (repo, ref, sha), prereg (path, sha256), models (role, model, effort), run_by, notes, and severity_map: a table from each raw severity (CRITICAL, INFORMATIONAL, FIXABLE, INVESTIGATE, Critical, High, Medium, Low, P0 to P3) to CRITICAL or INFORMATIONAL, optionally per reader. Round 3's prose-voice rule is such a map.
 - **findings/<pr>.jsonl.** One finding per line, in gstack's specialist line shape (severity, confidence, path, line, category, summary, fix, fingerprint, specialist) plus reader, pass and id. A finding's id is its id field, else its fingerprint, else `#<line number>`; it must be unique in the file.
@@ -110,7 +110,7 @@ An arm's run is the directory Minder was asked to write: `arm-<id>/` with arm.js
 
 `noloss ingest <dir> --suite <id>` validates the directory, runs the sealed guard's patterns and the wiki's key-shape scan over every text field, and copies it to lanes/review-noloss/arms/<suite>/<arm id>/. A finding text that fails the scan blocks the ingest; it is never redacted silently. Ingest never changes a source file.
 
-**The legacy arms.** A and B (round 2) and C and A' (round 3) have no findings files in the drive; their merged.jsonl files were on GSTA-167's lane machine. So each is ingested from a hand transcription of its results table, in blocker order: matched_finding is `-`, raw and mapped severity follow the outcome (F as CRITICAL, D as INFORMATIONAL), judge is "GSTA-167 lane", saw_label is yes, and note carries the results file and any footnote (3526 B2, 3527 B1 and B4, 3567 B3). Blocker order is checked against the footnotes, which name blockers by cause. cost.tsv for C and A' holds one root-counter-delta row each over the 11 PRs measured in both (330.3M and 194.9M); A and B have none. A test recomputes every per-PR fraction and total in both results files, both rounds' bars, and round 3's sentence naming A''s nine misses and two gains. The Captain is asked to have Minder copy those four merged.jsonl files into the arm shape if they still exist, which would allow a blinded re-judge later.
+**The legacy arms.** A and B (round 2) and C and A' (round 3) have no findings files in the drive; their merged.jsonl files were on GSTA-167's lane machine. So each is ingested from a hand transcription of its results table, in blocker order: matched_finding is `-`, raw and mapped severity follow the outcome (F as CRITICAL, D as INFORMATIONAL), judge is "GSTA-167 lane", saw_label is yes, and note carries the results file and any footnote (3526 B2, 3527 B1 and B4, 3567 B3). Blocker order is checked against the footnotes, which name blockers by cause. cost.tsv for C and A' holds one root-counter-delta row each over the 11 PRs measured in both (330.3M and 194.9M); A and B have none. A test recomputes every per-PR fraction and total in both results files, both rounds' bars, and round 3's sentence naming A''s nine misses and two gains. The Captain is asked to have the gstack Captain copy those four merged.jsonl files into the arm shape if they still exist, which would allow a blinded re-judge later.
 
 ### 4. Metrics
 
@@ -226,13 +226,13 @@ Phase 1, this plan and its review: under the 40M cap. Phase 2 estimate: about 45
 - **Legacy judging was labelled.** Its verdicts stand as GSTA-167's but carry the flag, and they are never pooled with blind judgments.
 - **Severity maps can favour one arm.** Round 3's map is generous to C's prose voices. The scorer prints both arms' maps and flags a comparison whose maps differ.
 - **Line resolution on multi-file blockers** is a hand call. The judging rule matches on any listed path and the cause, never on the line.
-- **Contract drift.** Minder's next drop may differ from version 1. Ingest names every mismatch with a reason code, and unknown fields are kept, not refused.
+- **Contract drift.** The gstack Captain's next drop may differ from version 1. Ingest names every mismatch with a reason code, and unknown fields are kept, not refused.
 
 ### 15. Needs
 
-- The Captain relays contract version 1 (section 3) to Minder before arm D reports.
-- Minder, through the Captain, copies the A, B, C and A' merged.jsonl files and C's plans/<pr>.txt into the arm shape if they still exist.
-- Minder learns of the 29-blocker recount.
+- The Captain relays contract version 1 (section 3) to the gstack Captain before arm D reports.
+- The gstack Captain, through the Captain, copies the A, B, C and A' merged.jsonl files and C's plans/<pr>.txt into the arm shape if they still exist.
+- The gstack Captain learns of the 29-blocker recount.
 
 ## Review record
 

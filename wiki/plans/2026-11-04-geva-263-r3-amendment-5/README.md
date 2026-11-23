@@ -113,6 +113,8 @@ r3b-power.ts.txt runs that rule itself. It imports analyze() from a git archive 
 
 ## 7. Budget
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 /investigate's evaluation gets $2,000 all-in from 2026-11-03 13:30Z, with runs in flight included: paid model calls, judges, VMs and crew model use at about $1 per 1,000 credits. Amendment 4's caps file withdrew the old R3b proposals ($2,100, $3,100 and $1,000) and left R3b "at most $2,000 less everything settled on amendment 4 (both run threads' model use included)".
 
 | Line | Amount | Source |
@@ -131,6 +133,8 @@ r3b-power.ts.txt runs that rule itself. It imports analyze() from a git archive 
 The remainder powers both models at the frozen n of 70, with the MDD in section 6. No model is left out for money. The unallocated $810.78 is not a reserve anyone may draw on without a Captain decision. A raise after a projection stop (section 5) comes from it, and the Captain records each raise in approvals/.
 
 ## 8. Items and caps
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 One item per model, each on its own ledger and run thread, never both on one thread (amendment 4 section 13). Each item holds the re-check and the three grid parts, and Sol's also holds its route check.
 

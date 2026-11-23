@@ -1,0 +1,14 @@
+diff --git a/springdoc-openapi-starter-common/src/main/java/org/springdoc/core/service/AbstractRequestService.java b/springdoc-openapi-starter-common/src/main/java/org/springdoc/core/service/AbstractRequestService.java
+index 681a615..4b2a596 100644
+--- a/springdoc-openapi-starter-common/src/main/java/org/springdoc/core/service/AbstractRequestService.java
++++ b/springdoc-openapi-starter-common/src/main/java/org/springdoc/core/service/AbstractRequestService.java
+@@ -502,7 +502,8 @@ public abstract class AbstractRequestService {
+ 		}
+ 		// Check for @RequestBody annotation
+ 		org.springframework.web.bind.annotation.RequestBody requestBody = parameter.getParameterAnnotation(org.springframework.web.bind.annotation.RequestBody.class);
+-		if (requestBody == null) {
++		RequestPart requestPart = parameter.getParameterAnnotation(RequestPart.class);
++		if (requestBody == null && requestPart == null) {
+ 			return false;
+ 		}
+ 		// Check if the parameter type is assignable to Map

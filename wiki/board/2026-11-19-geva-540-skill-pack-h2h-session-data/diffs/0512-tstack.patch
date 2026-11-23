@@ -1,0 +1,130 @@
+diff --git a/Terminal.Gui/Views/DialogTResult.cs b/Terminal.Gui/Views/DialogTResult.cs
+index 94f4d99..2acfe14 100644
+--- a/Terminal.Gui/Views/DialogTResult.cs
++++ b/Terminal.Gui/Views/DialogTResult.cs
+@@ -358,7 +358,8 @@ public class Dialog<TResult> : Runnable<TResult>, IDesignable
+         }
+         else
+         {
+-            SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Base);
++            // NOTE: Do not touch SchemeName here. SetStyle is called from the constructor (when the dialog is
++            // not running), so setting it would clobber the Schemes.Dialog default (and any user-set SchemeName).
+ 
+             // strip out movable and resizable
+             Arrangement &= ~(ViewArrangement.Movable | ViewArrangement.Resizable);
+diff --git a/Tests/UnitTestsParallelizable/Views/DialogTests.cs b/Tests/UnitTestsParallelizable/Views/DialogTests.cs
+index 5c64f21..4393665 100644
+--- a/Tests/UnitTestsParallelizable/Views/DialogTests.cs
++++ b/Tests/UnitTestsParallelizable/Views/DialogTests.cs
+@@ -1583,6 +1583,111 @@ public class DialogTests (ITestOutputHelper output) : TestDriverBase
+ 
+     #endregion Drawing Tests
+ 
++    #region Scheme Tests
++
++    // Claude - Opus 5.5
++    // Regression: Dialog<TResult>.SetStyle () was called at the end of the constructor and, because the
++    // dialog is not yet running, overwrote SchemeName ("Dialog") with "Base". Nothing restored it when the
++    // dialog was later run, so plain Dialogs rendered with the Base scheme. MessageBox masked the bug by
++    // re-setting SchemeName after construction.
++
++    [Fact]
++    public void Constructor_Sets_SchemeName_To_Dialog ()
++    {
++        using Dialog dialog = new ();
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Dialog), dialog.SchemeName);
++    }
++
++    [Fact]
++    public void Generic_Constructor_Sets_SchemeName_To_Dialog ()
++    {
++        using Dialog<string> dialog = new ();
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Dialog), dialog.SchemeName);
++    }
++
++    [Fact]
++    public void GetScheme_Returns_Dialog_Scheme ()
++    {
++        using Dialog dialog = new ();
++
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog), dialog.GetScheme ());
++    }
++
++    [Fact]
++    public void Draws_Using_Dialog_Scheme ()
++    {
++        IDriver driver = CreateTestDriver (10, 5);
++
++        using Dialog dialog = new ();
++        dialog.X = 0;
++        dialog.Y = 0;
++        dialog.Width = 5;
++        dialog.Height = 3;
++        dialog.BorderStyle = LineStyle.Single;
++        dialog.ShadowStyle = ShadowStyle.None;
++
++        dialog.Driver = driver;
++        dialog.Layout ();
++        dialog.Draw ();
++
++        Attribute expected = SchemeManager.GetScheme (Schemes.Dialog).Normal;
++
++        // Interior cell of the dialog
++        Assert.Equal (expected, driver.Contents! [1, 1].Attribute);
++    }
++
++    [Fact]
++    public void Running_Dialog_Uses_Dialog_SchemeName ()
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++
++        using Dialog dialog = new ();
++        string? schemeName = null;
++        Scheme? scheme = null;
++
++        app.Iteration += OnIteration;
++        app.Run (dialog);
++        app.Iteration -= OnIteration;
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Dialog), schemeName);
++        Assert.Equal (SchemeManager.GetScheme (Schemes.Dialog), scheme);
++
++        void OnIteration (object? s, EventArgs<IApplication?> a)
++        {
++            schemeName = dialog.SchemeName;
++            scheme = dialog.GetScheme ();
++            app.RequestStop ();
++        }
++    }
++
++    [Fact]
++    public void Running_Dialog_Preserves_Custom_SchemeName ()
++    {
++        using IApplication app = Application.Create ();
++        app.Init (DriverRegistry.Names.ANSI);
++
++        using Dialog dialog = new ();
++        dialog.SchemeName = SchemeManager.SchemesToSchemeName (Schemes.Error);
++        string? schemeName = null;
++
++        app.Iteration += OnIteration;
++        app.Run (dialog);
++        app.Iteration -= OnIteration;
++
++        Assert.Equal (SchemeManager.SchemesToSchemeName (Schemes.Error), schemeName);
++
++        void OnIteration (object? s, EventArgs<IApplication?> a)
++        {
++            schemeName = dialog.SchemeName;
++            app.RequestStop ();
++        }
++    }
++
++    #endregion Scheme Tests
++
+     #region Dialog<TResult> Generic Tests
+ 
+     // Claude - Opus 4.5

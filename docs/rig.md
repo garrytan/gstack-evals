@@ -1,6 +1,6 @@
 # The rig proof
 
-gstack-evals proves its rig before it spends money (GSTA-8's CI plan, decision 3; unit U20). A line item recorded with `--admission required` leases only when an admission record for that lease's slot is green, current and written on the machine that will spend. This page says what the record proves, how a Captain writes one, and what makes a lease refuse.
+gstack-evals proves its rig before it spends money (the CI plan, decision 3; unit U20). A line item recorded with `--admission required` leases only when an admission record for that lease's slot is green, current and written on the machine that will spend. This page says what the record proves, how a Captain writes one, and what makes a lease refuse.
 
 The ledger side, where the lease reads the record, is in [budget-ledger.md](budget-ledger.md#admission). Reason codes are in [errors.md](errors.md).
 
@@ -99,7 +99,7 @@ A record is write-once. The first attempt for slot 1 is `items/<item>/admission-
 
 ## Disk space
 
-A real-host call fills two places: the state root (`~/.capy/work/gstack-evals` on Capy, `$XDG_STATE_HOME/gstack-evals` or `~/.local/state/gstack-evals` elsewhere) and Docker's root dir. GST-361 measured U11's /learn call on a Capy machine: base gstack@7204a39a27ba, arms before, after and none.
+A real-host call fills two places: the state root (`~/.capy/work/gstack-evals` on Capy, `$XDG_STATE_HOME/gstack-evals` or `~/.local/state/gstack-evals` elsewhere) and Docker's root dir. The install cleanup fix measured U11's /learn call on a Capy machine: base gstack@7204a39a27ba, arms before, after and none.
 
 | What | Where | Size | After the run |
 |---|---|---|---|

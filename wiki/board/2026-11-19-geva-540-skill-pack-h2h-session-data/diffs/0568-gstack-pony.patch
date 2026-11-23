@@ -1,0 +1,161 @@
+diff --git a/RULES_DESCRIPTIONS.md b/RULES_DESCRIPTIONS.md
+index f73ee66..c9b1bee 100644
+--- a/RULES_DESCRIPTIONS.md
++++ b/RULES_DESCRIPTIONS.md
+@@ -1753,6 +1753,8 @@ _Configuration_: N/A
+ 
+ _Description_: Since Go 1.25 the `sync` package proposes the [`WaitGroup.Go`](https://pkg.go.dev/sync#WaitGroup.Go) method.
+ This method is a shorter and safer replacement for the idiom `wg.Add ... go { ... wg.Done ... }`.
++The idiom is also spotted when the goroutines are spawned inside a loop that follows `wg.Add`
++(e.g. `wg.Add(n); for range n { go func() { defer wg.Done(); ... }() }`).
+ The rule proposes to replace these legacy idioms with calls to the new method.
+ 
+ _Limitations_: The rule doesn't rely on type information but on variable names to identify waitgroups.
+diff --git a/rule/use_waitgroup_go.go b/rule/use_waitgroup_go.go
+index 6f04fd6..1b76683 100644
+--- a/rule/use_waitgroup_go.go
++++ b/rule/use_waitgroup_go.go
+@@ -97,16 +97,7 @@ func (w *lintUseWaitGroupGo) analyzeBlock(b *ast.BlockStmt) {
+ 		// wg.Add is the i-th statement of block.List
+ 		// we will iterate from the (i+1)-th statement up to the last statement of block.List
+ 		for i++; i < len(stmts); i++ {
+-			stmt := stmts[i]
+-			// looking for a go statement
+-			goStmt, ok := stmt.(*ast.GoStmt)
+-			if !ok {
+-				continue // not a go statement
+-			}
+-
+-			// here we found a the go statement
+-			// now let's check is the go statement is applied to a function literal that contains a wg.Done
+-			if !w.hasCallToWgDone(goStmt) {
++			if !w.isGoWithWgDone(stmts[i]) && !w.isLoopWithGoWgDone(stmts[i]) {
+ 				continue
+ 			}
+ 
+@@ -122,6 +113,48 @@ func (w *lintUseWaitGroupGo) analyzeBlock(b *ast.BlockStmt) {
+ 	}
+ }
+ 
++// isGoWithWgDone returns true if the given statement is a go statement
++// running a function literal that contains a call to wg.Done, false otherwise.
++func (w *lintUseWaitGroupGo) isGoWithWgDone(stmt ast.Stmt) bool {
++	goStmt, ok := stmt.(*ast.GoStmt)
++	return ok && w.hasCallToWgDone(goStmt)
++}
++
++// isLoopWithGoWgDone returns true if the given statement is a for/range loop
++// whose body directly contains a go statement with a call to wg.Done
++// (not preceded by its own wg.Add), as in:
++//
++//	wg.Add(n)
++//	for range n {
++//		go func() {
++//			defer wg.Done()
++//			...
++//		}()
++//	}
++func (w *lintUseWaitGroupGo) isLoopWithGoWgDone(stmt ast.Stmt) bool {
++	var body *ast.BlockStmt
++	switch loop := stmt.(type) {
++	case *ast.ForStmt:
++		body = loop.Body
++	case *ast.RangeStmt:
++		body = loop.Body
++	default:
++		return false
++	}
++
++	for _, s := range body.List {
++		if w.isCallToWgAdd(s) {
++			return false // the loop body has its own wg.Add; it is analyzed on its own
++		}
++
++		if w.isGoWithWgDone(s) {
++			return true
++		}
++	}
++
++	return false
++}
++
+ // hasCallToWgDone returns true if the given go statement
+ // calls to a function literal containing a call to wg.Done, false otherwise.
+ func (*lintUseWaitGroupGo) hasCallToWgDone(goStmt *ast.GoStmt) bool {
+diff --git a/testdata/go1.25/use_waitgroup_go.go b/testdata/go1.25/use_waitgroup_go.go
+index a827a49..fe901a1 100644
+--- a/testdata/go1.25/use_waitgroup_go.go
++++ b/testdata/go1.25/use_waitgroup_go.go
+@@ -51,3 +51,49 @@ func useWaitGroupGo() {
+ 	}()
+ 	wg.Wait()
+ }
++
++// from https://github.com/kubernetes-sigs/kueue/pull/9892
++func useWaitGroupGoWithLoops(jobs int64) {
++	wg := sync.WaitGroup{}
++
++	wg.Add(int(jobs)) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++
++	for range int(jobs) {
++		go func() {
++			defer wg.Done()
++			doSomething()
++		}()
++	}
++
++	wg.Wait()
++
++	wg.Add(len(items)) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++	for i := 0; i < len(items); i++ {
++		doSomethingElse()
++		go func() {
++			doSomething(items[i])
++			wg.Done()
++		}()
++	}
++	wg.Wait()
++
++	// the loop body has its own wg.Add, only that one shall be reported
++	wg.Add(1)
++	doSomething()
++	for _, item := range items {
++		wg.Add(1) // MATCH /replace wg.Add()...go {...wg.Done()...} with wg.Go(...)/
++		go func() {
++			defer wg.Done()
++			doSomething(item)
++		}()
++	}
++	wg.Wait()
++
++	// no wg.Done in the goroutine
++	wg.Add(len(items))
++	for range items {
++		go func() {
++			doSomething()
++		}()
++	}
++}
+diff --git a/testdata/use_waitgroup_go.go b/testdata/use_waitgroup_go.go
+index 4270b43..3cb9180 100644
+--- a/testdata/use_waitgroup_go.go
++++ b/testdata/use_waitgroup_go.go
+@@ -51,3 +51,18 @@ func useWaitGroupGo() {
+ 	}()
+ 	wg.Wait()
+ }
++
++func useWaitGroupGoWithLoops(jobs int64) {
++	wg := sync.WaitGroup{}
++
++	wg.Add(int(jobs))
++
++	for range int(jobs) {
++		go func() {
++			defer wg.Done()
++			doSomething()
++		}()
++	}
++
++	wg.Wait()
++}

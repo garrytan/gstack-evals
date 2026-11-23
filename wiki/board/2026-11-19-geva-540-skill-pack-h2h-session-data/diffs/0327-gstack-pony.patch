@@ -1,0 +1,140 @@
+diff --git a/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeHandler.java b/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeHandler.java
+index 5018f46..7d56f53 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeHandler.java
++++ b/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeHandler.java
+@@ -246,6 +246,12 @@ public class EventBridgeHandler {
+                 if (!entryNode.path("Detail").isMissingNode()) {
+                     entry.put("Detail", entryNode.path("Detail").asText(null));
+                 }
++                JsonNode resourcesNode = entryNode.path("Resources");
++                if (resourcesNode.isArray()) {
++                    List<String> resources = new ArrayList<>();
++                    resourcesNode.forEach(r -> resources.add(r.asText()));
++                    entry.put("Resources", resources);
++                }
+                 entries.add(entry);
+             }
+         }
+diff --git a/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeService.java b/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeService.java
+index 9f727d1..e32f63b 100644
+--- a/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeService.java
++++ b/src/main/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeService.java
+@@ -17,6 +17,7 @@ import io.github.hectorvent.floci.services.sqs.SqsService;
+ import com.fasterxml.jackson.core.type.TypeReference;
+ import com.fasterxml.jackson.databind.JsonNode;
+ import com.fasterxml.jackson.databind.ObjectMapper;
++import com.fasterxml.jackson.databind.node.ArrayNode;
+ import com.fasterxml.jackson.databind.node.ObjectNode;
+ import jakarta.enterprise.context.ApplicationScoped;
+ import jakarta.inject.Inject;
+@@ -27,6 +28,7 @@ import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
++import java.util.Objects;
+ import java.util.UUID;
+ 
+ @ApplicationScoped
+@@ -370,6 +372,13 @@ public class EventBridgeService {
+                     return false;
+                 }
+             }
++            JsonNode resourcesField = pattern.get("resources");
++            if (resourcesField != null && resourcesField.isArray()) {
++                // An array-valued event field matches if any of its values matches the pattern
++                if (eventResources(event).stream().noneMatch(r -> matchesArrayField(resourcesField, r))) {
++                    return false;
++                }
++            }
+             JsonNode detailPattern = pattern.get("detail");
+             if (detailPattern != null && detailPattern.isObject()) {
+                 Object eventDetail = event.get("Detail");
+@@ -396,6 +405,13 @@ public class EventBridgeService {
+         }
+     }
+ 
++    private static List<String> eventResources(Map<String, Object> event) {
++        if (event.get("Resources") instanceof List<?> list) {
++            return list.stream().filter(Objects::nonNull).map(Object::toString).toList();
++        }
++        return List.of();
++    }
++
+     private boolean matchesArrayField(JsonNode arrayNode, String value) {
+         if (value == null) return false;
+         for (JsonNode element : arrayNode) {
+@@ -446,7 +462,8 @@ public class EventBridgeService {
+             node.put("account", regionResolver.getAccountId());
+             node.put("time", Instant.now().toString());
+             node.put("region", regionResolver.getDefaultRegion());
+-            node.putArray("resources");
++            ArrayNode resourcesNode = node.putArray("resources");
++            eventResources(entry).forEach(resourcesNode::add);
+             node.set("detail", objectMapper.readTree(detail));
+             node.put("event-bus-name", busName);
+             return objectMapper.writeValueAsString(node);
+diff --git a/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeServiceTest.java b/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeServiceTest.java
+index 85ce75d..11e8eef 100644
+--- a/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeServiceTest.java
++++ b/src/test/java/io/github/hectorvent/floci/services/eventbridge/EventBridgeServiceTest.java
+@@ -8,13 +8,18 @@ import io.github.hectorvent.floci.services.eventbridge.model.EventBus;
+ import io.github.hectorvent.floci.services.eventbridge.model.Rule;
+ import io.github.hectorvent.floci.services.eventbridge.model.RuleState;
+ import io.github.hectorvent.floci.services.eventbridge.model.Target;
++import io.github.hectorvent.floci.services.sqs.SqsService;
+ import org.junit.jupiter.api.BeforeEach;
++import org.mockito.ArgumentCaptor;
+ import org.junit.jupiter.api.Test;
+ 
+ import java.util.List;
+ import java.util.Map;
+ 
+ import static org.junit.jupiter.api.Assertions.*;
++import static org.mockito.ArgumentMatchers.anyString;
++import static org.mockito.ArgumentMatchers.eq;
++import static org.mockito.Mockito.*;
+ 
+ class EventBridgeServiceTest {
+ 
+@@ -314,4 +319,40 @@ class EventBridgeServiceTest {
+         EventBridgeService.PutEventsResult result = service.putEvents(entries, REGION);
+         assertEquals(1, result.failedCount());
+     }
++
++    @Test
++    void matchesPatternByResources() {
++        Map<String, Object> event = Map.of("Source", "my.app",
++                "Resources", List.of("res:a", "res:b"));
++
++        assertTrue(service.matchesPattern(event, "{\"resources\":[\"res:b\"]}"));
++        assertFalse(service.matchesPattern(event, "{\"resources\":[\"res:c\"]}"));
++        assertFalse(service.matchesPattern(Map.of("Source", "my.app"), "{\"resources\":[\"res:a\"]}"));
++    }
++
++    @Test
++    void putEventsForwardsResourcesToTarget() throws Exception {
++        SqsService sqs = mock(SqsService.class);
++        ObjectMapper mapper = new ObjectMapper();
++        EventBridgeService svc = new EventBridgeService(
++                new InMemoryStorage<>(), new InMemoryStorage<>(), new InMemoryStorage<>(),
++                new RegionResolver("us-east-1", "000000000000"),
++                null, sqs, null, mapper);
++        svc.putRule("r", null, "{\"resources\":[\"res:a\"]}", null, RuleState.ENABLED,
++                null, null, null, REGION);
++        Target t = new Target();
++        t.setId("t1");
++        t.setArn("arn:aws:sqs:us-east-1:000000000000:my-queue");
++        svc.putTargets("r", null, List.of(t), REGION);
++
++        svc.putEvents(List.of(Map.of("Source", "my.app", "DetailType", "Test", "Detail", "{}",
++                "Resources", List.of("res:a", "res:b"))), REGION);
++        svc.putEvents(List.of(Map.of("Source", "my.app", "DetailType", "Test", "Detail", "{}",
++                "Resources", List.of("res:other"))), REGION);
++
++        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
++        verify(sqs, times(1)).sendMessage(anyString(), body.capture(), eq(0));
++        assertEquals(List.of("res:a", "res:b"),
++                mapper.convertValue(mapper.readTree(body.getValue()).get("resources"), List.class));
++    }
+ }
+\ No newline at end of file

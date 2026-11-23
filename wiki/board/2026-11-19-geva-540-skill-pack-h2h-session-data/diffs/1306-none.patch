@@ -1,0 +1,77 @@
+diff --git a/internal/tools/http/http.go b/internal/tools/http/http.go
+index bb317b6..62bff35 100644
+--- a/internal/tools/http/http.go
++++ b/internal/tools/http/http.go
+@@ -160,6 +160,32 @@ func getRequestBody(bodyParams parameters.Parameters, requestBodyPayload string,
+ 	return requestBodyStr, nil
+ }
+ 
++// validatePathParamValue rejects path parameter values that contain dot
++// segments ("." or ".."), which could otherwise be used to traverse outside
++// of the operator-configured path. Percent-encoded and backslash variants are
++// also rejected.
++func validatePathParamValue(v string) error {
++	candidates := []string{v}
++	decoded := v
++	for i := 0; i < 3; i++ {
++		d, err := url.PathUnescape(decoded)
++		if err != nil || d == decoded {
++			break
++		}
++		decoded = d
++		candidates = append(candidates, decoded)
++	}
++	for _, c := range candidates {
++		c = strings.ReplaceAll(c, "\\", "/")
++		for _, seg := range strings.Split(c, "/") {
++			if seg == "." || seg == ".." {
++				return fmt.Errorf("path traversal sequences are not allowed")
++			}
++		}
++	}
++	return nil
++}
++
+ // Helper function to generate the HTTP request URL upon Tool invocation.
+ func getURL(baseURL, path string, pathParams, queryParams parameters.Parameters, defaultQueryParams map[string]string, paramsMap map[string]any) (string, error) {
+ 	// use Go template to replace path params
+@@ -168,6 +194,11 @@ func getURL(baseURL, path string, pathParams, queryParams parameters.Parameters,
+ 		return "", err
+ 	}
+ 	pathParamsMap := pathParamValues.AsMap()
++	for name, v := range pathParamsMap {
++		if err := validatePathParamValue(fmt.Sprintf("%v", v)); err != nil {
++			return "", fmt.Errorf("invalid value for path parameter %q: %w", name, err)
++		}
++	}
+ 
+ 	templ, err := template.New("url").Parse(path)
+ 	if err != nil {
+diff --git a/internal/tools/http/http_url_test.go b/internal/tools/http/http_url_test.go
+index c23e7fe..bfd29da 100644
+--- a/internal/tools/http/http_url_test.go
++++ b/internal/tools/http/http_url_test.go
+@@ -76,3 +76,23 @@ func TestGetURLHostOverride(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestGetURLPathTraversal(t *testing.T) {
++	baseURL := "https://api.good.com"
++	path := "/api/v1/users/{{.id}}"
++	pathParams := parameters.Parameters{parameters.NewStringParameter("id", "id")}
++
++	bad := []string{"..", "../../../admin/secrets", "./x", "a/../../admin", "%2e%2e/admin", "%2E%2E%2Fadmin", "..\\admin", "%252e%252e/admin"}
++	for _, v := range bad {
++		if u, err := getURL(baseURL, path, pathParams, nil, nil, map[string]any{"id": v}); err == nil {
++			t.Errorf("expected error for %q, got url %q", v, u)
++		}
++	}
++	good := map[string]string{"123": "https://api.good.com/api/v1/users/123", "a..b": "https://api.good.com/api/v1/users/a..b"}
++	for v, want := range good {
++		got, err := getURL(baseURL, path, pathParams, nil, nil, map[string]any{"id": v})
++		if err != nil || got != want {
++			t.Errorf("for %q: got %q, %v; want %q", v, got, err, want)
++		}
++	}
++}

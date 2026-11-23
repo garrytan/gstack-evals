@@ -1,0 +1,207 @@
+diff --git a/src/libuilogic/Ocr/FixEngine/OcrFixReplaceList2.cs b/src/libuilogic/Ocr/FixEngine/OcrFixReplaceList2.cs
+index f714abe..2f898ff 100644
+--- a/src/libuilogic/Ocr/FixEngine/OcrFixReplaceList2.cs
++++ b/src/libuilogic/Ocr/FixEngine/OcrFixReplaceList2.cs
+@@ -698,6 +698,11 @@ namespace Nikse.SubtitleEdit.Core.Dictionaries
+                 return res;
+             }
+ 
++            if (GetReplaceWordCaseVariant(pre, word, post, out var caseRes))
++            {
++                return caseRes;
++            }
++
+             var oldWord = word;
+             if (Configuration.Settings.Tools.OcrFixUseHardcodedRules)
+             {
+@@ -726,6 +731,52 @@ namespace Nikse.SubtitleEdit.Core.Dictionaries
+             return preWordPost;
+         }
+ 
++        /// <summary>
++        /// Replace lists normally contain lowercase entries only (e.g. "adios" -> "adiós"), so also
++        /// match words that are capitalized ("Adios" -> "Adiós") or all uppercase ("ADIOS" -> "ADIÓS").
++        /// </summary>
++        private bool GetReplaceWordCaseVariant(string pre, string word, string post, out string result)
++        {
++            result = string.Empty;
++            if (word.Length == 0 || !char.IsUpper(word[0]))
++            {
++                return false;
++            }
++
++            var isAllUpper = word.Length > 1 && word.ToUpperInvariant() == word && word.ToLowerInvariant() != word;
++            var lowerFirst = char.ToLowerInvariant(word[0]) + word.Substring(1);
++            if (!isAllUpper && GetReplaceWord(pre, lowerFirst, post, out var res) && res.Length > 0)
++            {
++                result = UpperCaseFirstLetter(res, pre.Length);
++                return true;
++            }
++
++            if (isAllUpper && GetReplaceWord(pre, word.ToLowerInvariant(), post, out res) &&
++                res.Length >= pre.Length + post.Length &&
++                res.StartsWith(pre, StringComparison.Ordinal) &&
++                res.EndsWith(post, StringComparison.Ordinal))
++            {
++                var middle = res.Substring(pre.Length, res.Length - pre.Length - post.Length);
++                result = pre + middle.ToUpperInvariant() + post;
++                return true;
++            }
++
++            return false;
++        }
++
++        private static string UpperCaseFirstLetter(string s, int startIndex)
++        {
++            for (var i = Math.Min(startIndex, s.Length); i < s.Length; i++)
++            {
++                if (char.IsLetter(s[i]))
++                {
++                    return s.Substring(0, i) + char.ToUpperInvariant(s[i]) + s.Substring(i + 1);
++                }
++            }
++
++            return s;
++        }
++
+         private bool GetReplaceWord(string pre, string word, string post, out string result)
+         {
+             if (string.IsNullOrEmpty(pre) && string.IsNullOrEmpty(post))
+diff --git a/src/seconv/Core/FixCommonErrorsRunner.cs b/src/seconv/Core/FixCommonErrorsRunner.cs
+index dfbc1b1..b92067b 100644
+--- a/src/seconv/Core/FixCommonErrorsRunner.cs
++++ b/src/seconv/Core/FixCommonErrorsRunner.cs
+@@ -1,4 +1,4 @@
+-using Nikse.SubtitleEdit.Core.Common;
++﻿using Nikse.SubtitleEdit.Core.Common;
+ using Nikse.SubtitleEdit.Core.Forms.FixCommonErrors;
+ using Nikse.SubtitleEdit.Core.Interfaces;
+ using Nikse.SubtitleEdit.Features.Ocr.FixEngine;
+@@ -130,7 +130,8 @@ internal static class FixCommonErrorsRunner
+     /// <summary>
+     /// Applies the OCR-fix engine (OCR replace lists + Hunspell spell-check guessing) to every line,
+     /// the headless equivalent of the GUI's "Fix common OCR errors". No-op when no dictionary folder
+-    /// is configured or no Hunspell dictionary matches the detected language. (#11744)
++    /// is configured. When no Hunspell dictionary matches the detected language, the OCR replace list
++    /// is still applied (without spell-check guessing). (#11744)
+     /// </summary>
+     private static void RunOcrFix(Subtitle subtitle, string twoLetterLanguage)
+     {
+@@ -148,11 +149,8 @@ internal static class FixCommonErrorsRunner
+ 
+         var spellChecker = new SpellChecker();
+         var dictionary = spellChecker.GetDictionaryLanguages(folder)
+-            .FirstOrDefault(d => d.GetThreeLetterCode() == threeLetter);
+-        if (dictionary == null)
+-        {
+-            return;
+-        }
++            .FirstOrDefault(d => d.GetThreeLetterCode() == threeLetter)
++            ?? new SpellCheckDictionaryDisplay { Name = threeLetter, DictionaryFileName = string.Empty };
+ 
+         IOcrFixEngine engine = new OcrFixEngine(spellChecker);
+         engine.Initialize(subtitle, threeLetter, dictionary);
+diff --git a/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs b/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
+index 7d4063b..a8ab698 100644
+--- a/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
++++ b/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
+@@ -33,11 +33,10 @@ namespace Nikse.SubtitleEdit.Core.Forms.FixCommonErrors
+ 
+             var spellCheckManager = new SpellCheckManager();
+             var spellCheckers = spellCheckManager.GetDictionaryLanguages(Se.DictionariesFolder);
+-            var spellChecker = spellCheckers.FirstOrDefault(x => x.GetThreeLetterCode() == threeLetterCode);
+-            if (spellChecker == null)
+-            {
+-                return;
+-            }
++            // The OCR replace list (e.g. spa_OCRFixReplaceList.xml) must be applied even when no
++            // Hunspell dictionary is installed for the language - fall back to "no spell checker".
++            var spellChecker = spellCheckers.FirstOrDefault(x => x.GetThreeLetterCode() == threeLetterCode)
++                               ?? new SpellCheckDictionaryDisplay { Name = threeLetterCode, DictionaryFileName = string.Empty };
+ 
+             OcrFixEngine.Initialize(subtitle, threeLetterCode, spellChecker);
+ 
+diff --git a/tests/UI/Features/Tools/FixCommonErrors/FixCommonOcrErrorsTests.cs b/tests/UI/Features/Tools/FixCommonErrors/FixCommonOcrErrorsTests.cs
+new file mode 100644
+index 0000000..61840eb
+--- /dev/null
++++ b/tests/UI/Features/Tools/FixCommonErrors/FixCommonOcrErrorsTests.cs
+@@ -0,0 +1,78 @@
++using Nikse.SubtitleEdit.Core.Common;
++using Nikse.SubtitleEdit.Core.Dictionaries;
++using Nikse.SubtitleEdit.Core.Forms.FixCommonErrors;
++using Nikse.SubtitleEdit.Features.Ocr.FixEngine;
++using Nikse.SubtitleEdit.Features.SpellCheck;
++using Nikse.SubtitleEdit.Logic.Config;
++
++namespace UITests.Features.Tools.FixCommonErrors;
++
++[Collection("Se.DictionariesFolder")]
++public class FixCommonOcrErrorsTests : IDisposable
++{
++    private const string ReplaceListXml = """
++        <?xml version="1.0" encoding="utf-8"?>
++        <OCRFixReplaceList>
++          <WholeWords>
++            <Word from="aca" to="acá" />
++            <Word from="adios" to="adiós" />
++            <Word from="algun" to="algún" />
++            <Word from="dia" to="día" />
++            <Word from="volvere" to="volveré" />
++          </WholeWords>
++        </OCRFixReplaceList>
++        """;
++
++    private readonly string _folder;
++    private readonly string? _oldDictionariesFolder;
++    private readonly Func<string> _oldConfigFolder;
++
++    public FixCommonOcrErrorsTests()
++    {
++        _folder = Path.Combine(Path.GetTempPath(), "SE.FixCommonOcrErrorsTests", Guid.NewGuid().ToString("N"));
++        Directory.CreateDirectory(_folder);
++        File.WriteAllText(Path.Combine(_folder, "spa_OCRFixReplaceList.xml"), ReplaceListXml);
++
++        _oldDictionariesFolder = Se.DictionariesFolder;
++        _oldConfigFolder = SpellCheckConfig.DictionariesFolder;
++        Se.DictionariesFolder = _folder;
++        SpellCheckConfig.DictionariesFolder = () => _folder;
++    }
++
++    public void Dispose()
++    {
++        Se.DictionariesFolder = _oldDictionariesFolder!;
++        SpellCheckConfig.DictionariesFolder = _oldConfigFolder;
++        FixCommonOcrErrors.OcrFixEngine = null;
++        try { Directory.Delete(_folder, true); } catch { /* ignore */ }
++    }
++
++    [Fact]
++    public void Fix_SpanishReplaceList_AppliedWithoutHunspellDictionary()
++    {
++        var subtitle = new Subtitle();
++        subtitle.Paragraphs.Add(new Paragraph("Hola, aca estoy.", 0, 2000));
++        subtitle.Paragraphs.Add(new Paragraph("Adios.", 3000, 5000));
++        subtitle.Paragraphs.Add(new Paragraph("Algun dia volvere.", 6000, 8000));
++
++        FixCommonOcrErrors.OcrFixEngine = new OcrFixEngine(new SpellCheckManager());
++        new FixCommonOcrErrors().Fix(subtitle, new EmptyFixCallback { Language = "es" });
++
++        Assert.Equal("Hola, acá estoy.", subtitle.Paragraphs[0].Text);
++        Assert.Equal("Adiós.", subtitle.Paragraphs[1].Text);
++        Assert.Equal("Algún día volveré.", subtitle.Paragraphs[2].Text);
++    }
++
++    [Theory]
++    [InlineData("adios", "adiós")]
++    [InlineData("Adios", "Adiós")]
++    [InlineData("Adios.", "Adiós.")]
++    [InlineData("ADIOS", "ADIÓS")]
++    [InlineData("<i>Adios</i>", "<i>Adiós</i>")]
++    [InlineData("Hola", "Hola")]
++    public void FixCommonWordErrors_MatchesCapitalizedWords(string input, string expected)
++    {
++        var list = OcrFixReplaceList2.FromLanguageId("spa");
++        Assert.Equal(expected, list.FixCommonWordErrors(input));
++    }
++}

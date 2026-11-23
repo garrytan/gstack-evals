@@ -1,0 +1,52 @@
+diff --git a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+index 29a21da..c5cf0f3 100644
+--- a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
++++ b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+@@ -24,7 +24,7 @@ public final class YamlEscaper extends AbstractCharEscaper {
+   private static final String[] REPLACEMENTS;
+ 
+   static {
+-    REPLACEMENTS = new String[0x22 + 1];
++    REPLACEMENTS = new String[0x5C + 1];
+     for (var i = 0; i < 0x20; i++) {
+       REPLACEMENTS[i] = IoUtils.toHexEscape(i);
+     }
+@@ -39,12 +39,13 @@ public final class YamlEscaper extends AbstractCharEscaper {
+     REPLACEMENTS[0x1B] = "\\e";
+     // we don't ever need to escape 0x20 because we don't generate quoted multiline strings
+     REPLACEMENTS[0x22] = "\\\"";
++    REPLACEMENTS[0x5C] = "\\\\";
+   }
+ 
+   @Override
+   protected @Nullable String findReplacement(char ch) {
+     //noinspection UnnecessaryUnicodeEscape
+-    return ch <= '\u0022'
++    return ch <= 0x5C
+         ? REPLACEMENTS[ch]
+         : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
+   }
+diff --git a/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl b/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
+index 5d8c5e9..2517f11 100644
+--- a/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
++++ b/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
+@@ -38,6 +38,7 @@ h3 = "\r"
+ h4 = "one\rtwo"
+ h5 = "\u{7}"
+ h6 = "one\u{7}two"
++h7 = "\t\\d"
+ 
+ // control characters in multiline strings
+ i1 = "one\ttwo\nthree"
+diff --git a/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml b/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
+index 811c851..1bccb6a 100644
+--- a/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
++++ b/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
+@@ -53,6 +53,7 @@ h3: "\r"
+ h4: "one\rtwo"
+ h5: "\a"
+ h6: "one\atwo"
++h7: "\t\\d"
+ i1: "one\ttwo\nthree"
+ i2: "one\rtwo\nthree"
+ i3: "one\atwo\nthree"

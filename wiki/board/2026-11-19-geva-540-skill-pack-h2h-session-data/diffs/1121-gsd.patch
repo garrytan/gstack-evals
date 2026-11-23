@@ -1,0 +1,62 @@
+diff --git a/internal/transport/http2_server.go b/internal/transport/http2_server.go
+index 63c6539..6813dd1 100644
+--- a/internal/transport/http2_server.go
++++ b/internal/transport/http2_server.go
+@@ -511,12 +511,20 @@ func (t *http2Server) operateHeaders(ctx context.Context, frame *http2.MetaHeade
+ 
+ 	// "If :authority is missing, Host must be renamed to :authority." - A41
+ 	if len(mdata[":authority"]) == 0 {
+-		// No-op if host isn't present, no eventual :authority header is a valid
+-		// RPC.
+-		if host, ok := mdata["host"]; ok {
+-			mdata[":authority"] = host
+-			delete(mdata, "host")
++		host, ok := mdata["host"]
++		if !ok || len(host) == 0 {
++			// Requests missing both :authority and Host are rejected, to be
++			// consistent with other gRPC implementations and to protect
++			// components (e.g. xDS routing) that rely on :authority.
++			errMsg := "missing :authority and host headers"
++			if t.logger.V(logLevel) {
++				t.logger.Infof("Aborting the stream early: %v", errMsg)
++			}
++			t.writeEarlyAbort(streamID, s.contentSubtype, status.New(codes.Internal, errMsg), http.StatusBadRequest, !frame.StreamEnded())
++			return nil
+ 		}
++		mdata[":authority"] = host
++		delete(mdata, "host")
+ 	} else {
+ 		// "If :authority is present, Host must be discarded" - A41
+ 		delete(mdata, "host")
+diff --git a/internal/xds/server/routing.go b/internal/xds/server/routing.go
+index f02a0d8..07f3683 100644
+--- a/internal/xds/server/routing.go
++++ b/internal/xds/server/routing.go
+@@ -65,7 +65,11 @@ func RouteAndProcess(ctx context.Context) error {
+ 	// the RPC gets to this point, there will be a single, unambiguous authority
+ 	// present in the header map.
+ 	authority := md.Get(":authority")
+-	// authority[0] is safe because of the guarantee mentioned above.
++	if len(authority) == 0 {
++		// Defensive check: should not happen since the transport rejects
++		// requests without :authority or host.
++		return rc.statusErrWithNodeID(codes.Unavailable, "the incoming RPC has no :authority header")
++	}
+ 	vh := findBestMatchingVirtualHostServer(authority[0], rc.vhs)
+ 	if vh == nil {
+ 		return rc.statusErrWithNodeID(codes.Unavailable, "the incoming RPC did not match a configured Virtual Host")
+diff --git a/test/end2end_test.go b/test/end2end_test.go
+index 410036f..3308453 100644
+--- a/test/end2end_test.go
++++ b/test/end2end_test.go
+@@ -6756,7 +6756,9 @@ func (s) TestAuthorityHeader(t *testing.T) {
+ 				"content-type", "application/grpc",
+ 				"te", "trailers",
+ 			},
+-			wantAuthority: "",
++			// Requests missing both :authority and host are rejected by the
++			// transport before reaching the interceptor.
++			wantAuthority: "missing :authority and host headers",
+ 		},
+ 		// "If :authority is present, Host must be discarded." - A41
+ 		{

@@ -1,0 +1,79 @@
+diff --git a/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs b/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs
+index 80a18b5..e0904bf 100644
+--- a/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs
++++ b/src/Spectre.Console.Tests/Unit/Prompts/TextPromptTests.cs
+@@ -17,6 +17,36 @@ public sealed class TextPromptTests
+         result.ShouldBe("Hello World");
+     }
+ 
++    [Fact]
++    public void Should_Accept_Choice_Ignoring_Case_By_Default()
++    {
++        // Given
++        var console = new TestConsole();
++        console.Input.PushTextWithEnter("yes");
++
++        // When
++        var result = console.Prompt(new TextPrompt<string>("Helpful?").AddChoices(["Yes", "No"]));
++
++        // Then
++        result.ShouldBe("Yes");
++    }
++
++    [Fact]
++    public void Should_Respect_Explicit_Case_Sensitive_Comparer()
++    {
++        // Given
++        var console = new TestConsole();
++        console.Input.PushTextWithEnter("yes");
++        console.Input.PushTextWithEnter("Yes");
++
++        // When
++        var result = console.Prompt(new TextPrompt<string>("Helpful?", StringComparer.Ordinal).AddChoices(["Yes", "No"]));
++
++        // Then
++        result.ShouldBe("Yes");
++        console.Output.ShouldContain("Please select one of the available options");
++    }
++
+     [Fact]
+     [Expectation("ConversionError")]
+     public Task Should_Return_Validation_Error_If_Value_Cannot_Be_Converted()
+diff --git a/src/Spectre.Console/Prompts/TextPrompt.cs b/src/Spectre.Console/Prompts/TextPrompt.cs
+index 5418ef8..dfd426d 100644
+--- a/src/Spectre.Console/Prompts/TextPrompt.cs
++++ b/src/Spectre.Console/Prompts/TextPrompt.cs
+@@ -112,6 +112,21 @@ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+         _comparer = comparer;
+     }
+ 
++    private static bool TryGetChoiceIgnoreCase(Dictionary<string, T> choiceMap, string input, out T? result)
++    {
++        foreach (var pair in choiceMap)
++        {
++            if (string.Equals(pair.Key, input, StringComparison.OrdinalIgnoreCase))
++            {
++                result = pair.Value;
++                return true;
++            }
++        }
++
++        result = default;
++        return false;
++    }
++
+     /// <summary>
+     /// Shows the prompt and requests input from the user.
+     /// </summary>
+@@ -175,7 +190,10 @@ public sealed class TextPrompt<T> : IPrompt<T>, IHasCulture
+                 T? result;
+                 if (Choices.Count > 0)
+                 {
+-                    if (choiceMap.TryGetValue(input, out result) && result != null)
++                    // Without an explicit comparer, prefer an exact match but fall back to ignoring case.
++                    if ((choiceMap.TryGetValue(input, out result) ||
++                         (_comparer == null && TryGetChoiceIgnoreCase(choiceMap, input, out result)))
++                        && result != null)
+                     {
+                         ClearPromptLine(console);
+                         return result;

@@ -1,0 +1,51 @@
+diff --git a/src/linker-script.cc b/src/linker-script.cc
+index 51144b3..8ec399b 100644
+--- a/src/linker-script.cc
++++ b/src/linker-script.cc
+@@ -248,10 +248,15 @@ std::string_view Script<E>::get_script_output_type() {
+       return I386::name;
+   }
+ 
+-  if (tok.size() >= 3 && (tok[0] == "INPUT" || tok[0] == "GROUP") &&
+-      tok[1] == "(")
+-    if (MappedFile *mf = resolve_path(tok[2], false))
+-      return get_machine_type(ctx, rctx, mf);
++  if (tok.size() >= 2 && (tok[0] == "INPUT" || tok[0] == "GROUP") &&
++      tok[1] == "(") {
++    tok = tok.subspan(2);
++    while (tok.size() >= 2 && tok[0] == "AS_NEEDED" && tok[1] == "(")
++      tok = tok.subspan(2);
++    if (!tok.empty() && tok[0] != ")")
++      if (MappedFile *mf = resolve_path(tok[0], false))
++        return get_machine_type(ctx, rctx, mf);
++  }
+   return "";
+ }
+ 
+diff --git a/test/linker-script-as-needed.sh b/test/linker-script-as-needed.sh
+new file mode 100755
+index 0000000..3a13515
+--- /dev/null
++++ b/test/linker-script-as-needed.sh
+@@ -0,0 +1,21 @@
++#!/bin/bash
++. $(dirname $0)/common.inc
++
++echo 'void foo() {}' | $CC -shared -o $t/libfoo.so -Wl,-soname,libfoo.so -xc -
++
++cat <<EOF | $CC -o $t/a.o -c -xc -
++void foo();
++void bar() { foo(); }
++EOF
++
++echo 'void bar() {}' | $CC -o $t/b.o -c -xc -
++
++echo 'INPUT(AS_NEEDED(-lfoo) a.o)' > $t/c.script
++echo 'GROUP ( AS_NEEDED ( AS_NEEDED ( libfoo.so ) ) b.o )' > $t/d.script
++
++./mold -shared -o $t/e.so -L$t $t/c.script
++readelf --dynamic $t/e.so | grep -F 'Shared library: [libfoo.so]'
++
++./mold -shared -o $t/f.so $t/d.script
++readelf --dynamic $t/f.so > $t/log
++not grep -F libfoo.so $t/log

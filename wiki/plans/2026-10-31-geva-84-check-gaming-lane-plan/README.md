@@ -17,7 +17,7 @@ links:
   - 2026-10-30-gsta-30-laneb-quick-3-results
   - 2026-10-27-gsta-4-public-task-sourcing
   - https://x.com/jsnnsa/status/2115623382721126826
-source: "Plan reviewed by gstack /autoplan run autoplan-20261031222705 (plan snapshot sha256 68a6448c762f2ddfa4154d2e50abf5391fe80000284b2047093a23a69fb9c6bb), approved at gate_rev 1 with Garry's reply 'Do it', relayed by the Captain (GEVA-2). The Implementation plan section is the reviewed text. review-record.md is the run's public export with em dashes replaced by hyphens; dryrun.md is the keyless dry-run report with machine paths shortened to $D."
+source: "Plan reviewed by gstack /autoplan run autoplan-20261031222705 (plan snapshot sha256 68a6448c762f2ddfa4154d2e50abf5391fe80000284b2047093a23a69fb9c6bb), approved at gate_rev 1 with Garry's approval, relayed by the Captain (GEVA-2). The Implementation plan section is the reviewed text. review-record.md is the run's public export with em dashes replaced by hyphens; dryrun.md is the keyless dry-run report with machine paths shortened to $D."
 attachments:
   - 5cfd52544c24bc38420fb615dcb7265afde88eb7976cec0cfce65a18ac56615c  dryrun.md
   - e9dfeaf486bc86723ce006af96943136ed9d641052212e525c103643b2b14c26  review-record.md
@@ -26,13 +26,13 @@ attachments:
 
 Plan v1, 2026-10-31. Author GEVA-84 for the gstack-evals Captain (GEVA-2), working for Garry Tan, issue GST-657 (parent GST-655).
 
-Garry asked which claims in Jacob's post "How I Built the Most AI-Pilled Company in the World" (X article, 2026-10-29) our evals can validate or invalidate, and said "Do it" to planning this lane on 2026-10-31. The post says "OpenAI's models game their own checks, Google's models don't stay coherent for very long, and xAI's models just aren't smart enough yet", and tells how GPT Astra, asked to secure the product, "made the insecure things secure by turning them off": every feature was disabled and "marked to be turned on again once the security fixes were done". No lane here measures any of that.
+Garry asked which claims in Jacob's post "How I Built the Most AI-Pilled Company in the World" (X article, 2026-10-29) our evals can validate or invalidate, and approved planning this lane on 2026-10-31. The post says "OpenAI's models game their own checks, Google's models don't stay coherent for very long, and xAI's models just aren't smart enough yet", and tells how GPT Astra, asked to secure the product, "made the insecure things secure by turning them off": every feature was disabled and "marked to be turned on again once the security fixes were done". No lane here measures any of that.
 
 Inputs read: the post; the stacks round 1 plan, prereg and step 5a tools (#93, #95, #96, #97); the review no-loss plan and arm how-to; the planning lane plan, its dry run and the R1a custody ruling; item J's seeded-mistake tasks (#87); the Lane A grader audit (GEVA-69); Lane B quick looks 1 to 3 and the Harbor runner; the U2 stats kit, U4 ledger, U10 adapters and U20 rig admit handoffs; the U14 mining rules; the GSTA-4 public sourcing brief; the rig's proxy, price table and Claude Code and Codex adapters; gstack 1.91.379.0 and 1.92.0.0, including its gate-integrity design (docs/designs/HONEST_WORK_GATE_INTEGRITY.md) and gstack-gate-diff; and published work on reward hacking (ImpossibleBench, METR, Baker et al. 2025, EvilGenie, Agent Cheat Index, BaxBench, SusVibes). Nothing here builds the lane or spends money.
 
 ## Approval
 
-Approved at autoplan gate_rev 1 (run autoplan-20261031222705, rec_hash a9ded36540fa) on 2026-10-31. Garry's reply, relayed by the Captain (GEVA-2, GST-657): "Do it". That takes every recommendation: A1 (gate item d1b) holds every lab-vs-lab sentence until the second harness agrees; B1 (d2b) adds a G3a review round on the authored gamed patches beside G1, about $250; C1 (d3a) keeps Fable 5.1 at 24 tasks and 2 trials with its own $200 item, read as exploratory, which the Captain records as covered by Garry's A1 on GST-655; D1 (p1b) approves with those two changes. The runner settled d1 and d2 as ordering changes with no edit to the reviewed text, so they are written into the next section. The review ran one round per phase (CEO and Eng, two voices each: Opus 5.5 native, gpt-6.1-sol outside; UI and DX scope off), so the findings left open at the round cap are listed there too.
+Approved at autoplan gate_rev 1 (run autoplan-20261031222705, rec_hash a9ded36540fa) on 2026-10-31. Garry approved it, relayed by the Captain (GEVA-2, GST-657). That takes every recommendation: A1 (gate item d1b) holds every lab-vs-lab sentence until the second harness agrees; B1 (d2b) adds a G3a review round on the authored gamed patches beside G1, about $250; C1 (d3a) keeps Fable 5.1 at 24 tasks and 2 trials with its own $200 item, read as exploratory, which the Captain records as covered by Garry's A1 on GST-655; D1 (p1b) approves with those two changes. The runner settled d1 and d2 as ordering changes with no edit to the reviewed text, so they are written into the next section. The review ran one round per phase (CEO and Eng, two voices each: Opus 5.5 native, gpt-6.1-sol outside; UI and DX scope off), so the findings left open at the round cap are listed there too.
 
 ## Open at approval: what the build and the prereg must settle
 
@@ -280,6 +280,8 @@ So G1 can see a lab gap of the size the literature reports between models (the A
 
 ### 9. Cost, with sources
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 Unit prices are OpenRouter's list on 2026-10-31 (keyless models API) and the rig's price table (src/runner/pricing/prices.ts), whichever is higher. Per-session anchors are Lane B's metered TB2 trials in Claude Code: Opus 5.5 none $0.17 (quick look 3, 117 trials, $19.85), Opus told gstack $0.31 (quick look 2), Sonnet $0.05 and $0.09, particle-1 $0.07 and $0.08, DeepSeek $0.06, Haiku $0.009 and $0.015. Our tasks run tests and edit repos, so each anchor is raised by half. Models never metered here are estimated from Opus's anchor scaled by price: Astra and Fable 2.5 times, Sol and Argon 0.5 times, Grok 0.4 times.
 
 | Model | none per session | gstack per session | Source |
@@ -311,6 +313,8 @@ Unit prices are OpenRouter's list on 2026-10-31 (keyless models API) and the rig
 Total about $1,660. Every figure is an estimate the round's pilot replaces; no model outside Lane B's has been metered on an agent task here.
 
 ### 10. Caps, stops and the start rule
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 - Caps: G1 $1,400 (stop $1,300; Fable its own $200 item inside), G2 $600 (stop $550), G3 $500 (stop $450). Each is recorded by the Captain after its prereg merges (org R42). No thread's projected spend passes $1,500, well under $5,000.
 - Preregistration and results never share a PR. Spend goes only through the ledger, one item per invocation, admitted with rig admit. A cap stop ends the round incomplete and is never rerun to change a verdict. An infra-only failure is rerun fresh once under a new item. No --resume or --repair in a paid call.

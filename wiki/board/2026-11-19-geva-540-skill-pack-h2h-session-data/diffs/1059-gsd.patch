@@ -1,0 +1,70 @@
+diff --git a/index.js b/index.js
+index 4d3e212..c12ac30 100644
+--- a/index.js
++++ b/index.js
+@@ -24,7 +24,10 @@ var UNSAFE_CHARS_REGEXP   = /[<>\/\u2028\u2029]/g;
+ // stops there without waiting for a closing `>`. A trailing backslash is not
+ // a delimiter here (that's a JS-level concern, not an HTML one), so this
+ // doesn't affect tagged template literals like `String.raw`.
+-var SCRIPT_CLOSE_REGEXP = /<\/script[^>]*>|<\/script(?=[\t\n\f\r \/>])/gi;
++// The wildcard excludes `<` as well as `>` so a single match can never run
++// past a second `<` and swallow a later, complete `</script>` (only one
++// replacement is emitted per match, so a swallowed tag would survive).
++var SCRIPT_CLOSE_REGEXP = /<\/script[^<>]*>|<\/script(?=[\t\n\f\r \/>])/gi;
+ 
+ var RESERVED_SYMBOLS = ['*', 'async'];
+ 
+diff --git a/package-lock.json b/package-lock.json
+index b71a45b..caf0acd 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1,12 +1,12 @@
+ {
+   "name": "serialize-javascript",
+-  "version": "7.1.1",
++  "version": "7.1.2",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "serialize-javascript",
+-      "version": "7.1.1",
++      "version": "7.1.2",
+       "license": "BSD-3-Clause",
+       "devDependencies": {
+         "benchmark": "^2.1.4"
+diff --git a/package.json b/package.json
+index b445f02..e297fae 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "serialize-javascript",
+-  "version": "7.1.1",
++  "version": "7.1.2",
+   "description": "Serialize JavaScript to a superset of JSON that includes regular expressions and functions.",
+   "main": "index.js",
+   "scripts": {
+diff --git a/test/unit/serialize.js b/test/unit/serialize.js
+index 978328f..b7cd0b1 100644
+--- a/test/unit/serialize.js
++++ b/test/unit/serialize.js
+@@ -681,6 +681,18 @@ describe('serialize( obj )', function () {
+             strictEqual(typeof deserialized.b, 'function');
+         });
+ 
++        it('should not let one script-close match swallow a later </script> (GHSA-gfhx-hw2g-v5hg)', function () {
++            var src = "function f(x){ return x</script=+/ + '</script><img src=x onerror=alert(1)>' }";
++            var serialized = serialize({ h: new Function('return ' + src)() });
++
++            strictEqual(/<\/script[\t\n\f\r \/>]/i.test(serialized), false);
++            strictEqual(serialized.includes('</script>'), false);
++
++            var deserialized; eval('deserialized = ' + serialized);
++            strictEqual(typeof deserialized.h, 'function');
++            strictEqual(deserialized.h(1), false);
++        });
++
+         it('should not corrupt `<` used as a comparison operator followed by a regex literal', function () {
+             // `</script` here is not an HTML closing tag: it's the token
+             // sequence `<` (less-than) followed by the regex literal

@@ -1,0 +1,18 @@
+diff --git a/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java b/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
+index 9c34f07..412e89f 100644
+--- a/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
++++ b/agentscope-harness/src/main/java/io/agentscope/harness/agent/filesystem/remote/RemoteFilesystem.java
+@@ -426,7 +426,12 @@ public class RemoteFilesystem implements AbstractFilesystem {
+                                                 ? effectivePattern
+                                                 : "**/" + effectivePattern));
+         PathMatcher directMatcher =
+-                FileSystems.getDefault().getPathMatcher("glob:" + effectivePattern);
++                FileSystems.getDefault()
++                        .getPathMatcher(
++                                "glob:"
++                                        + (effectivePattern.startsWith("**/")
++                                                ? effectivePattern.substring(3)
++                                                : effectivePattern));
+ 
+         // Fast path: index has entries for this prefix
+         if (index != null && index.hasPrefix(normalizedPath)) {

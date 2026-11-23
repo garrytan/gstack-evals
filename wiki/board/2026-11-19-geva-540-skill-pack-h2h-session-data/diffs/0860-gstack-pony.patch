@@ -1,0 +1,35 @@
+diff --git a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+index 29a21da..9a07cea 100644
+--- a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
++++ b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+@@ -46,6 +46,6 @@ public final class YamlEscaper extends AbstractCharEscaper {
+     //noinspection UnnecessaryUnicodeEscape
+     return ch <= '\u0022'
+         ? REPLACEMENTS[ch]
+-        : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
++        : ch == '\\' ? "\\\\" : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
+   }
+ }
+diff --git a/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl b/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
+index 5d8c5e9..b05fae2 100644
+--- a/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
++++ b/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
+@@ -104,6 +104,8 @@ p9 = """
+ p10 = "?apple"
+ p11 = ":banana"
+ p12 = "-orange"
++p13 = "\t\\d"
++p14 = "\\d"
+ 
+ output {
+   renderer = new YamlRenderer {}
+diff --git a/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml b/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
+index 811c851..1bd67d4 100644
+--- a/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
++++ b/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
+@@ -118,3 +118,5 @@ p9: |-
+ p10: ?apple
+ p11: :banana
+ p12: -orange
++p13: "\t\\d"
++p14: \d

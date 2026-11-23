@@ -1,0 +1,57 @@
+diff --git a/src/cc65/coptstop.c b/src/cc65/coptstop.c
+index 7a9416b..8d9e109 100644
+--- a/src/cc65/coptstop.c
++++ b/src/cc65/coptstop.c
+@@ -1373,8 +1373,8 @@ static unsigned Opt_a_tossub (StackOpData* D)
+     /* Inline the sbc */
+     D->IP = D->OpIndex+1;
+ 
+-    /* Must be true because of OP_RHS_LOAD */
+-    CHECK ((D->Rhs.A.Flags & D->Rhs.X.Flags & LI_DIRECT) != 0);
++    /* Must be true because of OP_RHS_LOAD (only the low byte is checked) */
++    CHECK ((D->Rhs.A.Flags & LI_DIRECT) != 0);
+ 
+     /* sec */
+     X = NewCodeEntry (OP65_SEC, AM65_IMP, 0, 0, D->OpEntry->LI);
+@@ -1403,8 +1403,12 @@ static unsigned Opt_a_tossub (StackOpData* D)
+         InsertEntry (D, X, D->IP++);
+     }
+ 
+-    /* Rhs load entries must be removed */
+-    D->Rhs.X.Flags |= LI_REMOVE;
++    /* Rhs load entries must be removed. The high byte is only removed if
++    ** it was loaded directly, otherwise its info may refer to other code.
++    */
++    if ((D->Rhs.X.Flags & LI_DIRECT) != 0) {
++        D->Rhs.X.Flags |= LI_REMOVE;
++    }
+     D->Rhs.A.Flags |= LI_REMOVE;
+ 
+     /* Remove the push and the call to the tossubax function */
+diff --git a/test/val/bug2946.c b/test/val/bug2946.c
+new file mode 100644
+index 0000000..d6074b2
+--- /dev/null
++++ b/test/val/bug2946.c
+@@ -0,0 +1,21 @@
++/* bug #2946: Incomplete, non-removable Rhs asserts in OptStackOps */
++
++#include <stdio.h>
++#include <stdlib.h>
++
++unsigned char a, b = 0;
++unsigned char c = 10;
++unsigned char d = 1;
++
++int main(void) {
++    /* 'if' needed to produce a label below, moved by OptJumpTarget3  */
++    if (b != 0) {
++        /* Operation not important; it only affects the removal of one LDX #$00 */
++        b = 0;
++    }
++
++    /* d >= 0 is const, A/X=1 (Warning: Result of comparison is always true) */
++    a = c - (d >= 0);
++
++    return !(a == 9);
++}

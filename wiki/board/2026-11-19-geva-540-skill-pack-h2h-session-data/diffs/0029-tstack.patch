@@ -1,0 +1,62 @@
+diff --git a/src/framework/parsers/glb-parser.js b/src/framework/parsers/glb-parser.js
+index c957254..bf88222 100644
+--- a/src/framework/parsers/glb-parser.js
++++ b/src/framework/parsers/glb-parser.js
+@@ -588,7 +588,10 @@ const createMaterial = (gltfMaterial, textures) => {
+         material.aoMapChannel = 'r';
+ 
+         extractTextureTransform(occlusionTexture, material, ['ao']);
+-        // TODO: support 'strength'
++
++        if (occlusionTexture.hasOwnProperty('strength')) {
++            material.aoIntensity = occlusionTexture.strength;
++        }
+     }
+ 
+     if (gltfMaterial.hasOwnProperty('emissiveFactor')) {
+diff --git a/test/framework/parsers/glb-parser.test.mjs b/test/framework/parsers/glb-parser.test.mjs
+new file mode 100644
+index 0000000..bb3b845
+--- /dev/null
++++ b/test/framework/parsers/glb-parser.test.mjs
+@@ -0,0 +1,40 @@
++import { expect } from 'chai';
++
++import { GlbParser } from '../../../src/framework/parsers/glb-parser.js';
++
++const parseMaterial = (gltfMaterial) => {
++    const gltf = {
++        asset: { version: '2.0' },
++        scenes: [{ nodes: [] }],
++        nodes: [],
++        materials: [gltfMaterial]
++    };
++    const data = new TextEncoder().encode(JSON.stringify(gltf)).buffer;
++    return new Promise((resolve, reject) => {
++        GlbParser.parse('test.gltf', '', data, null, null, {}, (err, result) => {
++            if (err) {
++                reject(err);
++            } else {
++                resolve(result.materials[0]);
++            }
++        });
++    });
++};
++
++describe('GlbParser', function () {
++
++    describe('occlusionTexture', function () {
++
++        it('maps strength to aoIntensity', async function () {
++            const material = await parseMaterial({ occlusionTexture: { index: 0, strength: 0.5 } });
++            expect(material.aoIntensity).to.equal(0.5);
++        });
++
++        it('defaults aoIntensity to 1 when strength is absent', async function () {
++            const material = await parseMaterial({ occlusionTexture: { index: 0 } });
++            expect(material.aoIntensity).to.equal(1);
++        });
++
++    });
++
++});

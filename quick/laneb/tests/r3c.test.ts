@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { armSpec, CLOSING_LINES, jobConfig } from "../runner/grid.ts";
+import { CLOSING as HM_CLOSING } from "../../../lanes/harness-mechanics/pins.ts";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
 import { itemCheck, OPUS } from "../r3/screen.ts";
 import { R3C, calibrationPlan, f2pShare, goldFiles, type tiers } from "../r3/r3c-rules.ts";
@@ -45,9 +46,10 @@ describe("the closing line", () => {
     const py = Bun.spawnSync(["python3", "-c", "import json, prompt_builder as p; print(json.dumps(p.CLOSING_LINES))"], { env: { ...process.env, PYTHONPATH: join(laneb, "runner/agent") } });
     expect(py.exitCode).toBe(0);
     const fromPy = JSON.parse(py.stdout.toString());
-    expect(Object.keys(fromPy)).toEqual([CLOSING]);
-    expect(Object.keys(CLOSING_LINES)).toEqual([CLOSING]);
-    expect(Buffer.from(fromPy[CLOSING]).equals(Buffer.from(CLOSING_LINES[CLOSING]))).toBe(true);
+    expect(Object.keys(fromPy)).toEqual([CLOSING, HM_CLOSING.key]);
+    expect(Object.keys(CLOSING_LINES)).toEqual([CLOSING, HM_CLOSING.key]);
+    for (const k of [CLOSING, HM_CLOSING.key] as const) expect(Buffer.from(fromPy[k]).equals(Buffer.from(CLOSING_LINES[k]))).toBe(true);
+    expect(Buffer.from(HM_CLOSING.text).equals(Buffer.from(CLOSING_LINES[HM_CLOSING.key]))).toBe(true);
     expect(Buffer.from(R3C.closingLine).equals(Buffer.from(CLOSING_LINES[CLOSING]))).toBe(true);
   });
 

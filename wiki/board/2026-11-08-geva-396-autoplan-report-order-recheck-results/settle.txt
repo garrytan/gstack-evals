@@ -1,0 +1,7 @@
+STAGE_SETTLED item=ap-e3 arm=autoplan:told lease=ap-e3.0001.df8579 spent=$78.236151 unknown=$0.00 sessions=4 ended=completed
+E3_RUN_SETTLED: verdict pass, exposed 3 of 4 after the refusal, over-credit and refused-publish checks (the last under the Captain ruling of 2026-11-08, GSTA-2); tg5dce6b3f8b exposed, tg6b9daf7138 not exposed (load step), tgff24032962 exposed, tg8d524982ac exposed; no reclassification; gaps 0; rerun unused; 2026-11-08T01:30:18Z
+HOURS_LEASE e3-vm lease e3-vm.0001.d6ea45 task host-e3-1 host_hours 5.234 spent 1570200 {"schema":1,"kind":"close","item":"e3-vm","seq":1,"lease_id":"e3-vm.0001.d6ea45","how":"settled","spent_micros":1570200,"unknown_micros":0,"unknown_calls":0,"usage":{"input":0,"output":0,"reasoning":0,"cache_read":0,"cache_write":0},"closed_at":"2026-11-08T01:30:25.643Z"}
+ITEM: ap-e3 cap=$343.00 admission=required committed=$78.236151 left=$264.763849 run=e3 leases=1 open=-
+ITEM: e3-vm cap=$9.00 admission=warn committed=$1.5702 left=$7.4298 run=e3 leases=1 open=-
+ENVELOPE: program=wave1 cap=$10000.00 committed=$1574.29218 settled=$1574.29218 open=$0.00 pending=$0.00 left=$8425.70782
+SKILL: autoplan cap=$2000.00 committed=$1007.329551 settled=$1007.329551 open=$0.00 pending=$0.00 left=$992.670449

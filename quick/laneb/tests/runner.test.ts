@@ -13,7 +13,7 @@ describe("ledger", () => {
   test("approval first, then reserves within the cap, idempotent ids, one settle per id", () => {
     const l = new Ledger(join(dir, "l1.jsonl"), "laneb-quick");
     expect(() => l.status()).toThrow();
-    l.approve(10, { quotes: ["Rec"] });
+    l.approve(10, { quotes: ["(paraphrase) took the recommendation"] });
     expect(() => l.approve(10, {})).toThrow();
     expect(l.reserve("a", toMicros(6))).toEqual({ ok: true, existing: false });
     expect(l.reserve("a", toMicros(6))).toEqual({ ok: true, existing: true });

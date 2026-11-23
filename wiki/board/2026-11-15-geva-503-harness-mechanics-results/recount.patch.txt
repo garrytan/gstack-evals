@@ -1,0 +1,23 @@
+Recount of the plain-2 lines in H2, made after the final review with the report's own contrast code.
+Apply it to lanes/harness-mechanics/analyze.ts at this post's head with git apply (git skips these lines),
+rerun the report command in Replicate it with the head config, and read the H2 secondary RECOUNT lines.
+
+diff --git a/lanes/harness-mechanics/analyze.ts b/lanes/harness-mechanics/analyze.ts
+index ffd449b..f9ba6a4 100644
+--- a/lanes/harness-mechanics/analyze.ts
++++ b/lanes/harness-mechanics/analyze.ts
+@@ -393,6 +393,14 @@ export function report(rows: HmRowIn[], cfg: ReportConfig, o: { out?: string; si
+     contrast(ix, "gstack minus none pass", m2, ["none", "verify-prose"], passV("none", "verify-prose")),
+     contrast(ix, "bo2 minus none pass", m2, ["none", "plain-2"], bo2V("none")),
+     contrast(ix, "bo2 minus verify-hook pass", m2, ["none", "plain-2", "verify-hook"], bo2V("verify-hook")),
++    contrast(ix, "RECOUNT bo2 minus plain-2 pass", m2, ["none", "plain-2"], bo2V("plain-2")),
++    contrast(ix, "RECOUNT gstack minus plain-2 pass", m2, ["plain-2", "verify-prose"], passV("plain-2", "verify-prose")),
++    contrast(ix, "RECOUNT verify-hook minus plain-2 pass", m2, ["plain-2", "verify-hook"], passV("plain-2", "verify-hook")),
++    ...m2.flatMap((mk) => [
++      contrast(ix, "RECOUNT " + mk + " bo2 minus none pass", [mk], ["none", "plain-2"], bo2V("none")),
++      contrast(ix, "RECOUNT " + mk + " bo2 minus plain-2 pass", [mk], ["none", "plain-2"], bo2V("plain-2")),
++      contrast(ix, "RECOUNT " + mk + " plain-2 minus none pass", [mk], ["none", "plain-2"], passV("none", "plain-2")),
++    ]),
+   ];
+   const d0By = m2.map((mk) => contrast(ix, "d0 " + mk, [mk], ["none", "plain-2"], passV("none", "plain-2")));
+   const a5Fail = Object.entries(s1.models).filter(([, a]) => !a.a5.ok).map(([mk, a]) => mk + " " + pct(a.a5.rate));

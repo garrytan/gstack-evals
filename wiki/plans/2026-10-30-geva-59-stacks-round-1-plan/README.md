@@ -27,14 +27,14 @@ This post is plan v2, written by GEVA-57 and carried through review round 2 by G
 
 ## Approval
 
-Garry Tan asked for this in the gstack-evals Captain thread on 2026-10-30: "have you been doing any analysis of how gstack stacks up vs pstack and tstack yet?", then "great go ahead, i'm interested in picking up all the smart stuff particularly from pstack lauren is brilliant and amazing!!". He then wrote "rec" before any gate was relayed to him. The Captain recorded that word as a standing instruction to take this plan's recommendations (approval a-1a254a600c48), with anything beyond what Garry was told going to the Captain first. It is a standing instruction given before the gate, not an answer to a gate he saw.
+Garry Tan asked for this in the gstack-evals Captain thread on 2026-10-30: he asked whether we had compared gstack with pstack and tstack yet, then said to go ahead, because he wants to pick up the good ideas, especially from Lauren Tan's pstack. He then told the Captain to take the recommendations before any gate was relayed to him. The Captain recorded that as a standing instruction to take this plan's recommendations (approval a-1a254a600c48), with anything beyond what Garry was told going to the Captain first. It is a standing instruction given before the gate, not an answer to a gate he saw.
 
 gstack /autoplan run autoplan-20261030222934 reviewed the plan in two rounds:
 
-- Round 1, on plan v1 (snapshot sha256 25ea32dc492090608a4ed03d23cf59beb3a7c96383b1e1d4b936603a3bd312e2): CEO native on Opus 5.5 (12 findings), Eng native on Opus 5.5 (18) and Eng outside on gpt-6-astra (10). The CEO outside voice did not run, because the brief capped each round at 3 reviewers. GEVA-57 answered gate rev 1 with "d1a d2b p1b" and the owner reply "rec", then revised the plan to v2 (snapshot sha256 05a452fa6be451b20cf398472649095759f7f3d85c2ec2c2dc9b9150e852cea0).
-- Round 2, on plan v2: CEO native on Opus 5.5 (12 findings, 4 High), Eng native on Opus 5.5 (11, 3 High) and Eng outside on gpt-6-astra (5, 4 High), again with no CEO outside voice. Gate rev 2 held one item, plan approval, with the recommendation p1a (approve as-is). GEVA-59 answered "p1a" with the owner reply "rec", and the run reported APPROVED at gate_rev 2.
+- Round 1, on plan v1 (snapshot sha256 25ea32dc492090608a4ed03d23cf59beb3a7c96383b1e1d4b936603a3bd312e2): CEO native on Opus 5.5 (12 findings), Eng native on Opus 5.5 (18) and Eng outside on gpt-6-astra (10). The CEO outside voice did not run, because the brief capped each round at 3 reviewers. GEVA-57 answered gate rev 1 with "d1a d2b p1b" and the owner's standing instruction to take the recommendations, then revised the plan to v2 (snapshot sha256 05a452fa6be451b20cf398472649095759f7f3d85c2ec2c2dc9b9150e852cea0).
+- Round 2, on plan v2: CEO native on Opus 5.5 (12 findings, 4 High), Eng native on Opus 5.5 (11, 3 High) and Eng outside on gpt-6-astra (5, 4 High), again with no CEO outside voice. Gate rev 2 held one item, plan approval, with the recommendation p1a (approve as-is). GEVA-59 answered "p1a" with the owner's standing instruction to take the recommendations, and the run reported APPROVED at gate_rev 2.
 
-The run stopped at its two-round cap with 11 High findings open. It printed that the evidence was sufficient and the decision was the owner's, and the standing "rec" took the recommendation. The next section lists those findings.
+The run stopped at its two-round cap with 11 High findings open. It printed that the evidence was sufficient and the decision was the owner's, and the standing instruction took the recommendation. The next section lists those findings.
 
 ## Open at approval: what the preregistration must settle
 
@@ -72,7 +72,7 @@ Garry asked how gstack stacks up against pstack and tstack, and said he wants to
 ### Before → after
 
 - Before: one desk survey from 10-27. Stack arms were deferred to v1.1. gstack ported pstack at 99b609a7 (10-24) and never measured the port, and it missed pstack's 10-27 interrogate rewrite.
-- After: a measured answer in two places: blockers kept, false blockers and cost per blocker on 26 PRs, and pass rates on 40 told TB2 tasks on Opus 5.5, Haiku 5.5 and particle-1. Each stack win becomes an idea card for GStack Minder, credited to its author.
+- After: a measured answer in two places: blockers kept, false blockers and cost per blocker on 26 PRs, and pass rates on 40 told TB2 tasks on Opus 5.5, Haiku 5.5 and particle-1. Each stack win becomes an idea card for the gstack Captain, credited to its author.
 
 ### Why it matters
 
@@ -80,7 +80,7 @@ pstack and tstack are idea sources for gstack, not a leaderboard. A port that ha
 
 ### What caused this work
 
-Garry, 2026-10-30: "have you been doing any analysis of how gstack stacks up vs pstack and tstack yet?", then "great go ahead, i'm interested in picking up all the smart stuff particularly from pstack lauren is brilliant and amazing!!". GEVA-55 did the research and stopped at its token cap before /autoplan, so this thread starts at the plan step.
+Garry, 2026-10-30: he asked whether we had compared gstack with pstack and tstack yet, then said to go ahead, because he wants to pick up the good ideas, especially from Lauren Tan's pstack. GEVA-55 did the research and stopped at its token cap before /autoplan, so this thread starts at the plan step.
 
 ### Big decisions
 
@@ -93,8 +93,8 @@ Each has options, the pick, why, and what would flip it. Section numbers point t
 - E. Models (section 5). Pick: Opus 5.5 in every cell, particle-1 in both lanes, Haiku 5.5 in TB2 only; Sonnet 5.5, DeepSeek V4.1 Flash and the open-weight slots out, each with a reason. In the particle-1 review cell every stack runs on particle-1 alone, under one rule. Flip: the Captain wants the full ladder now, at about $60 more for Sonnet in TB2.
 - F. Placebo (section 3). Pick: gstack-placebo and pstack-placebo on Haiku and particle-1 in TB2 only. Why: Lane B found cheap-rung effects that a placebo explained; quick look 2 already measured gstack against its placebo on Opus. Flip: a large pstack TB2 effect on Opus.
 - G. Cap and stops (section 9). Options: review stop $1,950; review stop $2,050. Pick: $2,400 cap, review stop $2,050, TB2 stop $300, an exposure-based start rule after each pilot and a fixed drop order. Why: at $1,950 the start rule clears the central estimate by about $30, so any pilot overrun would return the lane to the Captain. Flip: the Captain prefers the lower stop.
-- H. A proof gate on gstack's own findings in round 1 (CEO review). Options: add a rig-written proof gate arm now; keep round 1 to the stacks as their authors ship them. Pick: keep. Why: writing a proof gate for gstack is a port, which GStack Minder owns; a pstack false-blocker drop in round 1 triggers a paired test of GStack Minder's port in round 2 (section 1). Flip: the Captain wants an answer on the port before GStack Minder writes one.
-- I. A fidelity window with the authors (CEO review). Dropped. Garry, 2026-10-30: "Oh no don't talk to them". Nobody contacts Lauren Tan or Theo Browne, before the run or after it. Each stack runs as published, at the commit pinned in section 3, invoked the way its own docs describe (section 4); the rig adaptations each arm needs are listed in sections 3 to 5. This plan's text is the fidelity record.
+- H. A proof gate on gstack's own findings in round 1 (CEO review). Options: add a rig-written proof gate arm now; keep round 1 to the stacks as their authors ship them. Pick: keep. Why: writing a proof gate for gstack is a port, which the gstack Captain owns; a pstack false-blocker drop in round 1 triggers a paired test of the gstack Captain's port in round 2 (section 1). Flip: the Captain wants an answer on the port before the gstack Captain writes one.
+- I. A fidelity window with the authors (CEO review). Dropped. Garry, 2026-10-30, said not to contact the stacks' authors. Nobody contacts Lauren Tan or Theo Browne, before the run or after it. Each stack runs as published, at the commit pinned in section 3, invoked the way its own docs describe (section 4); the rig adaptations each arm needs are listed in sections 3 to 5. This plan's text is the fidelity record.
 - J. Seeded-mistake Lane A tasks for pstack correct (CEO review). Approved by the Captain (GEVA-2, 2026-10-30) as a build task after this plan merges; it is not part of this plan's pull request. Keyless and with no spend, written during round 1's build window, so round 2 starts with its tasks written first.
 ### 1. The top ideas and what round 1 says about each
 
@@ -109,7 +109,7 @@ Round 1 is exploratory for every mechanism. At this design an arm equal to gstac
 | 5. A generated per-repo verification skill (Lauren Tan, pstack create- and maintain-verification-skill) | Partly: /qa and browse | Not in round 1 | Round 2, Lane A on a small app repo | Same |
 | 6. Best-of-N with a cross-family judge and a graft (Lauren Tan, pstack arena) | Partly: design-shotgun, autoplan's two voices | Not in round 1 (N times the cost per unit) | Round 2, told TB2 on tasks Opus fails | Same |
 
-The Captain's action on the likely outcome is fixed now: if pstack is NOT_DISTINGUISHED on recall and its false-blocker interval is below zero, idea 1 gets a card and GStack Minder's port is tested in round 2 by a paired no-loss variant against the current /review. If neither interval excludes zero, the card says so and idea 1 waits for a larger suite.
+The Captain's action on the likely outcome is fixed now: if pstack is NOT_DISTINGUISHED on recall and its false-blocker interval is below zero, idea 1 gets a card and the gstack Captain's port is tested in round 2 by a paired no-loss variant against the current /review. If neither interval excludes zero, the card says so and idea 1 waits for a larger suite.
 
 Per-unit wins (a blocker another stack found in both passes and gstack in neither; a TB2 task another stack passed 2 of 3 times and gstack 0 of 3) become idea cards only under section 11's rule, since about 10 such wins appear by chance even between equal stacks.
 
@@ -191,6 +191,8 @@ Every unit image is built and its own test command run before the preregistratio
 
 ### 8. Cost, with sources
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 Metered sources (each is a file in the repo or the Captain drive):
 
 - M1: Captain drive `ledger/laneb-quick-3.jsonl`, settle rows, mean USD per TB2 trial: Opus 5.5 none $0.169 (n 118); Haiku 5.5 none, gstack, placebo $0.0088, $0.0154, $0.0145; particle-1 $0.0685, $0.0777, $0.0842; Sonnet 5.5 none and gstack $0.0519 and $0.0911.
@@ -233,6 +235,8 @@ This thread's own model use (cap 20M tokens, about $7 at M4's rate) is outside t
 
 ### 9. Cap, stops and start rule
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 - Cap $2,400. Hard stops: review $2,050, TB2 $300, each its own line item in the program ledger (`docs/budget-ledger.md`) with an approval row that quotes the Captain's approval under R42.
 - Start rule after each lane's pilot, per arm and model: settled spend, plus reserved and unknown exposure, plus 1.4 times each arm's pilot-measured cost per unit-pass times its remaining unit-passes, plus the remaining judging estimate, must fit under the lane's stop. Otherwise the lane returns to the Captain before its grid. Keyless ledger tests cover the calculation.
 - Each slot's allowance is twice the pilot's largest unit-pass for that arm. A pass that hits its allowance is an incomplete pass, reported apart, never scored as missed blockers.
@@ -258,13 +262,13 @@ Target: results within 10 working days of this plan's approval.
 
 Each candidate win is compared with what chance alone would produce: the expected count of per-unit wins under the null, from permuting arm labels within each unit, is printed beside each observed count. A card needs observed wins above the null's 95th percentile, or a mechanism a blinded reader can name from the transcripts. Cards are ranked by that margin.
 
-Each card names the stack and skill with its author, the mechanism in our own words, the gstack skill it would change, and the test that would prove a port (a Lane A before/after with the tasks written first, or a paired no-loss variant against the current /review). The Captain hands cards to GStack Minder. A port ships only after its own test passes. This plan ports nothing.
+Each card names the stack and skill with its author, the mechanism in our own words, the gstack skill it would change, and the test that would prove a port (a Lane A before/after with the tasks written first, or a paired no-loss variant against the current /review). The Captain hands cards to the gstack Captain. A port ships only after its own test passes. This plan ports nothing.
 
 ### 12. Out of scope
 
 - Any paid model call from this plan or its pull request.
 - Installing either stack in a way that calls a model.
-- Porting ideas into gstack (GStack Minder owns that, through the Captain).
+- Porting ideas into gstack (the gstack Captain owns that, through the Captain).
 - tstack council (no Gemini route), pstack arena and correct (round 2), HARN-14 native tasks (round 2).
 
 ### 13. Risks
@@ -286,7 +290,7 @@ Each card names the stack and skill with its author, the mechanism in our own wo
 
 ### 15. Needs
 
-- Garry's standing "rec" (2026-10-30), applied at gate_rev 1 and gate_rev 2. The Captain approved J. Garry dropped I.
+- Garry's standing instruction to take the recommendations (2026-10-30), applied at gate_rev 1 and gate_rev 2. The Captain approved J. Garry dropped I.
 - The Captain's cap approval under R42 (given in the brief).
 - For round 2: an opening in harness-evals for a pstack arm on HARN-14.
 

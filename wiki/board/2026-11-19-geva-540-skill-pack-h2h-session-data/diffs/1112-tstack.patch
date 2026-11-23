@@ -1,0 +1,169 @@
+diff --git a/index.d.ts b/index.d.ts
+index 7b31309..04df30d 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1586,9 +1586,10 @@ declare module '@xmldom/xmldom' {
+ 		 * concatenated CDATA sections — **deprecated**, will be removed in the next breaking
+ 		 * release.
+ 		 * - W3C DOM Parsing §3.2.1.1 requires well-formedness checks on Element `localName`s,
+-		 * prefixes, and attribute serialization when `requireWellFormed` is `true`. These checks are
+-		 * **not implemented** in this release — see the tracking issue filed against the next
+-		 * breaking milestone.
++		 * prefixes, and attribute serialization when `requireWellFormed` is `true`. Only the
++		 * Element qualified name and synthesized `xmlns:PREFIX` declarations are checked (against
++		 * the XML `QName` production); the remaining checks are **not implemented** in this
++		 * release — see the tracking issue filed against the next breaking milestone.
+ 		 *
+ 		 * @throws {DOMException}
+ 		 * `InvalidStateError` when `requireWellFormed` is `true` and any of the following conditions
+@@ -1604,6 +1605,9 @@ declare module '@xmldom/xmldom' {
+ 		 * production (W3C DOM Parsing §3.2.1.3; XML 1.0 production [11])
+ 		 * - a DocumentType's `internalSubset` contains `"]>"`
+ 		 * - the Document has no `documentElement`
++		 * - an Element's serialized qualified name does not match the XML `QName` production
++		 * - a synthesized namespace declaration (`xmlns:PREFIX`) does not match the XML `QName`
++		 * production
+ 		 * @see https://developer.mozilla.org/docs/Web/API/XMLSerializer/serializeToString
+ 		 * @see https://html.spec.whatwg.org/#dom-xmlserializer-serializetostring
+ 		 * @see https://github.com/w3c/DOM-Parsing/issues/84
+diff --git a/lib/dom.js b/lib/dom.js
+index 6a2e0b0..fe679c4 100644
+--- a/lib/dom.js
++++ b/lib/dom.js
+@@ -2927,8 +2927,10 @@ function XMLSerializer() {}
+  * - W3C DOM Parsing §3.2.1.1 requires well-formedness checks on Element `localName`s,
+  * prefixes,
+  * and attribute serialization (duplicate attributes, namespace declarations, attribute value
+- * characters) when `requireWellFormed` is `true`. These checks are **not implemented** in this
+- * release — see the tracking issue filed against the next breaking milestone.
++ * characters) when `requireWellFormed` is `true`. Only the Element qualified name and
++ * synthesized `xmlns:PREFIX` declarations are checked (against the XML `QName` production);
++ * the remaining checks are **not implemented** in this release — see the tracking issue filed
++ * against the next breaking milestone.
+  *
+  * @param {Node} node
+  * @param {Object | function} [options]
+@@ -2955,6 +2957,9 @@ function XMLSerializer() {}
+  * production (W3C DOM Parsing §3.2.1.3; XML 1.0 production [11])
+  * - a DocumentType's `internalSubset` contains `"]>"`
+  * - the Document has no `documentElement`
++ * - an Element's serialized qualified name does not match the XML `QName` production
++ * - a synthesized namespace declaration (`xmlns:PREFIX`) does not match the XML `QName`
++ * production
+  * @see https://developer.mozilla.org/docs/Web/API/XMLSerializer/serializeToString
+  * @see https://html.spec.whatwg.org/#dom-xmlserializer-serializetostring
+  * @see https://github.com/w3c/DOM-Parsing/issues/84
+@@ -3111,6 +3116,12 @@ function serializeToString(node, buf, visibleNamespaces, opts) {
+ 							}
+ 						}
+ 
++						if (requireWellFormed && !g.QName_exact.test(prefixedNodeName)) {
++							throw new DOMException(
++								'The element name "' + prefixedNodeName + '" is not a valid XML QName',
++								DOMExceptionName.InvalidStateError
++							);
++						}
+ 						buf.push('<', prefixedNodeName);
+ 
+ 						// Build a fresh namespace snapshot for this element's children.
+@@ -3135,7 +3146,14 @@ function serializeToString(node, buf, visibleNamespaces, opts) {
+ 							if (needNamespaceDefine(attr, isHTML, childNamespaces)) {
+ 								var attrPrefix = attr.prefix || '';
+ 								var uri = attr.namespaceURI;
+-								addSerializedAttribute(buf, attrPrefix ? 'xmlns:' + attrPrefix : 'xmlns', uri);
++								var nsDeclName = attrPrefix ? 'xmlns:' + attrPrefix : 'xmlns';
++								if (requireWellFormed && !g.QName_exact.test(nsDeclName)) {
++									throw new DOMException(
++										'The namespace declaration name "' + nsDeclName + '" is not a valid XML QName',
++										DOMExceptionName.InvalidStateError
++									);
++								}
++								addSerializedAttribute(buf, nsDeclName, uri);
+ 								childNamespaces.push({ prefix: attrPrefix, namespace: uri });
+ 							}
+ 							// Apply nodeFilter and serialize the attribute.
+@@ -3153,7 +3171,14 @@ function serializeToString(node, buf, visibleNamespaces, opts) {
+ 						if (nodeName === prefixedNodeName && needNamespaceDefine(n, isHTML, childNamespaces)) {
+ 							var nodePrefix = n.prefix || '';
+ 							var uri = n.namespaceURI;
+-							addSerializedAttribute(buf, nodePrefix ? 'xmlns:' + nodePrefix : 'xmlns', uri);
++							var nodeNsDeclName = nodePrefix ? 'xmlns:' + nodePrefix : 'xmlns';
++							if (requireWellFormed && !g.QName_exact.test(nodeNsDeclName)) {
++								throw new DOMException(
++									'The namespace declaration name "' + nodeNsDeclName + '" is not a valid XML QName',
++									DOMExceptionName.InvalidStateError
++								);
++							}
++							addSerializedAttribute(buf, nodeNsDeclName, uri);
+ 							childNamespaces.push({ prefix: nodePrefix, namespace: uri });
+ 						}
+ 
+diff --git a/test/dom/serializer.test.js b/test/dom/serializer.test.js
+index 4bd555a..e517d5a 100644
+--- a/test/dom/serializer.test.js
++++ b/test/dom/serializer.test.js
+@@ -458,6 +458,64 @@ describe('XMLSerializer.serializeToString', () => {
+ 			});
+ 		});
+ 
++		describe('Element name', () => {
++			test('requireWellFormed: true on createElement with attribute injection throws InvalidStateError', () => {
++				doc.documentElement.appendChild(doc.createElement('img src=x onerror="alert(1)"'));
++				expectDOMException(() => new XMLSerializer().serializeToString(doc, { requireWellFormed: true }), 'InvalidStateError');
++			});
++
++			test('default serialization still emits invalid element name verbatim', () => {
++				doc.documentElement.appendChild(doc.createElement('img src=x onerror="alert(1)"'));
++				expect(new XMLSerializer().serializeToString(doc)).toBe('<root><img src=x onerror="alert(1)"/></root>');
++			});
++
++			test.each(['a>b', 'a b', '1abc', '', 'a:b:c', ':a', 'a/'])(
++				'requireWellFormed: true on element name %j throws InvalidStateError',
++				(name) => {
++					doc.documentElement.appendChild(doc.createElement(name));
++					expectDOMException(() => new XMLSerializer().serializeToString(doc, { requireWellFormed: true }), 'InvalidStateError');
++				}
++			);
++
++			test('requireWellFormed: true on direct tagName mutation throws InvalidStateError', () => {
++				const el = doc.createElement('ok');
++				doc.documentElement.appendChild(el);
++				el.tagName = 'x><script>alert(1)</script';
++				expectDOMException(() => new XMLSerializer().serializeToString(doc, { requireWellFormed: true }), 'InvalidStateError');
++			});
++
++			test('requireWellFormed: true on invalid prefix in synthesized xmlns declaration throws InvalidStateError', () => {
++				const el = doc.createElementNS('urn:x', 'p:el');
++				doc.documentElement.appendChild(el);
++				el.prefix = 'p onload="alert(1)" q';
++				expectDOMException(() => new XMLSerializer().serializeToString(doc, { requireWellFormed: true }), 'InvalidStateError');
++			});
++
++			test('requireWellFormed: true on invalid attribute prefix in synthesized xmlns declaration throws InvalidStateError', () => {
++				const el = doc.createElement('el');
++				doc.documentElement.appendChild(el);
++				const attr = doc.createAttributeNS('urn:x', 'p:a');
++				el.setAttributeNode(attr);
++				attr.prefix = 'p onload="alert(1)" q';
++				expectDOMException(() => new XMLSerializer().serializeToString(doc, { requireWellFormed: true }), 'InvalidStateError');
++			});
++
++			test.each(['a', 'a-b.c_d', 'p:local', '\u00e9l\u00e9ment'])(
++				'requireWellFormed: true on valid element name %j does not throw',
++				(name) => {
++					doc.documentElement.appendChild(doc.createElement(name));
++					expect(() => new XMLSerializer().serializeToString(doc, { requireWellFormed: true })).not.toThrow();
++				}
++			);
++
++			test('requireWellFormed: true on namespaced elements does not throw', () => {
++				const nsDoc = new DOMImplementation().createDocument('urn:a', 'a:root', null);
++				nsDoc.documentElement.appendChild(nsDoc.createElementNS('urn:b', 'b:child'));
++				nsDoc.documentElement.appendChild(nsDoc.createElementNS('urn:c', 'child'));
++				expect(() => new XMLSerializer().serializeToString(nsDoc, { requireWellFormed: true })).not.toThrow();
++			});
++		});
++
+ 		describe('DocumentType', () => {
+ 			test('default: DocumentType with invalid publicId serializes verbatim — no throw', () => {
+ 				const doctype = new DOMImplementation().createDocumentType('name', '"invalid<char"', '');

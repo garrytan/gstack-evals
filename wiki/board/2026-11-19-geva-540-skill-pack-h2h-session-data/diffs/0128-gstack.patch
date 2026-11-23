@@ -1,0 +1,89 @@
+diff --git a/crates/obscura-cdp/src/dispatch.rs b/crates/obscura-cdp/src/dispatch.rs
+index cfeb540..ccf60fe 100644
+--- a/crates/obscura-cdp/src/dispatch.rs
++++ b/crates/obscura-cdp/src/dispatch.rs
+@@ -160,6 +160,14 @@ impl CdpContext {
+         id
+     }
+ 
++    /// Drop every registered execution context id. Called on navigation right
++    /// where `Runtime.executionContextsCleared` is emitted, so pre-navigation
++    /// contexts stop validating and the set stays bounded. The caller is
++    /// responsible for re-registering the contexts it re-creates.
++    pub fn clear_execution_contexts(&mut self) {
++        self.valid_context_ids.clear();
++    }
++
+     pub fn create_page(&mut self) -> String {
+         self.page_counter += 1;
+         let page_id = format!("page-{}", self.page_counter);
+diff --git a/crates/obscura-cdp/src/domains/page.rs b/crates/obscura-cdp/src/domains/page.rs
+index dd84b5e..a10a2d8 100644
+--- a/crates/obscura-cdp/src/domains/page.rs
++++ b/crates/obscura-cdp/src/domains/page.rs
+@@ -79,6 +79,11 @@ pub fn emit_navigation_events(
+         CdpEvent { method: "Page.frameNavigated".into(), params: json!({"frame": {"id": frame_id, "loaderId": loader_id, "url": page_url, "domainAndRegistry": "", "securityOrigin": page_url, "mimeType": nav_mime, "adFrameStatus": {"adFrameType": "none"}}, "type": "Navigation"}), session_id: es.clone() },
+         CdpEvent { method: "Runtime.executionContextCreated".into(), params: json!({"context": {"id": 2, "origin": page_url, "name": "", "uniqueId": format!("ctx-nav-{}", page_id), "auxData": {"isDefault": true, "type": "default", "frameId": frame_id}}}), session_id: es.clone() },
+     ];
++    // Mirror the Runtime.executionContextsCleared above: every pre-navigation
++    // context is gone. Only the re-emitted default context (2) and the fresh
++    // isolated-world ids minted below remain valid.
++    ctx.clear_execution_contexts();
++    ctx.valid_context_ids.insert(2);
+     let world_names: Vec<String> = if ctx.isolated_worlds.is_empty() {
+         vec!["__puppeteer_utility_world__24.40.0".to_string()]
+     } else {
+@@ -570,6 +575,39 @@ mod tests {
+         assert_eq!(content["height"].as_f64(), Some(720.0));
+     }
+ 
++    /// Navigation emits Runtime.executionContextsCleared, so pre-navigation
++    /// context ids must stop validating and the set must not grow unbounded.
++    #[test]
++    fn navigation_prunes_stale_context_ids() {
++        let mut ctx = CdpContext::new();
++        ctx.isolated_worlds.push("utility".to_string());
++        let pre = ctx.next_isolated_context();
++        assert!(ctx.valid_context_ids.contains(&pre));
++
++        let mut last = Vec::new();
++        for _ in 0..50 {
++            emit_navigation_events(
++                &mut ctx, &None, "frame", "loader", "https://example.com/",
++                "page-1", &[], WaitUntil::Load, true,
++            );
++            last = ctx
++                .pending_events
++                .iter()
++                .filter(|e| e.method == "Runtime.executionContextCreated")
++                .filter_map(|e| e.params["context"]["id"].as_i64())
++                .collect();
++            ctx.pending_events.clear();
++        }
++
++        assert!(!ctx.valid_context_ids.contains(&pre), "stale isolated id still valid");
++        let mut expected: Vec<i64> = last.clone();
++        expected.sort();
++        let mut actual: Vec<i64> = ctx.valid_context_ids.iter().copied().collect();
++        actual.sort();
++        assert_eq!(actual, expected, "only live contexts may remain valid");
++        assert_eq!(actual.len(), 2);
++    }
++
+     #[tokio::test]
+     async fn unknown_page_method_still_errors() {
+         let mut ctx = CdpContext::new();
+diff --git a/crates/obscura-cdp/src/domains/runtime.rs b/crates/obscura-cdp/src/domains/runtime.rs
+index fd102c3..79c9c26 100644
+--- a/crates/obscura-cdp/src/domains/runtime.rs
++++ b/crates/obscura-cdp/src/domains/runtime.rs
+@@ -79,6 +79,9 @@ pub async fn handle(
+                         session_id: session_id.clone(),
+                     };
+                     ctx.pending_events.push(event);
++                    // Context 1 is (re-)announced here; keep it valid even if
++                    // a prior navigation cleared the registered contexts.
++                    ctx.valid_context_ids.insert(1);
+                 }
+                 None => {
+                     // No session attached yet — that's fine. Just ack.

@@ -1,0 +1,76 @@
+== sens404 rc=0 prices dated 2026-11-08; 2108 sessions, 58 missing
+== opus ==
+Primary A, R against N
+cut: -27.7% (95% interval -38.2% to -18.0%), median per-task ratio 1.101
+success: R minus N 1.1 points (95% interval -2.2 to 4.4), worse 9, better 12, 273 paired tasks: no measurable difference
+verdict: NO SAVING
+Primary B, R against P
+success: R minus P 0.4 points (95% interval -2.6 to 3.4), worse 9, better 10, 272 paired tasks: no measurable difference
+bill ratio R/P: 0.965 (95% interval 0.883 to 1.049)
+verdict: PARTICLE-1 ALONE IS ENOUGH
+P against N (no verdict)
+cut: -34.2% (95% interval -46.2% to -23.2%), median per-task ratio 1.158
+success: P minus N 0.7 points (95% interval -1.8 to 3.2), worse 5, better 7, 278 paired tasks: no measurable difference; non-inferiority not admitted
+== sol ==
+Primary A, R against N
+cut: -18.8% (95% interval -28.8% to -9.1%), median per-task ratio 1.161
+success: R minus N 1.1 points (95% interval -1.1 to 3.3), worse 3, better 6, 276 paired tasks: no measurable difference
+verdict: NO SAVING
+Primary B, R against P
+success: R minus P -2.2 points (95% interval -4.7 to 0.4), worse 8, better 2, 271 paired tasks: no measurable difference
+bill ratio R/P: 0.995 (95% interval 0.919 to 1.069)
+verdict: PARTICLE-1 ALONE IS ENOUGH
+P against N (no verdict)
+cut: -19.6% (95% interval -31.5% to -8.3%), median per-task ratio 1.158
+success: P minus N 2.9 points (95% interval 0.7 to 5.5), worse 2, better 10, 273 paired tasks: a measurable gain; non-inferiority not admitted
+== sens27 rc=0 prices dated 2026-11-08; 2101 sessions, 58 missing
+== opus ==
+Primary A, R against N
+cut: -27.7% (95% interval -38.2% to -18.0%), median per-task ratio 1.101
+success: R minus N 1.1 points (95% interval -2.2 to 4.4), worse 9, better 12, 273 paired tasks: no measurable difference
+verdict: NO SAVING
+Primary B, R against P
+success: R minus P 0.4 points (95% interval -2.7 to 3.4), worse 9, better 10, 270 paired tasks: no measurable difference
+bill ratio R/P: 0.960 (95% interval 0.879 to 1.043)
+verdict: PARTICLE-1 ALONE IS ENOUGH
+P against N (no verdict)
+cut: -33.9% (95% interval -45.9% to -22.8%), median per-task ratio 1.155
+success: P minus N 0.7 points (95% interval -1.8 to 3.2), worse 5, better 7, 275 paired tasks: no measurable difference; non-inferiority not admitted
+== sol ==
+Primary A, R against N
+cut: -18.6% (95% interval -28.6% to -9.1%), median per-task ratio 1.161
+success: R minus N 1.1 points (95% interval -1.0 to 3.3), worse 3, better 6, 275 paired tasks: no measurable difference
+verdict: NO SAVING
+Primary B, R against P
+success: R minus P -1.9 points (95% interval -4.3 to 0.7), worse 7, better 2, 267 paired tasks: no measurable difference
+bill ratio R/P: 0.998 (95% interval 0.920 to 1.072)
+verdict: PARTICLE-1 ALONE IS ENOUGH
+P against N (no verdict)
+cut: -19.0% (95% interval -31.1% to -7.6%), median per-task ratio 1.156
+success: P minus N 3.0 points (95% interval 0.7 to 5.6), worse 2, better 10, 270 paired tasks: a measurable gain; non-inferiority not admitted
+== no1c rc=0 prices dated 2026-11-08; 2070 sessions, 58 missing
+== opus ==
+Primary A, R against N
+cut: -30.7% (95% interval -42.0% to -20.6%), median per-task ratio 1.106
+success: R minus N 1.5 points (95% interval -1.8 to 4.7), worse 8, better 12, 269 paired tasks: no measurable difference
+verdict: NO SAVING
+Primary B, R against P
+success: R minus P 0.4 points (95% interval -2.7 to 3.4), worse 9, better 10, 267 paired tasks: no measurable difference
+bill ratio R/P: 0.966 (95% interval 0.885 to 1.049)
+verdict: PARTICLE-1 ALONE IS ENOUGH
+P against N (no verdict)
+cut: -35.0% (95% interval -47.0% to -23.8%), median per-task ratio 1.160
+success: P minus N 1.1 points (95% interval -1.2 to 3.5), worse 4, better 7, 271 paired tasks: no measurable difference; non-inferiority not admitted
+== sol ==
+Primary A, R against N
+cut: -21.4% (95% interval -31.1% to -11.7%), median per-task ratio 1.170
+success: R minus N 1.1 points (95% interval -1.1 to 3.4), worse 3, better 6, 266 paired tasks: no measurable difference
+verdict: NO SAVING
+Primary B, R against P
+success: R minus P -2.3 points (95% interval -4.8 to 0.4), worse 8, better 2, 264 paired tasks: no measurable difference
+bill ratio R/P: 0.988 (95% interval 0.917 to 1.055)
+verdict: PARTICLE-1 ALONE IS ENOUGH
+P against N (no verdict)
+cut: -18.1% (95% interval -29.6% to -6.5%), median per-task ratio 1.154
+success: P minus N 3.4 points (95% interval 0.8 to 6.2), worse 2, better 11, 262 paired tasks: a measurable gain; non-inferiority not admitted
+ALL-DONE

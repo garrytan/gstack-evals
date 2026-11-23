@@ -1,0 +1,48 @@
+diff --git a/cell.go b/cell.go
+index 1cac3e4..8df587f 100644
+--- a/cell.go
++++ b/cell.go
+@@ -1657,6 +1657,9 @@ func (ws *xlsxWorksheet) mergeCellsParser(cell string) (string, error) {
+ 				_ = sortCoordinates(rect)
+ 				ws.MergeCells.Cells[i].rect = rect
+ 			}
++			if len(ws.MergeCells.Cells[i].rect) < 4 {
++				continue
++			}
+ 			if cellInRange([]int{col, row}, ws.MergeCells.Cells[i].rect) {
+ 				cell = strings.Split(ws.MergeCells.Cells[i].Ref, ":")[0]
+ 				break
+@@ -1688,6 +1691,9 @@ func (f *File) checkCellInRangeRef(cell, rangeRef string) (bool, error) {
+ // cellInRange provides a function to determine if a given range is within a
+ // range.
+ func cellInRange(cell, ref []int) bool {
++	if len(cell) < 2 || len(ref) < 4 {
++		return false
++	}
+ 	return cell[0] >= ref[0] && cell[0] <= ref[2] && cell[1] >= ref[1] && cell[1] <= ref[3]
+ }
+ 
+diff --git a/merge_test.go b/merge_test.go
+index 3675cea..111d8bd 100644
+--- a/merge_test.go
++++ b/merge_test.go
+@@ -238,4 +238,19 @@ func TestMergeCellsParser(t *testing.T) {
+ 	ws := &xlsxWorksheet{MergeCells: &xlsxMergeCells{Cells: []*xlsxMergeCell{nil}}}
+ 	_, err := ws.mergeCellsParser("A1")
+ 	assert.NoError(t, err)
++
++	// Test merge cell with empty reference
++	ws = &xlsxWorksheet{MergeCells: &xlsxMergeCells{Cells: []*xlsxMergeCell{{Ref: ""}}}}
++	cell, err := ws.mergeCellsParser("A1")
++	assert.NoError(t, err)
++	assert.Equal(t, "A1", cell)
++
++	f := NewFile()
++	sheet, ok := f.Sheet.Load("xl/worksheets/sheet1.xml")
++	assert.True(t, ok)
++	sheet.(*xlsxWorksheet).MergeCells = &xlsxMergeCells{Cells: []*xlsxMergeCell{{Ref: ""}}}
++	val, err := f.GetCellValue("Sheet1", "A1")
++	assert.NoError(t, err)
++	assert.Empty(t, val)
++	assert.NoError(t, f.SetCellValue("Sheet1", "A1", 1))
+ }

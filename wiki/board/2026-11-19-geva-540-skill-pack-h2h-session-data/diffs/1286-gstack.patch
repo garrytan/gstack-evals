@@ -1,0 +1,51 @@
+diff --git a/__tests__/utils/convertTokenData.test.js b/__tests__/utils/convertTokenData.test.js
+index f50aa0e..eeb64d5 100644
+--- a/__tests__/utils/convertTokenData.test.js
++++ b/__tests__/utils/convertTokenData.test.js
+@@ -67,6 +67,19 @@ data.DTCG.array = copyNormal.array.map((item) => ({
+ 
+ describe('utils', () => {
+   describe('convertTokenData', () => {
++    it('should not allow prototype pollution', () => {
++      const result = convertTokenData(
++        [
++          { key: '{__proto__.foo}', value: 'malicious' },
++          { key: '{constructor.prototype.bar}', value: 'malicious' },
++        ],
++        { output: 'object' },
++      );
++      expect({}.foo).to.be.undefined;
++      expect({}.bar).to.be.undefined;
++      expect(Object.keys(result)).to.eql([]);
++    });
++
+     // Use the test below here if you need to debug a specific conversion, which is a bit harder to do
+     // in the dynamically generated tests below it.
+     // it.only(`should convert object to map for DTCG tokens`, () => {
+diff --git a/lib/utils/convertTokenData.js b/lib/utils/convertTokenData.js
+index c3dabb0..8d25564 100644
+--- a/lib/utils/convertTokenData.js
++++ b/lib/utils/convertTokenData.js
+@@ -25,6 +25,8 @@ function convertToTokenMap(flattenedTokens) {
+   );
+ }
+ 
++const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
++
+ /**
+  * @param {Token[]} tokenArray
+  * @returns
+@@ -34,9 +36,12 @@ function convertToTokenObject(tokenArray) {
+   tokenArray.forEach((token) => {
+     const { key } = token;
+     const keyArr = /** @type {string} */ (key).replace('{', '').replace('}', '').split('.');
++    if (keyArr.some((k) => UNSAFE_KEYS.has(k))) {
++      return;
++    }
+     let slice = obj;
+     keyArr.forEach((k, i, arr) => {
+-      if (slice[k] === undefined) {
++      if (!Object.prototype.hasOwnProperty.call(slice, k)) {
+         slice[k] = {};
+       }
+       // end

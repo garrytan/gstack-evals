@@ -1,0 +1,185 @@
+diff --git a/src/common/html_re.ts b/src/common/html_re.ts
+index 5c999d2..31f5f40 100644
+--- a/src/common/html_re.ts
++++ b/src/common/html_re.ts
+@@ -22,5 +22,7 @@ const HTML_TAG_RE = new RegExp(
+   `^(?:${open_tag}|${close_tag}|${comment}|${processing}|${declaration}|${cdata})`
+ )
+ const HTML_OPEN_CLOSE_TAG_RE = new RegExp(`^(?:${open_tag}|${close_tag})`)
++// Sticky variant (match at `lastIndex`), avoids slicing the source string
++const HTML_OPEN_CLOSE_TAG_STICKY_RE = new RegExp(`(?:${open_tag}|${close_tag})`, 'y')
+ 
+-export { HTML_TAG_RE, HTML_OPEN_CLOSE_TAG_RE }
++export { HTML_TAG_RE, HTML_OPEN_CLOSE_TAG_RE, HTML_OPEN_CLOSE_TAG_STICKY_RE }
+diff --git a/src/rules_inline/html_inline.ts b/src/rules_inline/html_inline.ts
+index 5c2faef..7b267a1 100644
+--- a/src/rules_inline/html_inline.ts
++++ b/src/rules_inline/html_inline.ts
+@@ -1,6 +1,6 @@
+ // Process html tags
+ 
+-import { HTML_TAG_RE } from '../common/html_re.ts'
++import { HTML_OPEN_CLOSE_TAG_STICKY_RE } from '../common/html_re.ts'
+ import type StateInline from './state_inline.ts'
+ 
+ function isLinkOpen (str: string) {
+@@ -36,16 +36,102 @@ export default function html_inline (state: StateInline, silent: boolean): boole
+     return false
+   }
+ 
+-  const match = state.src.slice(pos).match(HTML_TAG_RE)
+-  if (!match) { return false }
++  const end = matchHtml(state, pos)
++  if (end < 0) { return false }
+ 
+   if (!silent) {
+     const token = state.push('html_inline', '', 0)
+-    token.content = match[0]
++    token.content = state.src.slice(pos, end)
+ 
+     if (isLinkOpen(token.content)) state.linkLevel++
+     if (isLinkClose(token.content)) state.linkLevel--
+   }
+-  state.pos += match[0].length
++  state.pos = end
+   return true
+ }
++
++// Search `terminator` starting from `start`, remembering failed searches.
++// If a search from `start` fails, any search from a later position fails
++// too, so repeated unterminated constructs don't cause quadratic scans.
++function findTerminator (state: StateInline, terminator: string, start: number): number {
++  const failFrom = state.htmlFail[terminator]
++  if (failFrom !== undefined && start >= failFrom) { return -1 }
++
++  const idx = state.src.indexOf(terminator, start)
++  if (idx < 0) { state.htmlFail[terminator] = start }
++  return idx
++}
++
++// Equivalent of `<!--(?:[^-]|-[^-]|--[^>])*-->` applied at `start` (position
++// right after `<!--`). Match ends at the first `>` preceded by a run of `-`
++// (counted from `start`) whose length is 2 (mod 3). Returns end position or -1.
++function scanComment (state: StateInline, start: number): number {
++  const src = state.src
++  const max = src.length
++  const key = '-->'
++  const failFrom = state.htmlFail[key]
++
++  if (failFrom !== undefined && start >= failFrom) {
++    // Everything after the leading dash run was already scanned without
++    // success. Only the leading run (truncated at `start`) can differ.
++    let j = start
++    while (j < max && src.charCodeAt(j) === 0x2D/* - */) j++
++    if (j < max && src.charCodeAt(j) === 0x3E/* > */ && (j - start) % 3 === 2) {
++      return j + 1
++    }
++    return -1
++  }
++
++  let dashes = 0
++  for (let j = start; j < max; j++) {
++    const c = src.charCodeAt(j)
++    if (c === 0x2D/* - */) {
++      dashes++
++    } else {
++      if (c === 0x3E/* > */ && dashes % 3 === 2) { return j + 1 }
++      dashes = 0
++    }
++  }
++
++  state.htmlFail[key] = start
++  return -1
++}
++
++// Returns end position of html construct at `pos`, or -1
++function matchHtml (state: StateInline, pos: number): number {
++  const src = state.src
++  const ch = src.charCodeAt(pos + 1)
++
++  if (ch === 0x3F/* ? */) {
++    // processing instruction: <?...?>
++    const idx = findTerminator(state, '?>', pos + 2)
++    return idx < 0 ? -1 : idx + 2
++  }
++
++  if (ch === 0x21/* ! */) {
++    if (src.startsWith('<!--', pos)) {
++      // comment: <!--> | <!---> | <!--...-->
++      if (src.startsWith('<!-->', pos)) return pos + 5
++      if (src.startsWith('<!--->', pos)) return pos + 6
++      return scanComment(state, pos + 4)
++    }
++
++    if (src.startsWith('<![CDATA[', pos)) {
++      const idx = findTerminator(state, ']]>', pos + 9)
++      return idx < 0 ? -1 : idx + 3
++    }
++
++    if (isLetter(src.charCodeAt(pos + 2))) {
++      // declaration: <!X...>
++      const idx = findTerminator(state, '>', pos + 3)
++      return idx < 0 ? -1 : idx + 1
++    }
++
++    return -1
++  }
++
++  // open / close tag
++  HTML_OPEN_CLOSE_TAG_STICKY_RE.lastIndex = pos
++  const match = HTML_OPEN_CLOSE_TAG_STICKY_RE.exec(src)
++  return match ? pos + match[0].length : -1
++}
+diff --git a/src/rules_inline/state_inline.ts b/src/rules_inline/state_inline.ts
+index 5f64d71..8860dd9 100644
+--- a/src/rules_inline/state_inline.ts
++++ b/src/rules_inline/state_inline.ts
+@@ -37,6 +37,10 @@ class StateInline {
+   backticks: Record<number, number> = {}
+   backticksScanned = false
+ 
++  // html_inline: terminator => smallest start position from which a search
++  // for that terminator failed (used to avoid repeated quadratic scans)
++  htmlFail: Record<string, number> = {}
++
+   // Counter used to disable inline linkify-it execution
+   // inside <a> and markdown links
+   linkLevel = 0
+diff --git a/test/markdown-it/pathological.test.mjs b/test/markdown-it/pathological.test.mjs
+index d88bea7..d26513f 100644
+--- a/test/markdown-it/pathological.test.mjs
++++ b/test/markdown-it/pathological.test.mjs
+@@ -113,6 +113,10 @@ describe('Pathological sequences speed', () => {
+       await test_pattern('</' + '<!--'.repeat(100000))
+     })
+ 
++    it('unclosed <!-- (html enabled)', async () => {
++      await test_pattern('</' + '<!--'.repeat(100000), { html: true })
++    })
++
+     it('empty lines in deeply nested lists', async () => {
+       await test_pattern('- '.repeat(30000) + 'x' + '\n'.repeat(30000))
+     })
+@@ -127,6 +131,22 @@ describe('Pathological sequences speed', () => {
+   })
+ 
+   describe('Markdown-it', () => {
++    describe('unterminated inline html (html enabled)', () => {
++      const openers = {
++        comment: '<!--',
++        'comment with invalid terminator': '<!-- --->',
++        'processing instruction': '<?x',
++        declaration: '<!A',
++        cdata: '<![CDATA['
++      }
++
++      for (const [name, opener] of Object.entries(openers)) {
++        it(name, async () => {
++          await test_pattern('x ' + opener.repeat(128000), { html: true })
++        })
++      }
++    })
++
+     it('emphasis **_* pattern', async () => {
+       await test_pattern('**_* '.repeat(50000))
+     })

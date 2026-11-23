@@ -1,0 +1,85 @@
+diff --git a/.changeset/quiet-abort-signal.md b/.changeset/quiet-abort-signal.md
+new file mode 100644
+index 0000000..22f3c18
+--- /dev/null
++++ b/.changeset/quiet-abort-signal.md
+@@ -0,0 +1,5 @@
++---
++'svelte': patch
++---
++
++fix: allow state mutations inside `getAbortSignal()` abort handlers when a derived re-runs
+diff --git a/packages/svelte/src/internal/client/runtime.js b/packages/svelte/src/internal/client/runtime.js
+index 3d760e4..6c45943 100644
+--- a/packages/svelte/src/internal/client/runtime.js
++++ b/packages/svelte/src/internal/client/runtime.js
+@@ -265,6 +265,17 @@ export function update_reaction(reaction) {
+ 
+ 	var flags = reaction.f;
+ 
++	if (reaction.ac !== null) {
++		// abort handlers run outside the reaction, so they may safely write to state
++		active_reaction = null;
++		try {
++			reaction.ac.abort(STALE_REACTION);
++		} finally {
++			active_reaction = previous_reaction;
++			reaction.ac = null;
++		}
++	}
++
+ 	new_deps = /** @type {null | Value[]} */ (null);
+ 	skipped_deps = 0;
+ 	untracked_writes = null;
+@@ -277,11 +288,6 @@ export function update_reaction(reaction) {
+ 	untracking = false;
+ 	update_version = ++read_version;
+ 
+-	if (reaction.ac !== null) {
+-		reaction.ac.abort(STALE_REACTION);
+-		reaction.ac = null;
+-	}
+-
+ 	try {
+ 		reaction.f |= REACTION_IS_UPDATING;
+ 		var fn = /** @type {Function} */ (reaction.fn);
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/_config.js b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/_config.js
+new file mode 100644
+index 0000000..b5fe25a
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/_config.js
+@@ -0,0 +1,13 @@
++import { flushSync } from 'svelte';
++import { test } from '../../test';
++
++export default test({
++	html: `<button>0 0</button>`,
++
++	test({ assert, target }) {
++		const button = /** @type {HTMLButtonElement} */ (target.querySelector('button'));
++
++		flushSync(() => button.click());
++		assert.htmlEqual(target.innerHTML, `<button>1 1</button>`);
++	}
++});
+diff --git a/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/main.svelte b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/main.svelte
+new file mode 100644
+index 0000000..dfb7cf5
+--- /dev/null
++++ b/packages/svelte/tests/runtime-runes/samples/abort-signal-state-mutation/main.svelte
+@@ -0,0 +1,15 @@
++<script>
++	import { getAbortSignal } from 'svelte';
++
++	let count = $state(0);
++	let aborted = $state(0);
++
++	const value = $derived.by(() => {
++		getAbortSignal().addEventListener('abort', () => {
++			aborted += 1;
++		});
++		return count;
++	});
++</script>
++
++<button onclick={() => count++}>{value} {aborted}</button>

@@ -1,0 +1,130 @@
+diff --git a/pkg/proxy/authheaders/authheaders.go b/pkg/proxy/authheaders/authheaders.go
+index 5736989..68abdaa 100644
+--- a/pkg/proxy/authheaders/authheaders.go
++++ b/pkg/proxy/authheaders/authheaders.go
+@@ -36,12 +36,10 @@ import (
+ // This mirrors k8s.io/client-go/transport.SetAuthProxyHeaders and the upstream
+ // requestheader authenticator's ClearAuthenticationHeaders.
+ func SetAuthHeaders(header http.Header, user userinfo.Info, userHeader, groupHeader, extraHeaderPrefix string) {
+-	header.Del(userHeader)
+-	header.Del(groupHeader)
+-	for key := range header {
+-		if strings.HasPrefix(strings.ToLower(key), strings.ToLower(extraHeaderPrefix)) {
+-			header.Del(key)
+-		}
++	StripAuthHeaders(header, userHeader, groupHeader, extraHeaderPrefix)
++
++	if user == nil {
++		return
+ 	}
+ 
+ 	header.Set(userHeader, user.GetName())
+@@ -59,3 +57,38 @@ func SetAuthHeaders(header http.Header, user userinfo.Info, userHeader, groupHea
+ 		}
+ 	}
+ }
++
++// StripAuthHeaders unconditionally removes all identity headers (user, group
++// and every header carrying the extra prefix) from the given header map. It
++// always strips the default X-Remote-* headers as well as the configured ones.
++func StripAuthHeaders(header http.Header, userHeader, groupHeader, extraHeaderPrefix string) {
++	prefixes := []string{strings.ToLower(DefaultExtraHeaderPrefix)}
++	if extraHeaderPrefix != "" {
++		prefixes = append(prefixes, strings.ToLower(extraHeaderPrefix))
++	}
++	header.Del(DefaultUserHeader)
++	header.Del(DefaultGroupHeader)
++	header.Del(DefaultUIDHeader)
++	if userHeader != "" {
++		header.Del(userHeader)
++	}
++	if groupHeader != "" {
++		header.Del(groupHeader)
++	}
++	for key := range header {
++		lk := strings.ToLower(key)
++		for _, p := range prefixes {
++			if strings.HasPrefix(lk, p) {
++				header.Del(key)
++				break
++			}
++		}
++	}
++}
++
++const (
++	DefaultUserHeader        = "X-Remote-User"
++	DefaultGroupHeader       = "X-Remote-Group"
++	DefaultUIDHeader         = "X-Remote-Uid"
++	DefaultExtraHeaderPrefix = "X-Remote-Extra-"
++)
+diff --git a/pkg/proxy/authheaders/authheaders_test.go b/pkg/proxy/authheaders/authheaders_test.go
+index 258c208..4b6cc67 100644
+--- a/pkg/proxy/authheaders/authheaders_test.go
++++ b/pkg/proxy/authheaders/authheaders_test.go
+@@ -142,3 +142,24 @@ func TestSetAuthHeaders_RealExtraIsEncodedAndForwarded(t *testing.T) {
+ 		t.Errorf("encoded extra header %q = %v, want [root:org:ws]; full headers=%v", encoded, got, h)
+ 	}
+ }
++
++func TestStripAuthHeaders_NoUser(t *testing.T) {
++	t.Parallel()
++	h := http.Header{
++		userHeader:           {"system:admin"},
++		groupHeader:          {"system:masters"},
++		"X-Remote-Uid":       {"0"},
++		warrantHeader:        {"x"},
++		"X-Custom-Extra-Foo": {"bar"},
++		"Accept":             {"application/json"},
++	}
++	StripAuthHeaders(h, "X-Custom-User", "X-Custom-Group", "X-Custom-Extra-")
++	for _, k := range []string{userHeader, groupHeader, "X-Remote-Uid", warrantHeader, "X-Custom-Extra-Foo"} {
++		if v := h.Values(k); len(v) != 0 {
++			t.Errorf("header %q leaked: %v", k, v)
++		}
++	}
++	if h.Get("Accept") == "" {
++		t.Errorf("unrelated header removed")
++	}
++}
+diff --git a/pkg/proxy/proxy.go b/pkg/proxy/proxy.go
+index 7ba4cee..0ce0015 100644
+--- a/pkg/proxy/proxy.go
++++ b/pkg/proxy/proxy.go
+@@ -58,7 +58,10 @@ func newTransport(clientCert, clientKeyFile, caFile string) (*http.Transport, er
+ // passing them through access headers to the shard.
+ func WithProxyAuthHeaders(delegate http.Handler, userHeader, groupHeader string, extraHeaderPrefix string) http.HandlerFunc {
+ 	return func(w http.ResponseWriter, r *http.Request) {
+-		if u, ok := request.UserFrom(r.Context()); ok {
++		// Always strip inbound identity headers, even if no user is attached
++		// to the request, so client-supplied values never reach the backend.
++		authheaders.StripAuthHeaders(r.Header, userHeader, groupHeader, extraHeaderPrefix)
++		if u, ok := request.UserFrom(r.Context()); ok && u != nil {
+ 			authheaders.SetAuthHeaders(r.Header, u, userHeader, groupHeader, extraHeaderPrefix)
+ 		}
+ 
+diff --git a/pkg/server/localproxy.go b/pkg/server/localproxy.go
+index 1a64aa3..1a2099b 100644
+--- a/pkg/server/localproxy.go
++++ b/pkg/server/localproxy.go
+@@ -182,6 +182,8 @@ func WithLocalProxy(
+ 				},
+ 			}
+ 
++			// Never forward client-supplied identity headers to the mount backend.
++			authheaders.StripAuthHeaders(req.Header, "", "", "")
+ 			proxy.ServeHTTP(w, req)
+ 			return
+ 		}
+@@ -323,7 +325,10 @@ func newInsecureTransport() (*http.Transport, error) {
+ // passing them through access headers to the shard.
+ func withProxyAuthHeaders(delegate http.Handler, userHeader, groupHeader string, extraHeaderPrefix string) http.HandlerFunc {
+ 	return func(w http.ResponseWriter, r *http.Request) {
+-		if u, ok := request.UserFrom(r.Context()); ok {
++		// Always strip inbound identity headers, even if no user is attached
++		// to the request, so client-supplied values never reach the backend.
++		authheaders.StripAuthHeaders(r.Header, userHeader, groupHeader, extraHeaderPrefix)
++		if u, ok := request.UserFrom(r.Context()); ok && u != nil {
+ 			authheaders.SetAuthHeaders(r.Header, u, userHeader, groupHeader, extraHeaderPrefix)
+ 		}
+ 

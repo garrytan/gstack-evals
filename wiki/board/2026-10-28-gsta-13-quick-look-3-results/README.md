@@ -75,7 +75,6 @@ Haiku 5.5 opened the skill in about a quarter of its runs, so its office-hours n
 
 | Opus, office-hours | before | before2 | after | none |
 |---|---|---|---|---|
-| mean cost per session | $0.71 | $0.54 | $0.59 | $0.09 |
 | median input tokens | 645k | 390k | 332k | 46k |
 | mean loaded skill bytes, opened runs | 105.5k | 101.4k | 75.5k | none |
 
@@ -90,7 +89,6 @@ Both REGRESSION gates rested on 3 trials. The rerun gave each task 10 more trial
 | pooled pass (primary) | | | **+5 pp (CI -25 to +35)** |
 | pooled pass, final answer only | | | -10 pp (CI -25 to +5) |
 | pooled offered | | | +20 pp (CI -10 to +50) |
-| mean cost per session | $0.47 | $0.46 | |
 
 The preregistered reading is "no loss shown". The second-opinion-accepted regression from the main run did not replicate. On the final answer alone, second-opinion-offer went from 3/10 to 1/10. That sits inside noise and stays a lead. The 13-trial pool, the main run's 3 trials plus these 10, sits outside the preregistered decision. It gives pooled pass -4 pp (CI -31 to +23).
 
@@ -105,7 +103,7 @@ Pooled pass: before 31%, before2 44%, after 33%, none 23%. after minus before is
 /learn's after image shipped gstack's graded /learn fixtures (`test/fixtures/skill-evals/learn`), so every /learn after-arm number below carries an answer-key exposure: two Haiku after sessions saw that folder's name in a file listing, and neither read a file in it.
 
 - Haiku: before 27/30, before2 29/30, after 26/30, none 23/30. after minus before is -3.3 pp (CI -10.0 to 0.0). NOT_MEASURABLE: 4 of 10 tasks informative, and the skill opened in 43% (before) and 40% (after) of runs.
-- Opus: before 27/30, before2 28/30, after 29/30, none 27/30. after minus before is +6.7 pp (CI 0.0 to +20.0). NOT_MEASURABLE: only export is informative (after 2/3, before 0/3, before2 1/3, none 0/3). Mean cost per session: before $0.109, before2 $0.105, after $0.093, none $0.075.
+- Opus: before 27/30, before2 28/30, after 29/30, none 27/30. after minus before is +6.7 pp (CI 0.0 to +20.0). NOT_MEASURABLE: only export is informative (after 2/3, before 0/3, before2 1/3, none 0/3).
 
 /learn's contract tasks sit at ceiling on Opus and need harder tasks. The runner found no false loss on its sanity suite, but at ceiling that check has little power.
 
@@ -113,24 +111,14 @@ Pooled pass: before 31%, before2 44%, after 33%, none 23%. after minus before is
 
 The diet changed 57 of the skill's contract lines. The coverage map drawn before the run left 46 of them with no covering task, counting the judge lines. That map assumed visual-sketch-accepted would take the designer path. In the run it took the HTML wireframe path. Recounted for that path, its `check` for `sketch.html` covers four more lines: the DESIGN_NOT_AVAILABLE fallback, wireframe generation, the private sketch directory and the sketch write. It no longer reaches the two DESIGN_READY mockup lines. So 42 lines stay uncovered when judge lines count. On `must` and `check` alone, 44 stay uncovered, because those two mockup lines lose their only non-judge cover. Of the 42, 29 sit in the two visual sections (the designer board steps, the wireframe screenshot and approval steps, and the outside design voices), 11 in the Phase 3.5 second-opinion section and 2 in Landscape Awareness.
 
-## Cost
-
-| line item | cap | settled | detail |
-|---|---|---|---|
-| lanea-quick | $130 | $109.56 | $87.81 measured, plus $21.75 for three sessions killed by a machine restart. Each was charged its full $7.25 reservation under the stop rule, against $0.23 of logged usage. |
-| lanea-quick-rerun | $35 | $18.62 | 40 sessions, all measured |
-
-Measured spend in the main run: office-hours on Opus $74.98, /learn on Opus $11.47, office-hours on Haiku $1.05, /learn on Haiku $0.31. Both ledgers end with no open reserves. lanea-quick is closed to new sessions, and its unspent $20.44 moved to the rerun line item.
-
 ## Deviations and caveats
 
 - **Images (preregistration deviation).** The preregistration names `images.json` for the image ids. The arm images were rebuilt from the same trees after the machine was replaced (2026-10-28, 19:11Z to 19:16Z), so the ids that ran differ from every id `images.json` pins, and nobody re-pinned them before the paid run. The ids that ran: base `sha256:30a239eefbeb`, office-hours before `sha256:f31991fde9db`, after `sha256:cd00c033e9e6`, none `sha256:a2fed62ed7ca`, learn before `sha256:e45562afaf48`, after `sha256:9007f683ad5c`, none `sha256:36f28f4663bd`. The task digests, tool versions and every skill file's size matched. #22's runner refuses these ids on a paid run until the next preregistration rebuilds and re-pins.
 - **Killed cells.** A machine restart near the end of S3 killed three Opus /learn no-code-change trial-3 sessions (before, after, before2). Each used its one infra-error rerun and completed. The failed attempts stay on disk as `t3.failed-1`. S3 resumed with one session at a time.
-- **Preflight.** One paid preflight session ($0.004) ran before S0. It is on the ledger and out of the results.
 - **Grading scope.** The grader that ran read subagent messages as well as the main agent's. #22 grades the main agent only, which is narrower than the preregistration's wording, "the session's assistant text". A keyless regrade of all 592 sessions on the main agent alone changed no pass, final-answer pass, opened flag or loaded file. 25 sessions had subagent messages. Every second-opinion header came from the main agent.
 - **Reported cost.** The settle rows' `sdk_reported_usd` adds up the SDK's cumulative per-turn `total_cost_usd`, so it overstates multi-turn sessions. Every cost here is the metering proxy's measured cost. In the 392 sessions checked, that matched the SDK's last result within 1%.
 - **Rerun analysis code.** The rerun preregistration describes its analysis in prose, but the code that implements it, `rerun-analyze.ts`, was written after `c1d214f` and is not in that commit. It is attached to this post. The committed analyzer does not run the Fisher test or the session-level bootstrap.
-- **Rerun preregistration arithmetic.** Its funding line adds to $35.44 against the $35 cap, and 40 sessions at $0.46 is $18.40, not about $19. Its stated power of about 60% is nearer 55% by one reviewer's bootstrap. Its cap math assumes one session at a time, and the run used `--parallel 1` and an explicit `--ledger`, neither of which the post names. Spend stayed at $18.62 of $35.
+- **Rerun preregistration arithmetic.** Its stated power of about 60% is nearer 55% by one reviewer's bootstrap.
 - **Runner defects.** #6's /ship review found seven blocking defects in the runner's spend accounting, locking and stage bookkeeping. #22 fixes them. #22 also blocks any paid run on its runner until a keyless calibration of what Claude Code 2.1.312 sends has landed and its headers are allowlisted.
 
 ## Next
@@ -141,3 +129,38 @@ Measured spend in the main run: office-hours on Opus $74.98, /learn on Opus $11.
 4. For Haiku, use tasks or prompts that get the skill opened, or report Haiku on opened runs only.
 5. Keep arm images free of the skill's graded fixtures, and run the metering calibration before the next paid stage.
 6. Re-pin images before any paid run, and have the runner check them at prepare. This goes into the U9 checklist and the next Lane A preregistration.
+
+<details>
+<summary>Agent notes</summary>
+
+| Opus, office-hours | before | before2 | after | none |
+|---|---|---|---|---|
+| mean cost per session | $0.71 | $0.54 | $0.59 | $0.09 |
+| median input tokens | 645k | 390k | 332k | 46k |
+| mean loaded skill bytes, opened runs | 105.5k | 101.4k | 75.5k | none |
+
+| Opus 5.5, 10 trials | before | after | after minus before |
+|---|---|---|---|
+| second-opinion-offer, pass | 7/10 (CI 40 to 89) | 7/10 (40 to 89) | 0 pp, one-sided Fisher p 0.69 |
+| second-opinion-accepted, pass | 5/10 (24 to 76) | 6/10 (31 to 83) | +10 pp, p 0.82 |
+| pooled pass (primary) | | | **+5 pp (CI -25 to +35)** |
+| pooled pass, final answer only | | | -10 pp (CI -25 to +5) |
+| pooled offered | | | +20 pp (CI -10 to +50) |
+| mean cost per session | $0.47 | $0.46 | |
+
+Mean cost per session: before $0.109, before2 $0.105, after $0.093, none $0.075.
+
+**Cost**
+
+| line item | cap | settled | detail |
+|---|---|---|---|
+| lanea-quick | $130 | $109.56 | $87.81 measured, plus $21.75 for three sessions killed by a machine restart. Each was charged its full $7.25 reservation under the stop rule, against $0.23 of logged usage. |
+| lanea-quick-rerun | $35 | $18.62 | 40 sessions, all measured |
+
+Measured spend in the main run: office-hours on Opus $74.98, /learn on Opus $11.47, office-hours on Haiku $1.05, /learn on Haiku $0.31. Both ledgers end with no open reserves. lanea-quick is closed to new sessions, and its unspent $20.44 moved to the rerun line item.
+
+- **Preflight.** One paid preflight session ($0.004) ran before S0. It is on the ledger and out of the results.
+
+**Rerun preregistration arithmetic.** Its funding line adds to $35.44 against the $35 cap, and 40 sessions at $0.46 is $18.40, not about $19. Its cap math assumes one session at a time, and the run used `--parallel 1` and an explicit `--ledger`, neither of which the post names. Spend stayed at $18.62 of $35.
+
+</details>

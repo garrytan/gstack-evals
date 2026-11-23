@@ -1,0 +1,8 @@
+task fit: sessions, with next_step, with done, with both
+  F opus: 99, next_step 100.0%, done 100.0%, both 100.0%
+  J opus: 99, next_step 100.0%, done 100.0%, both 100.0%
+  J sol: 99, next_step 100.0%, done 100.0%, both 100.0%
+  P opus: 279, next_step 100.0%, done 100.0%, both 100.0%
+  P sol: 279, next_step 100.0%, done 100.0%, both 100.0%
+  R opus: 279, next_step 100.0%, done 100.0%, both 100.0%
+  R sol: 279, next_step 100.0%, done 100.0%, both 100.0%

@@ -1,0 +1,32 @@
+diff --git a/crates/hir-def/src/expr_store/tests/body.rs b/crates/hir-def/src/expr_store/tests/body.rs
+index c7b9edf..f98e3ce 100644
+--- a/crates/hir-def/src/expr_store/tests/body.rs
++++ b/crates/hir-def/src/expr_store/tests/body.rs
+@@ -806,3 +806,14 @@ fn foo() {
+             }"#]],
+     );
+ }
++
++#[test]
++fn macro_type_as_type_bound() {
++    lower(
++        r#"
++fn main() {
++    let x: vec![]+;
++}
++"#,
++    );
++}
+diff --git a/crates/syntax/src/ast/node_ext.rs b/crates/syntax/src/ast/node_ext.rs
+index 1eb658f..3bc8592 100644
+--- a/crates/syntax/src/ast/node_ext.rs
++++ b/crates/syntax/src/ast/node_ext.rs
+@@ -880,7 +880,7 @@ impl ast::TypeBound {
+         } else if let Some(lifetime) = self.lifetime() {
+             Some(TypeBoundKind::Lifetime(lifetime))
+         } else {
+-            unreachable!()
++            None
+         }
+     }
+ }

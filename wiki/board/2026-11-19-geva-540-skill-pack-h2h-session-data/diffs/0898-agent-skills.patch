@@ -1,0 +1,79 @@
+diff --git a/packages/react/src/menu/popup/MenuPopup.tsx b/packages/react/src/menu/popup/MenuPopup.tsx
+index cf3d523..65bf67a 100644
+--- a/packages/react/src/menu/popup/MenuPopup.tsx
++++ b/packages/react/src/menu/popup/MenuPopup.tsx
+@@ -101,6 +101,11 @@ export const MenuPopup = React.forwardRef(function MenuPopup(
+   if (parent.type === 'menubar' && lastOpenChangeReason !== 'outside-press') {
+     returnFocus = true;
+   }
++  // When a submenu is closed via the Escape key without closing its parent, return focus to the
++  // submenu trigger.
++  if (parent.type === 'menu' && lastOpenChangeReason === 'escape-key') {
++    returnFocus = true;
++  }
+ 
+   return (
+     <FloatingFocusManager
+diff --git a/packages/react/src/menu/root/MenuRoot.test.tsx b/packages/react/src/menu/root/MenuRoot.test.tsx
+index d6b697f..9bcf06e 100644
+--- a/packages/react/src/menu/root/MenuRoot.test.tsx
++++ b/packages/react/src/menu/root/MenuRoot.test.tsx
+@@ -838,6 +838,58 @@ describe('<Menu.Root />', () => {
+ 
+       expect(menus[0].id).to.equal('parent-menu');
+     });
++
++    it('moves focus to the submenu trigger when the Escape key is pressed if `closeParentOnEsc=false`', async () => {
++      const { getByRole, user } = await render(
++        <Menu.Root>
++          <Menu.Trigger>Open</Menu.Trigger>
++          <Menu.Portal>
++            <Menu.Positioner>
++              <Menu.Popup>
++                <Menu.Item>1</Menu.Item>
++                <Menu.SubmenuRoot closeParentOnEsc={false}>
++                  <Menu.SubmenuTrigger>2</Menu.SubmenuTrigger>
++                  <Menu.Portal>
++                    <Menu.Positioner>
++                      <Menu.Popup>
++                        <Menu.Item>2.1</Menu.Item>
++                        <Menu.Item>2.2</Menu.Item>
++                      </Menu.Popup>
++                    </Menu.Positioner>
++                  </Menu.Portal>
++                </Menu.SubmenuRoot>
++              </Menu.Popup>
++            </Menu.Positioner>
++          </Menu.Portal>
++        </Menu.Root>,
++      );
++
++      const trigger = getByRole('button', { name: 'Open' });
++      await act(async () => {
++        trigger.focus();
++      });
++
++      await user.keyboard('[ArrowDown]');
++      await waitFor(() => {
++        expect(getByRole('menuitem', { name: '1' })).toHaveFocus();
++      });
++
++      await user.keyboard('[ArrowDown]');
++      await waitFor(() => {
++        expect(getByRole('menuitem', { name: '2' })).toHaveFocus();
++      });
++
++      await user.keyboard('[ArrowRight]');
++      await waitFor(() => {
++        expect(getByRole('menuitem', { name: '2.1' })).toHaveFocus();
++      });
++
++      await user.keyboard('[Escape]');
++
++      await waitFor(() => {
++        expect(getByRole('menuitem', { name: '2' })).toHaveFocus();
++      });
++    });
+   });
+ 
+   describe('prop: modal', () => {

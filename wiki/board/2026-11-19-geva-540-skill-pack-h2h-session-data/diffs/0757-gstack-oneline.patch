@@ -1,0 +1,12 @@
+diff --git a/packages/agents-realtime/src/realtimeSession.ts b/packages/agents-realtime/src/realtimeSession.ts
+index 3c4f22e..bdc7559 100644
+--- a/packages/agents-realtime/src/realtimeSession.ts
++++ b/packages/agents-realtime/src/realtimeSession.ts
+@@ -314,6 +314,7 @@ export class RealtimeSession<
+     }
+ 
+     return {
++      ...this.options.config,
+       instructions,
+       voice: this.#currentAgent.voice,
+       model: this.options.model,

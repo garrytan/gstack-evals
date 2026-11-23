@@ -1,0 +1,147 @@
+diff --git a/src/common/html_re.ts b/src/common/html_re.ts
+index 5c999d2..eddd410 100644
+--- a/src/common/html_re.ts
++++ b/src/common/html_re.ts
+@@ -13,7 +13,7 @@ const attribute = `(?:\\s+${attr_name}(?:\\s*=\\s*${attr_value})?)`
+ const open_tag = `<[A-Za-z][A-Za-z0-9\\-]*${attribute}*\\s*\\/?>`
+ 
+ const close_tag = '<\\/[A-Za-z][A-Za-z0-9\\-]*\\s*>'
+-const comment = '<!---?>|<!--(?:[^-]|-[^-]|--[^>])*-->'
++const comment = '<!---?>|<!--[\\s\\S]*?-->'
+ const processing = '<[?][\\s\\S]*?[?]>'
+ const declaration = '<![A-Za-z][^>]*>'
+ const cdata = '<!\\[CDATA\\[[\\s\\S]*?\\]\\]>'
+diff --git a/src/rules_inline/html_inline.ts b/src/rules_inline/html_inline.ts
+index 5c2faef..a7578c5 100644
+--- a/src/rules_inline/html_inline.ts
++++ b/src/rules_inline/html_inline.ts
+@@ -16,6 +16,30 @@ function isLetter (ch: number) {
+   return (lc >= 0x61/* a */) && (lc <= 0x7a/* z */)
+ }
+ 
++// Returns the position of the first `term` in `state.src` at or after `from`,
++// or -1. Results are cached per inline source, so repeated unterminated
++// openers (`<!--<!--<!--...`) do not rescan the rest of the input each time.
++function findTerminator (state: StateInline, term: string, from: number): number {
++  let cached = state.html_terminators[term]
++  if (!cached) {
++    cached = state.html_terminators[term] = { from: -1, at: -1, absentFrom: Infinity }
++  }
++
++  // Already known to be absent in the tail
++  if (from >= cached.absentFrom) { return -1 }
++  // Last found occurrence is still the next one
++  if (cached.from >= 0 && cached.from <= from && cached.at >= from) { return cached.at }
++
++  const at = state.src.indexOf(term, from)
++  if (at < 0) {
++    cached.absentFrom = from
++  } else {
++    cached.from = from
++    cached.at = at
++  }
++  return at
++}
++
+ export default function html_inline (state: StateInline, silent: boolean): boolean {
+   if (!state.md.options.html) { return false }
+ 
+@@ -36,16 +60,49 @@ export default function html_inline (state: StateInline, silent: boolean): boole
+     return false
+   }
+ 
+-  const match = state.src.slice(pos).match(HTML_TAG_RE)
+-  if (!match) { return false }
++  let end = -1
++
++  if (ch === 0x21/* ! */ && state.src.charCodeAt(pos + 2) === 0x2D/* - */) {
++    // HTML comment (CommonMark 0.31.2): `<!-->`, `<!--->`, or `<!--`,
++    // text not including `-->`, and `-->`. Matched manually: a regexp
++    // here is prone to backtracking and rescanning the tail on failure.
++    if (state.src.charCodeAt(pos + 3) !== 0x2D/* - */) { return false }
++
++    if (state.src.charCodeAt(pos + 4) === 0x3E/* > */) {
++      end = pos + 5
++    } else if (state.src.startsWith('->', pos + 4)) {
++      end = pos + 6
++    } else {
++      const at = findTerminator(state, '-->', pos + 4)
++      if (at < 0) { return false }
++      end = at + 3
++    }
++  } else {
++    // Processing instructions, declarations and CDATA scan the rest of
++    // the input for their terminator. Bail out early if it is absent,
++    // so repeated unterminated openers do not cause quadratic rescans.
++    if (ch === 0x3F/* ? */) {
++      if (findTerminator(state, '?>', pos + 2) < 0) { return false }
++    } else if (ch === 0x21/* ! */) {
++      if (state.src.charCodeAt(pos + 2) === 0x5B/* [ */) {
++        if (findTerminator(state, ']]>', pos + 3) < 0) { return false }
++      } else if (findTerminator(state, '>', pos + 2) < 0) {
++        return false
++      }
++    }
++
++    const match = state.src.slice(pos).match(HTML_TAG_RE)
++    if (!match) { return false }
++    end = pos + match[0].length
++  }
+ 
+   if (!silent) {
+     const token = state.push('html_inline', '', 0)
+-    token.content = match[0]
++    token.content = state.src.slice(pos, end)
+ 
+     if (isLinkOpen(token.content)) state.linkLevel++
+     if (isLinkClose(token.content)) state.linkLevel--
+   }
+-  state.pos += match[0].length
++  state.pos = end
+   return true
+ }
+diff --git a/src/rules_inline/state_inline.ts b/src/rules_inline/state_inline.ts
+index 5f64d71..a37c982 100644
+--- a/src/rules_inline/state_inline.ts
++++ b/src/rules_inline/state_inline.ts
+@@ -37,6 +37,10 @@ class StateInline {
+   backticks: Record<number, number> = {}
+   backticksScanned = false
+ 
++  // Inline html terminator (`-->`, `?>`, `>`, `]]>`) => last lookup result,
++  // used to avoid quadratic rescans for unterminated constructs
++  html_terminators: Record<string, { from: number, at: number, absentFrom: number }> = {}
++
+   // Counter used to disable inline linkify-it execution
+   // inside <a> and markdown links
+   linkLevel = 0
+diff --git a/test/markdown-it/pathological.test.mjs b/test/markdown-it/pathological.test.mjs
+index d88bea7..207a09b 100644
+--- a/test/markdown-it/pathological.test.mjs
++++ b/test/markdown-it/pathological.test.mjs
+@@ -175,6 +175,25 @@ describe('Pathological sequences speed', () => {
+       await test_pattern('[a]: /u "' + 'x\n'.repeat(300000) + '"')
+     })
+ 
++    it('unclosed inline html comments with html enabled', async () => {
++      await test_pattern('x ' + '<!--'.repeat(100000), { html: true })
++      await test_pattern('</' + '<!--'.repeat(100000), { html: true })
++      await test_pattern('x ' + '<!--'.repeat(100000) + '-->', { html: true })
++      await test_pattern('x ' + '<!-- a --->'.repeat(50000), { html: true })
++    })
++
++    it('unclosed inline html processing instructions with html enabled', async () => {
++      await test_pattern('x ' + '<?x'.repeat(100000), { html: true })
++    })
++
++    it('unclosed inline html declarations with html enabled', async () => {
++      await test_pattern('x ' + '<!A'.repeat(100000), { html: true })
++    })
++
++    it('unclosed inline html cdata with html enabled', async () => {
++      await test_pattern('x ' + '<![CDATA['.repeat(100000), { html: true })
++    })
++
+     it('reference with multiline label', async () => {
+       await test_pattern('[' + 'a\n'.repeat(300000))
+     })

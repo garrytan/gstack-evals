@@ -1,0 +1,64 @@
+diff --git a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+index 86cfc96..6b2f788 100644
+--- a/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
++++ b/java/opendataloader-pdf-core/src/main/java/org/opendataloader/pdf/processors/TextLineProcessor.java
+@@ -24,7 +24,6 @@ import org.verapdf.wcag.algorithms.entities.geometry.BoundingBox;
+ import org.verapdf.wcag.algorithms.entities.tables.tableBorders.TableBorder;
+ import org.verapdf.wcag.algorithms.semanticalgorithms.utils.ChunksMergeUtils;
+ import org.verapdf.wcag.algorithms.semanticalgorithms.utils.ListUtils;
+-import org.verapdf.wcag.algorithms.semanticalgorithms.utils.TextChunkUtils;
+ 
+ import java.util.ArrayList;
+ import java.util.Comparator;
+@@ -33,6 +32,13 @@ import java.util.List;
+ public class TextLineProcessor {
+ 
+     private static final double ONE_LINE_PROBABILITY = 0.75;
++    // Min gap (in font-size units) between chunks that counts as a word break. veraPDF's
++    // TEXT_LINE_SPACE_RATIO (0.17) drops spaces in tight/justified text where each word is
++    // positioned separately (Td/Tm) without space glyphs. Smaller gaps (kerning) are already
++    // merged by TextProcessor.mergeCloseTextChunks.
++    // ponystack: words inside one TJ array are still joined by veraPDF ChunkParser's
++    // hardcoded 0.17em rule; fixing that needs an upstream veraPDF change.
++    static final double TEXT_LINE_SPACE_RATIO = 0.12;
+     private static final Comparator<TextChunk> TEXT_CHUNK_COMPARATOR =
+         Comparator.comparingDouble(o -> o.getBoundingBox().getLeftX());
+ 
+@@ -69,7 +75,7 @@ public class TextLineProcessor {
+             if (content instanceof TextLine) {
+                 TextLine textLine = (TextLine) content;
+                 textLine.getTextChunks().sort(TEXT_CHUNK_COMPARATOR);
+-                double threshold = textLine.getFontSize() * TextChunkUtils.TEXT_LINE_SPACE_RATIO;
++                double threshold = textLine.getFontSize() * TEXT_LINE_SPACE_RATIO;
+                 newContents.set(i, getTextLineWithSpaces(textLine, threshold));
+             }
+         }
+diff --git a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+index 855aa82..31034fb 100644
+--- a/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
++++ b/java/opendataloader-pdf-core/src/test/java/org/opendataloader/pdf/processors/TextLineProcessorTest.java
+@@ -115,4 +115,24 @@ public class TextLineProcessorTest {
+             "There should be a space between chunks when there is a physical gap");
+     }
+ 
++    /**
++     * Tight word spacing (0.15em, e.g. justified text positioned via TJ offsets without
++     * space glyphs) must still produce a space; adjacent chunks must not.
++     */
++    @Test
++    public void testProcessTextLinesAddsSpacesForTightWordGaps() {
++        StaticContainers.setIsIgnoreCharactersWithoutUnicode(false);
++        StaticContainers.setIsDataLoader(true);
++        List<IObject> contents = new ArrayList<>();
++        // font size 10: "Lexical" ends at 40, "Search" starts 1.5pt later, "es" touches it
++        contents.add(new TextChunk(new BoundingBox(0, 10.0, 300.0, 40.0, 310.0), "Lexical", 10, 300.0));
++        contents.add(new TextChunk(new BoundingBox(0, 41.5, 300.0, 70.0, 310.0), "Search", 10, 300.0));
++        contents.add(new TextChunk(new BoundingBox(0, 70.0, 300.0, 80.0, 310.0), "es", 10, 300.0));
++
++        contents = TextLineProcessor.processTextLines(contents);
++
++        Assertions.assertEquals(1, contents.size());
++        Assertions.assertEquals("Lexical Searches", ((TextLine) contents.get(0)).getValue());
++    }
++
+ }

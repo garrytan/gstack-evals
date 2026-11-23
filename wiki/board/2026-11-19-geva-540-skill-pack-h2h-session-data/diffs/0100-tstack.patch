@@ -1,0 +1,101 @@
+diff --git a/src/libuilogic/SpellCheck/SpellChecker.cs b/src/libuilogic/SpellCheck/SpellChecker.cs
+index 447d912..f633c07 100644
+--- a/src/libuilogic/SpellCheck/SpellChecker.cs
++++ b/src/libuilogic/SpellCheck/SpellChecker.cs
+@@ -114,6 +114,9 @@ public class SpellChecker : ISpellChecker, IDoSpell
+ 
+         if (!File.Exists(dictionaryFile))
+         {
++            // Don't keep spell checking with a dictionary loaded earlier for another language.
++            _hunspellWeCantSpell = null;
++            WordLists = null;
+             return false;
+         }
+ 
+diff --git a/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs b/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
+index 7d4063b..1b91049 100644
+--- a/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
++++ b/src/ui/Features/Tools/FixCommonErrors/FixCommonOcrErrors.cs
+@@ -33,11 +33,10 @@ namespace Nikse.SubtitleEdit.Core.Forms.FixCommonErrors
+ 
+             var spellCheckManager = new SpellCheckManager();
+             var spellCheckers = spellCheckManager.GetDictionaryLanguages(Se.DictionariesFolder);
+-            var spellChecker = spellCheckers.FirstOrDefault(x => x.GetThreeLetterCode() == threeLetterCode);
+-            if (spellChecker == null)
+-            {
+-                return;
+-            }
++            // A Hunspell dictionary is optional: without one the OCR replace list is still applied
++            // (only spell-check based guessing is skipped), matching Subtitle Edit 4.
++            var spellChecker = spellCheckers.FirstOrDefault(x => x.GetThreeLetterCode() == threeLetterCode)
++                               ?? new SpellCheckDictionaryDisplay();
+ 
+             OcrFixEngine.Initialize(subtitle, threeLetterCode, spellChecker);
+ 
+diff --git a/tests/UI/Features/Tools/FixCommonErrors/FixCommonOcrErrorsTests.cs b/tests/UI/Features/Tools/FixCommonErrors/FixCommonOcrErrorsTests.cs
+new file mode 100644
+index 0000000..ace1378
+--- /dev/null
++++ b/tests/UI/Features/Tools/FixCommonErrors/FixCommonOcrErrorsTests.cs
+@@ -0,0 +1,61 @@
++using Nikse.SubtitleEdit.Core.Common;
++using Nikse.SubtitleEdit.Core.Forms.FixCommonErrors;
++using Nikse.SubtitleEdit.Features.Ocr.FixEngine;
++using Nikse.SubtitleEdit.Features.SpellCheck;
++using Nikse.SubtitleEdit.Logic.Config;
++
++namespace UITests.Features.Tools.FixCommonErrors;
++
++public class FixCommonOcrErrorsTests
++{
++    // "Fix common OCR errors" must apply the language's OCR replace list even when no Hunspell
++    // dictionary for that language is installed (e.g. after a config reset only the bundled
++    // *_OCRFixReplaceList.xml files exist). It used to silently do nothing in that case.
++    [Fact]
++    public void Fix_AppliesOcrReplaceList_WithoutHunspellDictionary()
++    {
++        var folder = Path.Combine(Path.GetTempPath(), "SubtitleEdit.UITests", Guid.NewGuid().ToString("N"));
++        Directory.CreateDirectory(folder);
++        File.WriteAllText(Path.Combine(folder, "spa_OCRFixReplaceList.xml"),
++            """
++            <?xml version="1.0" encoding="utf-8"?>
++            <ReplaceList>
++              <WholeWords>
++                <Word from="aca" to="acá" />
++                <Word from="Adios" to="Adiós" />
++                <Word from="Algun" to="Algún" />
++                <Word from="dia" to="día" />
++                <Word from="volvere" to="volveré" />
++              </WholeWords>
++            </ReplaceList>
++            """);
++
++        var oldSeFolder = Se.DictionariesFolder;
++        var oldConfigFolder = SpellCheckConfig.DictionariesFolder;
++        var oldEngine = FixCommonOcrErrors.OcrFixEngine;
++        try
++        {
++            Se.DictionariesFolder = folder;
++            SpellCheckConfig.DictionariesFolder = () => folder;
++            FixCommonOcrErrors.OcrFixEngine = new OcrFixEngine(new SpellChecker());
++
++            var subtitle = new Subtitle();
++            subtitle.Paragraphs.Add(new Paragraph("Hola, aca estoy.", 0, 1000));
++            subtitle.Paragraphs.Add(new Paragraph("Adios.", 2000, 3000));
++            subtitle.Paragraphs.Add(new Paragraph("Algun dia volvere.", 4000, 5000));
++
++            new FixCommonOcrErrors().Fix(subtitle, new EmptyFixCallback { Language = "es" });
++
++            Assert.Equal("Hola, acá estoy.", subtitle.Paragraphs[0].Text);
++            Assert.Equal("Adiós.", subtitle.Paragraphs[1].Text);
++            Assert.Equal("Algún día volveré.", subtitle.Paragraphs[2].Text);
++        }
++        finally
++        {
++            Se.DictionariesFolder = oldSeFolder;
++            SpellCheckConfig.DictionariesFolder = oldConfigFolder;
++            FixCommonOcrErrors.OcrFixEngine = oldEngine;
++            Directory.Delete(folder, recursive: true);
++        }
++    }
++}

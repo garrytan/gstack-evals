@@ -1,0 +1,183 @@
+diff --git a/internal/storage/embeddeddolt/ignored_tables_test.go b/internal/storage/embeddeddolt/ignored_tables_test.go
+new file mode 100644
+index 0000000..ef2400a
+--- /dev/null
++++ b/internal/storage/embeddeddolt/ignored_tables_test.go
+@@ -0,0 +1,99 @@
++//go:build cgo
++
++package embeddeddolt_test
++
++import (
++	"context"
++	"database/sql"
++	"path/filepath"
++	"testing"
++
++	"github.com/steveyegge/beads/internal/storage/embeddeddolt"
++	"github.com/steveyegge/beads/internal/types"
++)
++
++var wispTables = []string{"wisps", "wisp_dependencies", "wisp_labels", "wisp_events", "wisp_comments"}
++
++func showCreateTables(t *testing.T, ctx context.Context, db *sql.DB) map[string]string {
++	t.Helper()
++	ddl := map[string]string{}
++	for _, table := range wispTables {
++		var name, create string
++		if err := db.QueryRowContext(ctx, "SHOW CREATE TABLE "+table).Scan(&name, &create); err != nil {
++			t.Fatalf("SHOW CREATE TABLE %s: %v", table, err)
++		}
++		ddl[table] = create
++	}
++	return ddl
++}
++
++// Wisp tables are dolt_ignore'd, so a working set can lack them (fresh clone,
++// restored backup, new branch). Reopening the store must recreate them.
++func TestReopenRecreatesMissingWispTables(t *testing.T) {
++	skipUnlessEmbeddedDolt(t)
++	ctx := t.Context()
++	beadsDir := filepath.Join(t.TempDir(), ".beads")
++	dataDir := filepath.Join(beadsDir, "embeddeddolt")
++
++	store, err := embeddeddolt.New(ctx, beadsDir, "rw", "main")
++	if err != nil {
++		t.Fatalf("New: %v", err)
++	}
++	if err := store.SetConfig(ctx, "issue_prefix", "rw"); err != nil {
++		t.Fatalf("SetConfig: %v", err)
++	}
++	for _, id := range []string{"rw-a", "rw-b"} {
++		issue := &types.Issue{ID: id, Title: id, Status: types.StatusOpen, Priority: 2, IssueType: types.TypeTask}
++		if err := store.CreateIssue(ctx, issue, "tester"); err != nil {
++			t.Fatalf("CreateIssue %s: %v", id, err)
++		}
++	}
++	if err := store.Commit(ctx, "seed"); err != nil {
++		t.Fatalf("Commit: %v", err)
++	}
++	store.Close()
++
++	db, cleanup, err := embeddeddolt.OpenSQL(ctx, dataDir, "rw", "main")
++	if err != nil {
++		t.Fatalf("OpenSQL: %v", err)
++	}
++	fresh := showCreateTables(t, ctx, db)
++	for _, table := range wispTables {
++		if _, err := db.ExecContext(ctx, "DROP TABLE "+table); err != nil {
++			cleanup()
++			t.Fatalf("DROP TABLE %s: %v", table, err)
++		}
++	}
++	cleanup()
++
++	store, err = embeddeddolt.New(ctx, beadsDir, "rw", "main")
++	if err != nil {
++		t.Fatalf("reopen: %v", err)
++	}
++	defer store.Close()
++
++	db, cleanup, err = embeddeddolt.OpenSQL(ctx, dataDir, "rw", "main")
++	if err != nil {
++		t.Fatalf("OpenSQL after reopen: %v", err)
++	}
++	recreated := showCreateTables(t, ctx, db)
++	cleanup()
++	for _, table := range wispTables {
++		if recreated[table] != fresh[table] {
++			t.Errorf("%s schema drifted after recreation\nfresh:\n%s\nrecreated:\n%s", table, fresh[table], recreated[table])
++		}
++	}
++
++	dep := &types.Dependency{IssueID: "rw-b", DependsOnID: "rw-a", Type: types.DepBlocks}
++	if err := store.AddDependency(ctx, dep, "tester"); err != nil {
++		t.Fatalf("AddDependency after reopen: %v", err)
++	}
++	if err := store.DeleteIssue(ctx, "rw-b"); err != nil {
++		t.Fatalf("DeleteIssue after reopen: %v", err)
++	}
++
++	wisp := &types.Issue{Title: "w", Status: types.StatusOpen, Priority: 2, IssueType: types.TypeTask, Ephemeral: true}
++	if err := store.CreateIssue(ctx, wisp, "tester"); err != nil {
++		t.Fatalf("CreateIssue wisp after reopen: %v", err)
++	}
++}
+diff --git a/internal/storage/embeddeddolt/schema.go b/internal/storage/embeddeddolt/schema.go
+index 1e86ec8..8b943a6 100644
+--- a/internal/storage/embeddeddolt/schema.go
++++ b/internal/storage/embeddeddolt/schema.go
+@@ -169,3 +169,59 @@ func backfillMigrations(ctx context.Context, tx *sql.Tx) (int, error) {
+ 	}
+ 	return n, nil
+ }
++
++// ignoredTableSteps rebuild the dolt_ignore'd wisp tables. Migrations run once
++// per database, but these tables live only in the working set, so a clone, a
++// restored backup, or a new branch lacks them. A step runs when any table it
++// builds is missing; together the steps reproduce what migrations 0020-0023 did.
++var ignoredTableSteps = []struct {
++	tables    []string
++	migration string
++	stmt      string
++}{
++	{tables: []string{"wisps"}, migration: "0020_create_wisps.up.sql"},
++	{tables: []string{"wisps"}, stmt: "ALTER TABLE wisps ADD COLUMN no_history TINYINT(1) DEFAULT 0"},
++	{tables: []string{"wisp_labels", "wisp_dependencies", "wisp_events", "wisp_comments"}, migration: "0021_create_wisp_auxiliary.up.sql"},
++	{tables: []string{"wisp_dependencies"}, migration: "0022_wisp_dep_type_index.up.sql"},
++}
++
++// ensureIgnoredTables recreates any missing dolt_ignore'd wisp tables.
++func ensureIgnoredTables(ctx context.Context, tx *sql.Tx) error {
++	missing := map[string]bool{}
++	for _, step := range ignoredTableSteps {
++		for _, table := range step.tables {
++			var n int
++			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?", table).Scan(&n); err != nil {
++				return fmt.Errorf("checking for table %s: %w", table, err)
++			}
++			missing[table] = n == 0
++		}
++	}
++
++	for _, step := range ignoredTableSteps {
++		if !anyMissing(missing, step.tables) {
++			continue
++		}
++		stmt := step.stmt
++		if step.migration != "" {
++			data, err := upMigrations.ReadFile("schema/" + step.migration)
++			if err != nil {
++				return fmt.Errorf("reading migration %s: %w", step.migration, err)
++			}
++			stmt = string(data)
++		}
++		if _, err := tx.ExecContext(ctx, stmt); err != nil {
++			return fmt.Errorf("recreating %s: %w", strings.Join(step.tables, ", "), err)
++		}
++	}
++	return nil
++}
++
++func anyMissing(missing map[string]bool, tables []string) bool {
++	for _, table := range tables {
++		if missing[table] {
++			return true
++		}
++	}
++	return false
++}
+diff --git a/internal/storage/embeddeddolt/store.go b/internal/storage/embeddeddolt/store.go
+index d9f0dcc..6984aa6 100644
+--- a/internal/storage/embeddeddolt/store.go
++++ b/internal/storage/embeddeddolt/store.go
+@@ -237,6 +237,9 @@ func (s *EmbeddedDoltStore) initSchema(ctx context.Context) error {
+ 		if err != nil {
+ 			return err
+ 		}
++		if err := ensureIgnoredTables(ctx, tx); err != nil {
++			return err
++		}
+ 		if applied > 0 {
+ 			if _, err := tx.ExecContext(ctx, "CALL DOLT_ADD('-A')"); err != nil {
+ 				return fmt.Errorf("dolt add after migrations: %w", err)

@@ -11,5 +11,5 @@ body:
     attributes:
       label: Before you send
       options:
-        - label: This issue holds no technical details, file names, secrets or proof of concept.
+        - label: This issue holds no technical details, file names, secrets, held-out task material or proof of concept.
           required: true

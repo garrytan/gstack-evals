@@ -1,0 +1,98 @@
+diff --git a/src/rules_core/smartquotes.ts b/src/rules_core/smartquotes.ts
+index 61979cb..c81d827 100644
+--- a/src/rules_core/smartquotes.ts
++++ b/src/rules_core/smartquotes.ts
+@@ -48,7 +48,14 @@ function applyReplacements (str: string, replacements: Replacement[]) {
+ function process_inlines (tokens: Token[], state: StateCore) {
+   let j
+ 
+-  const stack = []
++  // Separate stacks for single and double quote openers. Each item gets a
++  // sequence number so that we can emulate a single combined stack (needed
++  // to drop all openers placed after a matched one) without rescanning
++  // unrelated openers, which would cause quadratic behaviour.
++  interface StackItem { token: number, pos: number, level: number, seq: number }
++  const stackSingle: StackItem[] = []
++  const stackDouble: StackItem[] = []
++  let seq = 0
+   // token index -> list of replacements in the original token content
+   const replacements: ReplacementMap = {}
+ 
+@@ -57,10 +64,8 @@ function process_inlines (tokens: Token[], state: StateCore) {
+ 
+     const thisLevel = tokens[i].level
+ 
+-    for (j = stack.length - 1; j >= 0; j--) {
+-      if (stack[j].level <= thisLevel) { break }
+-    }
+-    stack.length = j + 1
++    while (stackSingle.length && stackSingle[stackSingle.length - 1].level > thisLevel) stackSingle.pop()
++    while (stackDouble.length && stackDouble[stackDouble.length - 1].level > thisLevel) stackDouble.pop()
+ 
+     if (token.type !== 'text') { continue }
+ 
+@@ -164,38 +169,39 @@ function process_inlines (tokens: Token[], state: StateCore) {
+       }
+ 
+       if (canClose) {
+-        // this could be a closing quote, rewind the stack to get a match
+-        for (j = stack.length - 1; j >= 0; j--) {
+-          let item = stack[j]
+-          if (stack[j].level < thisLevel) { break }
+-          if (item.single === isSingle && stack[j].level === thisLevel) {
+-            item = stack[j]
+-
+-            let openQuote
+-            let closeQuote
+-            if (isSingle) {
+-              openQuote = state.md.options.quotes[2]
+-              closeQuote = state.md.options.quotes[3]
+-            } else {
+-              openQuote = state.md.options.quotes[0]
+-              closeQuote = state.md.options.quotes[1]
+-            }
+-
+-            addReplacement(replacements, i, t.index, closeQuote)
+-            addReplacement(replacements, item.token, item.pos, openQuote)
+-
+-            stack.length = j
+-            continue OUTER
++        // this could be a closing quote, find the latest opener of same type;
++        // stack levels are non-decreasing, so it matches only if on same level
++        const sameStack = isSingle ? stackSingle : stackDouble
++        const otherStack = isSingle ? stackDouble : stackSingle
++        const item = sameStack.length ? sameStack[sameStack.length - 1] : null
++
++        if (item && item.level === thisLevel) {
++          let openQuote
++          let closeQuote
++          if (isSingle) {
++            openQuote = state.md.options.quotes[2]
++            closeQuote = state.md.options.quotes[3]
++          } else {
++            openQuote = state.md.options.quotes[0]
++            closeQuote = state.md.options.quotes[1]
+           }
++
++          addReplacement(replacements, i, t.index, closeQuote)
++          addReplacement(replacements, item.token, item.pos, openQuote)
++
++          // drop matched opener and everything pushed after it
++          sameStack.pop()
++          while (otherStack.length && otherStack[otherStack.length - 1].seq > item.seq) otherStack.pop()
++          continue OUTER
+         }
+       }
+ 
+       if (canOpen) {
+-        stack.push({
++        (isSingle ? stackSingle : stackDouble).push({
+           token: i,
+           pos: t.index,
+-          single: isSingle,
+-          level: thisLevel
++          level: thisLevel,
++          seq: seq++
+         })
+       } else if (canClose && isSingle) {
+         addReplacement(replacements, i, t.index, APOSTROPHE)

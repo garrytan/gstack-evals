@@ -1,0 +1,80 @@
+diff --git a/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs b/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs
+index b3d3920..3ca62a6 100644
+--- a/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs
++++ b/NAudio.Core.Tests/WaveStreams/WaveFileWriterTests.cs
+@@ -11,6 +11,40 @@ namespace NAudio.Core.Tests.WaveStreams
+     [Category("UnitTest")]
+     public class WaveFileWriterTests
+     {
++        [Test]
++        public void PcmFormatChunkShouldNotIncludeExtraSize()
++        {
++            var ms = new MemoryStream();
++            using (var writer = new WaveFileWriter(new IgnoreDisposeStream(ms), new WaveFormat(16000, 16, 1)))
++            {
++                writer.Write(new byte[] { 1, 2, 3, 4 }, 0, 4);
++            }
++            var bytes = ms.ToArray();
++            Assert.That(System.Text.Encoding.ASCII.GetString(bytes, 12, 4), Is.EqualTo("fmt "));
++            Assert.That(BitConverter.ToInt32(bytes, 16), Is.EqualTo(16), "fmt chunk size");
++            Assert.That(System.Text.Encoding.ASCII.GetString(bytes, 36, 4), Is.EqualTo("data"));
++            Assert.That(bytes.Length, Is.EqualTo(44 + 4));
++
++            ms.Position = 0;
++            using (var reader = new WaveFileReader(ms))
++            {
++                Assert.That(reader.WaveFormat, Is.EqualTo(new WaveFormat(16000, 16, 1)));
++                Assert.That(reader.Length, Is.EqualTo(4));
++            }
++        }
++
++        [Test]
++        public void NonPcmFormatChunkShouldIncludeExtraSize()
++        {
++            var ms = new MemoryStream();
++            using (var writer = new WaveFileWriter(new IgnoreDisposeStream(ms), WaveFormat.CreateIeeeFloatWaveFormat(16000, 1)))
++            {
++                writer.WriteSample(0.5f);
++            }
++            var bytes = ms.ToArray();
++            Assert.That(BitConverter.ToInt32(bytes, 16), Is.EqualTo(18), "fmt chunk size");
++        }
++
+         [Test]
+         public void ReaderShouldReadBackSameDataWrittenWithWrite()
+         {
+@@ -121,7 +155,7 @@ namespace NAudio.Core.Tests.WaveStreams
+             {
+                 var dataLength = Int32.MaxValue + 1001L;
+                 WaveFileWriter.CreateWaveFile(tempFile, new NullWaveStream(new WaveFormat(44100,2), dataLength));
+-                Assert.That(new FileInfo(tempFile).Length, Is.EqualTo(dataLength + 46));
++                Assert.That(new FileInfo(tempFile).Length, Is.EqualTo(dataLength + 44));
+             }
+             finally
+             {
+diff --git a/NAudio.Core/Wave/WaveFormats/WaveFormat.cs b/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
+index 423e1b0..9535836 100644
+--- a/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
++++ b/NAudio.Core/Wave/WaveFormats/WaveFormat.cs
+@@ -302,14 +302,19 @@ namespace NAudio.Wave
+         /// <param name="writer">the output stream</param>
+         public virtual void Serialize(BinaryWriter writer)
+         {
+-            writer.Write((int)(18 + extraSize)); // wave format length
++            // PCM uses the 16 byte PCMWAVEFORMAT structure, which has no cbSize field
++            bool writeExtraSize = !(Encoding == WaveFormatEncoding.Pcm && extraSize == 0);
++            writer.Write(writeExtraSize ? (int)(18 + extraSize) : 16); // wave format length
+             writer.Write((short)Encoding);
+             writer.Write((short)Channels);
+             writer.Write((int)SampleRate);
+             writer.Write((int)AverageBytesPerSecond);
+             writer.Write((short)BlockAlign);
+             writer.Write((short)BitsPerSample);
+-            writer.Write((short)extraSize);
++            if (writeExtraSize)
++            {
++                writer.Write((short)extraSize);
++            }
+         }
+ 
+         /// <summary>

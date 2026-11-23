@@ -1,0 +1,111 @@
+// GEVA-501 descriptive secondaries: shared loading and the paired contrast, reusing the frozen scorer at wt head 1cca006.
+// Sessions are built exactly as score/cli.ts builds them (trialDirs over every batch's harbor dir, readTrial against every
+// journal and the dated price table); missing sessions (infrastructure, the batch 1 empty-key first attempts) never pair.
+// The contrast mirrors primary.ts's contrast(): pairOnTasks, clusteredPairedDelta for success, clusterRatio for bill and
+// time, both with BOOT (seed 20261111, 10,000 draws) over repository clusters.
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { callUsd, coverage, loadPrices, pairOnTasks, readJournal, readTrial, type Call, type PriceTable, type SessionOutcome } from "$WORK/wt/lanes/decision-routing/score/session.ts";
+import { trialDirs } from "$WORK/wt/lanes/decision-routing/score/cli.ts";
+import { clusteredPairedDelta } from "$WORK/wt/src/runner/stats/paired.ts";
+import { clusterRatio } from "$WORK/wt/lanes/decision-routing/score/ratio.ts";
+import { BOOT } from "$WORK/wt/lanes/decision-routing/score/primary.ts";
+
+export { callUsd, clusterRatio, clusteredPairedDelta, BOOT, pairOnTasks, coverage, loadPrices, readJournal };
+export type { Call, PriceTable, SessionOutcome };
+
+export const G = "$WORK";
+export const WT = G + "/wt";
+export const RUN = G + "/runs/dr-scored@906185467619";
+export const OUT = G + "/secondaries/out";
+export const BATCHES = ["batch1", "batch1b", "batch1c", "batch2", "batch3", "batch4", "batch5", "batch6"];
+export const PRICES = WT + "/lanes/decision-routing/config/prices.json";
+export const PREREG = WT + "/wiki/plans/2026-11-09-geva-411-decision-routing-prereg";
+
+export const roots = BATCHES.map((b) => join(RUN, b, "harbor"));
+export const journalPaths = BATCHES.flatMap((b) => readdirSync(join(RUN, b, "journals")).filter((f) => f.endsWith(".ndjson")).sort().map((f) => join(RUN, b, "journals", f)));
+export const planned: string[] = JSON.parse(readFileSync(G + "/reading-scored/planned.json", "utf8")).tasks;
+export const subset: string[] = readFileSync(PREREG + "/subset.txt", "utf8").split("\n").map((l) => l.trim()).filter(Boolean);
+
+/** The dated table with every cache read and cache write priced as plain input (S6: caching priced away). */
+export function noCache(t: PriceTable): PriceTable {
+  const models: PriceTable["models"] = {};
+  for (const [k, r] of Object.entries(t.models)) {
+    models[k] = { ...r, cache_read: r.input, cache_write: r.input, ...(r.long ? { long: { ...r.long, cache_read: r.long.input, cache_write: r.long.input } } : {}) };
+  }
+  return { date: t.date + " (cache priced as input)", models };
+}
+
+export interface Loaded { calls: Map<string, Call[]>; prices: PriceTable; dirs: string[]; sessions: SessionOutcome[] }
+
+export function load(prices: PriceTable = loadPrices(PRICES), calls?: Map<string, Call[]>): Loaded {
+  const c = calls ?? readJournal(journalPaths);
+  const dirs = roots.flatMap(trialDirs);
+  const sessions = dirs.map((d) => readTrial(d, { calls: c, prices }));
+  const off = sessions.filter((s) => !planned.includes(s.task));
+  if (off.length) throw new Error(off.length + " sessions off plan");
+  return { calls: c, prices, dirs, sessions };
+}
+
+export const graded = (xs: readonly SessionOutcome[]) => xs.filter((s) => s.status === "graded");
+export const cellOf = (xs: readonly SessionOutcome[], cell: string, model: string, tasks?: readonly string[]) =>
+  xs.filter((s) => s.cell === cell && s.model === model && (!tasks || tasks.includes(s.task)));
+
+export const readJson = (p: string): any => (existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null);
+export const jsonl = (p: string): any[] => (existsSync(p) ? readFileSync(p, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)) : []);
+export const summaryOf = (s: SessionOutcome) => readJson(join(s.dir, "agent", "dr", "dr-summary.json"));
+export const decisionsOf = (s: SessionOutcome) => jsonl(join(s.dir, "agent", "dr", "decisions.jsonl"));
+export const trajectoryOf = (s: SessionOutcome) => readJson(join(s.dir, "agent", "dr", "trajectory.json"));
+export const meterOf = (s: SessionOutcome): string => readJson(join(s.dir, "agent", "dr", "meter.json")).meter_id;
+
+export interface Contrast {
+  label: string; treatment: string; control: string; n_pairs: number; n_clusters: number;
+  coverage: { treatment: string; control: string };
+  pass: { treatment: number; control: number };
+  success: { delta_points: number; ci: [number, number] | null; worse: number; better: number };
+  discordance: number; mdd_points: number;
+  bill: { treatment_mean: number; control_mean: number; ratio: number; ci: [number, number] | null; median_task_ratio: number | null };
+  time: { treatment_mean_s: number; control_mean_s: number; ratio: number; ci: [number, number] | null };
+}
+
+/** Treatment against control on tasks graded in both: success treatment minus control, bill and time treatment over control. */
+export function contrast(label: string, treatment: readonly SessionOutcome[], control: readonly SessionOutcome[], plan: readonly string[]): Contrast {
+  const covT = coverage(treatment, plan), covC = coverage(control, plan);
+  const pairs = pairOnTasks(control, treatment);
+  const s = clusteredPairedDelta(pairs.map((p) => ({ id: p.task, cluster: p.repo, a: p.a.success!, b: p.b.success! })), BOOT);
+  const bill = clusterRatio(pairs.map((p) => ({ cluster: p.repo, a: p.a.bill_usd!, b: p.b.bill_usd! })), BOOT);
+  const time = clusterRatio(pairs.map((p) => ({ cluster: p.repo, a: p.a.time_ms!, b: p.b.time_ms! })), BOOT);
+  const perTask = pairs.filter((p) => p.a.bill_usd! > 0).map((p) => p.b.bill_usd! / p.a.bill_usd!).sort((x, y) => x - y);
+  const mid = perTask.length / 2;
+  const median = perTask.length ? (perTask.length % 2 ? perTask[Math.floor(mid)]! : (perTask[mid - 1]! + perTask[mid]!) / 2) : null;
+  const worse = pairs.filter((p) => p.a.success === 1 && p.b.success === 0).length, better = pairs.filter((p) => p.a.success === 0 && p.b.success === 1).length;
+  const n = pairs.length, d = (worse + better) / n;
+  const mean = (f: (p: (typeof pairs)[number]) => number) => pairs.reduce((a, p) => a + f(p), 0) / n;
+  const t = treatment[0], c = control[0];
+  return {
+    label, treatment: t ? t.model + " " + t.cell : "?", control: c ? c.model + " " + c.cell : "?", n_pairs: n, n_clusters: bill.n_clusters,
+    coverage: { treatment: covT.graded + " of " + covT.planned, control: covC.graded + " of " + covC.planned },
+    pass: { treatment: pairs.filter((p) => p.b.success === 1).length, control: pairs.filter((p) => p.a.success === 1).length },
+    success: { delta_points: s.delta * 100, ci: s.ci95 ? [s.ci95[0] * 100, s.ci95[1] * 100] : null, worse, better },
+    discordance: d, mdd_points: 280 * Math.sqrt(d / n),
+    bill: { treatment_mean: mean((p) => p.b.bill_usd!), control_mean: mean((p) => p.a.bill_usd!), ratio: bill.ratio, ci: bill.ci95, median_task_ratio: median },
+    time: { treatment_mean_s: mean((p) => p.b.time_ms!) / 1000, control_mean_s: mean((p) => p.a.time_ms!) / 1000, ratio: time.ratio, ci: time.ci95 },
+  };
+}
+
+export const f1 = (x: number) => x.toFixed(1), f3 = (x: number) => x.toFixed(3);
+export const ci = (c: [number, number] | null, f: (x: number) => string) => (c ? "(" + f(c[0]) + " to " + f(c[1]) + ")" : "(no interval)");
+
+/** One markdown table row for a contrast. */
+export function row(c: Contrast): string {
+  return "| " + c.label + " | " + c.n_pairs + " (" + c.n_clusters + " repos) | " + c.pass.treatment + " vs " + c.pass.control + " | " + f1(c.success.delta_points) + " " + ci(c.success.ci, f1) + "; worse " + c.success.worse + ", better " + c.success.better +
+    " | " + f1(c.mdd_points) + " | $" + c.bill.treatment_mean.toFixed(3) + " vs $" + c.bill.control_mean.toFixed(3) + " | " + f3(c.bill.ratio) + " " + ci(c.bill.ci, f3) + "; median " + (c.bill.median_task_ratio === null ? "none" : f3(c.bill.median_task_ratio)) +
+    " | " + f1(c.time.treatment_mean_s) + " s vs " + f1(c.time.control_mean_s) + " s | " + f3(c.time.ratio) + " " + ci(c.time.ci, f3) + " |";
+}
+export const HEADER = "| contrast (treatment vs control) | paired tasks | passes (treatment vs control) | success, points (95% interval) | MDD, points | mean bill | bill ratio (95% interval) | mean session time | time ratio (95% interval) |\n|---|---|---|---|---|---|---|---|---|";
+
+export function save(name: string, text: string, data: unknown) {
+  mkdirSync(OUT, { recursive: true });
+  writeFileSync(join(OUT, name + ".txt"), text + "\n");
+  writeFileSync(join(OUT, name + ".json"), JSON.stringify(data, null, 2) + "\n");
+}

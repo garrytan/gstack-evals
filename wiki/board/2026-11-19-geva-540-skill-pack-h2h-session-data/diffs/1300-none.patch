@@ -1,0 +1,49 @@
+diff --git a/pkg/packet/bgp/bgp.go b/pkg/packet/bgp/bgp.go
+index 336bb0c..49c7ab9 100644
+--- a/pkg/packet/bgp/bgp.go
++++ b/pkg/packet/bgp/bgp.go
+@@ -15703,6 +15703,9 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 		if err != nil {
+ 			return err
+ 		}
++		if int(routelen) < w.Len(options...)+addpathLen {
++			return NewMessageError(eCode, eSubCode, nil, "withdrawn route length exceeds withdrawn routes length")
++		}
+ 		routelen -= uint16(w.Len(options...) + addpathLen)
+ 		if len(data) < w.Len(options...) {
+ 			return NewMessageError(eCode, eSubCode, nil, "Withdrawn route length is short")
+@@ -15758,6 +15761,14 @@ func (msg *BGPUpdate) DecodeFromBytes(data []byte, options ...*MarshallingOption
+ 				strongestError = e
+ 			}
+ 		}
++		if int(pathlen) < p.Len(options...) {
++			e = NewMessageErrorWithErrorHandling(
++				eCode, BGP_ERROR_SUB_ATTRIBUTE_LENGTH_ERROR, data, ERROR_HANDLING_TREAT_AS_WITHDRAW, nil, "attribute length exceeds total path attribute length")
++			if e.(*MessageError).Stronger(strongestError) {
++				strongestError = e
++			}
++			return strongestError
++		}
+ 		pathlen -= uint16(p.Len(options...))
+ 		if len(data) < p.Len(options...) {
+ 			e = NewMessageErrorWithErrorHandling(
+diff --git a/pkg/packet/bgp/bgp_test.go b/pkg/packet/bgp/bgp_test.go
+index 5da7224..aafe497 100644
+--- a/pkg/packet/bgp/bgp_test.go
++++ b/pkg/packet/bgp/bgp_test.go
+@@ -4658,3 +4658,15 @@ func TestAsPathDecoding4Byte(t *testing.T) {
+ 		}
+ 	}
+ }
++
++func Test_BGPUpdateDecodeLengthUnderflow(t *testing.T) {
++	// withdrawn routes length 1, but prefix /24 occupies 4 bytes
++	data := []byte{0x00, 0x01, 0x18, 0x0a, 0x00, 0x00, 0x00, 0x00}
++	m := &BGPUpdate{}
++	assert.Error(t, m.DecodeFromBytes(data))
++
++	// total path attribute length 3, but ORIGIN attribute occupies 4 bytes
++	data = []byte{0x00, 0x00, 0x00, 0x03, 0x40, 0x01, 0x01, 0x00}
++	m = &BGPUpdate{}
++	assert.Error(t, m.DecodeFromBytes(data))
++}

@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+# GEVA-501 R48 task fit and exposure (offline): per routed cell and model, the share of sessions whose decision log holds
+# at least one next_step and at least one done decision, and the acting-layer split per type.
+import json, os, glob, collections
+R = "$WORK/runs/dr-scored@906185467619"
+seen = {}
+for b in ["batch1", "batch1b", "batch1c", "batch2", "batch3", "batch4", "batch5", "batch6"]:
+    for f in glob.glob(f"{R}/{b}/harbor/*/*/agent/dr/decisions.jsonl"):
+        sess = f.split("/harbor/")[1].split("/")[0]
+        if os.path.getsize(f) > 0: seen[sess] = f
+fit = collections.defaultdict(lambda: [0, 0, 0, 0])
+layer = collections.defaultdict(collections.Counter)
+for sess, f in seen.items():
+    parts = sess.split("__"); cell, model = parts[-2], parts[-1]
+    types = collections.Counter()
+    for l in open(f):
+        if not l.strip(): continue
+        d = json.loads(l); types[d["type"]] += 1; layer[(cell, d["type"])][d.get("acting_layer")] += 1
+    x = fit[(cell, model)]; x[0] += 1; x[1] += types["next_step"] > 0; x[2] += types["done"] > 0; x[3] += (types["next_step"] > 0 and types["done"] > 0)
+print("task fit: sessions, with next_step, with done, with both")
+for k in sorted(fit):
+    n, a, b, c = fit[k]; print("  %s %s: %d, next_step %.1f%%, done %.1f%%, both %.1f%%" % (k[0], k[1], n, 100*a/n, 100*b/n, 100*c/n))

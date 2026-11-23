@@ -1,0 +1,65 @@
+diff --git a/crates/core/src/operations/merge/mod.rs b/crates/core/src/operations/merge/mod.rs
+index d76fed0..aa0e1cd 100644
+--- a/crates/core/src/operations/merge/mod.rs
++++ b/crates/core/src/operations/merge/mod.rs
+@@ -1547,8 +1547,7 @@ async fn execute(
+     let table_root = snapshot.table_configuration().table_root().clone();
+ 
+     for action in snapshot.log_data() {
+-        let rel_path = action.path();
+-        let rel_path_str = rel_path.as_ref();
++        let rel_path_str = action.path_raw();
+ 
+         if should_remove_rewritten_file(&survivors, rel_path_str, &table_root)? {
+             metrics.num_target_files_removed += 1;
+@@ -2069,6 +2068,50 @@ mod tests {
+         );
+     }
+ 
++    #[tokio::test]
++    async fn test_merge_partition_value_with_space_removes_rewritten_file() {
++        let schema = get_arrow_schema(&None);
++        let mut table = setup_table(Some(vec!["modified"])).await;
++        let make_source = || {
++            let batch = RecordBatch::try_new(
++                Arc::clone(&schema),
++                vec![
++                    Arc::new(arrow::array::StringArray::from(vec!["A", "B"])),
++                    Arc::new(arrow::array::Int32Array::from(vec![1, 2])),
++                    Arc::new(arrow::array::StringArray::from(vec!["foo bar", "foo bar"])),
++                ],
++            )
++            .unwrap();
++            SessionContext::new().read_batch(batch).unwrap()
++        };
++
++        for i in 0..2 {
++            let (t, metrics) = table
++                .merge(
++                    make_source(),
++                    col("target.id")
++                        .eq(col("source.id"))
++                        .and(col("target.modified").eq(lit("foo bar"))),
++                )
++                .with_source_alias("source")
++                .with_target_alias("target")
++                .when_matched_update(|update| update.update("value", col("source.value")))
++                .unwrap()
++                .when_not_matched_insert(|insert| {
++                    insert
++                        .set("id", col("source.id"))
++                        .set("value", col("source.value"))
++                        .set("modified", col("source.modified"))
++                })
++                .unwrap()
++                .await
++                .unwrap();
++            table = t;
++            assert_eq!(metrics.num_target_files_removed, i);
++            assert_eq!(table.snapshot().unwrap().log_data().num_files(), 1);
++        }
++    }
++
+     #[tokio::test]
+     async fn test_merge_rewrite_removes_old_file_and_avoids_duplicate_rows() {
+         let (table, source) = setup().await;

@@ -1,0 +1,3 @@
+https://github.com/openai/openai-agents-js at 616293c21746e959d65331d7feef9a2c7f29f3ed
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): MIT
+Root licence and notice files at that commit: LICENSE

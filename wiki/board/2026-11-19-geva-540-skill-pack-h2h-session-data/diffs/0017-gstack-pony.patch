@@ -1,0 +1,62 @@
+diff --git a/rust/src/dashboard/routes/helpers.rs b/rust/src/dashboard/routes/helpers.rs
+index dc848c6..4a12e92 100644
+--- a/rust/src/dashboard/routes/helpers.rs
++++ b/rust/src/dashboard/routes/helpers.rs
+@@ -173,9 +173,56 @@ fn git_root_for(path: &str) -> Option<String> {
+     let mut p = Path::new(path);
+     loop {
+         let git = p.join(".git");
+-        if git.exists() {
++        if is_valid_git_boundary(&git) {
+             return Some(p.to_string_lossy().to_string());
+         }
+         p = p.parent()?;
+     }
+ }
++
++/// A `.git` directory, or a gitfile whose `gitdir:` target is an existing directory.
++fn is_valid_git_boundary(git: &Path) -> bool {
++    if git.is_dir() {
++        return true;
++    }
++    let Ok(content) = std::fs::read_to_string(git) else {
++        return false;
++    };
++    let Some(target) = content
++        .lines()
++        .find_map(|l| l.trim().strip_prefix("gitdir:"))
++        .map(str::trim)
++        .filter(|t| !t.is_empty())
++    else {
++        return false;
++    };
++    let target = Path::new(target);
++    let resolved = if target.is_absolute() {
++        target.to_path_buf()
++    } else {
++        git.parent().unwrap_or(Path::new(".")).join(target)
++    };
++    resolved.is_dir()
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn git_root_ignores_broken_gitfile_but_accepts_valid_one() {
++        let tmp = tempfile::tempdir().unwrap();
++        let ws = tmp.path().join("workspace");
++        let project = ws.join("project");
++        std::fs::create_dir_all(&project).unwrap();
++        std::fs::write(ws.join(".git"), "gitdir: ../missing/git-dir\n").unwrap();
++        assert_eq!(git_root_for(project.to_str().unwrap()), None);
++
++        std::fs::create_dir_all(tmp.path().join("real-git")).unwrap();
++        std::fs::write(ws.join(".git"), "gitdir: ../real-git\n").unwrap();
++        assert_eq!(
++            git_root_for(project.to_str().unwrap()),
++            Some(ws.to_string_lossy().to_string())
++        );
++    }
++}

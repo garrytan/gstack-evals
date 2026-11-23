@@ -34,7 +34,7 @@ The bodies and keys are held in **procedural custody (interim, Captain drive, en
 | age recipient | age1qru8aggfw8sgaxrx7whjfjksptqr4rnqaaxns4xq9auxxepe9susevg7vr |
 | Units | 42 (24 seeded, 12 decoys, 4 pilots, 2 real-neutral) |
 
-- Any thread in the gstack-evals project under Garry's account can read the key, so access is a crew rule, not a lock. Only the thread that runs R1a and a custodian the Captain names may use it. GStack Minder, which builds the gstack candidate under test (GST-537), has no access to the key or the bodies.
+- Any thread in the gstack-evals project under Garry's account can read the key, so access is a crew rule, not a lock. Only the thread that runs R1a and a custodian the Captain names may use it. The gstack Captain, which builds the gstack candidate under test (GST-537), has no access to the key or the bodies.
 - Exposures: the authors (openai/gpt-6.1-sol), the auditors (anthropic/claude-opus-5-5) and the panel builder GEVA-82 (anthropic/claude-opus-5-5, which handled files by script and saw ids, categories, sizes and audit summaries). The section on authoring and audit below gives the detail.
 - After the bundle was verified by decrypting it and re-deriving every unit digest, every plaintext copy on the author, auditor and builder machines was deleted.
 - When the planned custody repo exists, the bundle moves there byte for byte, so every digest here stays valid. This is not "sealed" in plan v3.2's sense. The custody record sits beside the bundle in the Captain drive (handoffs/GEVA-82/sealed/CUSTODY.md).
@@ -49,7 +49,7 @@ The bodies and keys are held in **procedural custody (interim, Captain drive, en
 | Pilot, two flaws each | 2 | 1 | 1 | 4 | never scored |
 | Real-neutral, one real flaw each | 1 | 1 | 0 | 2 | reported alone |
 
-- Every seeded and pilot unit carries one group W flaw ("builds the wrong thing") and one group B flaw ("builds the right thing badly"), Garry's framing of what a CEO review should catch.
+- Every seeded and pilot unit carries one group W flaw ("builds the wrong thing") and one group B flaw ("builds the right thing badly"), the two kinds of flaw a CEO review should catch.
 - The 48 seeded flaws split 24 from each taxonomy: 12 W and 12 B from each.
 - Decoy baits: half resemble a T1 category and half a T2 category, three and three in each decoy set. A bait is a deliberate choice that the unit's context justifies, so flagging it as must-fix is a false alarm.
 - The modes follow Open item 6: greenfield (a new product), added capability (a feature on an existing product) and fix (a known problem in an existing product).

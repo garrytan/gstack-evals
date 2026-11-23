@@ -1,0 +1,80 @@
+diff --git a/uri.go b/uri.go
+index d9ecf22..477e52f 100644
+--- a/uri.go
++++ b/uri.go
+@@ -232,22 +232,22 @@ func (uri URI) String() string {
+ 		rawQuery := strings.Builder{}
+ 		if uri.CertFile != "" {
+ 			rawQuery.WriteString("certfile=")
+-			rawQuery.WriteString(uri.CertFile)
++			rawQuery.WriteString(url.QueryEscape(uri.CertFile))
+ 			rawQuery.WriteRune('&')
+ 		}
+ 		if uri.KeyFile != "" {
+ 			rawQuery.WriteString("keyfile=")
+-			rawQuery.WriteString(uri.KeyFile)
++			rawQuery.WriteString(url.QueryEscape(uri.KeyFile))
+ 			rawQuery.WriteRune('&')
+ 		}
+ 		if uri.CACertFile != "" {
+ 			rawQuery.WriteString("cacertfile=")
+-			rawQuery.WriteString(uri.CACertFile)
++			rawQuery.WriteString(url.QueryEscape(uri.CACertFile))
+ 			rawQuery.WriteRune('&')
+ 		}
+ 		if uri.ServerName != "" {
+ 			rawQuery.WriteString("server_name_indication=")
+-			rawQuery.WriteString(uri.ServerName)
++			rawQuery.WriteString(url.QueryEscape(uri.ServerName))
+ 		}
+ 		authority.RawQuery = rawQuery.String()
+ 	}
+diff --git a/uri_test.go b/uri_test.go
+index 3139911..8f16cf0 100644
+--- a/uri_test.go
++++ b/uri_test.go
+@@ -425,7 +425,7 @@ func TestURI_ParseUriToString(t *testing.T) {
+ 		{
+ 			name: "TLS with URI parameters",
+ 			uri:  "amqps://some-host.com/foobar?certfile=/foo/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82/cert.pem&keyfile=/foo/%E4%BD%A0%E5%A5%BD/key.pem&cacertfile=C:%5Ccerts%5Cca.pem&server_name_indication=example.com",
+-			want: "amqps://some-host.com/foobar?certfile=/foo/привет/cert.pem&keyfile=/foo/你好/key.pem&cacertfile=C:\\certs\\ca.pem&server_name_indication=example.com",
++			want: "amqps://some-host.com/foobar?certfile=%2Ffoo%2F%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82%2Fcert.pem&keyfile=%2Ffoo%2F%E4%BD%A0%E5%A5%BD%2Fkey.pem&cacertfile=C%3A%5Ccerts%5Cca.pem&server_name_indication=example.com",
+ 		},
+ 		{name: "only server name indication", uri: "amqps://foo.bar?server_name_indication=example.com", want: "amqps://foo.bar/?server_name_indication=example.com"},
+ 	}
+@@ -441,3 +441,35 @@ func TestURI_ParseUriToString(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestURI_StringEscapesTLSParameters(t *testing.T) {
++	original := URI{
++		Scheme:     "amqps",
++		Host:       "foo.bar",
++		Port:       5671,
++		Username:   "guest",
++		Password:   "guest",
++		Vhost:      "/",
++		CertFile:   "/tmp/cert=foo&keyfile=/evil/key.pem&cacertfile=/evil/ca.pem",
++		KeyFile:    "/original/key.pem",
++		CACertFile: "/original/ca.pem?x=1#frag",
++		ServerName: "example.com&certfile=/evil/cert.pem",
++	}
++
++	parsed, err := ParseURI(original.String())
++	if err != nil {
++		t.Fatalf("ParseURI() error = %v", err)
++	}
++	if parsed.CertFile != original.CertFile {
++		t.Errorf("CertFile = %q, want %q", parsed.CertFile, original.CertFile)
++	}
++	if parsed.KeyFile != original.KeyFile {
++		t.Errorf("KeyFile = %q, want %q", parsed.KeyFile, original.KeyFile)
++	}
++	if parsed.CACertFile != original.CACertFile {
++		t.Errorf("CACertFile = %q, want %q", parsed.CACertFile, original.CACertFile)
++	}
++	if parsed.ServerName != original.ServerName {
++		t.Errorf("ServerName = %q, want %q", parsed.ServerName, original.ServerName)
++	}
++}

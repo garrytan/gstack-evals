@@ -74,6 +74,8 @@ particle-1's are the same with `--item l1-route-p1`, pilot-p1 and f1-p1, and l1-
 
 ## Caps
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 price.py's `item()` sets every cap: cap = ceil10(1.5 x expected + 6 parallel sessions x $5 allowance + parts x $2.40), where expected is 1.05 x model spend plus VM hours at $0.60, and $2.40 is one 4-hour VM block per part. Sol's rates are its Lane B 3c multiples of Opus's (1.33 none, 1.63 gstack) and particle-1's are 2.04 times Opus's (R3 amendment 4's projection).
 
 | Item | Sessions | Expected | Cap | From |
@@ -104,6 +106,8 @@ f1-sol-offu's arithmetic: 1.5 x $104.34 + $30 + 3 x $2.40 = $193.71, which round
 **Its MDD.** 13.5 points at Sol's Run D rate of 9.5%, by [mdd.py](mdd.py.txt): the merged power.py's model and exact sign-flip, one-sided for a gain at 0.05, 80 tasks x 1, 80% power, task rates spread as Beta with concentration 2 ([mdd.txt](mdd.txt)). The 9.5% counts any gstack skill opened on TB2 with the shipped descriptions (7 of 74, 95% CI 1.4% to 18.9%), while B1 counts /investigate loads on F tasks, so L1's before-u rate may differ. mdd.txt also gives 11.7 points at 5%, 16.0 at 20%, and 14.8 at 9.5% with concentration 6. If f1-sol-offu is refused, it is reported as not run under the ceiling, with MDD 13.5 points.
 
 ## Money at caps
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 The ceiling check on the pinned plan, at the crew file as of 2026-11-06 17:00 UTC ([whatif-crew.json](whatif-crew.json)), against L1's final Opus ledgers (dry run E2 and E3):
 

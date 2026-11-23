@@ -1,0 +1,52 @@
+diff --git a/crates/obscura-cdp/src/domains/page.rs b/crates/obscura-cdp/src/domains/page.rs
+index dd84b5e..789e839 100644
+--- a/crates/obscura-cdp/src/domains/page.rs
++++ b/crates/obscura-cdp/src/domains/page.rs
+@@ -79,6 +79,11 @@ pub fn emit_navigation_events(
+         CdpEvent { method: "Page.frameNavigated".into(), params: json!({"frame": {"id": frame_id, "loaderId": loader_id, "url": page_url, "domainAndRegistry": "", "securityOrigin": page_url, "mimeType": nav_mime, "adFrameStatus": {"adFrameType": "none"}}, "type": "Navigation"}), session_id: es.clone() },
+         CdpEvent { method: "Runtime.executionContextCreated".into(), params: json!({"context": {"id": 2, "origin": page_url, "name": "", "uniqueId": format!("ctx-nav-{}", page_id), "auxData": {"isDefault": true, "type": "default", "frameId": frame_id}}}), session_id: es.clone() },
+     ];
++    // Runtime.executionContextsCleared invalidates every prior context: only
++    // the re-emitted default context (2) and the fresh isolated worlds minted
++    // below stay valid. Also bounds the set on long-lived connections.
++    ctx.valid_context_ids.clear();
++    ctx.valid_context_ids.insert(2);
+     let world_names: Vec<String> = if ctx.isolated_worlds.is_empty() {
+         vec!["__puppeteer_utility_world__24.40.0".to_string()]
+     } else {
+@@ -570,6 +575,22 @@ mod tests {
+         assert_eq!(content["height"].as_f64(), Some(720.0));
+     }
+ 
++    #[test]
++    fn navigation_prunes_cleared_context_ids() {
++        let mut ctx = CdpContext::new();
++        let stale = ctx.next_isolated_context();
++        emit_navigation_events(&mut ctx, &None, "f", "l", "about:blank", "p", &[], WaitUntil::Load, true);
++        let fresh = ctx.next_isolated_context_id - 1;
++        assert!(!ctx.valid_context_ids.contains(&stale));
++        assert!(!ctx.valid_context_ids.contains(&1));
++        assert!(ctx.valid_context_ids.contains(&2));
++        assert!(ctx.valid_context_ids.contains(&fresh));
++        for _ in 0..50 {
++            emit_navigation_events(&mut ctx, &None, "f", "l", "about:blank", "p", &[], WaitUntil::Load, true);
++        }
++        assert_eq!(ctx.valid_context_ids.len(), 2);
++    }
++
+     #[tokio::test]
+     async fn unknown_page_method_still_errors() {
+         let mut ctx = CdpContext::new();
+diff --git a/crates/obscura-cdp/src/domains/runtime.rs b/crates/obscura-cdp/src/domains/runtime.rs
+index fd102c3..1f349c0 100644
+--- a/crates/obscura-cdp/src/domains/runtime.rs
++++ b/crates/obscura-cdp/src/domains/runtime.rs
+@@ -79,6 +79,8 @@ pub async fn handle(
+                         session_id: session_id.clone(),
+                     };
+                     ctx.pending_events.push(event);
++                    // Re-register: a navigation may have cleared it.
++                    ctx.valid_context_ids.insert(1);
+                 }
+                 None => {
+                     // No session attached yet — that's fine. Just ack.

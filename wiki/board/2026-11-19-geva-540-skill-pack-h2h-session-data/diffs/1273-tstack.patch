@@ -1,0 +1,39 @@
+diff --git a/pkg/controllers/management/auth/project_cluster/common.go b/pkg/controllers/management/auth/project_cluster/common.go
+index 6c013d3..dd16352 100644
+--- a/pkg/controllers/management/auth/project_cluster/common.go
++++ b/pkg/controllers/management/auth/project_cluster/common.go
+@@ -108,7 +108,9 @@ func createProjectMembershipRoles(project *apisv3.Project, roleController crbacv
+ 				APIGroups:     []string{apisv3.SchemeGroupVersion.Group},
+ 				Resources:     []string{apisv3.ProjectResourceName},
+ 				ResourceNames: []string{project.Name},
+-				Verbs:         []string{rbacv1.VerbAll},
++				// Explicitly list verbs instead of using a wildcard so that project owners
++				// are not granted special verbs such as "updatepsa".
++				Verbs: projectOwnerVerbs,
+ 			},
+ 		},
+ 	}
+@@ -123,6 +125,10 @@ func createProjectMembershipRoles(project *apisv3.Project, roleController crbacv
+ 	return nil
+ }
+ 
++// projectOwnerVerbs are the verbs granted on the project resource to project owners.
++// The wildcard verb must not be used here, since it would grant the "updatepsa" verb.
++var projectOwnerVerbs = []string{"get", "update", "delete", "patch", "create", "list", "watch", "deletecollection"}
++
+ // createClusterMembershipRoles creates 2 cluster roles: an owner role and a member role. Used to provide cluster membership.
+ func createClusterMembershipRoles(cluster *apisv3.Cluster, crClient crbacv1.ClusterRoleController) error {
+ 	ownerRef, err := newOwnerReference(cluster)
+diff --git a/pkg/controllers/management/auth/project_cluster/common_test.go b/pkg/controllers/management/auth/project_cluster/common_test.go
+index 3d665af..b51830c 100644
+--- a/pkg/controllers/management/auth/project_cluster/common_test.go
++++ b/pkg/controllers/management/auth/project_cluster/common_test.go
+@@ -70,7 +70,7 @@ func TestCreateProjectMembershipRoles(t *testing.T) {
+ 				APIGroups:     []string{"management.cattle.io"},
+ 				Resources:     []string{"projects"},
+ 				ResourceNames: []string{"test-project"},
+-				Verbs:         []string{"*"},
++				Verbs:         []string{"get", "update", "delete", "patch", "create", "list", "watch", "deletecollection"},
+ 			},
+ 		},
+ 	}

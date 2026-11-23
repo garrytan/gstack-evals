@@ -1,0 +1,36 @@
+#!/bin/bash
+# GEVA-501 scored label pass (preregistration B7, S4 and S10 labels), offline and keyless: for scored batch K, prefetch its
+# task images when missing, then run decision-routing labels trial on every trial whose session logged decisions
+# (cells R, P, J, F), JOBS at a time, writing ~/lbl/labels/<session>.jsonl. A session with a labels file is skipped.
+# usage: labelpass.sh <K> [jobs]   trials under ~/lbl/<batch dir>/<session>/<trial> (batch1 also takes batch1b and batch1c)
+set -uo pipefail
+U=$VM_HOME; export PATH=$U/.local/bin:$U/.bun/bin:$PATH
+R=$U/work/repo-r3; S=$U/scored; L=$U/lbl; K=$1; JOBS=${2:-4}; cd $R
+step() { echo "== $(date -u +%T) $*"; }
+mkdir -p $L/labels $L/logs $L/plans
+python3 - "$K" <<'EOF'
+import json, sys
+k = int(sys.argv[1]); S = "$VM_HOME/scored"
+a = json.load(open("lanes/decision-routing/config/scored-batches.json"))
+T = set([b for b in a["batches"] if b["batch"] == k][0]["tasks"])
+rows = [r for n in ("scored", "subset") for r in json.load(open(S + "/plans/" + n + ".json")) if r["task"] in T]
+json.dump(rows, open("$VM_HOME/lbl/plans/label%d.json" % k, "w"))
+print("batch", k, len(T), "tasks", len(rows), "rows")
+EOF
+step prefetch
+bun lanes/decision-routing/host/prefetch.ts --plan $L/plans/label$K.json --tasks-dir $U/tasks > $L/logs/prefetch-$K.log 2>&1; echo "prefetch rc=$?"; tail -1 $L/logs/prefetch-$K.log | cut -c1-200
+PH=$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)
+dirs=$L/batch$K; [ "$K" = 1 ] && dirs="$L/batch1 $L/batch1b $L/batch1c"
+step labels
+find -L $dirs -mindepth 3 -maxdepth 3 -name result.json 2>/dev/null | sort | while read -r res; do
+  trial=$(dirname "$res"); session=$(basename "$(dirname "$trial")")
+  case "$session" in *__R__*|*__P__*|*__J__*|*__F__*) ;; *) continue ;; esac
+  [ -s "$trial/agent/dr/decisions.jsonl" ] || continue
+  task=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["task_name"])' "$res")
+  echo "$trial $task $session"
+done > $L/logs/todo-$K.txt
+echo "trials to label: $(wc -l < $L/logs/todo-$K.txt)"
+export R L PH U
+cat $L/logs/todo-$K.txt | xargs -r -P $JOBS -L 1 bash -c 'trial=$0 task=$1 session=$2; out=$L/labels/$session.$(basename $trial).jsonl; [ -s "$out" ] && exit 0; cd $R && bun bin/gstack-evals decision-routing labels trial "$trial" --task "$U/tasks/$task" --proxy-host "$PH" --out "$out.part" > "$L/logs/$session.$(basename $trial).log" 2>&1 && mv "$out.part" "$out" || echo "FAILED $session $(tail -1 $L/logs/$session.$(basename $trial).log | cut -c1-200)"'
+echo "labelled files for batch $K: $(cut -d' ' -f3 $L/logs/todo-$K.txt | while read s; do ls $L/labels/$s.*.jsonl 2>/dev/null; done | wc -l) of $(wc -l < $L/logs/todo-$K.txt)"
+step "DONE $K"

@@ -1,0 +1,20 @@
+#!/bin/bash
+# GEVA-501 decision-level replay (preregistration S4 safety_held, S7 jev_newer, S11 guess_ablation) on the dr-replay item
+# (cap $40), one mode per launch, on the runner host. A timer writes the stop file after <timer seconds> so the lease ends
+# inside 6 hours; a relaunch over the same out dir skips every session already answered.
+# usage: replay.sh <mode> <timer seconds>
+set -uo pipefail
+U=$VM_HOME; export PATH=$U/.local/bin:$U/.bun/bin:$PATH
+R=$U/work/repo-r3; S=$U/scored; RP=$U/replay; MODE=$1; T=$2; cd $R
+set -a; . $U/.dr-keys; set +a
+for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY TYPESAFE_API_KEY; do v=${!k:-}; [ ${#v} -ge 20 ] || { echo "provider key $k is empty or short; nothing launched"; exit 1; }; done
+H=$(cat $U/vms4/head14.txt); [ "$(git rev-parse HEAD)" = "$H" ] || { echo "head $(git rev-parse HEAD) is not $H; nothing launched"; exit 1; }
+SESS=(); [ "$MODE" = safety_held ] || SESS=(--sessions $RP/sessions-$MODE.json)
+mkdir -p $RP; rm -f $RP/STOP-$MODE
+echo "== $(date -u +%T) replay $MODE, timer $T s, sessions $( [ "$MODE" = safety_held ] && echo pseudo || python3 -c "import json;print(len(json.load(open('$RP/sessions-$MODE.json'))))")"
+( sleep $T; echo "operator stop: replay lease timer" > $RP/STOP-$MODE ) &
+TIMER=$!
+bun bin/gstack-evals decision-routing answer --item dr-replay --run-id dr-scored@906185467619 --mode $MODE "${SESS[@]}" --out $RP/$MODE --questions lanes/decision-routing/agent/dr_agent/questions.json --pin-file $S/pin.json --python /opt/dr/venv/bin/python --record $U/dr-record --ledger $S/ledger.sqlite --stop-file $RP/STOP-$MODE > $RP/$MODE.log 2>&1
+echo "answer rc=$?"; tail -4 $RP/$MODE.log | cut -c1-300
+kill $TIMER 2>/dev/null
+echo "== $(date -u +%T) DONE $MODE"

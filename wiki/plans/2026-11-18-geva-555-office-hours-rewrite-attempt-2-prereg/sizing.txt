@@ -1,0 +1,24 @@
+sizing.py, seed 20261117, 4000 simulated runs a point; power.py's model unchanged; layout: 56 founder briefs in 32 clusters
+Part A. new minus current: MDD at 80% power, two-sided 95% paired t interval over opening clusters
+p0 0.25  rho 0.500  pooled MDD 0.14  one model MDD 0.19
+p0 0.25  rho 0.843  pooled MDD 0.09  one model MDD 0.12
+p0 0.40  rho 0.500  pooled MDD 0.15  one model MDD 0.20
+p0 0.40  rho 0.843  pooled MDD 0.09  one model MDD 0.13
+p0 0.55  rho 0.500  pooled MDD 0.15  one model MDD 0.20
+p0 0.55  rho 0.843  pooled MDD 0.10  one model MDD 0.13
+Part B. contrasts against no gstack as the control arm, rho 0.500
+against none  p0 0.05  pooled MDD 0.09  one model MDD 0.13
+against none  p0 0.10  pooled MDD 0.11  one model MDD 0.15
+against none  p0 0.20  pooled MDD 0.13  one model MDD 0.18
+against none  p0 0.40  pooled MDD 0.15  one model MDD 0.20
+Part C. founder rows at p0 0.40: share of runs whose interval excludes zero, and whose rows read MERGE (estimate >= 0.15 and lower bound > 0), rows 1 to 3 assumed to pass
+rho 0.500 | d 0.00 excludes zero 0.029 MERGE 0.001 | d 0.10 excludes zero 0.490 MERGE 0.150 | d 0.15 excludes zero 0.826 MERGE 0.478 | d 0.20 excludes zero 0.973 MERGE 0.819 | d 0.25 excludes zero 0.998 MERGE 0.973
+rho 0.843 | d 0.00 excludes zero 0.021 MERGE 0.000 | d 0.10 excludes zero 0.864 MERGE 0.079 | d 0.15 excludes zero 0.995 MERGE 0.486 | d 0.20 excludes zero 1.000 MERGE 0.837 | d 0.25 excludes zero 1.000 MERGE 0.973
+Part D. The projection stop (section 5.5): rates at the 0.95 quantile of their Jeffreys posterior; 2000 simulated authoring runs a row, sequential batches of 16, item cap $409, at most 30 second-twin draws a partner
+pair at the first attempt's counts with plain shares (first twins 10 of 15, partners matched within 30 draws 6 of 8, 8.33 draws when matched): $3.48 a pair
+pair of a type whose every partner matches at 0.0095 a draw: 0.2490 within 30 draws, $15.13 a pair; the same formula gives $56.92 at 3 draws and $11.12 with no bound
+first attempt's rates, with the stop     pilot $43  filled 0.977 (mean spend $263)  projection stop 0.024 ($282)  cap stop before full 0.000 (none)
+first attempt's rates, no stop           pilot $43  filled 0.999 (mean spend $266)  projection stop 0.000 (none)  cap stop before full 0.002 ($406)
+T1 and T4 hard by type, with the stop    pilot $48  filled 0.655 (mean spend $313)  projection stop 0.344 ($326)  cap stop before full 0.000 (none)
+T1 and T4 hard by type, no stop          pilot $48  filled 0.871 (mean spend $329)  projection stop 0.000 (none)  cap stop before full 0.129 ($406)
+projection at the first attempt's counts alone, T8 planned at T7's counts: $127.52, against room after a $43.17 pilot (its mean at the first attempt's rates) of $337.83

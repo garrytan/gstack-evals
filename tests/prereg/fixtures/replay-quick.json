@@ -50,7 +50,7 @@
     "funding": "program",
     "line_item": "replay-quick",
     "ledger": "captain-gstack-evals/ledger/replay-quick.jsonl",
-    "approval": {"words":"Rec","by":"Garry Tan","source":"gate 1 of the v1 plan (first cap $500), moved up on \"It should be fast like this week\""},
+    "approval": {"words":"(paraphrase) took the recommendation","by":"Garry Tan","source":"gate 1 of the v1 plan (first cap $500), moved up at his request"},
     "reservation": "A reserve row at each call's worst case before it is sent, settled with measured usage.",
     "stop_rule": "A refused reservation stops the run: incomplete, never rerun to change a result.",
     "order": ["DeepSeek","Haiku","Opus, escaped pairs first"]

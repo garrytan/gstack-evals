@@ -1,0 +1,23 @@
+import glob, json, os
+h = os.path.expanduser("~")
+rows = []
+for p in ["p2", "p3", "p4", "p5"]:
+    fd = h + ("/pf/run-blind/score-p5" if p == "p5" else "/pf/run-test/score-" + p)
+    for f in sorted(glob.glob(h + "/pf/rescore/score-%s/s*.json" % p)):
+        s = os.path.basename(f)[:-5]
+        a = json.load(open(fd + "/" + s + ".json")); b = json.load(open(f))
+        assert a["unit"] == b["unit"] and a["arm"] == b["arm"] and a["model"] == b["model"]
+        ex = lambda r: sum(1 for e in r.get("entries") or [] for x in e.get("runs") or [] if x.get("exit") in (126, 127))
+        rows.append((p, s, b["model"], b["arm"], a["score"], b["score"], a.get("gap"), b.get("gap"), ex(a), ex(b)))
+agg = {}
+for p, s, m, arm, sa, sb, ga, gb, ea, eb in rows:
+    k = (m, arm); d = agg.setdefault(k, {"n": 0, "same": 0, "0to1": 0, "1to0": 0, "gapchg": 0, "first_catch": 0, "re_catch": 0, "ex127_first": 0, "ex127_re": 0})
+    d["n"] += 1; d["same"] += sa == sb and ga == gb
+    d["0to1"] += sa == 0 and sb == 1; d["1to0"] += sa == 1 and sb == 0
+    d["gapchg"] += ga != gb
+    d["first_catch"] += sa == 1; d["re_catch"] += sb == 1
+    d["ex127_first"] += ea; d["ex127_re"] += eb
+for k in sorted(agg): print(k[0], k[1], " ".join("%s=%d" % kv for kv in agg[k].items()))
+print("CHANGED")
+for p, s, m, arm, sa, sb, ga, gb, ea, eb in rows:
+    if sa != sb or ga != gb: print(p, s, m, arm, "score", sa, "->", sb, "gap", ga, "->", gb)

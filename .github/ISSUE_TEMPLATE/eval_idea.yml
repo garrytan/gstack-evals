@@ -5,6 +5,8 @@ body:
     attributes:
       value: |
         Describe tasks in general terms. Do not post the body of a task you would want held out.
+
+        We triage ideas when they arrive, as [CONTRIBUTING.md](https://github.com/garrytan/gstack-evals/blob/main/CONTRIBUTING.md) describes. An idea that doesn't fit this repo's goals is closed with a short note.
   - type: textarea
     id: question
     attributes:

@@ -1,0 +1,94 @@
+{
+  "v": 1,
+  "note": "Frozen cell table (preregistration section 5). A slot's allowlist is the cell's main models plus its deciders; limits hold in every cell.",
+  "models": {
+    "opus": {
+      "provider": "anthropic",
+      "id": "claude-opus-5-5",
+      "allow": "anthropic:claude-opus-5-5",
+      "litellm": "anthropic/claude-opus-5-5",
+      "proxy_path": "/anthropic"
+    },
+    "sol": {
+      "provider": "openai",
+      "id": "gpt-6.1-sol",
+      "allow": "openai:gpt-6.1-sol",
+      "litellm": "openai/gpt-6.1-sol",
+      "proxy_path": "/openai/v1"
+    },
+    "particle": {
+      "provider": "openrouter",
+      "id": "particle-ai/particle-1",
+      "allow": "openrouter:particle-ai/particle-1",
+      "proxy_path": "/openrouter/v1"
+    }
+  },
+  "deciders": {
+    "jev": "typesafe:jev-1.13.0",
+    "particle": "openrouter:particle-ai/particle-1"
+  },
+  "limits": {
+    "executed_actions": 100,
+    "wall_s": 2700,
+    "mini_step_limit": 0,
+    "mini_cost_limit": 0,
+    "allowance_micros": 5000000,
+    "pilot_session_stop_micros": 2500000
+  },
+  "cells": {
+    "N": {
+      "decision_layer": "off",
+      "main": [
+        "opus",
+        "sol"
+      ],
+      "deciders": []
+    },
+    "R": {
+      "decision_layer": "rule, jev (tuned bands), particle-1 shown Jev's guess (tuned bands), main",
+      "main": [
+        "opus",
+        "sol"
+      ],
+      "deciders": [
+        "typesafe:jev-1.13.0",
+        "openrouter:particle-ai/particle-1"
+      ]
+    },
+    "P": {
+      "decision_layer": "rule, particle-1 without a guess (tuned bands), main",
+      "main": [
+        "opus",
+        "sol"
+      ],
+      "deciders": [
+        "openrouter:particle-ai/particle-1"
+      ]
+    },
+    "F": {
+      "decision_layer": "rule, main typed (answer acts; relevance no drops; exit pick hands main its own turn)",
+      "main": [
+        "opus"
+      ],
+      "deciders": []
+    },
+    "J": {
+      "decision_layer": "rule, jev fixed (choice conf >= 0.9; noul yes p >= 0.9, no p <= 0.1; relevance drop p <= 0.1), main",
+      "main": [
+        "opus",
+        "sol"
+      ],
+      "deciders": [
+        "typesafe:jev-1.13.0"
+      ]
+    },
+    "W": {
+      "decision_layer": "off",
+      "main": [
+        "particle"
+      ],
+      "deciders": [],
+      "max_tokens": 32000
+    }
+  }
+}

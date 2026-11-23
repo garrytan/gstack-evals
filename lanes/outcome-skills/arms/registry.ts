@@ -4,6 +4,7 @@
 // shape; turnScript gives the turns an arm sends, in order, in one conversation, each after the previous goes quiet.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { checkSm, type SmBlock } from "../statemachines/arms.ts";
 
 export const REGISTRY_PATH = join(import.meta.dir, "registry.json");
 const LIMITS = ["session_cap_usd", "wall_limit_sec", "max_turns", "quiet_sec", "bg_wait_sec"] as const;
@@ -18,6 +19,8 @@ export type Registry = {
   families: Record<string, { skills: string[]; built: boolean; why?: string }>;
   arms: Record<string, Arm>;
   not_run: Record<string, Record<string, string>>;
+  /** Family SM's arms, kept apart from G's (statemachines/arms.ts checks them). */
+  sm?: SmBlock;
 };
 export type ScriptTurn = { phase: string; text: string; skill_turn: boolean };
 
@@ -48,6 +51,7 @@ export function loadRegistry(path = REGISTRY_PATH): Registry {
   }
   if (!lookup(reg.arms, "none")) fail(path + ": no none arm");
   for (const [family, f] of Object.entries(reg.families)) if (f.built) for (const skill of f.skills) if (!lookup(reg.arms, skill + ":told")) fail(path + ": family " + family + " skill " + skill + " has no told arm");
+  if (reg.sm !== undefined) checkSm(reg.sm, path);
   return reg;
 }
 

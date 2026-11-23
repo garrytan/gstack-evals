@@ -9,18 +9,19 @@ The layout from plan v3.2, "Repository layout and reuse". Each folder names the 
 | errors/ | The reason-code registry and the docs/errors.md generator | U1; each code's text belongs to its owner |
 | skill-eval/ | Lane A: contract reader, `validate`, the answer predicate and preflight's vacuity check (contract/, U5), the lock (lock/, U5), the verdict engine (verdict/, U6), the CLI, `doctor`, preflight and `explain` (cli/, U7) | U5, U6, U7 |
 | adapters/claude-code/ | Claude Code on the Agent SDK | U10 |
-| adapters/codex/ | Codex through `codex exec --json`, non-interactive tasks only | U10 |
+| adapters/codex/ | Codex through `codex exec --json`, resumed for each answer to a question | U10 |
 | adapters/_fake/ | The keyless fake host | U7 |
 | arms/ | Arm resolution: overlays, placebo, loadouts; stack installs (install.ts), the pstack and tstack kinds (stacks.ts) and per-cell settings (cells.ts) | not assigned; the arm-spec grammar (U7) is its first user |
 | usersim/ | The user simulator; classifier.ts is U5's | U10 |
+| persona-sim/ | A simulated person who holds facts an assistant must draw out: one checked person turn (sim.ts) and the two-auditor turn audit (audit.ts), with the caller's rules and model call; the office-hours founder eval is its first user | GEVA-418 |
 | grade/ | Scoring and blinded adjudication | U10 |
 | runner/proxy/ | The metering proxy, vendored from harness-evals | U3 |
 | runner/ledger/ | The budget ledger, written new: write-once approvals and leases, local SQLite reservations, settle and reconcile | U4 |
 | runner/prereg/ | The preregistration checker, vendored, and the prereg.json format and its checks | U2 |
-| runner/stats/ | The statistics kit, vendored, with two fixes, and the outcome-per-skill scorer for the G family (build step O4) | U2, GST-1325 |
+| runner/stats/ | The statistics kit, vendored, with two fixes, and the outcome-per-skill scorer for the G family (build step O4) | U2 |
 | runner/pricing/ | The price table the proxy and preflight read, vendored with the proxy | U3 |
 | trial/ | The trial module: isolation, images, network, env allowlist, state root, grading delta, cache | U9 |
-| trial/review/ | Review units as trials: unit repos and trees, the told prompt, the findings parser, cost.tsv from the proxy journal, the run loop and the review-units command | U9, GST-381 |
-| waste/ | The gstack-evals waste crew-log reader behind `gstack-evals waste`: Capy thread exports, /ship receipts and per-PR replay data, counts and digests only | GST-1114 |
+| trial/review/ | Review units as trials: unit repos and trees, the told prompt, the findings parser, cost.tsv from the proxy journal, the run loop and the review-units command | U9 |
+| waste/ | The gstack-evals waste crew-log reader behind `gstack-evals waste`: Capy thread exports, /ship receipts and per-PR replay data, counts and digests only | waste baseline |
 
 Vendored files keep their upstream copyright line in the file header and get an entry in [NOTICE.md](../NOTICE.md).

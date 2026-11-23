@@ -1,0 +1,92 @@
+diff --git a/internal/fsext/fileutil.go b/internal/fsext/fileutil.go
+index e688884..0b1e11d 100644
+--- a/internal/fsext/fileutil.go
++++ b/internal/fsext/fileutil.go
+@@ -98,6 +98,12 @@ func (w *FastGlobWalker) ShouldSkip(path string) bool {
+ 		return false
+ 	}
+ 
++	// Never ignore the root directory itself. Patterns like ".*" would
++	// otherwise match "." and skip the whole walk.
++	if relPath == "." {
++		return false
++	}
++
+ 	if w.gitignore != nil {
+ 		if w.gitignore.MatchesPath(relPath) {
+ 			return true
+diff --git a/internal/fsext/ls.go b/internal/fsext/ls.go
+index e691c14..b7f4e8f 100644
+--- a/internal/fsext/ls.go
++++ b/internal/fsext/ls.go
+@@ -130,6 +130,12 @@ func (dl *directoryLister) shouldIgnore(path string, ignorePatterns []string) bo
+ 		relPath = path
+ 	}
+ 
++	// Never ignore the root directory itself. Patterns like ".*" would
++	// otherwise match "." and skip the whole walk.
++	if relPath == "." {
++		return false
++	}
++
+ 	if commonIgnorePatterns().MatchesPath(relPath) {
+ 		slog.Debug("ingoring common pattern", "path", relPath)
+ 		return true
+diff --git a/internal/fsext/ls_test.go b/internal/fsext/ls_test.go
+new file mode 100644
+index 0000000..f9d6083
+--- /dev/null
++++ b/internal/fsext/ls_test.go
+@@ -0,0 +1,52 @@
++package fsext
++
++import (
++	"os"
++	"path/filepath"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestListDirectoryDotStarGitignore(t *testing.T) {
++	tempDir := t.TempDir()
++
++	oldWd, _ := os.Getwd()
++	require.NoError(t, os.Chdir(tempDir))
++	t.Cleanup(func() { os.Chdir(oldWd) })
++
++	require.NoError(t, os.WriteFile(".gitignore", []byte(".*\n"), 0o644))
++	require.NoError(t, os.WriteFile("example.txt", []byte("test"), 0o644))
++	require.NoError(t, os.WriteFile("another.go", []byte("test"), 0o644))
++	require.NoError(t, os.WriteFile(".hidden", []byte("test"), 0o644))
++
++	files, _, err := ListDirectory(".", nil, 0)
++	require.NoError(t, err)
++
++	var names []string
++	for _, f := range files {
++		names = append(names, filepath.Base(f))
++	}
++	require.ElementsMatch(t, []string{"example.txt", "another.go"}, names)
++}
++
++func TestGlobWithDoubleStarDotStarGitignore(t *testing.T) {
++	tempDir := t.TempDir()
++
++	oldWd, _ := os.Getwd()
++	require.NoError(t, os.Chdir(tempDir))
++	t.Cleanup(func() { os.Chdir(oldWd) })
++
++	require.NoError(t, os.WriteFile(".gitignore", []byte(".*\n"), 0o644))
++	require.NoError(t, os.WriteFile("example.txt", []byte("test"), 0o644))
++	require.NoError(t, os.WriteFile("another.go", []byte("test"), 0o644))
++
++	files, _, err := GlobWithDoubleStar("**/*", ".", 0)
++	require.NoError(t, err)
++
++	var names []string
++	for _, f := range files {
++		names = append(names, filepath.Base(f))
++	}
++	require.ElementsMatch(t, []string{"example.txt", "another.go"}, names)
++}

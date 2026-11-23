@@ -1,0 +1,32 @@
+h2h analysis, stage2: O 100 units, B 60 (B1 0, B2 60)
+class | gstack minus | n | difference (points) | 95% interval | p clustered | p exact | p Holm | MDD | procedure rate | state
+O | none | 99 | -4.0 | [-11.0, 2.2] | 0.2440 | 0.3438 | 1.0000 | none fits | n/a | no difference shown
+O | superpowers | 100 | -3.0 | [-9.5, 3.2] | 0.3670 | 0.5488 | 1.0000 | none fits | 0.0 | run as published, failure disclosed
+O | agent-skills | 100 | -3.0 | [-9.7, 3.2] | 0.3617 | 0.5488 | 1.0000 | none fits | 28.0 | pack not exercised as designed
+O | gsd | 100 | -4.0 | [-10.9, 2.2] | 0.2407 | 0.3438 | 1.0000 | none fits | 1.0 | pack not exercised as designed
+O | pstack | 100 | 2.0 | [-3.4, 7.7] | 0.4810 | 0.7266 | 1.0000 | none fits | 0.0 | pack not exercised as designed
+O | tstack | 98 | 2.0 | [-5.4, 9.5] | 0.5937 | 0.7905 | 1.0000 | 14 | 83.7 | no difference larger than about 14 points shown
+B | none | 60 | 0.0 | [-6.8, 6.7] | 1.0000 | 1.0000 | 1.0000 | none fits | n/a | no difference shown
+B | superpowers | 60 | 0.0 | [-6.8, 6.7] | 1.0000 | 1.0000 | 1.0000 | none fits | 0.0 | run as published, failure disclosed
+B | agent-skills | 60 | -1.7 | [-5.1, 0.0] | 0.3046 | 1.0000 | 1.0000 | none fits | 31.7 | pack not exercised as designed
+B | gsd | 60 | -1.7 | [-9.0, 5.5] | 0.6571 | 1.0000 | 1.0000 | none fits | 0.0 | pack not exercised as designed
+B | pstack | 60 | 1.7 | [-3.6, 7.3] | 0.5634 | 1.0000 | 1.0000 | none fits | 0.0 | pack not exercised as designed
+B | tstack | 60 | 0.0 | [-5.0, 4.8] | 1.0000 | 1.0000 | 1.0000 | none fits | 66.7 | pack not exercised as designed
+piece G: lines ratio gstack-pony over gstack 0.650 on 55 units both fixed (0 with zero lines left out), interval [0.568, 0.738], Holm p 0.0000; verified difference 5.0 [-1.1, 11.4], Holm p 0.1239; less code true, more correct false, adopt oneline
+secondary B1: gstack-qa minus gstack: none no interval on 0 units, infeasible
+secondary B1: gstack-qa minus none: none no interval on 0 units, infeasible
+why null O gstack minus none: one Why-null cycle due: exposure, task fit, power and headroom, and whether Opus does it unaided
+why null O gstack minus tstack: one Why-null cycle due: exposure, task fit, power and headroom, and whether Opus does it unaided
+why null B gstack minus none: one Why-null cycle due: exposure, task fit, power and headroom, and whether Opus does it unaided
+section 10: gstack ties plain Opus on ordinary bugs (O)
+section 10: gstack ties or trails plain Opus on B
+section 10: A pack not exercised as designed: agent-skills on O
+section 10: A pack not exercised as designed: gsd on O
+section 10: A pack not exercised as designed: pstack on O
+section 10: A pack not exercised as designed: agent-skills on B
+section 10: A pack not exercised as designed: gsd on B
+section 10: A pack not exercised as designed: pstack on B
+section 10: A pack not exercised as designed: tstack on B
+section 10: gstack's dollars per verified fix above plain Opus's, with no correctness gain on O
+section 10: gstack's dollars per verified fix above plain Opus's, with no correctness gain on B
+section 10: Piece G

@@ -1,0 +1,693 @@
+// stage-run.ts (GEVA-540 kit, not committed): the stage controller for the head-to-head's paid smoke (stage 0, item
+// h2h-smoke) and pilot (stage 1, item h2h-pilot) on runner R. It imports the repo by absolute path ($H2H_REPO, default
+// ~/h2h/repo) and re-implements nothing: h2h session-plan writes the plan, sessions/rerunner.ts sessionRunner's preflight
+// checks every arm, and each session runs the steps of rerunner.ts's run with the planned session itself (containHome,
+// sessions/run.ts runH2hSession, score/score.ts scoreSession, rerunner.ts refusedOutcome). rerunner's run is not called
+// because it records every session as stage2 with its own index and prints each session's verified result on stdout.
+// One check is its own: the runtime volume is probed read-only with a 900 s limit (runtimes.ts's probe and pins), and
+// buildRuntimeVolume runs only when that probe finds no manifest. On a loaded runner, runtimes.ts's own 120 s probe can
+// time out, and its rebuild path then rewrites the volume live sessions mount and fails at its links step.
+//
+// Stage 2 (Captain's go, 2026-11-17): --stage stage2 --item h2h-opus,h2h-pony --proxy h2h-opus=<host:port>,h2h-pony=<host:port>.
+// One driver run serves both items (one lease and one proxy each); each session pays from its plan row's item (plan.ts
+// itemOf) through that item's proxy. Before each start the controller checks the item's lease room from /status:
+// reserved - held - (live sessions of the item x the allowance) must cover one more allowance, so no session opens into
+// the driver's CAP_STOP refusal. With no room and no live session of the item it starts nothing more and exits 5
+// (KIT_STAGE_NO_ROOM), for a Captain ruling. A parked O unit (kit/park-unit.sh) is restored when its first session is
+// due, and once every session of a unit has a record its session image is removed and the unit is parked again (drop).
+// Concurrency in stage 2: --k bounds sessions still in their agent phase (no session.json yet); a session that is only
+// scoring holds no driver slot and no allowance, so it does not count against k or the room check. All live workers stay
+// under H2H_MAX_WORKERS (14: fourteen 4-CPU test containers fill R's 60 CPUs, and the dataset parsers, single-threaded and
+// unlimited, must still get a whole CPU inside their 300 s limit), and nothing starts while the kernel's pressure stall figures show contention (cpu "some"
+// avg60 over 20%, or io over 40%; /proc/pressure), so scoring's test runs are not starved. The load average is not used:
+// throttled threads in the 4-CPU test containers push it past 400 while the CPUs sit 80% idle. Starts look ahead over the first 8 units with pending sessions (H2H_WINDOW):
+// within a unit sessions still start in plan order, but a unit held for disk or room no longer holds the units behind
+// it, and those later starts must leave the held unit's disk need free, except a start whose own need (restore plus
+// 3.5 trees) is at most H2H_SMALL_GB (25 GB), which only needs the floor and the live budgets (window 4 and 5 GB until
+// 22:35Z on 2026-11-17, when the four units behind a held biome session were all over 5 GB and nothing started). A finished session's second copy of tree.tar
+// (Harbor's job dir) is hard-linked to the first when the bytes match.
+// Disk: scoring copies a unit's tree twice (sm-scored-<worker pid>-* volumes) while it runs, so each live session is
+// budgeted 3.5 times its unit's tree (2.5 until 2026-11-17 22:20Z, when two biome sessions took free disk to 45 GB; the
+// park record's volume_bytes, or du of the tree volume), less one tree for each
+// scored copy it already holds (free disk already counts those), and never under half a tree. A start waits until free
+// disk covers a 60 GB floor plus the budgets of every live session and the new one; with nothing live that exits 6.
+//
+// Usage (controller):
+//   bun stage-run.ts --stage stage0|stage1|stage2 --item h2h-smoke|h2h-pilot|h2h-opus,h2h-pony --run <driver run id> --units <units.json>
+//     --unit-dirs <dir of sm-unit dirs> --homes <dir> --pins <stage 0 pins record> --out <dir> --control <url>
+//     --proxy <host:port> --k <n> [--gsd-onboard]
+// The controller runs each session in a detached worker (bun stage-run.ts --worker <index> --out <dir>) so a session
+// outlives a controller crash, and it adopts a live worker on relaunch.
+//
+// Frozen rules and where they live here (prereg = wiki/plans/2026-11-15-geva-538-skill-pack-h2h-prereg/README.md):
+// - Plan and order: h2h session-plan's seeded order (prereg.json order_seed, line 6; README line 239 and plan.ts), started
+//   in index order, k at a time. A relaunch re-plans with planStage and refuses a plan.json that differs.
+// - Items: stage 0 pays from h2h-smoke and stage 1 from h2h-pilot (plan.ts itemOf; README line 270: each item gets a
+//   ledger item and a cap). Every plan row must name that item, and /status must show the driver serving --item for --run.
+//   Stage 0's rerun (DEVIATIONS.md, 2026-11-16) takes --item h2h-resmoke: its plan is stage 0's, and each session it runs
+//   and records names h2h-resmoke.
+// - Pins: ruling A1 (Captain, 2026-11-15) binds every session to stage 0's pins record; --pins must hold its stage0 field.
+// - Limits: every session runs at prereg.json limits.allowance_usd ($25, line 170), wall_sec 5400 and max_turns 300
+//   (lines 171-172) and continuation_cap 6 (line 168), through h2hLimits and h2hConfig. The allowance never doubles here:
+//   the doubling rule acts before stage 2 (README line 110; prereg.json line 173).
+// - Retries and gaps: README line 178 (section 7 step 6). An upstream or infra end gets one whole-session retry from a
+//   fresh container and a second is a gap; runH2hSession does exactly that, and this controller never runs a session
+//   again once it has a record, gap or not. A safety stop is scored as no fix by scoreSession. The reservation-bound
+//   refusal (README line 107) is retried inside the session and counted in the record, never an allowance stop.
+// - Money: no capLeftUsd is passed, so the driver's item lease decides whether a retry's slot opens (session.ts
+//   retryCovered). A cap stop (README line 270: "A cap stop ends that part incomplete and is never retried") writes the
+//   session's record, stops the stage (exit 10) and writes HALT; a relaunch refuses while HALT stands.
+// - Containment: README line 102 (a confirmed hit in any arm drops the unit for every arm). containHome runs before each
+//   session, as rerunner does; a hit writes a containment record, stops the stage (exit 12) and writes HALT.
+// - INFRA (README line 233): gaps are never rerun here; only named harness repairs and a re-pilot of failed cells.
+// - Finalize halt: runH2hSession's E_H2H_FINALIZE_HALT (no record, driver stopped) stops the stage with HALT (exit 1).
+// - Sealing: README line 220 (stage 0's outcomes are sealed with stage 1's) and line 222 (stage 1's per-arm outcomes are
+//   sealed until stage 2 is scored). Score records (h2h-score.v1) go only to <out>/scores (mode 0700, files 0600), which
+//   is the --scores input of gstack-evals h2h readout (analysis/commands.ts readoutCmd); <out>/sessions is its --sessions
+//   input. stdout, stderr, the journal and the records carry session ids, costs and gap flags only; stage 0 adds the
+//   section 11 pass fields (end, DONE, continuations, attempts, exposure loaded and procedure, markers, source edit), never
+//   an outcome. Score warnings go beside the scores.
+// - Crash and resume: a session with a record is never run again. A session with no record whose worker is alive is
+//   adopted. A dead worker's session dir with session.json is scored again (no model call). One whose attempt opened a
+//   slot or left a summary halts the stage (exit 1): its slot may have spent, and the driver refuses a second open of the
+//   same trial without meta.rerun anyway. One that opened nothing is moved aside and run fresh.
+// - Scoring failures (stage 2; kit/stage-gap.ts, tested keyless by kit/stage-gap.test.ts): a score_error halts the stage.
+//   Once a human clears HALT, the session is scored again from its saved tree (section 7 step 6's one rerun, no model
+//   call), and a second score_error on it is written as a gap: the scorer's own record for a session gap, gap set to the
+//   error code, plus its stage record (journal "score_gap"); it does not halt. A score or record already there, the
+//   scorer's own gaps included, is never written over.
+// - Stops: <out>/STOP is read before every session start; it starts nothing more, waits for live sessions and exits 4.
+// Exits: 0 done, 1 halted for a human (HALT), 2 usage, 3 refused precondition (resumable), 4 STOP, 5 no lease room,
+// 6 disk floor, 10 cap stop, 12 containment halt.
+import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, loadavg } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { clearResult, pressure60, pressureHold, scoreFailure, writeGap, type Files } from "./stage-gap.ts";
+
+for (const k of Object.keys(process.env)) if (/_KEY$|_TOKEN$/.test(k)) delete process.env[k];
+const REPO = resolve(process.env.H2H_REPO ?? join(homedir(), "h2h/repo"));
+const H = REPO + "/lanes/outcome-skills/h2h/";
+const SM = REPO + "/lanes/outcome-skills/statemachines/";
+const { readPrereg, H2hError } = await import(H + "prereg.ts");
+const { planStage, readPlan } = await import(H + "sessions/plan.ts");
+const { runH2hSession } = await import(H + "sessions/run.ts");
+const { sessionRunner, refusedOutcome } = await import(H + "sessions/rerunner.ts");
+const { scoreSession } = await import(H + "score/score.ts");
+const { readInstalls } = await import(H + "sessions/exposure.ts");
+const { armHome } = await import(H + "sessions/home.ts");
+const { buildRuntimeVolume, runtimeVolume, RUNTIME_MANIFEST, RUNTIME_PINS, RUNTIMES_DIR } = await import(H + "sessions/runtimes.ts");
+const { containHome } = await import(H + "arms/contain.ts");
+const { buildSessionImage } = await import(SM + "image.ts");
+const { treeVolume } = await import(SM + "oracle.ts");
+const { runName } = await import(SM + "testrun.ts");
+const { readUnit } = await import(SM + "unit.ts");
+
+const ITEM: Record<string, string> = { stage0: "h2h-smoke", stage1: "h2h-pilot", stage2: "h2h-opus,h2h-pony" };
+const STAGE2_ITEMS = ["h2h-opus", "h2h-pony"];
+const RESMOKE = "h2h-resmoke";
+const EXIT = { done: 0, halt: 1, usage: 2, precondition: 3, stop: 4, room: 5, disk: 6, cap: 10, containment: 12 } as const;
+const KIT = dirname(import.meta.path);
+const PARK = process.env.H2H_PARK ?? join(homedir(), "h2h/park");
+const FLOOR_BYTES = Number(process.env.H2H_FLOOR_GB ?? 60) * 1e9;
+const SCORE_COPIES = 3.5;
+const MAX_WORKERS = Number(process.env.H2H_MAX_WORKERS ?? 14);
+const PSI_CPU_MAX = Number(process.env.H2H_PSI_CPU_MAX ?? 20);
+const PSI_IO_MAX = Number(process.env.H2H_PSI_IO_MAX ?? 40);
+const pressureText = (what: "cpu" | "io"): string | null => {
+  try {
+    return readFileSync("/proc/pressure/" + what, "utf8");
+  } catch {
+    return null;
+  }
+};
+const WINDOW = Number(process.env.H2H_WINDOW ?? 8);
+const SMALL_BYTES = Number(process.env.H2H_SMALL_GB ?? 25) * 1e9;
+const pad = (i: number) => String(i).padStart(4, "0");
+const now = () => new Date().toISOString();
+const sha256 = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
+const readJson = (f: string) => JSON.parse(readFileSync(f, "utf8"));
+const writeAtomic = (f: string, x: unknown, mode = 0o644) => {
+  writeFileSync(f + ".tmp", JSON.stringify(x, null, 1) + "\n", { mode });
+  renameSync(f + ".tmp", f);
+};
+const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 1500);
+const codeOf = (e: unknown) => (e instanceof H2hError ? e.code : (msg(e).match(/^(E_[A-Z0-9_]+|CAP_STOP)\b/)?.[1] ?? "E_INTERNAL"));
+class Usage extends Error {}
+
+interface Config { stage: "stage0" | "stage1" | "stage2"; item: string; items: string[]; proxies: Record<string, string>; run: string; units: string; units_sha256: string; unit_dirs: string; homes: string; pins: string; pins_sha256: string; out: string; control: string; proxy: string; k: number; gsd_onboard: boolean; repo: string; repo_head: string; kit_sha256: string }
+const paths = (out: string) => ({
+  config: join(out, "config.json"), plan: join(out, "plan.json"), journal: join(out, "journal.jsonl"), lock: join(out, "controller.lock"), halt: join(out, "HALT"), stop: join(out, "STOP"),
+  runtime: join(out, "runtime.json"), records: join(out, "records"), sessions: join(out, "sessions"), scores: join(out, "scores"), workers: join(out, "workers"), images: join(out, "images"),
+});
+type Paths = ReturnType<typeof paths>;
+const recFile = (p: Paths, i: number) => join(p.records, pad(i) + ".json");
+const sessDir = (p: Paths, i: number, arm: string) => join(p.sessions, pad(i) + "-" + arm);
+const scoreFile = (p: Paths, i: number) => join(p.scores, pad(i) + ".json");
+const resultFile = (p: Paths, i: number) => join(p.workers, pad(i) + ".result.json");
+const pidFile = (p: Paths, i: number) => join(p.workers, pad(i) + ".pid.json");
+const unitsOf = (file: string): any[] => { const j = readJson(file); return Array.isArray(j) ? j : j.units; };
+const parkRec = (unitId: string) => (existsSync(join(PARK, unitId + ".json")) ? readJson(join(PARK, unitId + ".json")) : null);
+
+function starttime(pid: number): string | null {
+  try {
+    const s = readFileSync("/proc/" + pid + "/stat", "utf8");
+    const f = s.slice(s.lastIndexOf(")") + 2).split(" ");
+    return f[0] === "Z" || f[0] === "X" ? null : f[19]!;
+  } catch {
+    return null;
+  }
+}
+const alive = (w: { pid: number; starttime: string } | null) => !!w && starttime(w.pid) === w.starttime;
+
+/** What a session's line may say: ids, cost and gap always; stage 0 adds section 11's pass fields, never an outcome. */
+function line(c: Config, rec: any): Record<string, unknown> {
+  const base = { index: rec.index, unit: rec.unit, arm: rec.arm, item: rec.item, kind: rec.kind, cost_usd: rec.cost_usd, gap: rec.gap };
+  return c.stage === "stage0" ? { ...base, ...(rec.pass ?? {}) } : base;
+}
+
+// ---------------------------------------------------------------- worker
+async function worker(index: number, out: string): Promise<number> {
+  const p = paths(out);
+  writeAtomic(pidFile(p, index), { pid: process.pid, starttime: starttime(process.pid), started_at: now() });
+  const c = readJson(p.config) as Config;
+  const planned = readPlan(p.plan).sessions[index];
+  const s = { ...planned, item: c.stage === "stage2" ? planned.item : c.item };
+  try {
+    return await session(index, p, s);
+  } catch (e) {
+    writeAtomic(resultFile(p, index), { index, unit: s.unit, arm: s.arm, kind: "error", code: codeOf(e), detail: msg(e), at: now() });
+    return 0;
+  }
+}
+
+async function session(index: number, p: Paths, s: any): Promise<number> {
+  const c = readJson(p.config) as Config;
+  const P = readPrereg();
+  const unit = unitsOf(c.units).find((u: any) => u.id === s.unit);
+  const dir = join(c.unit_dirs, s.unit);
+  const sd = sessDir(p, index, s.arm);
+  const result = (kind: string, e: unknown) => {
+    writeAtomic(resultFile(p, index), { index, unit: s.unit, arm: s.arm, kind, code: codeOf(e), detail: msg(e), at: now() });
+    return 0;
+  };
+  const record = (r: Record<string, unknown>) => {
+    writeAtomic(recFile(p, index), { schema: "geva540-stage-record.v1", stage: c.stage, item: s.item, run: c.run, index, unit: s.unit, arm: s.arm, ended_at: now(), ...r });
+    return 0;
+  };
+  let sess: any = existsSync(join(sd, "session.json")) ? readJson(join(sd, "session.json")) : null;
+  if (!sess) {
+    const installs = readInstalls(c.pins);
+    const home = armHome(s.arm, { installs, homes: c.homes });
+    const u = readUnit(dir);
+    const image = readJson(join(p.images, s.unit + ".json"));
+    const id = spawnSync("docker", ["image", "inspect", "--format", "{{.Id}}", image.tag], { encoding: "utf8", timeout: 60_000 }).stdout.trim();
+    if (id !== image.image_id) return result("error", "KIT_STAGE_IMAGE the session image tag " + image.tag + " points at " + (id || "nothing") + ", not the recorded " + image.image_id);
+    if (home.dir) {
+      const h = containHome({ arm: s.arm, home: home.dir, unitDir: dir, where: { kind: "docker", image: image.tag, volume: image.volume, repoDir: u.repo_dir, name: runName("h2h-stage-contain") } });
+      if (!h.ok) return record({ kind: "containment", cost_usd: 0, gap: "E_H2H_RERUN_CONTAINMENT", detail: h.confirmed + " confirmed answer-key hit(s) in arm " + s.arm + "'s home: " + h.hits.filter((x: any) => x.idiom === null).slice(0, 3).map((x: any) => x.needle + " " + x.path).join("; ") });
+    }
+    const runtime = readJson(p.runtime);
+    const input = { unit, statement: readFileSync(join(dir, "issue.md"), "utf8"), image, repo_dir: u.repo_dir, work_dir: u.work_dir };
+    try {
+      const proxy = c.proxies?.[s.item];
+      if (!proxy) return result("error", "KIT_STAGE_PROXY the config names no proxy for item " + s.item);
+      sess = (await runH2hSession({ session: s, unit: input, home, installs, control: c.control, proxy, out: sd, allowance: P.limits.allowance_usd, runtime: { volume: runtime.volume }, gsdOnboard: c.gsd_onboard })).record;
+    } catch (e) {
+      let o: any;
+      try {
+        o = refusedOutcome(e, sd);
+      } catch (e2) {
+        return result("error", e2);
+      }
+      if (o.kind === "cap_stop") return record({ kind: "cap_stop", cost_usd: o.session?.cost_usd ?? 0, gap: "CAP_STOP", session_file: o.session ? join(sd, "session.json") : null, detail: o.detail });
+      return result("refused", o.detail);
+    }
+  }
+  if (sess.end === "cap_stop") return record({ kind: "cap_stop", cost_usd: sess.cost_usd, gap: "CAP_STOP", session_file: join(sd, "session.json") });
+  let score: any = existsSync(scoreFile(p, index)) ? readJson(scoreFile(p, index)) : null;
+  if (!score) {
+    let scored: any;
+    try {
+      scored = scoreSession(sess, sd, dir);
+    } catch (e) {
+      return result("score_error", e);
+    }
+    score = scored.score;
+    if (scored.warnings.length) writeFileSync(join(p.scores, pad(index) + ".warnings.txt"), scored.warnings.join("\n") + "\n", { mode: 0o600 });
+    writeAtomic(scoreFile(p, index), score, 0o600);
+  }
+  const e = sess.exposure;
+  return record({
+    kind: "session", cost_usd: sess.cost_usd, gap: score.gap ?? sess.gap ?? null, session_file: join(sd, "session.json"), score_file: scoreFile(p, index),
+    ...(c.stage === "stage0" ? { pass: { end: sess.end, done: sess.done_seen, continuations: sess.continuations, attempts: sess.attempts, loaded: e?.loaded ?? null, procedure: e?.procedure ?? null, markers: e?.markers ?? [], foreign_reads: e?.foreign_reads?.length ?? null, ...(unit?.entry === "feature" ? { source_edit: score.gap ? null : score.lines_changed > 0 } : {}) } } : {}),
+  });
+}
+
+// ---------------------------------------------------------------- controller
+function parse(argv: string[]): Config {
+  const valued = ["--stage", "--item", "--run", "--units", "--unit-dirs", "--homes", "--pins", "--out", "--control", "--proxy", "--k"];
+  const got = new Map<string, string>();
+  let gsd = false;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
+    if (a === "--gsd-onboard") gsd = true;
+    else if (valued.includes(a) && argv[i + 1] !== undefined && !got.has(a)) got.set(a, argv[++i]!);
+    else throw new Usage("E_USAGE unknown, repeated or empty argument " + a);
+  }
+  const missing = valued.filter((k) => !got.has(k));
+  if (missing.length) throw new Usage("E_USAGE missing " + missing.join(", "));
+  const stage = got.get("--stage")!;
+  if (!(stage in ITEM)) throw new Usage("E_USAGE --stage is stage0, stage1 or stage2, not " + stage);
+  if (got.get("--item") !== ITEM[stage] && !(stage === "stage0" && got.get("--item") === RESMOKE)) throw new Usage("E_USAGE " + stage + " pays from " + ITEM[stage] + (stage === "stage0" ? " or, for its rerun, " + RESMOKE : "") + " (plan.ts itemOf), not " + got.get("--item"));
+  const items = stage === "stage2" ? STAGE2_ITEMS : [got.get("--item")!];
+  let proxies: Record<string, string> = { [items[0]!]: got.get("--proxy")! };
+  if (stage === "stage2") {
+    const pairs = got.get("--proxy")!.split(",").map((x) => x.split("="));
+    proxies = Object.fromEntries(pairs.map(([a, b]) => [a ?? "", b ?? ""]));
+    if (pairs.length !== items.length || pairs.some((x) => x.length !== 2 || !x[1]) || items.some((it) => !proxies[it])) throw new Usage("E_USAGE stage2's --proxy is " + items.map((it) => it + "=<host:port>").join(","));
+  }
+  const k = Number(got.get("--k"));
+  if (!Number.isSafeInteger(k) || k < 1 || k > 16) throw new Usage("E_USAGE --k is a whole number from 1 to 16");
+  const f = (key: string) => resolve(got.get(key)!);
+  for (const key of ["--units", "--pins"]) if (!existsSync(f(key)) || !statSync(f(key)).isFile()) throw new Usage("E_USAGE " + key + " " + f(key) + " is not a file");
+  for (const key of ["--unit-dirs", "--homes"]) if (!existsSync(f(key)) || !statSync(f(key)).isDirectory()) throw new Usage("E_USAGE " + key + " " + f(key) + " is not a dir");
+  if (!readJson(f("--pins")).stage0) throw new Usage("E_USAGE --pins " + f("--pins") + " is not stage 0's pins record (no stage0 field); ruling A1 binds every session to it");
+  const head = spawnSync("git", ["-C", REPO, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+  return {
+    stage: stage as Config["stage"], item: got.get("--item")!, items, proxies, run: got.get("--run")!, units: f("--units"), units_sha256: sha256(readFileSync(f("--units"))), unit_dirs: f("--unit-dirs"), homes: f("--homes"),
+    pins: f("--pins"), pins_sha256: sha256(readFileSync(f("--pins"))), out: f("--out"), control: got.get("--control")!.replace(/\/$/, ""), proxy: got.get("--proxy")!, k, gsd_onboard: gsd, repo: REPO, repo_head: head, kit_sha256: sha256(readFileSync(import.meta.path)),
+  };
+}
+
+async function controller(argv: string[]): Promise<number> {
+  const c = parse(argv);
+  const p = paths(c.out);
+  for (const d of [c.out, p.records, p.sessions, p.workers, p.images]) mkdirSync(d, { recursive: true });
+  mkdirSync(p.scores, { recursive: true, mode: 0o700 });
+  chmodSync(p.scores, 0o700);
+  const journal = (ev: string, x: Record<string, unknown> = {}, print = true) => {
+    const l = JSON.stringify({ t: now(), ev, ...x });
+    appendFileSync(p.journal, l + "\n");
+    if (print) console.log(l);
+  };
+  const lock = existsSync(p.lock) ? readJson(p.lock) : null;
+  if (lock && lock.pid !== process.pid && alive(lock)) {
+    console.error("E_H2H_RERUN_PRECONDITION controller " + lock.pid + " already runs this stage in " + c.out);
+    return EXIT.precondition;
+  }
+  writeAtomic(p.lock, { pid: process.pid, starttime: starttime(process.pid), at: now() });
+  if (existsSync(p.halt)) {
+    const h = readJson(p.halt);
+    console.error(h.code + " the stage halted at " + h.at + ": " + h.reason + "; HALT stands in " + c.out + (h.exit === EXIT.cap || h.exit === EXIT.containment ? ", and a cap stop or containment halt is never retried" : "; a human clears it after a ruling"));
+    return h.exit;
+  }
+  if (existsSync(p.config)) {
+    const was = readJson(p.config) as Config;
+    const fixed = ["stage", "item", "run", "units", "units_sha256", "unit_dirs", "homes", "pins", "pins_sha256", "gsd_onboard"] as const;
+    const moved = fixed.filter((k) => JSON.stringify(was[k]) !== JSON.stringify(c[k]));
+    if (moved.length) {
+      console.error("E_USAGE " + c.out + " holds a stage run whose " + moved.join(", ") + " differ from this launch's; a relaunch resumes the same stage");
+      return EXIT.usage;
+    }
+  }
+  writeAtomic(p.config, c);
+  const P = readPrereg();
+  const units = unitsOf(c.units);
+  if (!existsSync(p.plan)) {
+    const r = spawnSync("bun", ["--no-env-file", H + "cli.ts", "session-plan", "--units", c.units, "--stage", c.stage, "--out", p.plan], { cwd: REPO, encoding: "utf8" });
+    if (r.status !== 0) {
+      console.error((r.stderr || r.stdout).trim() || "E_H2H_SESSION_INPUT h2h session-plan exited " + r.status);
+      return EXIT.usage;
+    }
+  }
+  const plan = readPlan(p.plan);
+  if (JSON.stringify(plan) !== JSON.stringify(planStage(units, c.stage, P))) {
+    console.error("E_H2H_SESSION_INPUT " + p.plan + " is not planStage's plan for " + c.units + " at " + c.stage + "; a stage's order is written once");
+    return EXIT.usage;
+  }
+  const payers = c.stage === "stage2" ? STAGE2_ITEMS : [ITEM[c.stage]];
+  const bad = plan.sessions.find((s: any) => !payers.includes(s.item));
+  if (bad) {
+    console.error("E_H2H_SESSION_INPUT plan session " + bad.index + " pays from " + bad.item + ", not " + payers.join(" or "));
+    return EXIT.usage;
+  }
+  const runner = sessionRunner({ H2H_CONTROL: c.control, H2H_PROXY: c.proxy, H2H_HOMES: c.homes, H2H_UNITS: c.unit_dirs, H2H_PINS: c.pins });
+  const parked = new Set<string>(c.stage === "stage2" ? units.filter((u: any) => parkRec(u.id)?.state === "parked").map((u: any) => u.id) : []);
+  for (const id of parked) {
+    try {
+      readUnit(join(c.unit_dirs, id));
+    } catch (e) {
+      console.error("E_H2H_RERUN_PRECONDITION parked unit " + id + ": " + msg(e));
+      return EXIT.precondition;
+    }
+  }
+  for (const arm of [...new Set(plan.sessions.map((s: any) => s.arm))] as string[]) {
+    const why = await runner.preflight(arm, units.filter((u: any) => !parked.has(u.id) && plan.sessions.some((s: any) => s.arm === arm && s.unit === u.id)));
+    if (why) {
+      console.error("E_H2H_RERUN_PRECONDITION arm " + arm + ": " + why);
+      return EXIT.precondition;
+    }
+  }
+  const items = c.items ?? [c.item];
+  const status = async (): Promise<{ ok: true; stages: any[]; off: any } | { ok: false; why: string }> => {
+    try {
+      const j = (await (await fetch(c.control + "/status", { signal: AbortSignal.timeout(10_000) })).json()) as any;
+      if (j.run_id !== c.run) return { ok: false, why: "the driver at " + c.control + " serves run " + j.run_id + ", not " + c.run };
+      const stages = items.map((it) => (j.stages ?? []).find((s: any) => s.item === it));
+      const miss = items.filter((_, n) => !stages[n]);
+      if (miss.length) return { ok: false, why: "the driver serves no " + miss.join(", ") + " stage" };
+      return { ok: true, stages, off: stages.find((s: any) => s.state !== "serving") ?? null };
+    } catch (e) {
+      return { ok: false, why: "the driver at " + c.control + " does not answer: " + msg(e) };
+    }
+  };
+  const first = await status();
+  if (!first.ok || first.off) {
+    console.error("E_H2H_RERUN_PRECONDITION " + (first.ok ? "stage " + first.off.item + " is " + first.off.state + " (ended " + first.off.ended + ")" : first.why));
+    return first.ok && first.off.ended === "cap_stop" ? EXIT.cap : EXIT.precondition;
+  }
+  const volume = runtimeVolume();
+  const probe = spawnSync("docker", ["run", "--rm", "--network", "none", "-v", volume + ":" + RUNTIMES_DIR + ":ro", "--entrypoint", "sh", RUNTIME_PINS.node.image, "-c", 'd=$1; cat "$d/MANIFEST.json"; echo; for t in node bun python3 gh; do echo "V $t $("$d/bin/$t" --version 2>&1 | head -1)"; done', "sh", RUNTIMES_DIR], { encoding: "utf8", timeout: 900_000 });
+  if (probe.error) {
+    console.error("E_H2H_RUNTIMES the read-only probe of the runtime volume " + volume + " did not finish in 900 s (" + probe.error.message + "); nothing started, and a relaunch probes again");
+    return EXIT.precondition;
+  }
+  let rt: any;
+  if (probe.status === 0 && probe.stdout.split("\n")[0] === JSON.stringify(RUNTIME_MANIFEST)) {
+    const versions = Object.fromEntries([...probe.stdout.matchAll(/^V (\S+) (.*)$/gm)].map((m) => [m[1]!, m[2]!.trim()]));
+    const bad = (["node", "bun", "python3", "gh"] as const).filter((t) => versions[t] !== RUNTIME_PINS[t].version);
+    if (bad.length) {
+      console.error("E_H2H_RUNTIMES the runtime volume " + volume + " reads " + bad.map((t) => t + " " + JSON.stringify(versions[t] ?? null)).join(", ") + ", not its pins; nothing started");
+      return EXIT.precondition;
+    }
+    rt = { volume, versions, reused: true };
+  } else {
+    try {
+      rt = await buildRuntimeVolume();
+    } catch (e) {
+      console.error(codeOf(e) + " " + msg(e).replace(/^(E_[A-Z0-9_]+) /, "") + "; nothing started, and a relaunch builds it again (build it once, before any other run, with h2h runtimes)");
+      return EXIT.precondition;
+    }
+  }
+  writeAtomic(p.runtime, { volume: rt.volume, versions: rt.versions, reused: rt.reused });
+  journal("launch", { stage: c.stage, item: c.item, run: c.run, k: c.k, sessions: plan.sessions.length, plan_sha256: sha256(readFileSync(p.plan)), units_sha256: c.units_sha256, pins_sha256: c.pins_sha256, repo_head: c.repo_head, kit_sha256: c.kit_sha256, gsd_onboard: c.gsd_onboard, runtime: rt.volume, pid: process.pid });
+
+  const live = new Map<number, { pid: number; starttime: string } | null>();
+  const exited = new Set<number>();
+  const S = plan.sessions as any[];
+  const opened = (dir: string): string[] => {
+    const hits: string[] = [];
+    const walk = (d: string) => {
+      for (const n of readdirSync(d)) {
+        const f = join(d, n);
+        const st = statSync(f);
+        if (st.isDirectory()) walk(f);
+        else if ((n === "h2h-opens.jsonl" && st.size > 0) || n === "h2h-summary.json") hits.push(f);
+      }
+    };
+    walk(dir);
+    return hits;
+  };
+  let halt: { code: string; exit: number; reason: string } | null = null;
+  let stop: { code: string; exit: number; reason: string } | null = null;
+  const setHalt = (code: string, exit: number, reason: string) => {
+    halt ??= { code, exit, reason };
+    if (!existsSync(p.halt)) writeAtomic(p.halt, { code, exit, reason, at: now() });
+  };
+  const filesOf = (i: number): Files => ({ result: resultFile(p, i), score: scoreFile(p, i), record: recFile(p, i), session: join(sessDir(p, i, S[i].arm), "session.json") });
+  const scoreGap = (i: number) => {
+    const s = S[i];
+    const rec = writeGap(filesOf(i), join(c.unit_dirs, s.unit), { schema: "geva540-stage-record.v1", stage: c.stage, item: c.stage === "stage2" ? s.item : c.item, run: c.run, index: i, unit: s.unit, arm: s.arm }, scoreSession, now());
+    journal("score_gap", { index: i, unit: s.unit, arm: s.arm, code: rec.gap });
+    journal("end", line(c, rec));
+  };
+  for (const s of S) {
+    if (existsSync(recFile(p, s.index))) continue;
+    const w = existsSync(pidFile(p, s.index)) ? readJson(pidFile(p, s.index)) : null;
+    if (alive(w)) {
+      live.set(s.index, w);
+      journal("adopt", { index: s.index, unit: s.unit, arm: s.arm, pid: w.pid });
+      continue;
+    }
+    const sd = sessDir(p, s.index, s.arm);
+    if (existsSync(resultFile(p, s.index))) {
+      const r = readJson(resultFile(p, s.index));
+      if (c.stage === "stage2" && r.kind === "score_error" && scoreFailure(filesOf(s.index), "relaunch") === "gap") {
+        scoreGap(s.index);
+        continue;
+      }
+      clearResult(filesOf(s.index));
+      journal("cleared", { index: s.index, unit: s.unit, arm: s.arm, kind: r.kind, code: r.code });
+    }
+    if (!existsSync(sd) || existsSync(join(sd, "session.json"))) continue;
+    const hits = opened(sd);
+    if (hits.length) {
+      setHalt("KIT_STAGE_INTERRUPTED", EXIT.halt, "session " + s.index + " (" + s.unit + " " + s.arm + ") has no record and its worker is gone, but an attempt opened a slot or left a summary (" + hits.slice(0, 2).join(", ") + "), so it may have spent; it is not run again without a ruling");
+      break;
+    }
+    const aside = sd + ".interrupted-" + Date.now();
+    renameSync(sd, aside);
+    journal("requeue", { index: s.index, unit: s.unit, arm: s.arm, why: "its worker died before any slot opened", aside });
+  }
+
+  const allowance = Math.round(P.limits.allowance_usd * 1e6);
+  const itemOfS = (s: any): string => (c.stage === "stage2" ? s.item : c.item);
+  const freeBytes = () => Number(spawnSync("df", ["-B1", "--output=avail", "/"], { encoding: "utf8" }).stdout.trim().split("\n").pop());
+  let waitNote = "";
+  const waiting = (note: string, x: Record<string, unknown>) => {
+    if (waitNote !== note) journal(note.split(" ")[0]!, x);
+    waitNote = note;
+  };
+  const diskShort = (need: number, unitId: string | null): boolean => {
+    const free = freeBytes();
+    if (free >= need) return false;
+    if (!live.size) stop ??= { code: "KIT_STAGE_DISK", exit: EXIT.disk, reason: "free disk " + (free / 1e9).toFixed(1) + " GB is under the " + (need / 1e9).toFixed(1) + " GB a start needs" + (unitId ? " (restoring " + unitId + ")" : "") + ", and no session is live to free any" };
+    else waiting("disk_wait " + Math.round(need / 1e9), { free_gb: Math.round(free / 1e9), need_gb: Math.round(need / 1e9), live: live.size });
+    return true;
+  };
+  const trees = new Map<string, number>();
+  const treeOf = (unitId: string): number => {
+    if (!trees.has(unitId)) {
+      let n = parkRec(unitId)?.volume_bytes;
+      if (typeof n !== "number") n = Number((spawnSync("sudo", ["du", "-sb", "/var/lib/docker/volumes/" + treeVolume(unitId) + "/_data"], { encoding: "utf8", timeout: 900_000 }).stdout ?? "").split(/\s/)[0]);
+      trees.set(unitId, Number.isFinite(n) && n > 0 ? n : 10e9);
+    }
+    return trees.get(unitId)!;
+  };
+  const budget = (extra: string | null) => {
+    const held = new Map<string, number>();
+    for (const v of (spawnSync("docker", ["volume", "ls", "-q", "--filter", "name=sm-scored-"], { encoding: "utf8", timeout: 60_000 }).stdout ?? "").split("\n")) {
+      const pid = v.split("-")[2];
+      if (pid) held.set(pid, (held.get(pid) ?? 0) + 1);
+    }
+    return [...live.entries()].reduce((n, [i, w]) => {
+      const pid = String((w ?? (existsSync(pidFile(p, i)) ? readJson(pidFile(p, i)) : null))?.pid ?? "");
+      return n + Math.max(0.5, SCORE_COPIES - (held.get(pid) ?? 0)) * treeOf(S[i].unit);
+    }, extra ? SCORE_COPIES * treeOf(extra) : 0);
+  };
+  const restore = (unitId: string): boolean => {
+    if (c.stage !== "stage2") return true;
+    const pr = parkRec(unitId);
+    if (!pr || pr.state === "restored") return true;
+    if (pr.state !== "parked") {
+      stop ??= { code: "KIT_STAGE_RESTORE", exit: EXIT.precondition, reason: "unit " + unitId + "'s park record is in state " + pr.state + ", not parked or restored" };
+      return false;
+    }
+    if (diskShort(FLOOR_BYTES + 2 * pr.volume_bytes + budget(null), unitId)) return false;
+    const t0 = Date.now();
+    const r = spawnSync("bash", [join(KIT, "park-unit.sh"), "restore", pr.class, unitId], { encoding: "utf8", timeout: 1_800_000 });
+    if (r.status !== 0 || !/^RESTORED$/m.test(r.stdout ?? "")) {
+      stop ??= { code: "KIT_STAGE_RESTORE", exit: EXIT.precondition, reason: "park-unit.sh restore " + unitId + " exited " + r.status + ": " + (r.stderr ?? "").trim().slice(-300) };
+      return false;
+    }
+    journal("restored", { unit: unitId, sec: Math.round((Date.now() - t0) / 1000) });
+    return true;
+  };
+  const unitDone = (unitId: string) => S.every((x) => x.unit !== unitId || (existsSync(recFile(p, x.index)) && !live.has(x.index)));
+  const gcUnit = (unitId: string) => {
+    if (c.stage !== "stage2" || !unitDone(unitId)) return;
+    const f = join(p.images, unitId + ".json");
+    if (existsSync(f)) {
+      const img = readJson(f);
+      if (spawnSync("docker", ["image", "inspect", img.image_id], { timeout: 60_000 }).status === 0) {
+        for (const n of [img.tag, img.image_id]) spawnSync("docker", ["rmi", "--no-prune", n], { timeout: 600_000 });
+        if (spawnSync("docker", ["image", "inspect", img.image_id], { timeout: 60_000 }).status === 0) return journal("gc_kept", { unit: unitId, why: "the session image " + img.tag + " is still there (in use?)" });
+        journal("gc_image", { unit: unitId, tag: img.tag });
+      }
+    }
+    images.delete(unitId);
+    const pr = parkRec(unitId);
+    if (pr?.state !== "restored") return;
+    const r = spawnSync("bash", [join(KIT, "park-unit.sh"), "drop", pr.class, unitId], { encoding: "utf8", timeout: 900_000 });
+    journal(r.status === 0 && /^DROPPED$/m.test(r.stdout ?? "") ? "dropped" : "drop_failed", { unit: unitId, ...(r.status === 0 ? {} : { detail: (r.stderr ?? "").trim().slice(-300) }) });
+  };
+  const images = new Map<string, any>();
+  const ensureImage = (unitId: string): boolean => {
+    if (images.has(unitId)) return true;
+    const f = join(p.images, unitId + ".json");
+    if (existsSync(f)) {
+      const img = readJson(f);
+      const id = spawnSync("docker", ["image", "inspect", "--format", "{{.Id}}", img.tag], { encoding: "utf8", timeout: 60_000 }).stdout.trim();
+      if (id === img.image_id) return images.set(unitId, img), true;
+      if ([...live.keys()].some((i) => S[i].unit === unitId)) return false;
+    }
+    if (!restore(unitId)) return false;
+    const u = readUnit(join(c.unit_dirs, unitId));
+    let img: any = null;
+    for (let t = 1; t <= 2 && !img; t++) {
+      try {
+        img = buildSessionImage(u, { volume: treeVolume(u.id), stage: "first" });
+      } catch (e) {
+        journal("image_failed", { unit: unitId, try: t, code: codeOf(e) });
+        if (t === 2) {
+          stop ??= { code: codeOf(e), exit: EXIT.precondition, reason: "the session image for " + unitId + " did not build twice: " + msg(e).slice(0, 300) };
+          return false;
+        }
+      }
+    }
+    writeAtomic(f, img);
+    images.set(unitId, img);
+    journal("image", { unit: unitId, tag: img.tag, image_id: img.image_id, head: img.head });
+    return true;
+  };
+  const start = (s: any) => {
+    rmSync(pidFile(p, s.index), { force: true });
+    const log = openSync(join(p.workers, pad(s.index) + ".log"), "a");
+    const child = spawn(process.execPath, ["--no-env-file", import.meta.path, "--worker", String(s.index), "--out", c.out], { cwd: REPO, detached: true, stdio: ["ignore", log, log], env: process.env });
+    child.on("exit", () => exited.add(s.index));
+    child.unref();
+    live.set(s.index, null);
+    journal("start", { index: s.index, unit: s.unit, arm: s.arm, pid: child.pid });
+  };
+  const finished = (i: number): boolean => {
+    if (exited.has(i)) return true;
+    const w = existsSync(pidFile(p, i)) ? readJson(pidFile(p, i)) : null;
+    return w ? !alive(w) : false;
+  };
+  const reap = (i: number) => {
+    live.delete(i);
+    const s = S[i];
+    if (existsSync(recFile(p, i))) {
+      const rec = readJson(recFile(p, i));
+      journal("end", line(c, rec));
+      if (rec.kind === "cap_stop") setHalt("CAP_STOP", EXIT.cap, "session " + i + " (" + s.unit + " " + s.arm + ") stopped at the cap: " + String(rec.detail ?? "the driver refused its slot").slice(0, 400));
+      if (rec.kind === "containment") setHalt("E_H2H_RERUN_CONTAINMENT", EXIT.containment, "unit " + s.unit + " drops for every arm: " + String(rec.detail).slice(0, 400));
+      if (c.stage === "stage2") spawnSync("bash", ["-c", 'cd "$1" && [ -f tree.tar ] || exit 0; t=$(stat -c %i tree.tar); find . -mindepth 2 -name tree.tar -type f -size "$(stat -c %s tree.tar)c" | while read -r f; do [ "$(stat -c %i "$f")" = "$t" ] || { cmp -s tree.tar "$f" && ln -f tree.tar "$f"; }; done', "bash", sessDir(p, i, s.arm)], { timeout: 900_000 });
+      gcUnit(s.unit);
+      return;
+    }
+    if (existsSync(resultFile(p, i))) {
+      const r = readJson(resultFile(p, i));
+      if (c.stage === "stage2" && r.kind === "score_error" && scoreFailure(filesOf(i), "live") === "gap") {
+        scoreGap(i);
+        gcUnit(s.unit);
+        return;
+      }
+      journal("failed", { index: i, unit: s.unit, arm: s.arm, kind: r.kind, code: r.code, detail: c.stage === "stage0" ? r.detail : r.code });
+      if (r.kind === "refused") stop ??= { code: "E_H2H_RERUN_PRECONDITION", exit: EXIT.precondition, reason: "session " + i + " (" + s.arm + ") refused: " + r.code };
+      else setHalt(r.code, EXIT.halt, "session " + i + " (" + s.unit + " " + s.arm + ") ended " + r.kind + " " + r.code + "; worker log " + join(p.workers, pad(i) + ".log"));
+      return;
+    }
+    setHalt("KIT_STAGE_INTERRUPTED", EXIT.halt, "the worker for session " + i + " (" + s.unit + " " + s.arm + ") exited with no record and no result; see " + join(p.workers, pad(i) + ".log"));
+  };
+
+  for (const u of new Set(S.map((s) => s.unit as string))) gcUnit(u);
+  for (;;) {
+    for (const i of [...live.keys()]) if (finished(i)) reap(i);
+    const pending = S.filter((s) => !live.has(s.index) && !existsSync(recFile(p, s.index)));
+    if (!halt && !stop && existsSync(p.stop)) stop = { code: "KIT_STAGE_STOPPED", exit: EXIT.stop, reason: "the STOP file " + p.stop + " is there" };
+    const agentLive = () => [...live.keys()].filter((i) => c.stage !== "stage2" || !existsSync(join(sessDir(p, i, S[i].arm), "session.json"))).length;
+    while (!halt && !stop && agentLive() < c.k && (c.stage !== "stage2" || live.size < MAX_WORKERS) && pending.length) {
+      if (existsSync(p.stop)) {
+        stop = { code: "KIT_STAGE_STOPPED", exit: EXIT.stop, reason: "the STOP file " + p.stop + " is there" };
+        break;
+      }
+      const st = await status();
+      if (!st.ok || st.off) {
+        if (st.ok && st.off.ended === "cap_stop") setHalt("CAP_STOP", EXIT.cap, "the driver's " + st.off.item + " stage is cap-stopped (" + st.off.scope + ")");
+        else stop = { code: "E_H2H_RERUN_PRECONDITION", exit: EXIT.precondition, reason: st.ok ? "stage " + st.off.item + " is " + st.off.state + " (ended " + st.off.ended + ")" : st.why };
+        break;
+      }
+      if (c.stage === "stage2" && pressureHold(pressureText("cpu"), pressureText("io"), PSI_CPU_MAX, PSI_IO_MAX)) {
+        waiting("load_wait", { cpu_some60: pressure60(pressureText("cpu")), io_some60: pressure60(pressureText("io")), load: Math.round(loadavg()[0] * 10) / 10, live: live.size });
+        break;
+      }
+      const heads: any[] = [pending[0]!];
+      if (c.stage === "stage2") for (const x of pending) if (heads.length < WINDOW && !heads.some((h) => h.unit === x.unit)) heads.push(x);
+      let reserve = 0;
+      let chosen: any = null;
+      const roomBlocked = new Set<string>();
+      for (const [n, s] of heads.entries()) {
+        const it = itemOfS(s);
+        if (roomBlocked.has(it)) continue;
+        const sst = st.stages.find((x: any) => x.item === it);
+        const inflight = [...live.keys()].filter((i) => itemOfS(S[i]) === it && (c.stage !== "stage2" || !existsSync(join(sessDir(p, i, S[i].arm), "session.json")))).length;
+        const room = sst.reserved_micros - (sst.held_micros ?? 0) - inflight * allowance;
+        if (room < allowance) {
+          if (!inflight) {
+            stop ??= { code: "KIT_STAGE_NO_ROOM", exit: EXIT.room, reason: "item " + it + " has $" + (room / 1e6).toFixed(2) + " of room on lease " + sst.lease_id + " ($" + (sst.reserved_micros / 1e6).toFixed(2) + " reserved, $" + ((sst.held_micros ?? 0) / 1e6).toFixed(2) + " held), under one $" + allowance / 1e6 + " allowance, with no session of it live; session " + s.index + " would open into the driver's cap stop, so nothing more starts until the Captain rules" };
+            break;
+          }
+          roomBlocked.add(it);
+          if (n === 0) waiting("room_wait " + it + " " + inflight, { item: it, inflight, room_usd: Math.round(room) / 1e6, index: s.index });
+          continue;
+        }
+        if (c.stage === "stage2") {
+          const pr = parkRec(s.unit);
+          const restoreNeed = pr?.state === "parked" ? 2 * pr.volume_bytes : 0;
+          const need = FLOOR_BYTES + budget(s.unit) + restoreNeed + (restoreNeed + SCORE_COPIES * treeOf(s.unit) <= SMALL_BYTES ? 0 : reserve);
+          const free = freeBytes();
+          if (free < need) {
+            if (n === 0 && !live.size) stop ??= { code: "KIT_STAGE_DISK", exit: EXIT.disk, reason: "free disk " + (free / 1e9).toFixed(1) + " GB is under the " + (need / 1e9).toFixed(1) + " GB session " + s.index + " (" + s.unit + ") needs, and no session is live to free any" };
+            else if (n === 0) waiting("disk_wait " + Math.round(need / 1e9), { free_gb: Math.round(free / 1e9), need_gb: Math.round(need / 1e9), live: live.size, index: s.index, unit: s.unit });
+            if (stop) break;
+            reserve += restoreNeed + SCORE_COPIES * treeOf(s.unit);
+            continue;
+          }
+        }
+        if (!ensureImage(s.unit)) {
+          if (stop) break;
+          continue;
+        }
+        chosen = s;
+        break;
+      }
+      if (!chosen) break;
+      if (chosen === heads[0]) waitNote = "";
+      pending.splice(pending.indexOf(chosen), 1);
+      start(chosen);
+    }
+    const end = halt ?? stop;
+    if (!live.size && (end || !pending.length)) {
+      const recs = S.filter((s) => existsSync(recFile(p, s.index))).map((s) => readJson(recFile(p, s.index)));
+      const arms: Record<string, { sessions: number; cost_usd: number; gaps: number }> = {};
+      for (const r of recs) {
+        const a = (arms[r.arm] ??= { sessions: 0, cost_usd: 0, gaps: 0 });
+        a.sessions++;
+        a.cost_usd += r.cost_usd ?? 0;
+        if (r.gap) a.gaps++;
+      }
+      for (const a of Object.values(arms)) a.cost_usd = Math.round(a.cost_usd * 1e6) / 1e6;
+      const summary = { recorded: recs.length, planned: S.length, cost_usd: Math.round(recs.reduce((n, r) => n + (r.cost_usd ?? 0), 0) * 1e6) / 1e6, arms };
+      if (end) {
+        journal(halt ? "halted" : "stopped", { code: end.code, exit: end.exit, reason: end.reason, ...summary });
+        console.error(end.code + " " + end.reason);
+        return end.exit;
+      }
+      journal("done", { ...summary, readout: c.stage === "stage1" ? "bun --no-env-file " + H + "cli.ts readout --units " + c.units + " --sessions " + p.sessions + " --scores " + p.scores + " --key <sealed-store key> --out <sealed file>" : null });
+      return EXIT.done;
+    }
+    await Bun.sleep(5_000);
+  }
+}
+
+const argv = process.argv.slice(2);
+try {
+  if (argv[0] === "--worker") process.exit(await worker(Number(argv[1]), resolve(argv[3]!)));
+  process.exit(await controller(argv));
+} catch (e) {
+  console.error(e instanceof Usage ? e.message : codeOf(e) + " " + msg(e).replace(/^(E_[A-Z0-9_]+|CAP_STOP) /, ""));
+  process.exit(e instanceof Usage ? EXIT.usage : EXIT.halt);
+}

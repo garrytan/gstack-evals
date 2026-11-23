@@ -30,7 +30,7 @@ The config now refuses every file under any folder whose name starts with `seale
 
 ## What has to happen before the first seal
 
-1. **Ask gstack for an exception list (recommended).** Add a field such as `sealed.allow_paths`, read from the base branch like the rest of the policy, so `sealed/*/MANIFEST.json` and `protected/MANIFEST.json` pass while everything beside them is refused. This keeps the plan's layout and fixes the gap for every repo that uses the guard. It is a request to GStack Minder, through the Captain.
+1. **Ask gstack for an exception list (recommended).** Add a field such as `sealed.allow_paths`, read from the base branch like the rest of the policy, so `sealed/*/MANIFEST.json` and `protected/MANIFEST.json` pass while everything beside them is refused. This keeps the plan's layout and fixes the gap for every repo that uses the guard. It is a request to the gstack Captain, through the Captain.
 2. **Or move the manifests out of the refused trees.** For example, use `manifests/sealed-<set>.json` and `manifests/protected.json`, and keep every `sealed/` and `protected/` folder refused. A folder named `sealed` under `manifests/` would be refused too. This needs no gstack change, but it changes the plan's layout, which the M2b unit and the plan would have to adopt.
 
 Until one of these lands, a unit that commits a manifest under `sealed/` or `protected/` gets SEALED_OUTPUT_REFUSED.

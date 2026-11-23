@@ -1,0 +1,76 @@
+diff --git a/pkg/controllers/management/auth/project_cluster/common.go b/pkg/controllers/management/auth/project_cluster/common.go
+index 6c013d3..d40b4b0 100644
+--- a/pkg/controllers/management/auth/project_cluster/common.go
++++ b/pkg/controllers/management/auth/project_cluster/common.go
+@@ -29,6 +29,10 @@ const (
+ 	clusterContext                  = "cluster"
+ )
+ 
++// projectOwnerVerbs deliberately excludes "updatepsa" so project owners cannot relax Pod Security Admission
++// on their namespaces and run privileged workloads.
++var projectOwnerVerbs = []string{"get", "update", "delete", "patch", "create", "list", "watch", "deletecollection"}
++
+ var crtbCreatorOwnerAnnotations = map[string]string{creatorOwnerBindingAnnotation: "true"}
+ 
+ func deleteNamespace(controller string, nsName string, nsClient corev1.NamespaceClient) error {
+@@ -108,7 +112,7 @@ func createProjectMembershipRoles(project *apisv3.Project, roleController crbacv
+ 				APIGroups:     []string{apisv3.SchemeGroupVersion.Group},
+ 				Resources:     []string{apisv3.ProjectResourceName},
+ 				ResourceNames: []string{project.Name},
+-				Verbs:         []string{rbacv1.VerbAll},
++				Verbs:         projectOwnerVerbs,
+ 			},
+ 		},
+ 	}
+diff --git a/pkg/controllers/management/auth/project_cluster/common_test.go b/pkg/controllers/management/auth/project_cluster/common_test.go
+index 3d665af..b51830c 100644
+--- a/pkg/controllers/management/auth/project_cluster/common_test.go
++++ b/pkg/controllers/management/auth/project_cluster/common_test.go
+@@ -70,7 +70,7 @@ func TestCreateProjectMembershipRoles(t *testing.T) {
+ 				APIGroups:     []string{"management.cattle.io"},
+ 				Resources:     []string{"projects"},
+ 				ResourceNames: []string{"test-project"},
+-				Verbs:         []string{"*"},
++				Verbs:         []string{"get", "update", "delete", "patch", "create", "list", "watch", "deletecollection"},
+ 			},
+ 		},
+ 	}
+diff --git a/pkg/controllers/management/auth/project_cluster/project_owner_psa_test.go b/pkg/controllers/management/auth/project_cluster/project_owner_psa_test.go
+new file mode 100644
+index 0000000..5a7fe96
+--- /dev/null
++++ b/pkg/controllers/management/auth/project_cluster/project_owner_psa_test.go
+@@ -0,0 +1,33 @@
++package project_cluster
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++	rbacv1 "k8s.io/api/rbac/v1"
++	"k8s.io/apiserver/pkg/authorization/authorizer"
++	"k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac"
++)
++
++func TestProjectOwnerRoleCannotUpdatePSA(t *testing.T) {
++	rule := rbacv1.PolicyRule{
++		APIGroups:     []string{"management.cattle.io"},
++		Resources:     []string{"projects"},
++		ResourceNames: []string{"test-project"},
++		Verbs:         projectOwnerVerbs,
++	}
++	attrs := func(verb string) authorizer.AttributesRecord {
++		return authorizer.AttributesRecord{
++			Verb:            verb,
++			APIGroup:        "management.cattle.io",
++			Resource:        "projects",
++			Name:            "test-project",
++			ResourceRequest: true,
++		}
++	}
++
++	assert.False(t, rbac.RulesAllow(attrs("updatepsa"), rule), "project owner must not be granted updatepsa")
++	for _, verb := range []string{"get", "update", "delete", "patch", "create", "list", "watch", "deletecollection"} {
++		assert.True(t, rbac.RulesAllow(attrs(verb), rule), "project owner must keep %s", verb)
++	}
++}

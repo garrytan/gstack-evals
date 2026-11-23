@@ -16,7 +16,8 @@
 #               `./setup --host claude --no-browser --loadout <GSTACK_LOADOUT>`
 #               result at the pin in the "gstack" context, the same seeded user
 #               as gstack-tar, then skill_routing and skill_contracts set off
-#               when GSTACK_OFF_KEYS=true.
+#               when GSTACK_OFF_KEYS=true, and each GSTACK_KEYS key=value pair set
+#               (the harness mechanics arms).
 #
 # The gstack checkout comes in as the named build context "gstack".
 
@@ -147,7 +148,9 @@ ENV HOME=/root \
     CLAUDE_CONFIG_DIR=/root/.claude
 COPY --from=gstack . /root/.claude/skills/gstack
 ARG GSTACK_LOADOUT=lite
-RUN cd /root/.claude/skills/gstack && ./setup --host claude --no-browser --loadout "$GSTACK_LOADOUT"
+# Extra setup flags (the harness mechanics gstack arms pass --skill-contracts). Empty for every other arm.
+ARG GSTACK_SETUP_FLAGS=""
+RUN cd /root/.claude/skills/gstack && ./setup --host claude --no-browser --loadout "$GSTACK_LOADOUT" $GSTACK_SETUP_FLAGS
 ARG GSTACK_UPDATE_CHECK=false
 ARG GSTACK_ONBOARDING_SEEN=true
 RUN set -eu; \
@@ -166,6 +169,27 @@ ARG GSTACK_OFF_KEYS=false
 RUN set -eu; \
     cfg=/root/.claude/skills/gstack/bin/gstack-config; \
     if [ "$GSTACK_OFF_KEYS" = true ]; then "$cfg" set skill_routing off; "$cfg" set skill_contracts off; fi
+# The harness mechanics hook arm: key=value pairs set with gstack's own config command, after the seeded user. Empty
+# (every other arm) sets nothing.
+ARG GSTACK_KEYS=""
+RUN set -eu; \
+    cfg=/root/.claude/skills/gstack/bin/gstack-config; \
+    for kv in $GSTACK_KEYS; do "$cfg" set "${kv%%=*}" "${kv#*=}"; done
+# The harness mechanics hook arm: a patch (base64) applied after setup to every installed copy of the file it names:
+# the checkout, the claude render and the ~/.claude/skills copy (skipped when it is a link into the render). Each
+# copy's git blob prints to /root/.gstack/hm-patched.tsv. Empty (every other arm) applies nothing.
+ARG GSTACK_PATCH_B64=""
+RUN set -eu; \
+    [ -n "$GSTACK_PATCH_B64" ] || exit 0; \
+    printf '%s' "$GSTACK_PATCH_B64" | base64 -d > /tmp/hm.patch; \
+    f=$(sed -n 's#^+++ b/##p' /tmp/hm.patch); \
+    : > /root/.gstack/hm-patched.tsv; \
+    for d in /root/.claude/skills/gstack /root/.gstack/render/claude /root/.claude/skills; do \
+      [ -L "$d/$f" ] && continue; \
+      (cd "$d" && git apply --unsafe-paths --directory=. /tmp/hm.patch); \
+      printf '%s\t%s\n' "$d/$f" "$(git hash-object "$d/$f")" >> /root/.gstack/hm-patched.tsv; \
+    done; \
+    rm /tmp/hm.patch
 # The same steps as gstack-build, with two differences. Only absolute symlinks
 # become copies: the checkout's own relative link (connect-chrome, tracked in
 # git as a link to open-gstack-browser) stays a link, because the pin's
@@ -174,9 +198,9 @@ RUN set -eu; \
 # settings.json each time it registers a hook, as settings.json.bak.<time>.<pid>.<random>,
 # and points settings.json.bak-latest at the newest; those rollback copies go.
 # After the tar is written, so nothing here can change it: gstack-config's view
-# of both switches, and the lite lock from the pin's own gstack-modules render
-# at setup's render path (setup's render is moved aside and put back, as
-# GEVA-254's install-pin.sh did).
+# of both switches, and the loadout's lock from the pin's own gstack-modules
+# render at setup's render path (a lite setup's render is moved aside and put
+# back, as GEVA-254's install-pin.sh did; a full setup renders nothing there).
 RUN set -eu; \
     mapfile -d '' links < <(find /root/.claude -type l -lname '/*' -not -path '*/node_modules/*' -print0); \
     for link in "${links[@]}"; do \
@@ -198,10 +222,10 @@ RUN set -eu; \
       -C /root -cf /out/arm.tar .claude .gstack; \
     g=/root/.claude/skills/gstack; render=/root/.gstack/render/claude; \
     for k in skill_routing skill_contracts; do printf '%s\t%s\n' "$k" "$("$g/bin/gstack-config" get "$k")"; done > /out/gstack-config.tsv; \
-    mv "$render" "$render.setup"; \
+    if [ -e "$render" ]; then mv "$render" "$render.setup"; fi; \
     (cd "$g" && bin/gstack-modules render --host claude --loadout "$GSTACK_LOADOUT" --out-dir "$render" > /dev/null); \
     cp "$render/loadout.lock.json" /out/loadout.lock.json; \
-    rm -rf "$render"; mv "$render.setup" "$render"
+    rm -rf "$render"; if [ -e "$render.setup" ]; then mv "$render.setup" "$render"; fi
 
 FROM scratch AS gstack-l1-tar
 COPY --from=gstack-l1-build /out/ /

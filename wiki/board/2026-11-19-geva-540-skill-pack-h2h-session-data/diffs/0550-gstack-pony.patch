@@ -1,0 +1,211 @@
+diff --git a/src/Quartz.Tests.Unit/Simpl/TaskSchedulingThreadPoolTest.cs b/src/Quartz.Tests.Unit/Simpl/TaskSchedulingThreadPoolTest.cs
+index 3ccdc89..15a01c7 100644
+--- a/src/Quartz.Tests.Unit/Simpl/TaskSchedulingThreadPoolTest.cs
++++ b/src/Quartz.Tests.Unit/Simpl/TaskSchedulingThreadPoolTest.cs
+@@ -1,4 +1,4 @@
+-using Quartz.Simpl;
++﻿using Quartz.Simpl;
+ 
+ namespace Quartz.Tests.Unit.Simpl;
+ 
+@@ -60,6 +60,25 @@ public class TaskSchedulingThreadPoolTest
+        
+     }
+ 
++    [Test]
++    public void DedicatedThreadPoolStopsItsThreadsOnShutdown()
++    {
++        var threadPool = new DedicatedThreadPool { MaxConcurrency = 2 };
++        threadPool.Initialize();
++
++        using var jobDone = new ManualResetEventSlim();
++        Assert.That(threadPool.RunInThread(() => { jobDone.Set(); return Task.CompletedTask; }), Is.True);
++        Assert.That(jobDone.Wait(TimeSpan.FromSeconds(5)), Is.True);
++
++        threadPool.Shutdown(waitForJobsToComplete: true);
++
++        var threads = (Thread[]) typeof(Quartz.Util.QueuedTaskScheduler)
++            .GetField("_threads", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
++            .GetValue(threadPool.Scheduler)!;
++        Assert.That(threads, Has.Length.EqualTo(2));
++        Assert.That(threads.All(t => t.Join(TimeSpan.FromSeconds(5))), Is.True);
++    }
++
+     private class CustomTaskSchedulingThreadPool : TaskSchedulingThreadPool
+     {
+         private readonly TaskScheduler taskScheduler;
+@@ -70,7 +89,7 @@ public class TaskSchedulingThreadPoolTest
+             this.taskScheduler = taskScheduler;
+         }
+ 
+-        protected override TaskScheduler GetDefaultScheduler()
++        protected override TaskScheduler GetDefaultScheduler(CancellationToken cancellationToken)
+         {
+             return taskScheduler;
+         }
+diff --git a/src/Quartz/Simpl/DedicatedThreadPool.cs b/src/Quartz/Simpl/DedicatedThreadPool.cs
+index 3ee9082..b7f9b45 100644
+--- a/src/Quartz/Simpl/DedicatedThreadPool.cs
++++ b/src/Quartz/Simpl/DedicatedThreadPool.cs
+@@ -12,8 +12,8 @@ internal sealed class DedicatedThreadPool : TaskSchedulingThreadPool
+     /// Returns a QueuedTaskScheduler
+     /// </summary>
+     /// <returns>QueuedTaskScheduler with threadCount == MaxConcurrency</returns>
+-    protected override TaskScheduler GetDefaultScheduler()
++    protected override TaskScheduler GetDefaultScheduler(CancellationToken cancellationToken)
+     {
+-        return new QueuedTaskScheduler(MaxConcurrency);
++        return new QueuedTaskScheduler(MaxConcurrency, cancellationToken: cancellationToken);
+     }
+ }
+\ No newline at end of file
+diff --git a/src/Quartz/Simpl/DefaultThreadPool.cs b/src/Quartz/Simpl/DefaultThreadPool.cs
+index c413deb..d9b6252 100644
+--- a/src/Quartz/Simpl/DefaultThreadPool.cs
++++ b/src/Quartz/Simpl/DefaultThreadPool.cs
+@@ -9,7 +9,7 @@ public sealed class DefaultThreadPool : TaskSchedulingThreadPool
+     /// Returns TaskScheduler.Default
+     /// </summary>
+     /// <returns>TaskScheduler.Default</returns>
+-    protected override TaskScheduler GetDefaultScheduler()
++    protected override TaskScheduler GetDefaultScheduler(CancellationToken cancellationToken)
+     {
+         return TaskScheduler.Default;
+     }
+diff --git a/src/Quartz/Simpl/TaskSchedulingThreadPool.cs b/src/Quartz/Simpl/TaskSchedulingThreadPool.cs
+index 5ed0c5e..4a62b6f 100644
+--- a/src/Quartz/Simpl/TaskSchedulingThreadPool.cs
++++ b/src/Quartz/Simpl/TaskSchedulingThreadPool.cs
+@@ -80,11 +80,15 @@ public abstract class TaskSchedulingThreadPool : IThreadPool
+     /// The TaskScheduler is provided through this factory method instead of as a property
+     /// so that it can take respect MaxConcurrency changes prior to initialization time
+     /// </remarks>
++    /// <param name="cancellationToken">
++    /// Token that is signaled when the thread pool is shut down; implementers that own
++    /// resources such as dedicated threads should release them when it is signaled.
++    /// </param>
+     /// <returns>
+     /// The default TaskScheduler the thread pool will use if users do
+     /// not specify a different TaskScheduler prior to initialization
+     /// </returns>
+-    protected abstract TaskScheduler GetDefaultScheduler();
++    protected abstract TaskScheduler GetDefaultScheduler(CancellationToken cancellationToken);
+ 
+     /// <summary>
+     /// Gets or sets the maximum number of thread pool tasks which can be
+@@ -140,7 +144,7 @@ public abstract class TaskSchedulingThreadPool : IThreadPool
+         // If this is undesirable, the scheduler should be set here unconditionally.
+         if (Scheduler is null)
+         {
+-            Scheduler = GetDefaultScheduler();
++            Scheduler = GetDefaultScheduler(shutdownCancellation.Token);
+         }
+ 
+         // Initialize the concurrency semaphore with the proper initial count
+diff --git a/src/Quartz/Util/QueuedTaskScheduler.cs b/src/Quartz/Util/QueuedTaskScheduler.cs
+index 3ec5938..741ab9b 100644
+--- a/src/Quartz/Util/QueuedTaskScheduler.cs
++++ b/src/Quartz/Util/QueuedTaskScheduler.cs
+@@ -45,9 +45,6 @@ internal sealed class QueuedTaskScheduler : TaskScheduler, IDisposable
+         }
+     }
+ 
+-    /// <summary>Cancellation token used for disposal.</summary>
+-    private readonly CancellationTokenSource _disposeCancellation = new CancellationTokenSource();
+-
+     /// <summary>
+     /// The maximum allowed concurrency level of this scheduler.  If custom threads are
+     /// used, this represents the number of created threads.
+@@ -79,11 +76,13 @@ internal sealed class QueuedTaskScheduler : TaskScheduler, IDisposable
+     /// <param name="threadName">The name to use for each of the created threads.</param>
+     /// <param name="useForegroundThreads">A Boolean value that indicates whether to use foreground threads instead of background.</param>
+     /// <param name="threadPriority">The priority to assign to each thread.</param>
++    /// <param name="cancellationToken">When signaled, the scheduler is shut down as if <see cref="Dispose"/> was called.</param>
+     public QueuedTaskScheduler(
+         int threadCount,
+         string threadName = "",
+         bool useForegroundThreads = false,
+-        ThreadPriority threadPriority = ThreadPriority.Normal)
++        ThreadPriority threadPriority = ThreadPriority.Normal,
++        CancellationToken cancellationToken = default)
+     {
+         // Validates arguments (some validation is left up to the Thread type itself).
+         // If the thread count is 0, default to the number of logical processors.
+@@ -123,6 +122,8 @@ internal sealed class QueuedTaskScheduler : TaskScheduler, IDisposable
+         {
+             thread.Start();
+         }
++
++        cancellationToken.Register(static state => ((QueuedTaskScheduler) state!).Dispose(), this);
+     }
+ 
+     /// <summary>The dispatch loop run by all threads in this scheduler.</summary>
+@@ -132,12 +133,13 @@ internal sealed class QueuedTaskScheduler : TaskScheduler, IDisposable
+         try
+         {
+             // If a thread abort occurs, we'll try to reset it and continue running.
+-            while (true)
++            // Once shut down, the remaining queued tasks are drained and the thread exits.
++            while (!_blockingTaskQueue.IsCompleted)
+             {
+                 try
+                 {
+                     // For each task queued to the scheduler, try to execute it.
+-                    foreach (var task in _blockingTaskQueue.GetConsumingEnumerable(_disposeCancellation.Token))
++                    foreach (var task in _blockingTaskQueue.GetConsumingEnumerable())
+                     {
+                         TryExecuteTask(task);
+                     }
+@@ -156,11 +158,6 @@ internal sealed class QueuedTaskScheduler : TaskScheduler, IDisposable
+                 }
+             }
+         }
+-        catch (OperationCanceledException)
+-        {
+-            // If the scheduler is disposed, the cancellation token will be set and
+-            // we'll receive an OperationCanceledException.  That OCE should not crash the process.
+-        }
+         finally
+         {
+             _taskProcessingThread.Value = false;
+@@ -177,14 +174,26 @@ internal sealed class QueuedTaskScheduler : TaskScheduler, IDisposable
+     /// <param name="task">The task to be queued.</param>
+     protected override void QueueTask(Task task)
+     {
+-        // If we've been disposed, no one should be queueing
+-        if (_disposeCancellation.IsCancellationRequested)
++        if (!_blockingTaskQueue.IsAddingCompleted)
+         {
+-            Throw.ObjectDisposedException(GetType().Name);
++            try
++            {
++                _blockingTaskQueue.Add(task);
++                return;
++            }
++            catch (InvalidOperationException)
++            {
++                // shut down concurrently
++            }
+         }
+ 
+-        // add the task to the blocking queue
+-        _blockingTaskQueue.Add(task);
++        // Our threads are gone after shutdown; still run late work (e.g. continuations of
++        // jobs that were executing during shutdown) so that nothing awaiting it hangs.
++        ThreadPool.UnsafeQueueUserWorkItem(static state =>
++        {
++            var (scheduler, t) = ((QueuedTaskScheduler, Task)) state!;
++            scheduler.TryExecuteTask(t);
++        }, (this, task));
+     }
+ 
+     /// <summary>Tries to execute a task synchronously on the current thread.</summary>
+@@ -215,6 +224,6 @@ internal sealed class QueuedTaskScheduler : TaskScheduler, IDisposable
+     /// <summary>Initiates shutdown of the scheduler.</summary>
+     public void Dispose()
+     {
+-        _disposeCancellation.Cancel();
++        _blockingTaskQueue.CompleteAdding();
+     }
+ }
+\ No newline at end of file

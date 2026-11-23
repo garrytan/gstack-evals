@@ -13,9 +13,9 @@ links: [wiki/README.md, scripts/wiki.ts]
 
 # Plans and research live in wiki/
 
-On 2026-10-28 Garry wrote to the gstack-evals Captain:
+On 2026-10-28 Garry asked the gstack-evals Captain for a repo home for plans and research.
 
-> "I think you should make sure you save planning and research docs to /designs or even invent a new GStack convention where /wiki stores the 'artifactory style message board' for the agent swarm"
+He wanted them in /designs, or in a new gstack /wiki convention that serves as a shared board for the agent crews.
 
 The Captain (GSTA-2) picked `wiki/` over `designs/`, with plans and designs inside it. GSTA-6 wrote the convention and its check. The rules are in [README.md](../README.md); this post records why they look the way they do.
 
@@ -39,4 +39,4 @@ The Captain (GSTA-2) picked `wiki/` over `designs/`, with plans and designs insi
 
 ## Next
 
-The Captain hands the spec to GStack Minder for gstack-wide adoption. Everything in README.md above its "In this repo" section is written to work unchanged in any repo, so a gstack skill such as /learn, /retro, /ship or /autoplan could post to any repo's wiki/.
+The Captain hands the spec to the gstack Captain for gstack-wide adoption. Everything in README.md above its "In this repo" section is written to work unchanged in any repo, so a gstack skill such as /learn, /retro, /ship or /autoplan could post to any repo's wiki/.

@@ -1,0 +1,9 @@
+{
+  "listing": "The following skills are available for use with the Skill tool:\n\n- plugin-authoring: Make a mod: a change to Claude's own interface or behaviour, such as a panel or pane that stays beside the chat and updates, a band, status line, toast, slash command, or hook on tool calls. Use to make, change or debug a mod or its hooks module.\n",
+  "user": [
+    "You are working in a Linux container. Complete the task described below. Work on your own until it is done; nobody is available to answer questions. When you are done, stop. The state of the container when you stop is what gets graded.\n\n<task>\n[b1-session none-stop] [b1-script stop] add() in calc.py returns the difference of its arguments. Make it return their sum.\n</task>\n\nWhen you finish, end your final message with one line: STATUS: FIXED or STATUS: NOT FIXED.\n"
+  ],
+  "loaded": null,
+  "gstack_files": 0,
+  "requests": 3
+}

@@ -1,0 +1,313 @@
+diff --git a/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go b/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
+index 56b17b5..eb305e5 100644
+--- a/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
++++ b/app/kuma-dp/pkg/dataplane/dnsproxy/metrics.go
+@@ -2,6 +2,8 @@ package dnsproxy
+ 
+ import (
+ 	"github.com/prometheus/client_golang/prometheus"
++
++	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/selfmetrics"
+ )
+ 
+ type metrics struct {
+@@ -20,16 +22,17 @@ func newMetrics() *metrics {
+ 		Name: "kuma_dp_dns_upstream_request_duration_seconds",
+ 		Help: "The duration of the proxied requests.",
+ 	})
+-	prometheus.MustRegister(upstreamRequestDuration)
++	selfmetrics.Registry.MustRegister(upstreamRequestDuration)
+ 	requestDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
+ 		Name: "kuma_dp_dns_request_duration_seconds",
+ 		Help: "The duration of the request (inclusive of request that use internal DNS map).",
+ 	})
+-	prometheus.MustRegister(requestDuration)
++	selfmetrics.Registry.MustRegister(requestDuration)
+ 	upstreamRequestFailureCount := prometheus.NewCounter(prometheus.CounterOpts{
+ 		Name: "kuma_dp_dns_upstream_request_failure_count",
+ 		Help: "The total number of failed upstream requests.",
+ 	})
++	selfmetrics.Registry.MustRegister(upstreamRequestFailureCount)
+ 	m = &metrics{
+ 		RequestDuration:             requestDuration,
+ 		UpstreamRequestDuration:     upstreamRequestDuration,
+diff --git a/app/kuma-dp/pkg/dataplane/meshmetrics/component.go b/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
+index e207929..1eb977e 100644
+--- a/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
++++ b/app/kuma-dp/pkg/dataplane/meshmetrics/component.go
+@@ -255,6 +255,9 @@ func (m *Manager) reconfigureBackend(ctx context.Context, backendName string, ba
+ }
+ 
+ func (m *Manager) Step(configuration dpapi.MeshMetricDpConfig) error {
++	if m.hijacker != nil {
++		m.hijacker.SetExtraLabels(configuration.Observability.Metrics.ExtraLabels)
++	}
+ 	newApplicationsToScrape := m.mapApplicationToApplicationToScrape(configuration.Observability.Metrics.Applications, configuration.Observability.Metrics.Sidecar, configuration.Observability.Metrics.ExtraLabels)
+ 	m.configurePrometheus(newApplicationsToScrape, getPrometheusBackends(configuration.Observability.Metrics.Backends))
+ 	return m.configureOpenTelemetryExporter(m.ctx, newApplicationsToScrape, getOpenTelemetryBackends(configuration.Observability.Metrics.Backends))
+diff --git a/app/kuma-dp/pkg/dataplane/metrics/server.go b/app/kuma-dp/pkg/dataplane/metrics/server.go
+index be6e6da..df8e6ac 100644
+--- a/app/kuma-dp/pkg/dataplane/metrics/server.go
++++ b/app/kuma-dp/pkg/dataplane/metrics/server.go
+@@ -26,6 +26,7 @@ import (
+ 	"go.opentelemetry.io/otel/exporters/prometheus"
+ 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+ 
++	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/selfmetrics"
+ 	"github.com/kumahq/kuma/v2/pkg/core"
+ 	"github.com/kumahq/kuma/v2/pkg/core/runtime/component"
+ 	v1alpha12 "github.com/kumahq/kuma/v2/pkg/plugins/policies/meshmetric/api/v1alpha1"
+@@ -111,6 +112,7 @@ type Hijacker struct {
+ 	applicationsToScrape []ApplicationToScrape
+ 	producer             *AggregatedProducer
+ 	prometheusHandler    http.Handler
++	selfMetrics          *selfmetrics.LabelingGatherer
+ }
+ 
+ func createHttpClient(isUsingTransparentProxy bool, sourceAddress *net.TCPAddr) http.Client {
+@@ -135,9 +137,16 @@ func New(socketPath string, applicationsToScrape []ApplicationToScrape, isUsingT
+ 		httpClientIPv6:       createHttpClient(isUsingTransparentProxy, inPassThroughIPv6),
+ 		applicationsToScrape: applicationsToScrape,
+ 		producer:             producer,
++		selfMetrics:          selfmetrics.DefaultGatherer,
+ 	}
+ }
+ 
++// SetExtraLabels sets labels (e.g. workload, mesh, zone) that are added to metrics
++// emitted by kuma-dp itself, so they match labels of Envoy and application metrics.
++func (s *Hijacker) SetExtraLabels(labels map[string]string) {
++	s.selfMetrics.SetLabels(labels)
++}
++
+ func (s *Hijacker) Start(stop <-chan struct{}) error {
+ 	_, err := os.Stat(s.socketPath)
+ 	if err == nil {
+@@ -177,7 +186,7 @@ func (s *Hijacker) Start(stop <-chan struct{}) error {
+ 		return err
+ 	}
+ 	sdkmetric.NewMeterProvider(sdkmetric.WithReader(promExporter))
+-	s.prometheusHandler = promhttp.HandlerFor(prom_client.DefaultGatherer, promhttp.HandlerOpts{
++	s.prometheusHandler = promhttp.HandlerFor(prom_client.Gatherers{prom_client.DefaultGatherer, s.selfMetrics}, promhttp.HandlerOpts{
+ 		ErrorHandling: promhttp.ContinueOnError,
+ 	})
+ 
+diff --git a/app/kuma-dp/pkg/dataplane/selfmetrics/selfmetrics.go b/app/kuma-dp/pkg/dataplane/selfmetrics/selfmetrics.go
+new file mode 100644
+index 0000000..b99baa9
+--- /dev/null
++++ b/app/kuma-dp/pkg/dataplane/selfmetrics/selfmetrics.go
+@@ -0,0 +1,98 @@
++// Package selfmetrics contains the Prometheus registry used for metrics
++// emitted by the kuma-dp process itself (e.g. DNS proxy metrics).
++//
++// Unlike Envoy or application metrics, these metrics are not scraped and
++// translated through the OpenTelemetry pipeline, so they don't automatically
++// receive the extra labels (like `kuma_workload`) configured by MeshMetric.
++// The LabelingGatherer adds those labels when the metrics are gathered.
++package selfmetrics
++
++import (
++	"sort"
++	"sync"
++
++	"github.com/prometheus/client_golang/prometheus"
++	io_prometheus_client "github.com/prometheus/client_model/go"
++	"github.com/prometheus/otlptranslator"
++)
++
++// Registry is the registry where metrics emitted by kuma-dp itself should be registered.
++var Registry = prometheus.NewRegistry()
++
++// DefaultGatherer gathers metrics from Registry and decorates them with extra labels.
++var DefaultGatherer = NewLabelingGatherer(Registry)
++
++// LabelingGatherer wraps a Gatherer and adds a configurable set of labels
++// to every gathered metric. Labels already present on a metric are not overridden.
++type LabelingGatherer struct {
++	gatherer prometheus.Gatherer
++	mu       sync.RWMutex
++	labels   []*io_prometheus_client.LabelPair
++}
++
++var _ prometheus.Gatherer = &LabelingGatherer{}
++
++func NewLabelingGatherer(gatherer prometheus.Gatherer) *LabelingGatherer {
++	return &LabelingGatherer{gatherer: gatherer}
++}
++
++// SetLabels replaces the set of labels added to the gathered metrics.
++// Label names are normalized to be Prometheus compliant (e.g. "kuma.workload" -> "kuma_workload"),
++// the same way OpenTelemetry attributes are translated for Envoy and application metrics.
++func (g *LabelingGatherer) SetLabels(labels map[string]string) {
++	namer := otlptranslator.LabelNamer{}
++	byName := map[string]string{}
++	for k, v := range labels {
++		if v == "" {
++			continue
++		}
++		name, err := namer.Build(k)
++		if err != nil {
++			continue
++		}
++		byName[name] = v
++	}
++	pairs := make([]*io_prometheus_client.LabelPair, 0, len(byName))
++	for name, value := range byName {
++		pairs = append(pairs, &io_prometheus_client.LabelPair{Name: &name, Value: &value})
++	}
++	sort.Slice(pairs, func(i, j int) bool { return pairs[i].GetName() < pairs[j].GetName() })
++
++	g.mu.Lock()
++	defer g.mu.Unlock()
++	g.labels = pairs
++}
++
++func (g *LabelingGatherer) Gather() ([]*io_prometheus_client.MetricFamily, error) {
++	families, err := g.gatherer.Gather()
++
++	g.mu.RLock()
++	extra := g.labels
++	g.mu.RUnlock()
++
++	if len(extra) == 0 {
++		return families, err
++	}
++
++	for _, family := range families {
++		for _, metric := range family.GetMetric() {
++			existing := map[string]struct{}{}
++			for _, l := range metric.GetLabel() {
++				existing[l.GetName()] = struct{}{}
++			}
++			for _, l := range extra {
++				if _, ok := existing[l.GetName()]; ok {
++					continue
++				}
++				metric.Label = append(metric.Label, &io_prometheus_client.LabelPair{
++					Name:  l.Name,
++					Value: l.Value,
++				})
++			}
++			sort.Slice(metric.Label, func(i, j int) bool {
++				return metric.Label[i].GetName() < metric.Label[j].GetName()
++			})
++		}
++	}
++	return families, err
++}
+diff --git a/app/kuma-dp/pkg/dataplane/selfmetrics/selfmetrics_test.go b/app/kuma-dp/pkg/dataplane/selfmetrics/selfmetrics_test.go
+new file mode 100644
+index 0000000..62d476f
+--- /dev/null
++++ b/app/kuma-dp/pkg/dataplane/selfmetrics/selfmetrics_test.go
+@@ -0,0 +1,80 @@
++package selfmetrics_test
++
++import (
++	. "github.com/onsi/ginkgo/v2"
++	. "github.com/onsi/gomega"
++	"github.com/prometheus/client_golang/prometheus"
++
++	"github.com/kumahq/kuma/v2/app/kuma-dp/pkg/dataplane/selfmetrics"
++)
++
++var _ = Describe("LabelingGatherer", func() {
++	labelsOf := func(g prometheus.Gatherer) map[string]string {
++		families, err := g.Gather()
++		Expect(err).ToNot(HaveOccurred())
++		Expect(families).To(HaveLen(1))
++		Expect(families[0].GetMetric()).To(HaveLen(1))
++		result := map[string]string{}
++		for _, l := range families[0].GetMetric()[0].GetLabel() {
++			result[l.GetName()] = l.GetValue()
++		}
++		return result
++	}
++
++	It("should add extra labels to gathered metrics", func() {
++		// given
++		registry := prometheus.NewRegistry()
++		histogram := prometheus.NewHistogram(prometheus.HistogramOpts{
++			Name: "kuma_dp_dns_request_duration_seconds",
++		})
++		registry.MustRegister(histogram)
++		histogram.Observe(1)
++		gatherer := selfmetrics.NewLabelingGatherer(registry)
++
++		// then no labels by default
++		Expect(labelsOf(gatherer)).To(BeEmpty())
++
++		// when
++		gatherer.SetLabels(map[string]string{
++			"kuma.workload":         "kri_wl_default_zone-1_kuma-demo_demo-app_",
++			"k8s_kuma_io_namespace": "kuma-demo",
++			"kuma_io_zone":          "zone-1",
++			"mesh":                  "default",
++			"empty":                 "",
++		})
++
++		// then
++		Expect(labelsOf(gatherer)).To(Equal(map[string]string{
++			"kuma_workload":         "kri_wl_default_zone-1_kuma-demo_demo-app_",
++			"k8s_kuma_io_namespace": "kuma-demo",
++			"kuma_io_zone":          "zone-1",
++			"mesh":                  "default",
++		}))
++
++		// when labels are reset
++		gatherer.SetLabels(nil)
++
++		// then
++		Expect(labelsOf(gatherer)).To(BeEmpty())
++	})
++
++	It("should not override existing labels", func() {
++		// given
++		registry := prometheus.NewRegistry()
++		counter := prometheus.NewCounter(prometheus.CounterOpts{
++			Name:        "some_counter",
++			ConstLabels: prometheus.Labels{"mesh": "original"},
++		})
++		registry.MustRegister(counter)
++		gatherer := selfmetrics.NewLabelingGatherer(registry)
++
++		// when
++		gatherer.SetLabels(map[string]string{"mesh": "other", "kuma.workload": "wl"})
++
++		// then
++		Expect(labelsOf(gatherer)).To(Equal(map[string]string{
++			"mesh":          "original",
++			"kuma_workload": "wl",
++		}))
++	})
++})
+diff --git a/app/kuma-dp/pkg/dataplane/selfmetrics/suite_test.go b/app/kuma-dp/pkg/dataplane/selfmetrics/suite_test.go
+new file mode 100644
+index 0000000..12e0763
+--- /dev/null
++++ b/app/kuma-dp/pkg/dataplane/selfmetrics/suite_test.go
+@@ -0,0 +1,11 @@
++package selfmetrics_test
++
++import (
++	"testing"
++
++	"github.com/kumahq/kuma/v2/pkg/test"
++)
++
++func TestSelfMetrics(t *testing.T) {
++	test.RunSpecs(t, "Self Metrics")
++}
+diff --git a/test/e2e_env/kubernetes/meshmetric/meshmetric.go b/test/e2e_env/kubernetes/meshmetric/meshmetric.go
+index 012d570..ccfaf0b 100644
+--- a/test/e2e_env/kubernetes/meshmetric/meshmetric.go
++++ b/test/e2e_env/kubernetes/meshmetric/meshmetric.go
+@@ -420,6 +420,8 @@ func MeshMetric() {
+ 			g.Expect(stdout).To(ContainSubstring("kuma_dp_dns_request_duration_seconds"))
+ 			// check if workload attribute was added (KRI format with workload name from ServiceAccount)
+ 			g.Expect(stdout).To(ContainSubstring(fmt.Sprintf("kuma_workload=\"kri_wl_%s_default_%s_default_\"", mainMesh, namespace)))
++			// DNS metrics emitted by kuma-dp should have the workload label as well
++			g.Expect(stdout).To(MatchRegexp(fmt.Sprintf(`kuma_dp_dns_request_duration_seconds_count\{[^}]*kuma_workload="kri_wl_%s_default_%s_default_"`, mainMesh, namespace)))
+ 		}).Should(Succeed())
+ 	})
+ 

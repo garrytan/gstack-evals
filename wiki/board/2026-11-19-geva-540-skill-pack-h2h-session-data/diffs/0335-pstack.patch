@@ -1,0 +1,148 @@
+diff --git a/plugins/codex/scripts/codex-companion.mjs b/plugins/codex/scripts/codex-companion.mjs
+index 201d1c7..9f1e8bc 100644
+--- a/plugins/codex/scripts/codex-companion.mjs
++++ b/plugins/codex/scripts/codex-companion.mjs
+@@ -35,6 +35,8 @@ import {
+ import {
+   buildSingleJobSnapshot,
+   buildStatusSnapshot,
++  filterJobsForCurrentSession,
++  getCurrentSessionId,
+   readStoredJob,
+   resolveCancelableJob,
+   resolveResultJob,
+@@ -47,8 +49,7 @@ import {
+   createJobRecord,
+   createProgressReporter,
+   nowIso,
+-  runTrackedJob,
+-  SESSION_ID_ENV
++  runTrackedJob
+ } from "./lib/tracked-jobs.mjs";
+ import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
+ import {
+@@ -310,7 +311,9 @@ async function waitForSingleJobSnapshot(cwd, reference, options = {}) {
+ 
+ async function resolveLatestTrackedTaskThread(cwd, options = {}) {
+   const workspaceRoot = resolveWorkspaceRoot(cwd);
+-  const jobs = sortJobsNewestFirst(listJobs(workspaceRoot)).filter((job) => job.id !== options.excludeJobId);
++  const jobs = sortJobsNewestFirst(filterJobsForCurrentSession(listJobs(workspaceRoot))).filter(
++    (job) => job.id !== options.excludeJobId
++  );
+   const activeTask = jobs.find((job) => job.jobClass === "task" && (job.status === "queued" || job.status === "running"));
+   if (activeTask) {
+     throw new Error(`Task ${activeTask.id} is still running. Use /codex:status before continuing it.`);
+@@ -321,6 +324,9 @@ async function resolveLatestTrackedTaskThread(cwd, options = {}) {
+     return { id: trackedTask.threadId };
+   }
+ 
++  if (getCurrentSessionId()) {
++    return null;
++  }
+   return findLatestTaskThread(workspaceRoot);
+ }
+ 
+@@ -862,16 +868,11 @@ function handleTaskResumeCandidate(argv) {
+ 
+   const cwd = resolveCommandCwd(options);
+   const workspaceRoot = resolveCommandWorkspace(options);
+-  const sessionId = process.env[SESSION_ID_ENV] ?? null;
+-  const jobs = sortJobsNewestFirst(listJobs(workspaceRoot));
++  const sessionId = getCurrentSessionId();
++  const jobs = sortJobsNewestFirst(filterJobsForCurrentSession(listJobs(workspaceRoot)));
+   const candidate =
+     jobs.find(
+-      (job) =>
+-        job.jobClass === "task" &&
+-        job.threadId &&
+-        job.status !== "queued" &&
+-        job.status !== "running" &&
+-        (!sessionId || job.sessionId === sessionId)
++      (job) => job.jobClass === "task" && job.threadId && job.status !== "queued" && job.status !== "running"
+     ) ?? null;
+ 
+   const payload = {
+diff --git a/plugins/codex/scripts/lib/job-control.mjs b/plugins/codex/scripts/lib/job-control.mjs
+index 74ba7f7..19621a4 100644
+--- a/plugins/codex/scripts/lib/job-control.mjs
++++ b/plugins/codex/scripts/lib/job-control.mjs
+@@ -12,11 +12,11 @@ export function sortJobsNewestFirst(jobs) {
+   return [...jobs].sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
+ }
+ 
+-function getCurrentSessionId(options = {}) {
++export function getCurrentSessionId(options = {}) {
+   return options.env?.[SESSION_ID_ENV] ?? process.env[SESSION_ID_ENV] ?? null;
+ }
+ 
+-function filterJobsForCurrentSession(jobs, options = {}) {
++export function filterJobsForCurrentSession(jobs, options = {}) {
+   const sessionId = getCurrentSessionId(options);
+   if (!sessionId) {
+     return jobs;
+diff --git a/tests/runtime.test.mjs b/tests/runtime.test.mjs
+index 6000c89..a98373f 100644
+--- a/tests/runtime.test.mjs
++++ b/tests/runtime.test.mjs
+@@ -217,6 +217,61 @@ test("task --resume-last resumes the latest persisted task thread", () => {
+   assert.equal(result.stdout, "Resumed the prior run.\nFollow-up prompt accepted.\n");
+ });
+ 
++test("task --resume-last does not resume a task thread from another Claude session", () => {
++  const repo = makeTempDir();
++  const binDir = makeTempDir();
++  installFakeCodex(binDir);
++  initGitRepo(repo);
++  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
++  run("git", ["add", "README.md"], { cwd: repo });
++  run("git", ["commit", "-m", "init"], { cwd: repo });
++
++  const firstRun = run("node", [SCRIPT, "task", "initial task"], {
++    cwd: repo,
++    env: { ...buildEnv(binDir), CODEX_COMPANION_SESSION_ID: "sess-other" }
++  });
++  assert.equal(firstRun.status, 0, firstRun.stderr);
++
++  const currentEnv = { ...buildEnv(binDir), CODEX_COMPANION_SESSION_ID: "sess-current" };
++  const candidate = run("node", [SCRIPT, "task-resume-candidate", "--json"], { cwd: repo, env: currentEnv });
++  assert.equal(candidate.status, 0, candidate.stderr);
++  assert.equal(JSON.parse(candidate.stdout).available, false);
++
++  const result = run("node", [SCRIPT, "task", "--resume-last", "follow up"], { cwd: repo, env: currentEnv });
++  assert.notEqual(result.status, 0);
++  assert.match(result.stderr, /No previous Codex task thread was found for this repository\./);
++});
++
++test("task --resume-last ignores running tasks from another Claude session", () => {
++  const repo = makeTempDir();
++  const binDir = makeTempDir();
++  installFakeCodex(binDir);
++  initGitRepo(repo);
++  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
++  run("git", ["add", "README.md"], { cwd: repo });
++  run("git", ["commit", "-m", "init"], { cwd: repo });
++
++  const currentEnv = { ...buildEnv(binDir), CODEX_COMPANION_SESSION_ID: "sess-current" };
++  const firstRun = run("node", [SCRIPT, "task", "initial task"], { cwd: repo, env: currentEnv });
++  assert.equal(firstRun.status, 0, firstRun.stderr);
++
++  const statePath = path.join(resolveStateDir(repo), "state.json");
++  const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
++  state.jobs.unshift({
++    id: "task-other-running",
++    status: "running",
++    title: "Codex Task",
++    jobClass: "task",
++    sessionId: "sess-other",
++    updatedAt: "2999-01-01T00:00:00.000Z"
++  });
++  fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
++
++  const result = run("node", [SCRIPT, "task", "--resume-last", "follow up"], { cwd: repo, env: currentEnv });
++  assert.equal(result.status, 0, result.stderr);
++  assert.equal(result.stdout, "Resumed the prior run.\nFollow-up prompt accepted.\n");
++});
++
+ test("task-resume-candidate returns the latest rescue thread from the current session", () => {
+   const workspace = makeTempDir();
+   const stateDir = resolveStateDir(workspace);

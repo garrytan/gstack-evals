@@ -1,0 +1,97 @@
+bun test v1.4.4 (38afee6c8)
+
+tests/ohr/sim/history.test.ts:
+40 |     { role: "person" as const, text: second.reply, own: second },
+41 |     { role: "assistant" as const, text: "What do the people you're building for do today instead?" },
+42 |   ];
+43 |   const call = followsHistory();
+44 |   const t = await simTurn({ kind: "founder", sheet: fixtureSheet("founder"), transcript, call });
+45 |   expect(t.kind).toBe("reply");
+                      ^
+error: expect(received).toBe(expected)
+
+Expected: "reply"
+Received: "check-failed"
+
+      at <anonymous> (tests/ohr/sim/history.test.ts:45:18)
+(fail) a turn-3 history carries the founder's own JSON objects, so a model that follows its history answers in JSON [7.41ms]
+48 | });
+49 | 
+50 | test("a person turn without its own JSON is refused before any call", async () => {
+51 |   const call = followsHistory();
+52 |   const transcript = [{ role: "assistant" as const, text: "Tell me more." }, { role: "person" as const, text: "Two services pay me." }, { role: "assistant" as const, text: "Who are they?" }];
+53 |   await expect(simTurn({ kind: "founder", sheet: fixtureSheet("founder"), transcript, call })).rejects.toThrow("E_USAGE");
+                                                                                                            ^
+error: expect(received).rejects.toThrow(expected)
+
+Expected promise that rejects
+Received promise that resolved: Promise { <resolved> }
+
+      at <anonymous> (tests/ohr/sim/history.test.ts:53:104)
+(fail) a person turn without its own JSON is refused before any call [2.74ms]
+54 |   expect(call.reqs.length).toBe(0);
+55 | });
+56 | 
+57 | test("the audit script keeps each turn's accepted JSON, so a model that follows its history delivers all six turns", async () => {
+58 |   const { turns } = await runScript({ brief: "b1", kind: "founder", sheet: fixtureSheet("founder") }, followsHistory());
+59 |   expect(turns.map((t) => t.outcome)).toEqual(["reply", "reply", "reply", "reply", "reply", "reply"]);
+                                           ^
+error: expect(received).toEqual(expected)
+
+  [
+    "reply",
+-   "reply",
+-   "reply",
+-   "reply",
+-   "reply",
+-   "reply",
++   "check-failed",
+  ]
+
+- Expected  - 5
++ Received  + 1
+
+      at <anonymous> (tests/ohr/sim/history.test.ts:59:39)
+(fail) the audit script keeps each turn's accepted JSON, so a model that follows its history delivers all six turns [4.21ms]
+68 |       return { kind: "reply", reply: "Reply " + seen.length + ".", revealed: [], rules: [1], done: false, attempts: 1, rejected: [], requests: [] };
+69 |     },
+70 |   });
+71 |   await loop.nextUser(["Tell me more."]);
+72 |   await loop.nextUser(["Who pays?"]);
+73 |   expect(seen[1]).toEqual([{ role: "assistant", text: "Tell me more." }, { role: "person", text: "Reply 1.", own: own("Reply 1.") }, { role: "assistant", text: "Who pays?" }]);
+                       ^
+error: expect(received).toEqual(expected)
+
+  [
+    {
+      "role": "assistant",
+      "text": "Tell me more.",
+    },
+    {
+-     "own": {
+-       "done": false,
+-       "reply": "Reply 1.",
+-       "revealed": [],
+-       "rules": [
+-         1,
+-       ],
+-     },
+      "role": "person",
+      "text": "Reply 1.",
+    },
+    {
+      "role": "assistant",
+      "text": "Who pays?",
+    },
+  ]
+
+- Expected  - 8
++ Received  + 0
+
+      at <anonymous> (tests/ohr/sim/history.test.ts:73:19)
+(fail) the stage session loop hands the simulator its delivered turns with their JSON [0.72ms]
+
+ 0 pass
+ 4 fail
+ 4 expect() calls
+Ran 4 tests across 1 file. [73.00ms]

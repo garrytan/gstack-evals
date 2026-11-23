@@ -1,0 +1,3 @@
+https://github.com/rust-lang/rust-bindgen at 85c064bc6d58bfdfca7c2636213b1671d747faef
+Licence at the freeze-date read (prereg o-, b1- and b2-licences.json): BSD-3-Clause
+Root licence and notice files at that commit: LICENSE

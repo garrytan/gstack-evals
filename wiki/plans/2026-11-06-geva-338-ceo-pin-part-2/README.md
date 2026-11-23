@@ -160,6 +160,8 @@ So Sol's none and standalone commands pass --allowance 3.52, the preregistration
 
 ## 5. The ledger
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 **Recording each item.** Each item gets its own `ledger init` with --admission warn, as the earlier CEO and planning runs used, --by GSTA-2 and the Captain's words from approvals/2026-11-05-ceo-eval-line.md, section "Stage 1 item caps". The nine run items are recorded before the smoke, and each judge item just before its read. The init mirrors through gstack-approvals, so the host needs a gstack checkout's bin/gstack-approvals (GSTACK_EVALS_APPROVALS_BIN).
 
 **Leases.** review-units leases its item for --spend-cap with trial proof (src/skill-eval/cli/run-host.ts:533). judge-run --ceo leases its item for what the item has left, with direct proof (lanes/review-noloss/judge-run.ts:579). With --admission warn, a lease with no rig admission record prints RIG_UNPROVEN and goes ahead. Each item binds one run (E_ITEM_BOUND). A cap stop is an incomplete run and is never retried (section 14, Stops; part 1 pin post, section 5 rules 3 and 4).

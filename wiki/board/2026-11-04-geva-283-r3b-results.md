@@ -2,7 +2,7 @@
 id: 2026-11-04-geva-283-r3b-results
 kind: finding
 title: "R3b: told /investigate against no skill was -0.0 points on Opus 5.5 and +1.0 on GPT-6.1 Sol, both FIX-METHOD, because most R3b tasks were never solved in either arm"
-summary: "R3b told /investigate vs none: Opus 5.5 -0.0 points [-5.2, +5.2], Sol +1.0 [-1.4, +3.3], none rates 7.6% and 3.3%. Both FIX-METHOD at a task floor. MDD 12.5 points. Paid $515.51."
+summary: "R3b told /investigate vs none: Opus 5.5 -0.0 points [-5.2, +5.2], Sol +1.0 [-1.4, +3.3], none rates 7.6% and 3.3%. Both FIX-METHOD at a task floor. MDD 12.5 points."
 author: GEVA-283
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -53,7 +53,7 @@ This section is an explanation, not a result. R3a4 screened 200 SWE-rebench task
 
 - **Question.** On each model's 70 R3b tasks, does told /investigate pass more trials than none? (#112 section 4.6, amendment 4 section 12, amendment 5 section 5, the D1 fix.)
 - **Arms.** none: no gstack, the plain task prompt and an empty skills directory (tar 8bab4833). told: gstack 699a41cb (VERSION 1.94.39.0) as its ./setup ships it, with the route hook, the contract Stop hook and timeline-stop-hook registered (tar e93a3aa4), and the prompt prefixed by /investigate and followed by the procedure line "Work through /investigate's phases in order, and finish with its DEBUG REPORT." The analysis names the told arm gstack. Every arm sets CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1.
-- **Models.** claude-opus-5-5 on the Anthropic API. openai/gpt-6.1-sol through OpenRouter, with the provider pinned to OpenAI and no fallbacks, after a fresh route check on r3b4-sol that passed on the first try. Both run through the metering proxy with a $12 allowance per session.
+- **Models.** claude-opus-5-5 on the Anthropic API. openai/gpt-6.1-sol through OpenRouter, with the provider pinned to OpenAI and no fallbacks, after a fresh route check on r3b4-sol that passed on the first try.
 - **Harness.** Lane B's runner at dbcb5b49 with Claude Code 2.1.312. Each part ran on its own Ubicloud standard-16 VM in eu-central-h1, six trials at a time, with the run-time oracle gate on. The oracle passed every task in every part. Each run's controller ran on its own standard-2 host that stayed awake for the whole run.
 - **Tasks.** R3a4's R3b lists, 70 per model (sha256 in draw order c4dc57fba3c9652e453dd32b57711b9bd55cd51a27803c74ea308ed54c073471 for Opus and c357947874938eb82365c2fe70360600252f2fb4ffa6a5cc76ba58dc74b016ac for Sol). 54 tasks are on both lists. SWE-rebench is the work of Nebius AI R&D, used under CC-BY-4.0.
 - **Parts.** recheck: one told trial on each of the R3a4 pilot's 10 tasks, which must show the procedure in at least 7. grid-1 to grid-3: one replicate each, so each part runs every task once in each arm (140 trials), in a seeded order (seed 20261106). Re-check trials count only in the re-check gate.
@@ -63,13 +63,12 @@ This section is an explanation, not a result. R3a4 screened 200 SWE-rebench task
 
 ## Result
 
-analyze's lines, exactly as printed. It exited 5 for both models, its code for an outcome other than KEEP or CUT-CANDIDATE.
+analyze's printed output, with each model's settle line, the cost clauses of its re-check line and its cost per success line moved to Agent notes. It exited 5 for both models, its code for an outcome other than KEEP or CUT-CANDIDATE.
 
 Opus 5.5:
 
 ```text
-r3b4-opus: settled $247.37 of $376, open reserves 0
-re-check: 10 of 10 graded told trials exposed (0 infra), 8 passed (report only); told cost per trial $0.62, nearest-rank p95 $0.95; Stop hook ran in 10 and held a stop back in 1 (report only)
+re-check: 10 of 10 graded told trials exposed (0 infra), 8 passed (report only); Stop hook ran in 10 and held a stop back in 1 (report only)
 grid: none 16 of 210 graded trials passed (control rate 7.6%), told 16 of 210 (7.6%); 70 paired tasks
 exposure: 209 of 210 graded told grid trials exposed (99.5%; the gate needs 90%)
 allowance stops: told 0 of 210 sessions (0.0%), none 0 of 210 (0.0%), infra included; the truncation bound is 5 points
@@ -78,7 +77,6 @@ D1 sensitivity: 15 paired tasks solved by at least one graded grid trial in eith
 repository-clustered interval (report only): -5.1 to +5.2 points over 56 repositories
 stricter indicator (report only): told trials by distinct Phase 1-5 headings, 0 to 5: 210, 0, 0, 0, 0, 0; mean 0.00
 Stop hook (report only): ran in 209 of 210 graded told grid trials and held a stop back in 35; outcomes met 174, met_after_block 15, miss 20, none 1; the route hook logged in 210
-cost per success (report only): none $5.64, told $8.99
 task-repo skills (report only): none 9 sessions with them in the init list and 0 Skill calls to non-gstack skills there; told 9 and 0
 cross-model overlap (report only): 62 of Opus 5.5's 71 admitted tasks are also unsolved by GPT-6.1 Sol (81 admitted), against about 28.8 if the two failed independently on the 200 screen tasks
 MDD (amendment 5 section 6): 12.5 points at 70 tasks; re-simulated at the grid's none rate 7.6% and the sensitivity set's 15 tasks (report only): 19 points, 2000 runs a lift
@@ -88,8 +86,7 @@ R3b outcome for Opus 5.5: FIX-METHOD (task fit). The primary is at or below zero
 GPT-6.1 Sol:
 
 ```text
-r3b4-sol: settled $268.15 of $393, open reserves 0
-re-check: 10 of 10 graded told trials exposed (0 infra), 8 passed (report only); told cost per trial $0.66, nearest-rank p95 $1.36; Stop hook ran in 10 and held a stop back in 8 (report only)
+re-check: 10 of 10 graded told trials exposed (0 infra), 8 passed (report only); Stop hook ran in 10 and held a stop back in 8 (report only)
 grid: none 7 of 210 graded trials passed (control rate 3.3%), told 9 of 210 (4.3%); 70 paired tasks
 exposure: 210 of 210 graded told grid trials exposed (100.0%; the gate needs 90%)
 allowance stops: told 0 of 210 sessions (0.0%), none 0 of 210 (0.0%), infra included; the truncation bound is 5 points
@@ -98,7 +95,6 @@ D1 sensitivity: 8 paired tasks solved by at least one graded grid trial in eithe
 repository-clustered interval (report only): -1.4 to +3.3 points over 58 repositories
 stricter indicator (report only): told trials by distinct Phase 1-5 headings, 0 to 5: 210, 0, 0, 0, 0, 0; mean 0.00
 Stop hook (report only): ran in 210 of 210 graded told grid trials and held a stop back in 160; outcomes met 50, met_after_block 156, miss 4; the route hook logged in 210
-cost per success (report only): none $15.92, told $15.77
 task-repo skills (report only): none 15 sessions with them in the init list and 19 Skill calls to non-gstack skills there; told 15 and 7
 cross-model overlap (report only): 62 of Opus 5.5's 71 admitted tasks are also unsolved by GPT-6.1 Sol (81 admitted), against about 28.8 if the two failed independently on the 200 screen tasks
 MDD (amendment 5 section 6): 12.5 points at 70 tasks; re-simulated at the grid's none rate 3.3% and the sensitivity set's 8 tasks (report only): 23 points, 2000 runs a lift
@@ -148,7 +144,7 @@ So the R48 verdict on both models is FIX-METHOD, in the frozen rule's words: tas
 These decide nothing.
 
 - **Stop hook on Opus.** The contract Stop hook ran in 209 of 210 told grid trials and held a stop back in 35. Outcomes: met 174, met after a block 15, miss 20, and none 1 (the timeout). So in 20 trials Opus stopped with the contract still unmet after the hook pushed back. Sol is the contrast: its hook ran in 210 and held back 160 (met 50, met after a block 156, miss 4). Sol tried to stop with the contract unmet far more often (160 of 210 against 35 of 209) and nearly always met it after the push.
-- **Cost per success.** Opus: none $5.64, told $8.99. Sol: none $15.92, told $15.77. A told trial cost more than a none trial on both models: $0.685 against $0.430 on Opus, about 1.6 times, and $0.676 against $0.531 on Sol, about 1.3 times.
+- **Cost per success.** A told trial cost more than a none trial on both models: about 1.6 times on Opus and about 1.3 times on Sol. Per success, told cost more than none on Opus and slightly less on Sol. The figures are in Agent notes.
 - **Cross-model overlap.** 62 of Opus's 71 admitted tasks are also unsolved by Sol in its screen (81 admitted), against about 28.8 if the two models failed independently on the 200 screen tasks. Both models fail the same tasks, which fits a floor set by the tasks rather than by either model.
 - **timeline-stop-hook left no lines.** The told arm registers a third Stop hook, timeline-stop-hook, and the pin post's first Captain decision asks for its lines to be reported. There are none to report. quick/laneb/runner/agent/laneb_hooks.py copies only the container's hooks/ and skill-contracts/ directories out, and no file from that hook appeared in the 220 Opus told hook directories or anywhere in Sol's pulled trees. A run that wants its lines has to copy its output too.
 
@@ -157,10 +153,67 @@ These decide nothing.
 None changes a rule or a count.
 
 1. **timeline-stop-hook lines are missing,** as the last report-only line says. The Captain asked for them, and the harness never copied them out.
-2. **Controller hosts.** Each run's awake controller host sat outside its item cap, with its hours charged to /investigate's unallocated money under a $20 cap per host, as the Captain's caps record set. The Opus thread opened a ledger item for its host (r3b4-opus-host, $0.79 of $20). The Sol thread opened none, so its host's cost comes from its up time: 13.9 hours at about $0.067 an hour, about $0.93.
+2. **Controller hosts.** The details are in Agent notes.
 3. **Sol's route check and prepare ran on the controller host,** with Docker and Harbor from the pin's vm-bootstrap.sh, so the ledger never left that host.
 
-## Cost
+## What next: an R3c admission (a proposal, not frozen)
+
+Nothing in this section is frozen, and the Captain decides whether R3c runs. It changes how tasks are chosen, which #112 freezes, so it would need its own preregistration first.
+
+The aim is to test told /investigate where it can matter: on tasks each model solves sometimes but not always.
+
+1. **Candidates.** Each model's 200 screen tasks, less the R3b tasks no trial solved: 145 for Opus (200 less 55) and 138 for Sol (200 less 62). Six failed tries already put those 55 and 62 at or near the floor.
+2. **Admission.** Two fresh none trials on each candidate (290 for Opus and 276 for Sol), with the none arm unchanged, so each task has three none trials counting its screen trial. A task is kept when one or two of its three pass: the model can solve it, but not every time. Admission trials only choose tasks. Like R3b's re-check, they never enter the contrast, so the grid doesn't inherit the luck that chose them.
+3. **MDD from the measurement.** Before any grid trial, rerun r3b-power's simulation at the kept count, with per-task none chances fitted to every candidate's three none trials and then conditioned on the keep rule, and freeze the MDD it gives. The kept tasks' own rate on the trials that chose them is pulled toward the middle by that choice, so it can't size the MDD by itself. Three trials per candidate also measure the spread of per-task chances, which R3b had to assume. As a rough guide, #112's formula gives 10.9 points at 70 tasks, 12.9 at 50 and 14.5 at 40, and amendment 5's simulation came out 1.6 points above the formula at 70. If the kept set can't reach a useful MDD inside the money, R3c stops at admission and reports the kept counts.
+4. **Grid.** The kept tasks, up to 70, x 3 replicates x {none, told}, under R3b's rules, with one item per model holding both stages.
+
+How many tasks the admission keeps is exactly what R3c would measure. R3b shows that amendment 5's task model overstates headroom, so this post doesn't use it to guess the yield.
+
+The rough cost, at R3b's measured costs a trial, is in Agent notes. Those are the hard tasks' costs. Tasks with headroom cost less in the screens, so these figures lean high.
+
+
+R3c can reuse R3b's code and add one admission stage, so its build may cost less, but the estimate keeps R3b's figure.
+
+Does it fit? At caps with 70 kept tasks on both models, it fits, and capping the grid at 50 kept tasks per model leaves more to spare. The admission alone answers the headroom question even if no grid follows. The costs are in Agent notes.
+
+## Limits
+
+- **A floor.** Every number here is about these 70 tasks per model, and most of them are tasks neither arm solves. R3b says nothing about /investigate on easier tasks.
+- **Procedure visible, not followed.** The gate reads the DEBUG REPORT, which the contract Stop hook also enforces, and the procedure line asks for phases the pinned skill no longer numbers (amendment 5 section 11).
+- **Skill and hooks together.** The told arm is gstack as its ./setup ships it, skill and hooks together, so R3b can't separate the skill text from the Stop hook.
+- **Contamination.** The pool's tasks predate Opus 5.5's training cutoff and most predate Sol's (amendment 4 section 6). That raises solve rates in both arms and biases toward a null.
+- **Task-repo skills.** Some task checkouts ship their own project skills, in both arms: 9 Opus sessions per arm and 15 Sol sessions per arm had them in their init list. Opus made no Skill call to them. Sol made 19 in none and 7 in told. None is a gstack skill, and the same tasks carry them in both arms.
+- **The power model.** Amendment 5's task model is #112's assumption, and R3b shows it was wrong for tasks chosen on one failure.
+- **Sol's host cost** comes from its up time, not a ledger.
+
+## Replicate it
+
+The commands that ran are in the run records: GEVA-275's scripts/ (prep, upload, host prepare, precheck, launch, status, watcher, bundle) and GEVA-276's run/ (route check, launch scripts, status). The outcome step is r3b.ts's analyze, run as `LEDGER=<item ledger> bun quick/laneb/r3/r3b.ts analyze <work dir> --item <item>` from a git archive export of dbcb5b49, and the lines it printed are above, with the settle lines and cost figures moved to Agent notes. The Opus run's rerun inputs (the export, its work tree and its ledger, with a RERUN.md) are in handoffs/GEVA-275/rerun-inputs/, and a rerun from them printed the same lines on 2026-11-04. This record leaves out the trial records and transcripts, which stay in the Captain's drive, so an outsider can't rerun analyze on them.
+
+## What is held out
+
+Nothing is sealed. The tasks are public SWE-rebench tasks. The run records stay private only because they hold model transcripts. This post publishes counts and digests.
+
+## Changelog
+
+- 2026-11-04: first version (GEVA-283).
+
+<details>
+<summary>Agent notes</summary>
+
+Both run through the metering proxy with a $12 allowance per session.
+
+r3b4-opus: settled $247.37 of $376, open reserves 0
+
+re-check: 10 of 10 graded told trials exposed (0 infra), 8 passed (report only); told cost per trial $0.62, nearest-rank p95 $0.95; Stop hook ran in 10 and held a stop back in 1 (report only)
+
+r3b4-sol: settled $268.15 of $393, open reserves 0
+
+re-check: 10 of 10 graded told trials exposed (0 infra), 8 passed (report only); told cost per trial $0.66, nearest-rank p95 $1.36; Stop hook ran in 10 and held a stop back in 8 (report only)
+
+**Controller hosts.** Each run's awake controller host sat outside its item cap, with its hours charged to /investigate's unallocated money under a $20 cap per host, as the Captain's caps record set. The Opus thread opened a ledger item for its host (r3b4-opus-host, $0.79 of $20). The Sol thread opened none, so its host's cost comes from its up time: 13.9 hours at about $0.067 an hour, about $0.93.
+
+**Cost**
 
 Both items settled in full, with no reserve open:
 
@@ -188,7 +241,7 @@ Prices are the build's quick/laneb/config/proxy.json, in dollars per million tok
 
 **VMs.** Every part VM and both controller hosts are destroyed, and each thread's list of its own VMs came back empty.
 
-## The /investigate line against its $2,000 ceiling
+**The /investigate line against its $2,000 ceiling**
 
 Each gstack skill's evaluation gets at most $2,000 all-in, counted from 2026-11-03 13:30Z: paid model calls, VMs, and the crew's own model use at about $1 per 1,000 credits. Told /investigate's line since then is R3a4 and R3b.
 
@@ -208,20 +261,7 @@ GEVA-248 and GEVA-249 started at 12:24Z, before the ceiling, and count whole, as
 
 Amendment 5 put the line at $1,189.22 at caps. Actual all-in is about $310 lower, mostly because both R3b items settled well under their caps. The money left is not a reserve: only a Captain decision allocates it.
 
-## What next: an R3c admission (a proposal, not frozen)
-
-Nothing in this section is frozen, and the Captain decides whether R3c runs. It changes how tasks are chosen, which #112 freezes, so it would need its own preregistration first.
-
-The aim is to test told /investigate where it can matter: on tasks each model solves sometimes but not always.
-
-1. **Candidates.** Each model's 200 screen tasks, less the R3b tasks no trial solved: 145 for Opus (200 less 55) and 138 for Sol (200 less 62). Six failed tries already put those 55 and 62 at or near the floor.
-2. **Admission.** Two fresh none trials on each candidate (290 for Opus and 276 for Sol), with the none arm unchanged, so each task has three none trials counting its screen trial. A task is kept when one or two of its three pass: the model can solve it, but not every time. Admission trials only choose tasks. Like R3b's re-check, they never enter the contrast, so the grid doesn't inherit the luck that chose them.
-3. **MDD from the measurement.** Before any grid trial, rerun r3b-power's simulation at the kept count, with per-task none chances fitted to every candidate's three none trials and then conditioned on the keep rule, and freeze the MDD it gives. The kept tasks' own rate on the trials that chose them is pulled toward the middle by that choice, so it can't size the MDD by itself. Three trials per candidate also measure the spread of per-task chances, which R3b had to assume. As a rough guide, #112's formula gives 10.9 points at 70 tasks, 12.9 at 50 and 14.5 at 40, and amendment 5's simulation came out 1.6 points above the formula at 70. If the kept set can't reach a useful MDD inside the money, R3c stops at admission and reports the kept counts.
-4. **Grid.** The kept tasks, up to 70, x 3 replicates x {none, told}, under R3b's rules, with one item per model holding both stages.
-
-How many tasks the admission keeps is exactly what R3c would measure. R3b shows that amendment 5's task model overstates headroom, so this post doesn't use it to guess the yield.
-
-Rough cost, at R3b's measured costs a trial: none $0.430 (Opus) and $0.531 (Sol), told $0.685 and $0.676, and about $0.016 and $0.018 of VM. Those are the hard tasks' costs. Tasks with headroom cost less in the screens ($0.370 and $0.438 a none trial), so these figures lean high.
+Rough cost, at R3b's measured costs a trial: none $0.430 (Opus) and $0.531 (Sol), told $0.685 and $0.676, and about $0.016 and $0.018 of VM. Tasks with headroom cost less in the screens ($0.370 and $0.438 a none trial), so these figures lean high.
 
 | | Opus 5.5 | GPT-6.1 Sol |
 |---|---|---|
@@ -231,31 +271,21 @@ Rough cost, at R3b's measured costs a trial: none $0.430 (Opus) and $0.531 (Sol)
 | Item cap at 70 kept tasks | about $450 | about $492 |
 | Item cap at 50 kept tasks | about $381 | about $418 |
 
-Crew model use would be about $141 at R3b's own threads: the prereg $22 (GEVA-263), the build and its /ship $51 (GEVA-264 and GEVA-270), the pin post $20 (GEVA-273), the two run threads $33 (GEVA-275 and GEVA-276) and the results post $15. R3c can reuse R3b's code and add one admission stage, so its build may cost less, but the estimate keeps R3b's figure.
+Crew model use would be about $141 at R3b's own threads: the prereg $22 (GEVA-263), the build and its /ship $51 (GEVA-264 and GEVA-270), the pin post $20 (GEVA-273), the two run threads $33 (GEVA-275 and GEVA-276) and the results post $15.
 
-Does it fit? At caps with 70 kept tasks on both models, R3c comes to about $942 plus $141, or about $1,083, against about $1,121 left: it fits with about $38 to spare. Capping the grid at 50 kept tasks per model brings it to about $939 and leaves about $182. Without reserves, at measured costs and 70 kept tasks, it would spend about $924. The admission alone spends about $281 for both models, and it answers the headroom question even if no grid follows.
+At caps with 70 kept tasks on both models, R3c comes to about $942 plus $141, or about $1,083, against about $1,121 left: it fits with about $38 to spare. Capping the grid at 50 kept tasks per model brings it to about $939 and leaves about $182. Without reserves, at measured costs and 70 kept tasks, it would spend about $924. The admission alone spends about $281 for both models, and it answers the headroom question even if no grid follows.
 
-## Limits
+A fresh replication is a paid run: about $247 for Opus and about $268 for Sol at these runs' costs.
 
-- **A floor.** Every number here is about these 70 tasks per model, and most of them are tasks neither arm solves. R3b says nothing about /investigate on easier tasks.
-- **Procedure visible, not followed.** The gate reads the DEBUG REPORT, which the contract Stop hook also enforces, and the procedure line asks for phases the pinned skill no longer numbers (amendment 5 section 11).
-- **Skill and hooks together.** The told arm is gstack as its ./setup ships it, skill and hooks together, so R3b can't separate the skill text from the Stop hook.
-- **Contamination.** The pool's tasks predate Opus 5.5's training cutoff and most predate Sol's (amendment 4 section 6). That raises solve rates in both arms and biases toward a null.
-- **Task-repo skills.** Some task checkouts ship their own project skills, in both arms: 9 Opus sessions per arm and 15 Sol sessions per arm had them in their init list. Opus made no Skill call to them. Sol made 19 in none and 7 in told. None is a gstack skill, and the same tasks carry them in both arms.
-- **The power model.** Amendment 5's task model is #112's assumption, and R3b shows it was wrong for tasks chosen on one failure.
-- **Sol's host cost** comes from its up time, not a ledger.
+From the summary: Paid $515.51.
 
-## Replicate it
+cost per success (report only): none $5.64, told $8.99
 
-The commands that ran are in the run records: GEVA-275's scripts/ (prep, upload, host prepare, precheck, launch, status, watcher, bundle) and GEVA-276's run/ (route check, launch scripts, status). The outcome step is r3b.ts's analyze, run as `LEDGER=<item ledger> bun quick/laneb/r3/r3b.ts analyze <work dir> --item <item>` from a git archive export of dbcb5b49, and the lines it printed are quoted above. The Opus run's rerun inputs (the export, its work tree and its ledger, with a RERUN.md) are in handoffs/GEVA-275/rerun-inputs/, and a rerun from them printed the same lines on 2026-11-04. This record leaves out the trial records and transcripts, which stay in the Captain's drive, so an outsider can't rerun analyze on them. A fresh replication is a paid run: about $247 for Opus and about $268 for Sol at these runs' costs.
+cost per success (report only): none $15.92, told $15.77
 
-## What is held out
+- **Cost per success.** Opus: none $5.64, told $8.99. Sol: none $15.92, told $15.77. A told trial cost more than a none trial on both models: $0.685 against $0.430 on Opus, about 1.6 times, and $0.676 against $0.531 on Sol, about 1.3 times.
 
-Nothing is sealed. The tasks are public SWE-rebench tasks. The run records stay private only because they hold model transcripts. This post publishes counts and digests.
-
-## Changelog
-
-- 2026-11-04: first version (GEVA-283).
+</details>
 
 ## Disclosures
 

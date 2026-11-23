@@ -1,0 +1,53 @@
+// S6 re-pricing from logged tokens, no new calls (prereg section 11): every bill with caching priced away (cache reads and
+// cache writes priced as plain input at each row's input rate, the long-context row likewise), via lib.ts noCache() and the
+// scorer's own readTrial and callUsd. Calls with no usage keep their charge (an unknown outcome its reservation, a booked
+// call its booked charge), as the scorer charges them. Batch prices: prices.json carries none, so none are computed.
+// Contrasts are lib.ts contrast() (the scorer's method) on the same paired tasks as the cached reading.
+import { load, graded, cellOf, contrast, planned, subset, loadPrices, PRICES, noCache, callUsd, meterOf, row, HEADER, save, type Contrast } from "./lib.ts";
+
+const base = loadPrices(PRICES);
+const C = load(base);
+const U = load(noCache(base), C.calls);
+const batchRows = Object.entries(JSON.parse(await Bun.file(PRICES).text()).models).filter(([, r]: [string, any]) => Object.keys(r).some((k) => /batch/i.test(k)));
+
+const cells: Array<[string, string]> = [["opus", "N"], ["opus", "R"], ["opus", "P"], ["opus", "F"], ["opus", "J"], ["sol", "N"], ["sol", "R"], ["sol", "P"], ["sol", "J"], ["particle", "W"]];
+const CREATIVE: Record<string, string> = { opus: "anthropic:claude-opus-5-5", sol: "openai:gpt-6.1-sol", particle: "openrouter:particle-ai/particle-1" };
+const means: Record<string, any> = {};
+for (const [m, c] of cells) {
+  const a = graded(cellOf(C.sessions, c, m)), b = graded(cellOf(U.sessions, c, m));
+  const tot = (xs: typeof a) => xs.reduce((s, x) => s + x.bill_usd!, 0);
+  const parts: Record<string, number> = {};
+  let read = 0, fresh = 0, write = 0;
+  for (const s of a) for (const call of C.calls.get(meterOf(s)) ?? []) {
+    const k = call.provider + ":" + call.model, usd = callUsd(call, base);
+    const label = k === CREATIVE[m] ? "creative model" : k.startsWith("typesafe") ? "Jev" : "particle-1";
+    parts[label] = (parts[label] ?? 0) + usd;
+    if (k === CREATIVE[m]) { read += call.usage.cache_read; fresh += call.usage.input; write += call.usage.cache_write; }
+  }
+  means[m + " " + c] = { sessions: a.length, mean_cached: tot(a) / a.length, mean_no_cache: tot(b) / b.length, multiple: tot(b) / tot(a), bill_share: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v / tot(a)])), creative_input_tokens: { fresh, cache_read: read, cache_write: write, cache_read_share: read / (fresh + read + write) } };
+}
+const sub = (L: typeof C, cell: string, model: string) => cellOf(L.sessions, cell, model, subset);
+const pairsOf = (L: typeof C, tag: string): Contrast[] => {
+  const out: Contrast[] = [];
+  for (const m of ["opus", "sol"]) {
+    out.push(contrast(tag + " " + m + " R vs N", cellOf(L.sessions, "R", m), cellOf(L.sessions, "N", m), planned));
+    out.push(contrast(tag + " " + m + " R vs P", cellOf(L.sessions, "R", m), cellOf(L.sessions, "P", m), planned));
+    out.push(contrast(tag + " " + m + " P vs N", cellOf(L.sessions, "P", m), cellOf(L.sessions, "N", m), planned));
+  }
+  out.push(contrast(tag + " opus F vs N (subset)", sub(L, "F", "opus"), sub(L, "N", "opus"), subset));
+  out.push(contrast(tag + " opus R vs F (subset)", sub(L, "R", "opus"), sub(L, "F", "opus"), subset));
+  for (const m of ["opus", "sol"]) out.push(contrast(tag + " " + m + " R vs J (subset)", sub(L, "R", m), sub(L, "J", m), subset));
+  out.push(contrast(tag + " opus J vs F (subset)", sub(L, "J", "opus"), sub(L, "F", "opus"), subset));
+  for (const m of ["opus", "sol"]) for (const c of ["N", "R", "P"]) out.push(contrast(tag + " W vs " + m + " " + c + " (subset)", cellOf(L.sessions, "W", "particle", subset), sub(L, c, m), subset));
+  return out;
+};
+const cached = pairsOf(C, "cached"), uncached = pairsOf(U, "no cache");
+const pct = (x: number) => (100 * x).toFixed(1) + "%";
+const lines: string[] = ["## S6 bills per cell, cached (as billed) and with caching priced away", "", "batch price rows in prices.json: " + (batchRows.length ? batchRows.map(([k]) => k).join(", ") : "none, so no batch re-pricing is computed"), "",
+  "| cell | graded sessions | mean bill cached | mean bill, cache priced as input | multiple | bill share (cached): creative model / Jev / particle-1 | creative model input tokens read from cache |", "|---|---|---|---|---|---|---|"];
+for (const [k, v] of Object.entries(means)) lines.push("| " + k + " | " + v.sessions + " | $" + v.mean_cached.toFixed(4) + " | $" + v.mean_no_cache.toFixed(4) + " | " + v.multiple.toFixed(2) + "x | " + ["creative model", "Jev", "particle-1"].map((p) => pct(v.bill_share[p] ?? 0)).join(" / ") + " | " + pct(v.creative_input_tokens.cache_read_share) + " |");
+lines.push("", "## S6 contrasts with caching priced away (bill ratio is treatment over control; cut = 1 minus the ratio)", "", HEADER, ...uncached.map(row), "", "## the same contrasts at the dated (cached) prices, for comparison", "", HEADER, ...cached.map(row));
+const cut = (c: Contrast) => pct(1 - c.bill.ratio) + " (" + (c.bill.ci ? pct(1 - c.bill.ci[1]) + " to " + pct(1 - c.bill.ci[0]) : "none") + ")";
+lines.push("", "cuts (1 minus bill ratio), no cache against cached:", ...uncached.map((u, i) => "  " + u.label.replace("no cache ", "") + ": " + cut(u) + " against " + cut(cached[i]!)));
+save("s6", lines.join("\n"), { batch_rows: batchRows.map(([k]) => k), means, no_cache: uncached, cached });
+console.log(lines.join("\n"));

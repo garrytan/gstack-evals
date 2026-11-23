@@ -1,0 +1,98 @@
+diff --git a/src/execution/physical_plan/plan_window.cpp b/src/execution/physical_plan/plan_window.cpp
+index a85dbcb..b54cec6 100644
+--- a/src/execution/physical_plan/plan_window.cpp
++++ b/src/execution/physical_plan/plan_window.cpp
+@@ -117,7 +117,7 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalWindow &op) {
+ 			for (idx_t i = 0; i < matching.size(); ++i) {
+ 				const auto match_idx = matching[i];
+ 				auto &match_expr = op.expressions[match_idx]->Cast<BoundWindowExpression>();
+-				if (wexpr.Equals(match_expr)) {
++				if (!wexpr.IsVolatile() && wexpr.Equals(match_expr)) {
+ 					projection_map[input_width + expr_idx] = output_pos + i;
+ 					cse = true;
+ 					break;
+diff --git a/src/optimizer/common_aggregate_optimizer.cpp b/src/optimizer/common_aggregate_optimizer.cpp
+index d351ccb..ed58ec7 100644
+--- a/src/optimizer/common_aggregate_optimizer.cpp
++++ b/src/optimizer/common_aggregate_optimizer.cpp
+@@ -50,10 +50,13 @@ void CommonAggregateOptimizer::ExtractCommonAggregates(LogicalAggregate &aggr) {
+ 	for (idx_t i = 0; i < aggr.expressions.size(); i++) {
+ 		ProjectionIndex original_index(i + total_erased);
+ 		ProjectionIndex new_index(i);
+-		auto entry = aggregate_remap.find(*aggr.expressions[i]);
++		const auto is_volatile = aggr.expressions[i]->IsVolatile();
++		auto entry = is_volatile ? aggregate_remap.end() : aggregate_remap.find(*aggr.expressions[i]);
+ 		if (entry == aggregate_remap.end()) {
+-			// aggregate does not exist yet: add it to the map
+-			aggregate_remap[*aggr.expressions[i]] = new_index;
++			// aggregate does not exist yet: add it to the map (volatile aggregates are never deduplicated)
++			if (!is_volatile) {
++				aggregate_remap[*aggr.expressions[i]] = new_index;
++			}
+ 			if (new_index != original_index) {
+ 				// this aggregate is not erased, however an aggregate BEFORE it has been erased
+ 				// so we need to remap this aggregate
+diff --git a/src/planner/binder/expression/bind_aggregate_expression.cpp b/src/planner/binder/expression/bind_aggregate_expression.cpp
+index 55c92b7..0716776 100644
+--- a/src/planner/binder/expression/bind_aggregate_expression.cpp
++++ b/src/planner/binder/expression/bind_aggregate_expression.cpp
+@@ -331,12 +331,16 @@ BindResult BaseSelectBinder::BindAggregate(FunctionExpression &aggr, AggregateFu
+ 
+ 	// check for all the aggregates if this aggregate already exists
+ 	ProjectionIndex aggr_index;
+-	auto entry = node.aggregate_map.find(*aggregate);
++	// volatile aggregates (e.g. any_value(random())) must not be deduplicated
++	const auto is_volatile = aggregate->IsVolatile();
++	auto entry = is_volatile ? node.aggregate_map.end() : node.aggregate_map.find(*aggregate);
+ 	if (entry == node.aggregate_map.end()) {
+ 		// new aggregate: insert into aggregate list
+ 		auto &aggr_ref = *aggregate;
+ 		aggr_index = ColumnBinding::PushExpression(node.aggregates, std::move(aggregate));
+-		node.aggregate_map[aggr_ref] = aggr_index;
++		if (!is_volatile) {
++			node.aggregate_map[aggr_ref] = aggr_index;
++		}
+ 	} else {
+ 		// duplicate aggregate: simplify refer to this aggregate
+ 		aggr_index = entry->second;
+diff --git a/test/sql/optimizer/test_volatile_aggregate_dedup.test b/test/sql/optimizer/test_volatile_aggregate_dedup.test
+new file mode 100644
+index 0000000..5993fa0
+--- /dev/null
++++ b/test/sql/optimizer/test_volatile_aggregate_dedup.test
+@@ -0,0 +1,35 @@
++# name: test/sql/optimizer/test_volatile_aggregate_dedup.test
++# description: Duplicate aggregate/window calls over volatile functions must not be deduplicated
++# group: [optimizer]
++
++query II
++SELECT g, any_value(uuid()::VARCHAR) OVER (PARTITION BY g) = any_value(uuid()::VARCHAR) OVER (PARTITION BY g)
++FROM (VALUES (1), (1), (2), (2)) t(g) ORDER BY g
++----
++1	false
++1	false
++2	false
++2	false
++
++query II
++SELECT g, any_value(uuid()::VARCHAR) = any_value(uuid()::VARCHAR)
++FROM (VALUES (1), (1), (2), (2)) t(g) GROUP BY g ORDER BY g
++----
++1	false
++2	false
++
++query I
++SELECT count(DISTINCT id_a) + count(DISTINCT id_b) FROM (
++	SELECT any_value(uuid()::VARCHAR) OVER (PARTITION BY g) AS id_a,
++	       any_value(uuid()::VARCHAR) OVER (PARTITION BY g) AS id_b
++	FROM (VALUES (1), (1), (2), (2)) t(g)
++) WHERE id_a <> id_b
++----
++4
++
++# non-volatile duplicates are still equal
++query I
++SELECT sum(x) OVER () = sum(x) OVER () FROM (VALUES (1), (2)) t(x)
++----
++true
++true

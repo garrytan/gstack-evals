@@ -1,0 +1,975 @@
+{
+  "schema": "h2h-arms-pins.v1",
+  "freeze_date": "2026-11-15",
+  "install_image": {
+    "base": "node:24-bookworm@sha256:9d266751ca3d7fdbe651c878ffd5ad0a42fed49a18c283509267c97f025b7496",
+    "bun": "oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d",
+    "claude_code": "2.1.325",
+    "playwright_deps": "1.65.0",
+    "tag": "h2h-arm-install:7c5d730f0a5c",
+    "id": "sha256:9cd2c293ece14c47cd6324aec5d307508b645414884ada7e018e09bc4f480c7a",
+    "dockerfile_sha256": "7c5d730f0a5c8adc6a1a31aad5a8fae9c81fad16a0b4abd1992a7d4084c0ce84"
+  },
+  "claude_code_latest": {
+    "repo": "npm:@anthropic-ai/claude-code",
+    "sha": "",
+    "version": "latest 2.1.325"
+  },
+  "build_pins": {
+    "freeze_date": "2026-11-15",
+    "official_marketplace": {
+      "repo": "anthropics/claude-plugins-official",
+      "sha": "b5b01ac4f889fec0c4c6bb89f27ca7c8574473f6"
+    },
+    "chrome_devtools_mcp": {
+      "npm": "chrome-devtools-mcp",
+      "version": "1.13.0",
+      "integrity": "sha512-Yf4qhS0+2oo7c+gOySMDHQt4ZL/yKXG2Mxxzjk0gcArINtcQ3tLiQVzAW6g2nsyQzAGhkcLwWWBAtlx3Bg+Spg=="
+    },
+    "claude_code": {
+      "npm": "@anthropic-ai/claude-code",
+      "version": "2.1.325",
+      "integrity": "sha512-OUxCb0sx734zJh9zGTP9oF01gZ44DCGFaw7hgD4byepjRRGyvHzgUOwC7dlCgVIljV6CiEVDjq+anY3GUvKFQw=="
+    }
+  },
+  "hash_rule": {
+    "skip": [
+      ".claude/backups/**",
+      ".npm/_cacache/index-v5/**",
+      ".npm/_logs/**",
+      "**/.git/index",
+      "**/.git/logs/**",
+      ".claude/skills/gstack/bin/.gstack-cso-build.log",
+      ".claude/plugins/.last_inuse_sweep"
+    ],
+    "json": [
+      {
+        "glob": ".claude.json",
+        "drop": [
+          "firstStartTime",
+          "machineID",
+          "userID"
+        ]
+      },
+      {
+        "glob": ".claude/plugins/installed_plugins.json",
+        "drop": [
+          "installedAt",
+          "lastUpdated"
+        ]
+      },
+      {
+        "glob": ".claude/plugins/known_marketplaces.json",
+        "drop": [
+          "lastUpdated"
+        ]
+      },
+      {
+        "glob": ".claude/gsd-install-state.json",
+        "drop": [
+          "appliedAt"
+        ]
+      },
+      {
+        "glob": ".claude/gsd-file-manifest.json",
+        "drop": [
+          "timestamp",
+          "files"
+        ]
+      },
+      {
+        "glob": ".gstack/.gbrain-local-status-cache.json",
+        "drop": [
+          "cached_at"
+        ]
+      }
+    ],
+    "text": [
+      {
+        "glob": ".claude/**",
+        "pattern": "(GSD_[A-Z_]*ARGS_END)_[0-9a-f]{32}",
+        "replace": "$1_NONCE"
+      },
+      {
+        "glob": ".gstack/installs.tsv",
+        "pattern": "\\t\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ$",
+        "replace": "\tTIME"
+      }
+    ]
+  },
+  "arms": [
+    {
+      "arm": "none",
+      "home_of": null,
+      "pins": [],
+      "roots": [],
+      "home_tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pin_checks": [],
+      "newer_seen": [],
+      "claude_code_version": "2.1.325",
+      "browser": "none installed; on B1 units the unit image's Playwright Chromium (part B) through the unit's own test runner",
+      "deviations": []
+    },
+    {
+      "arm": "gstack",
+      "home_of": null,
+      "pins": [
+        {
+          "repo": "garrytan/gstack",
+          "sha": "3805969159bc7e595cde9dc0f3c267129cef9c16",
+          "version": "1.99.4.0"
+        }
+      ],
+      "roots": [
+        ".bun",
+        ".cache/ms-playwright",
+        ".claude/CLAUDE.md",
+        ".claude/backups",
+        ".claude/settings.json",
+        ".claude/skills/_gstack-command",
+        ".claude/skills/autoplan",
+        ".claude/skills/benchmark",
+        ".claude/skills/benchmark-models",
+        ".claude/skills/browse",
+        ".claude/skills/canary",
+        ".claude/skills/careful",
+        ".claude/skills/codex",
+        ".claude/skills/connect-chrome",
+        ".claude/skills/context-restore",
+        ".claude/skills/context-save",
+        ".claude/skills/cso",
+        ".claude/skills/design-consultation",
+        ".claude/skills/design-html",
+        ".claude/skills/design-motion",
+        ".claude/skills/design-review",
+        ".claude/skills/design-shotgun",
+        ".claude/skills/deslop-shared-libs",
+        ".claude/skills/devex-review",
+        ".claude/skills/diagram",
+        ".claude/skills/document-generate",
+        ".claude/skills/document-release",
+        ".claude/skills/eval-plan",
+        ".claude/skills/freeze",
+        ".claude/skills/gstack",
+        ".claude/skills/gstack-upgrade",
+        ".claude/skills/guard",
+        ".claude/skills/health",
+        ".claude/skills/ios-clean",
+        ".claude/skills/ios-design-review",
+        ".claude/skills/ios-fix",
+        ".claude/skills/ios-qa",
+        ".claude/skills/ios-sync",
+        ".claude/skills/land-and-deploy",
+        ".claude/skills/landing-report",
+        ".claude/skills/learn",
+        ".claude/skills/make-pdf",
+        ".claude/skills/modernize",
+        ".claude/skills/office-hours",
+        ".claude/skills/open-gstack-browser",
+        ".claude/skills/pair-agent",
+        ".claude/skills/plan-ceo-review",
+        ".claude/skills/plan-design-review",
+        ".claude/skills/plan-devex-review",
+        ".claude/skills/plan-tune",
+        ".claude/skills/qa",
+        ".claude/skills/qa-only",
+        ".claude/skills/retro",
+        ".claude/skills/review",
+        ".claude/skills/runaway-stopper",
+        ".claude/skills/scrape",
+        ".claude/skills/setup-browser-cookies",
+        ".claude/skills/setup-deploy",
+        ".claude/skills/setup-gbrain",
+        ".claude/skills/ship",
+        ".claude/skills/skillify",
+        ".claude/skills/spec",
+        ".claude/skills/sync-gbrain",
+        ".claude/skills/test-audit",
+        ".claude/skills/ubicloud",
+        ".claude/skills/unfreeze",
+        ".claude/skills/verify",
+        ".claude/skills/write-skill",
+        ".claude.json",
+        ".gstack"
+      ],
+      "home_tree_sha256": "9e541432e300e12d4f0a9c75f22dd85b541646b4d72193168eb717409634ff3b",
+      "pin_checks": [
+        {
+          "repo": "garrytan/gstack",
+          "matched": true,
+          "how": "checkout ~/.claude/skills/gstack: HEAD 3805969159bc7e595cde9dc0f3c267129cef9c16 is the pin, its tree 3758f84f50becb3c970ae8ba9e26249066d8828d is the pin's tree, and git status shows 0 tracked files changed; untracked files are the installer's own output"
+        }
+      ],
+      "newer_seen": [
+        {
+          "repo": "garrytan/gstack",
+          "sha": "0326b144af36676d599dcf63a9fad9a870d22ed6",
+          "version": "head of main"
+        },
+        {
+          "repo": "garrytan/gstack",
+          "sha": "81fb9008351d29fccc3e146d860a9cda8c104a2d",
+          "version": "latest release v1.99.4.0"
+        }
+      ],
+      "claude_code_version": "2.1.325",
+      "browser": "gstack's browse binary .claude/skills/gstack/browse/dist/browse, built by ./setup, driving the Playwright Chromium ./setup installed under .cache/ms-playwright (chromium-1254 and its headless shell)",
+      "deviations": [
+        "clone fetched at the pin from a local clone (depth 1, origin set to GitHub) instead of GitHub's head",
+        "the CLAUDE.md section is prereg.json's frozen text, appended by the build"
+      ]
+    },
+    {
+      "arm": "superpowers",
+      "home_of": null,
+      "pins": [
+        {
+          "repo": "obra/superpowers",
+          "sha": "22f0b463e7a5e579904dd6211a520321035526f7",
+          "version": "7.0.2"
+        },
+        {
+          "repo": "anthropics/claude-plugins-official",
+          "sha": "b5b01ac4f889fec0c4c6bb89f27ca7c8574473f6"
+        }
+      ],
+      "roots": [
+        ".claude/backups",
+        ".claude/plugins/cache/claude-plugins-official",
+        ".claude/plugins/installed_plugins.json",
+        ".claude/plugins/known_marketplaces.json",
+        ".claude/plugins/marketplaces/claude-plugins-official",
+        ".claude/settings.json",
+        ".claude.json"
+      ],
+      "home_tree_sha256": "3fb427e11e6113297c8aef6b83281bcacbd5b90861608d221b8215abb53c5360",
+      "pin_checks": [
+        {
+          "repo": "anthropics/claude-plugins-official",
+          "matched": true,
+          "how": "checkout ~/.claude/plugins/marketplaces/claude-plugins-official: HEAD b5b01ac4f889fec0c4c6bb89f27ca7c8574473f6 is the pin, its tree 1f7b6f6e5be5be80a91743d051fa2543b02aedc9 is the pin's tree, and git status shows 0 tracked files changed; untracked files are the installer's own output"
+        },
+        {
+          "repo": "obra/superpowers",
+          "matched": true,
+          "how": "installed plugin ~/.claude/plugins/cache/claude-plugins-official/superpowers/7.0.2 hashed as a git tree (attributes off) is 8fddc972a73e9af7501442df0e638d8e29842b6b, the pin's tree"
+        }
+      ],
+      "newer_seen": [
+        {
+          "repo": "obra/superpowers",
+          "sha": "22f0b463e7a5e579904dd6211a520321035526f7",
+          "version": "head of main"
+        },
+        {
+          "repo": "obra/superpowers",
+          "sha": "22f0b463e7a5e579904dd6211a520321035526f7",
+          "version": "latest release v7.0.2"
+        },
+        {
+          "repo": "anthropics/claude-plugins-official",
+          "sha": "b5b01ac4f889fec0c4c6bb89f27ca7c8574473f6",
+          "version": "head of main"
+        }
+      ],
+      "claude_code_version": "2.1.325",
+      "browser": "none: the pack documents no browser runtime",
+      "deviations": [
+        "the official marketplace is added from GitHub (Claude Code refuses a local copy or a sha ref under its reserved name) and its clone is reset to the commit read on the freeze date before the install"
+      ]
+    },
+    {
+      "arm": "agent-skills",
+      "home_of": null,
+      "pins": [
+        {
+          "repo": "addyosmani/agent-skills",
+          "sha": "39b723ceebf81474d0557c1fecd01eddab585563",
+          "version": "0.6.16"
+        },
+        {
+          "repo": "npm:chrome-devtools-mcp",
+          "sha": "sha512-Yf4qhS0+2oo7c+gOySMDHQt4ZL/yKXG2Mxxzjk0gcArINtcQ3tLiQVzAW6g2nsyQzAGhkcLwWWBAtlx3Bg+Spg==",
+          "version": "1.13.0"
+        }
+      ],
+      "roots": [
+        ".cache/chrome-devtools-mcp",
+        ".claude/backups",
+        ".claude/plugin-sources/agent-skills",
+        ".claude/plugins/cache/addy-agent-skills",
+        ".claude/plugins/installed_plugins.json",
+        ".claude/plugins/known_marketplaces.json",
+        ".claude/settings.json",
+        ".claude.json",
+        ".npm"
+      ],
+      "home_tree_sha256": "00c17f28cc1dbbce4987ea0d6aaa8484eb769c112895d7bdb98c3b3790266ebf",
+      "pin_checks": [
+        {
+          "repo": "addyosmani/agent-skills",
+          "matched": true,
+          "how": "marketplace tree ~/.claude/plugin-sources/agent-skills hashed as a git tree (attributes off) is 0c0109ff61651aac39f42377e3b123c928672956, the pin's tree (the pin's tree 6e773dca46ab0fcc75e3771db1412cb0dd309a7f with only .claude-plugin/marketplace.json's agent-skills source rewritten to \"./\", sha256 faf27d7d0c228edc9281e1ba8dbf94ba1a1250caadf9aab52d1ec370775dedc4 to 31c0911c090243e940822f57d05051e54f817ea2530fcb6856130d041faddd13)"
+        },
+        {
+          "repo": "addyosmani/agent-skills",
+          "matched": true,
+          "how": "installed plugin ~/.claude/plugins/cache/addy-agent-skills/agent-skills/0.6.16 hashed as a git tree (attributes off) is 036723cc78c3d3b5ab41de92e9f33a6e73f67d9b, the pin's tree (the pin's tree 6e773dca46ab0fcc75e3771db1412cb0dd309a7f with only .claude-plugin/marketplace.json's agent-skills source rewritten to \"./\", sha256 faf27d7d0c228edc9281e1ba8dbf94ba1a1250caadf9aab52d1ec370775dedc4 to 31c0911c090243e940822f57d05051e54f817ea2530fcb6856130d041faddd13); Claude Code's plugin copy writes link targets without a trailing slash (.opencode/skills -> ../skills), so the expected tree applies that"
+        },
+        {
+          "repo": "npm:chrome-devtools-mcp",
+          "matched": true,
+          "how": "npm chrome-devtools-mcp@1.13.0: the tarball downloaded from the registry hashes to sha512-Yf4qhS0+2oo7c+gOySMDHQt4ZL/yKXG2Mxxzjk0gcArINtcQ3tLiQVzAW6g2nsyQzAGhkcLwWWBAtlx3Bg+Spg==, the registry's dist.integrity and the pin's; the copy npx installed in ~/.npm/_npx/0ca2f117c8429112/node_modules/chrome-devtools-mcp holds exactly the tarball's 388 files"
+        }
+      ],
+      "newer_seen": [
+        {
+          "repo": "addyosmani/agent-skills",
+          "sha": "39b723ceebf81474d0557c1fecd01eddab585563",
+          "version": "head of main"
+        },
+        {
+          "repo": "addyosmani/agent-skills",
+          "sha": "39b723ceebf81474d0557c1fecd01eddab585563",
+          "version": "latest release 0.6.16"
+        },
+        {
+          "repo": "npm:chrome-devtools-mcp",
+          "sha": "b1e35e3ab1774664dfc66a2cb813a392535fe160",
+          "version": "latest 1.13.0"
+        }
+      ],
+      "claude_code_version": "2.1.325",
+      "browser": "the chrome-devtools MCP server at user scope in .claude.json: npx -y chrome-devtools-mcp@1.13.0 --isolated --headless --executablePath /opt/h2h/chromium (the package from npx's cache in .npm/_npx)",
+      "deviations": [
+        "marketplace added from the pinned tree copied under HOME, with its plugin source rewritten from GitHub (no ref) to the marketplace root",
+        "chrome-devtools-mcp at a pinned version instead of @latest, registered at user scope, with --headless and --executablePath /opt/h2h/chromium"
+      ]
+    },
+    {
+      "arm": "gsd",
+      "home_of": null,
+      "pins": [
+        {
+          "repo": "open-gsd/gsd-core",
+          "sha": "357508df233ccca0dcf4332b385d6bee9b113da9",
+          "version": "1.21.0"
+        }
+      ],
+      "roots": [
+        ".claude/.gsd-profile",
+        ".claude/.gsd-source",
+        ".claude/.gsd-staging",
+        ".claude/agents/gsd-advisor-researcher.md",
+        ".claude/agents/gsd-ai-researcher.md",
+        ".claude/agents/gsd-assumptions-analyzer.md",
+        ".claude/agents/gsd-code-fixer.md",
+        ".claude/agents/gsd-code-reviewer.md",
+        ".claude/agents/gsd-codebase-mapper.md",
+        ".claude/agents/gsd-debug-session-manager.md",
+        ".claude/agents/gsd-debugger.md",
+        ".claude/agents/gsd-doc-classifier.md",
+        ".claude/agents/gsd-doc-synthesizer.md",
+        ".claude/agents/gsd-doc-verifier.md",
+        ".claude/agents/gsd-doc-writer.md",
+        ".claude/agents/gsd-dom-verifier.md",
+        ".claude/agents/gsd-domain-researcher.md",
+        ".claude/agents/gsd-eval-auditor.md",
+        ".claude/agents/gsd-eval-planner.md",
+        ".claude/agents/gsd-executor.md",
+        ".claude/agents/gsd-framework-selector.md",
+        ".claude/agents/gsd-integration-checker.md",
+        ".claude/agents/gsd-intel-updater.md",
+        ".claude/agents/gsd-mempalace-curator.md",
+        ".claude/agents/gsd-nyquist-auditor.md",
+        ".claude/agents/gsd-pattern-mapper.md",
+        ".claude/agents/gsd-phase-researcher.md",
+        ".claude/agents/gsd-plan-checker.md",
+        ".claude/agents/gsd-planner.md",
+        ".claude/agents/gsd-project-researcher.md",
+        ".claude/agents/gsd-research-synthesizer.md",
+        ".claude/agents/gsd-roadmapper.md",
+        ".claude/agents/gsd-security-auditor.md",
+        ".claude/agents/gsd-ui-auditor.md",
+        ".claude/agents/gsd-ui-checker.md",
+        ".claude/agents/gsd-ui-researcher.md",
+        ".claude/agents/gsd-user-profiler.md",
+        ".claude/agents/gsd-verifier.md",
+        ".claude/gsd-core",
+        ".claude/gsd-file-manifest.json",
+        ".claude/gsd-install-state.json",
+        ".claude/hooks/gsd-agent-isolation-guard.js",
+        ".claude/hooks/gsd-check-update-worker.js",
+        ".claude/hooks/gsd-check-update.js",
+        ".claude/hooks/gsd-config-reload.js",
+        ".claude/hooks/gsd-context-monitor.js",
+        ".claude/hooks/gsd-cursor-post-tool.js",
+        ".claude/hooks/gsd-cursor-pre-tool.js",
+        ".claude/hooks/gsd-cursor-session-start.js",
+        ".claude/hooks/gsd-cursor-stop.js",
+        ".claude/hooks/gsd-cursor-subagent-start.js",
+        ".claude/hooks/gsd-cursor-subagent-stop.js",
+        ".claude/hooks/gsd-ensure-canonical-path.js",
+        ".claude/hooks/gsd-graphify-update.sh",
+        ".claude/hooks/gsd-node-runner.sh",
+        ".claude/hooks/gsd-path-export.js",
+        ".claude/hooks/gsd-phase-boundary.sh",
+        ".claude/hooks/gsd-prompt-guard.js",
+        ".claude/hooks/gsd-read-guard.js",
+        ".claude/hooks/gsd-read-injection-scanner.js",
+        ".claude/hooks/gsd-secret-read-guard.js",
+        ".claude/hooks/gsd-session-state.sh",
+        ".claude/hooks/gsd-statusline.js",
+        ".claude/hooks/gsd-update-banner.js",
+        ".claude/hooks/gsd-validate-commit.sh",
+        ".claude/hooks/gsd-windsurf-pre-command.js",
+        ".claude/hooks/gsd-windsurf-pre-write.js",
+        ".claude/hooks/gsd-workflow-guard.js",
+        ".claude/hooks/gsd-worktree-path-guard.js",
+        ".claude/hooks/gsd-write-guard.js",
+        ".claude/hooks/lib",
+        ".claude/hooks/managed-hooks-registry.cjs",
+        ".claude/hooks/package.json",
+        ".claude/scripts",
+        ".claude/settings.json",
+        ".claude/skills/gsd-add-tests",
+        ".claude/skills/gsd-ai-integration-phase",
+        ".claude/skills/gsd-audit-fix",
+        ".claude/skills/gsd-audit-milestone",
+        ".claude/skills/gsd-audit-uat",
+        ".claude/skills/gsd-autonomous",
+        ".claude/skills/gsd-capture",
+        ".claude/skills/gsd-cleanup",
+        ".claude/skills/gsd-code-review",
+        ".claude/skills/gsd-complete-milestone",
+        ".claude/skills/gsd-config",
+        ".claude/skills/gsd-debug",
+        ".claude/skills/gsd-discuss-phase",
+        ".claude/skills/gsd-docs-update",
+        ".claude/skills/gsd-eval-review",
+        ".claude/skills/gsd-execute-phase",
+        ".claude/skills/gsd-explore",
+        ".claude/skills/gsd-extract-learnings",
+        ".claude/skills/gsd-fast",
+        ".claude/skills/gsd-forensics",
+        ".claude/skills/gsd-graphify",
+        ".claude/skills/gsd-health",
+        ".claude/skills/gsd-help",
+        ".claude/skills/gsd-import",
+        ".claude/skills/gsd-inbox",
+        ".claude/skills/gsd-ingest-docs",
+        ".claude/skills/gsd-manager",
+        ".claude/skills/gsd-map-codebase",
+        ".claude/skills/gsd-mempalace-capture",
+        ".claude/skills/gsd-mempalace-recall",
+        ".claude/skills/gsd-milestone-summary",
+        ".claude/skills/gsd-mvp-phase",
+        ".claude/skills/gsd-new-milestone",
+        ".claude/skills/gsd-new-project",
+        ".claude/skills/gsd-next",
+        ".claude/skills/gsd-ns-context",
+        ".claude/skills/gsd-ns-ideate",
+        ".claude/skills/gsd-ns-manage",
+        ".claude/skills/gsd-ns-project",
+        ".claude/skills/gsd-ns-review",
+        ".claude/skills/gsd-ns-workflow",
+        ".claude/skills/gsd-onboard",
+        ".claude/skills/gsd-pause-work",
+        ".claude/skills/gsd-phase",
+        ".claude/skills/gsd-plan-phase",
+        ".claude/skills/gsd-plan-review-convergence",
+        ".claude/skills/gsd-pr-branch",
+        ".claude/skills/gsd-profile-user",
+        ".claude/skills/gsd-progress",
+        ".claude/skills/gsd-quick",
+        ".claude/skills/gsd-quick-batch",
+        ".claude/skills/gsd-resume-work",
+        ".claude/skills/gsd-review",
+        ".claude/skills/gsd-review-backlog",
+        ".claude/skills/gsd-secure-phase",
+        ".claude/skills/gsd-settings",
+        ".claude/skills/gsd-ship",
+        ".claude/skills/gsd-sketch",
+        ".claude/skills/gsd-spec-phase",
+        ".claude/skills/gsd-spike",
+        ".claude/skills/gsd-stats",
+        ".claude/skills/gsd-surface",
+        ".claude/skills/gsd-thread",
+        ".claude/skills/gsd-ui-phase",
+        ".claude/skills/gsd-ui-review",
+        ".claude/skills/gsd-ultraplan-phase",
+        ".claude/skills/gsd-undo",
+        ".claude/skills/gsd-update",
+        ".claude/skills/gsd-validate-phase",
+        ".claude/skills/gsd-verify-work",
+        ".claude/skills/gsd-workspace",
+        ".claude/skills/gsd-workstreams",
+        ".npm"
+      ],
+      "home_tree_sha256": "f04663642201f65237bbddc9ab705ed25b41b66b9c6967510742136d5276e3d7",
+      "pin_checks": [
+        {
+          "repo": "open-gsd/gsd-core",
+          "matched": true,
+          "how": "npm @opengsd/gsd-core@1.21.0: the tarball downloaded from the registry hashes to sha512-qccKXCfMny+UMYO7rDZWz83oy6JWd1D3QR/2WUbcjd7N0WZBhr9/+hsXQ5nVaf423W/GSspMjSqT+ZsQNeCLUQ==, the registry's dist.integrity; the copy npx installed in ~/.npm/_npx/14f509acbe1ffdf9/node_modules/@opengsd/gsd-core holds exactly the tarball's 1282 files; the registry's gitHead is 357508df233ccca0dcf4332b385d6bee9b113da9 (the pin); of the tarball's 1282 files, 953 have a path in the git tree at the pin and 0 of those differ, and 329 are build output with no git path"
+        }
+      ],
+      "newer_seen": [
+        {
+          "repo": "open-gsd/gsd-core",
+          "sha": "7977b4762a2fdabd617d9ccc81b770cdf8a4a5b2",
+          "version": "head of next"
+        },
+        {
+          "repo": "open-gsd/gsd-core",
+          "sha": "357508df233ccca0dcf4332b385d6bee9b113da9",
+          "version": "latest release v1.21.0"
+        },
+        {
+          "repo": "npm:@opengsd/gsd-core",
+          "sha": "357508df233ccca0dcf4332b385d6bee9b113da9",
+          "version": "latest 1.21.0"
+        }
+      ],
+      "claude_code_version": "2.1.325",
+      "browser": "no install-time browser: its UI agents run npx playwright (the unit's own Playwright and the image's Chromium) and take CHROME_BIN, /opt/h2h/chromium on B1 units",
+      "deviations": [
+        "npx gets -y so it does not wait at its install prompt; the version is prereg.json's pin instead of @latest"
+      ]
+    },
+    {
+      "arm": "pstack",
+      "home_of": null,
+      "pins": [
+        {
+          "repo": "cursor/plugins",
+          "sha": "3dbd22ff12742fb28c9700b9760baa29ed41dc13",
+          "version": "0.15.36"
+        }
+      ],
+      "roots": [
+        ".claude/backups",
+        ".claude/plugin-sources/cursor-plugins",
+        ".claude/plugins/cache/cursor-plugins",
+        ".claude/plugins/installed_plugins.json",
+        ".claude/plugins/known_marketplaces.json",
+        ".claude/settings.json",
+        ".claude.json"
+      ],
+      "home_tree_sha256": "290ad042c288e5cc83ff6194c9041d083044b878f0f2ab6736fddd3d20ed614e",
+      "pin_checks": [
+        {
+          "repo": "cursor/plugins",
+          "matched": true,
+          "how": "marketplace tree ~/.claude/plugin-sources/cursor-plugins hashed as a git tree (attributes off) is 811070ab62bbbb6af848245cb93e1d7da886cea9, the pin's tree"
+        },
+        {
+          "repo": "cursor/plugins",
+          "matched": true,
+          "how": "installed plugin harness/pstack/claude-code ~/.claude/plugins/cache/cursor-plugins/pstack/0.15.36 hashed as a git tree (attributes off) is cdbbd4ca5dd2f4ca0eef3294e7b981c0c610d4bb, the pin's tree"
+        }
+      ],
+      "newer_seen": [
+        {
+          "repo": "cursor/plugins",
+          "sha": "bf0c7cd80abdbf7fe47b634978a7d1b4071f71a7",
+          "version": "head of main"
+        }
+      ],
+      "claude_code_version": "2.1.325",
+      "browser": "none: the pack documents no browser runtime",
+      "deviations": [
+        "marketplace added from the pinned cursor/plugins tree copied under HOME instead of GitHub's head"
+      ]
+    },
+    {
+      "arm": "tstack",
+      "home_of": null,
+      "pins": [
+        {
+          "repo": "t3dotgg/tstack",
+          "sha": "11e37a74d0a6868c121cd0910ab2b3bd9873b92a"
+        }
+      ],
+      "roots": [
+        ".claude/skills/babysit-pr",
+        ".claude/skills/council",
+        ".claude/skills/file-pr",
+        ".claude/skills/full-send",
+        ".claude/skills/full-stop",
+        ".claude/skills/leaving-pr-comments",
+        ".claude/skills/modernize",
+        ".claude/skills/sol-loop",
+        ".claude/skills/takeover"
+      ],
+      "home_tree_sha256": "1121444c21e208ae3d1600d39c6e9e706b6b1ba428978fe726f7da76ee28f3ad",
+      "pin_checks": [
+        {
+          "repo": "t3dotgg/tstack",
+          "matched": true,
+          "how": "skills directory ~/.claude/skills hashed as a git tree (attributes off) is f9330a3ec8391d71047a58928cb4204a839eb4ec, the pin's tree"
+        }
+      ],
+      "newer_seen": [
+        {
+          "repo": "t3dotgg/tstack",
+          "sha": "11e37a74d0a6868c121cd0910ab2b3bd9873b92a",
+          "version": "head of main"
+        }
+      ],
+      "claude_code_version": "2.1.325",
+      "browser": "none: the pack documents no browser runtime",
+      "deviations": [
+        "skills copied from the pinned tree instead of a fresh clone of the default branch"
+      ]
+    },
+    {
+      "arm": "gstack-pony",
+      "home_of": null,
+      "pins": [
+        {
+          "repo": "garrytan/gstack",
+          "sha": "3805969159bc7e595cde9dc0f3c267129cef9c16",
+          "version": "1.99.4.0"
+        },
+        {
+          "repo": "AyanbekDos/ponystack",
+          "sha": "bc1b71b0ad0b721bc9ffe299f76a2623e441ff61"
+        }
+      ],
+      "roots": [
+        ".bun",
+        ".cache/ms-playwright",
+        ".claude/CLAUDE.md",
+        ".claude/backups",
+        ".claude/plugin-sources/ponystack",
+        ".claude/plugins/cache/ponystack",
+        ".claude/plugins/installed_plugins.json",
+        ".claude/plugins/known_marketplaces.json",
+        ".claude/settings.json",
+        ".claude/skills/_gstack-command",
+        ".claude/skills/autoplan",
+        ".claude/skills/benchmark",
+        ".claude/skills/benchmark-models",
+        ".claude/skills/browse",
+        ".claude/skills/canary",
+        ".claude/skills/careful",
+        ".claude/skills/codex",
+        ".claude/skills/connect-chrome",
+        ".claude/skills/context-restore",
+        ".claude/skills/context-save",
+        ".claude/skills/cso",
+        ".claude/skills/design-consultation",
+        ".claude/skills/design-html",
+        ".claude/skills/design-motion",
+        ".claude/skills/design-review",
+        ".claude/skills/design-shotgun",
+        ".claude/skills/deslop-shared-libs",
+        ".claude/skills/devex-review",
+        ".claude/skills/diagram",
+        ".claude/skills/document-generate",
+        ".claude/skills/document-release",
+        ".claude/skills/eval-plan",
+        ".claude/skills/freeze",
+        ".claude/skills/gstack",
+        ".claude/skills/gstack-upgrade",
+        ".claude/skills/guard",
+        ".claude/skills/health",
+        ".claude/skills/ios-clean",
+        ".claude/skills/ios-design-review",
+        ".claude/skills/ios-fix",
+        ".claude/skills/ios-qa",
+        ".claude/skills/ios-sync",
+        ".claude/skills/land-and-deploy",
+        ".claude/skills/landing-report",
+        ".claude/skills/learn",
+        ".claude/skills/make-pdf",
+        ".claude/skills/modernize",
+        ".claude/skills/office-hours",
+        ".claude/skills/open-gstack-browser",
+        ".claude/skills/pair-agent",
+        ".claude/skills/plan-ceo-review",
+        ".claude/skills/plan-design-review",
+        ".claude/skills/plan-devex-review",
+        ".claude/skills/plan-tune",
+        ".claude/skills/qa",
+        ".claude/skills/qa-only",
+        ".claude/skills/retro",
+        ".claude/skills/review",
+        ".claude/skills/runaway-stopper",
+        ".claude/skills/scrape",
+        ".claude/skills/setup-browser-cookies",
+        ".claude/skills/setup-deploy",
+        ".claude/skills/setup-gbrain",
+        ".claude/skills/ship",
+        ".claude/skills/skillify",
+        ".claude/skills/spec",
+        ".claude/skills/sync-gbrain",
+        ".claude/skills/test-audit",
+        ".claude/skills/ubicloud",
+        ".claude/skills/unfreeze",
+        ".claude/skills/verify",
+        ".claude/skills/write-skill",
+        ".claude.json",
+        ".gstack"
+      ],
+      "home_tree_sha256": "a95068faefcf04eea2a4f1f4ebf5f84d7dedc9b710bb7095c25fa1b27574954f",
+      "pin_checks": [
+        {
+          "repo": "garrytan/gstack",
+          "matched": true,
+          "how": "checkout ~/.claude/skills/gstack: HEAD 3805969159bc7e595cde9dc0f3c267129cef9c16 is the pin, its tree 3758f84f50becb3c970ae8ba9e26249066d8828d is the pin's tree, and git status shows 0 tracked files changed; untracked files are the installer's own output"
+        },
+        {
+          "repo": "AyanbekDos/ponystack",
+          "matched": true,
+          "how": "marketplace tree ~/.claude/plugin-sources/ponystack hashed as a git tree (attributes off) is 42b8882de159b891eec4105133a800b9196f4c72, the pin's tree"
+        },
+        {
+          "repo": "AyanbekDos/ponystack",
+          "matched": true,
+          "how": "installed plugin ~/.claude/plugins/cache/ponystack/ponystack/0.1.0 hashed as a git tree (attributes off) is 42b8882de159b891eec4105133a800b9196f4c72, the pin's tree"
+        }
+      ],
+      "newer_seen": [
+        {
+          "repo": "garrytan/gstack",
+          "sha": "0326b144af36676d599dcf63a9fad9a870d22ed6",
+          "version": "head of main"
+        },
+        {
+          "repo": "garrytan/gstack",
+          "sha": "81fb9008351d29fccc3e146d860a9cda8c104a2d",
+          "version": "latest release v1.99.4.0"
+        },
+        {
+          "repo": "AyanbekDos/ponystack",
+          "sha": "bc1b71b0ad0b721bc9ffe299f76a2623e441ff61",
+          "version": "head of master"
+        }
+      ],
+      "claude_code_version": "2.1.325",
+      "browser": "as gstack",
+      "deviations": [
+        "as gstack",
+        "ponystack's marketplace added from its pinned tree copied under HOME instead of GitHub's head"
+      ]
+    },
+    {
+      "arm": "gstack-oneline",
+      "home_of": "gstack",
+      "pins": [
+        {
+          "repo": "garrytan/gstack",
+          "sha": "3805969159bc7e595cde9dc0f3c267129cef9c16",
+          "version": "1.99.4.0"
+        }
+      ],
+      "roots": [
+        ".bun",
+        ".cache/ms-playwright",
+        ".claude/CLAUDE.md",
+        ".claude/backups",
+        ".claude/settings.json",
+        ".claude/skills/_gstack-command",
+        ".claude/skills/autoplan",
+        ".claude/skills/benchmark",
+        ".claude/skills/benchmark-models",
+        ".claude/skills/browse",
+        ".claude/skills/canary",
+        ".claude/skills/careful",
+        ".claude/skills/codex",
+        ".claude/skills/connect-chrome",
+        ".claude/skills/context-restore",
+        ".claude/skills/context-save",
+        ".claude/skills/cso",
+        ".claude/skills/design-consultation",
+        ".claude/skills/design-html",
+        ".claude/skills/design-motion",
+        ".claude/skills/design-review",
+        ".claude/skills/design-shotgun",
+        ".claude/skills/deslop-shared-libs",
+        ".claude/skills/devex-review",
+        ".claude/skills/diagram",
+        ".claude/skills/document-generate",
+        ".claude/skills/document-release",
+        ".claude/skills/eval-plan",
+        ".claude/skills/freeze",
+        ".claude/skills/gstack",
+        ".claude/skills/gstack-upgrade",
+        ".claude/skills/guard",
+        ".claude/skills/health",
+        ".claude/skills/ios-clean",
+        ".claude/skills/ios-design-review",
+        ".claude/skills/ios-fix",
+        ".claude/skills/ios-qa",
+        ".claude/skills/ios-sync",
+        ".claude/skills/land-and-deploy",
+        ".claude/skills/landing-report",
+        ".claude/skills/learn",
+        ".claude/skills/make-pdf",
+        ".claude/skills/modernize",
+        ".claude/skills/office-hours",
+        ".claude/skills/open-gstack-browser",
+        ".claude/skills/pair-agent",
+        ".claude/skills/plan-ceo-review",
+        ".claude/skills/plan-design-review",
+        ".claude/skills/plan-devex-review",
+        ".claude/skills/plan-tune",
+        ".claude/skills/qa",
+        ".claude/skills/qa-only",
+        ".claude/skills/retro",
+        ".claude/skills/review",
+        ".claude/skills/runaway-stopper",
+        ".claude/skills/scrape",
+        ".claude/skills/setup-browser-cookies",
+        ".claude/skills/setup-deploy",
+        ".claude/skills/setup-gbrain",
+        ".claude/skills/ship",
+        ".claude/skills/skillify",
+        ".claude/skills/spec",
+        ".claude/skills/sync-gbrain",
+        ".claude/skills/test-audit",
+        ".claude/skills/ubicloud",
+        ".claude/skills/unfreeze",
+        ".claude/skills/verify",
+        ".claude/skills/write-skill",
+        ".claude.json",
+        ".gstack"
+      ],
+      "home_tree_sha256": "9e541432e300e12d4f0a9c75f22dd85b541646b4d72193168eb717409634ff3b",
+      "pin_checks": [
+        {
+          "repo": "garrytan/gstack",
+          "matched": true,
+          "how": "checkout ~/.claude/skills/gstack: HEAD 3805969159bc7e595cde9dc0f3c267129cef9c16 is the pin, its tree 3758f84f50becb3c970ae8ba9e26249066d8828d is the pin's tree, and git status shows 0 tracked files changed; untracked files are the installer's own output"
+        }
+      ],
+      "newer_seen": [
+        {
+          "repo": "garrytan/gstack",
+          "sha": "0326b144af36676d599dcf63a9fad9a870d22ed6",
+          "version": "head of main"
+        },
+        {
+          "repo": "garrytan/gstack",
+          "sha": "81fb9008351d29fccc3e146d860a9cda8c104a2d",
+          "version": "latest release v1.99.4.0"
+        }
+      ],
+      "claude_code_version": "2.1.325",
+      "browser": "as gstack",
+      "deviations": [
+        "as gstack"
+      ]
+    },
+    {
+      "arm": "gstack-qa",
+      "home_of": "gstack",
+      "pins": [
+        {
+          "repo": "garrytan/gstack",
+          "sha": "3805969159bc7e595cde9dc0f3c267129cef9c16",
+          "version": "1.99.4.0"
+        }
+      ],
+      "roots": [
+        ".bun",
+        ".cache/ms-playwright",
+        ".claude/CLAUDE.md",
+        ".claude/backups",
+        ".claude/settings.json",
+        ".claude/skills/_gstack-command",
+        ".claude/skills/autoplan",
+        ".claude/skills/benchmark",
+        ".claude/skills/benchmark-models",
+        ".claude/skills/browse",
+        ".claude/skills/canary",
+        ".claude/skills/careful",
+        ".claude/skills/codex",
+        ".claude/skills/connect-chrome",
+        ".claude/skills/context-restore",
+        ".claude/skills/context-save",
+        ".claude/skills/cso",
+        ".claude/skills/design-consultation",
+        ".claude/skills/design-html",
+        ".claude/skills/design-motion",
+        ".claude/skills/design-review",
+        ".claude/skills/design-shotgun",
+        ".claude/skills/deslop-shared-libs",
+        ".claude/skills/devex-review",
+        ".claude/skills/diagram",
+        ".claude/skills/document-generate",
+        ".claude/skills/document-release",
+        ".claude/skills/eval-plan",
+        ".claude/skills/freeze",
+        ".claude/skills/gstack",
+        ".claude/skills/gstack-upgrade",
+        ".claude/skills/guard",
+        ".claude/skills/health",
+        ".claude/skills/ios-clean",
+        ".claude/skills/ios-design-review",
+        ".claude/skills/ios-fix",
+        ".claude/skills/ios-qa",
+        ".claude/skills/ios-sync",
+        ".claude/skills/land-and-deploy",
+        ".claude/skills/landing-report",
+        ".claude/skills/learn",
+        ".claude/skills/make-pdf",
+        ".claude/skills/modernize",
+        ".claude/skills/office-hours",
+        ".claude/skills/open-gstack-browser",
+        ".claude/skills/pair-agent",
+        ".claude/skills/plan-ceo-review",
+        ".claude/skills/plan-design-review",
+        ".claude/skills/plan-devex-review",
+        ".claude/skills/plan-tune",
+        ".claude/skills/qa",
+        ".claude/skills/qa-only",
+        ".claude/skills/retro",
+        ".claude/skills/review",
+        ".claude/skills/runaway-stopper",
+        ".claude/skills/scrape",
+        ".claude/skills/setup-browser-cookies",
+        ".claude/skills/setup-deploy",
+        ".claude/skills/setup-gbrain",
+        ".claude/skills/ship",
+        ".claude/skills/skillify",
+        ".claude/skills/spec",
+        ".claude/skills/sync-gbrain",
+        ".claude/skills/test-audit",
+        ".claude/skills/ubicloud",
+        ".claude/skills/unfreeze",
+        ".claude/skills/verify",
+        ".claude/skills/write-skill",
+        ".claude.json",
+        ".gstack"
+      ],
+      "home_tree_sha256": "9e541432e300e12d4f0a9c75f22dd85b541646b4d72193168eb717409634ff3b",
+      "pin_checks": [
+        {
+          "repo": "garrytan/gstack",
+          "matched": true,
+          "how": "checkout ~/.claude/skills/gstack: HEAD 3805969159bc7e595cde9dc0f3c267129cef9c16 is the pin, its tree 3758f84f50becb3c970ae8ba9e26249066d8828d is the pin's tree, and git status shows 0 tracked files changed; untracked files are the installer's own output"
+        }
+      ],
+      "newer_seen": [
+        {
+          "repo": "garrytan/gstack",
+          "sha": "0326b144af36676d599dcf63a9fad9a870d22ed6",
+          "version": "head of main"
+        },
+        {
+          "repo": "garrytan/gstack",
+          "sha": "81fb9008351d29fccc3e146d860a9cda8c104a2d",
+          "version": "latest release v1.99.4.0"
+        }
+      ],
+      "claude_code_version": "2.1.325",
+      "browser": "as gstack (/qa drives browse)",
+      "deviations": [
+        "as gstack"
+      ]
+    }
+  ]
+}

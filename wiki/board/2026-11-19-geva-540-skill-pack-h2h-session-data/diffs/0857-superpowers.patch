@@ -1,0 +1,45 @@
+diff --git a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+index 29a21da..45d8c62 100644
+--- a/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
++++ b/pkl-core/src/main/java/org/pkl/core/util/yaml/YamlEscaper.java
+@@ -44,8 +44,10 @@ public final class YamlEscaper extends AbstractCharEscaper {
+   @Override
+   protected @Nullable String findReplacement(char ch) {
+     //noinspection UnnecessaryUnicodeEscape
+-    return ch <= '\u0022'
+-        ? REPLACEMENTS[ch]
+-        : ch == '\u2028' ? "\\L" : ch == '\u2029' ? "\\P" : null;
++    if (ch <= '\u0022') return REPLACEMENTS[ch];
++    if (ch == '\\') return "\\\\";
++    if (ch == '\u2028') return "\\L";
++    if (ch == '\u2029') return "\\P";
++    return null;
+   }
+ }
+diff --git a/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl b/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
+index 5d8c5e9..ed09681 100644
+--- a/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
++++ b/pkl-core/src/test/files/LanguageSnippetTests/input/api/yamlRendererStrings.yml.pkl
+@@ -105,6 +105,11 @@ p10 = "?apple"
+ p11 = ":banana"
+ p12 = "-orange"
+ 
++// backslashes in quoted strings
++q1 = "\t\\d"
++q2 = "\\"
++q3 = "one\\two"
++
+ output {
+   renderer = new YamlRenderer {}
+ }
+diff --git a/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml b/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
+index 811c851..177cbd6 100644
+--- a/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
++++ b/pkl-core/src/test/files/LanguageSnippetTests/output/api/yamlRendererStrings.yml
+@@ -118,3 +118,6 @@ p9: |-
+ p10: ?apple
+ p11: :banana
+ p12: -orange
++q1: "\t\\d"
++q2: \
++q3: one\two

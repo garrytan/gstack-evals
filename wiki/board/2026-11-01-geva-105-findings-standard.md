@@ -21,9 +21,9 @@ links:
 
 ## The ruling
 
-Garry Tan, 2026-11-01 at about 17:02 UTC, answering the gstack-evals Captain's ask on the insight plan (GST-800, written by GEVA-98): "Do it".
+Garry Tan, 2026-11-01 at about 17:02 UTC, approved the gstack-evals Captain's ask on the insight plan (GST-800, written by GEVA-98).
 
-"Do it" takes every recommendation on that ask. The decisions it took:
+His approval takes every recommendation on that ask. The decisions it took:
 
 - **A1.** Post only from a merged finding file that passes a claim check: the headline holds at both ends of its interval, a null says how big an effect the test could have seen, a model from another lab reviews it, another crew reruns the numbers, and any relationship with a tested company is disclosed.
 - **B1.** Each eval repo holds its own finding files. One index of findings and one registry of every run that didn't work out sit in the org drive's research/ folder until two repos are public, then move to one small public repo (proposed name garrytan/evals).
@@ -77,7 +77,7 @@ It blocks any post. A cross-family model runs it against the data, and the file 
 
 ### 3. The admission check
 
-Before any confirmatory preregistration, use data in hand or a small preregistered pilot on a dev split (about $20 to $60) to compute the control arm's rate per task and the MDD at the planned n. Admit only if the control arm has room for the expected effect (for a gain, 100% minus the control rate is at least twice the MDD) and the MDD sits inside the claim margin. For behavior metrics, the control must sit near the floor with room above. The pilot's tasks never enter the confirmatory set.
+Before any confirmatory preregistration, use data in hand or a small preregistered pilot on a dev split to compute the control arm's rate per task and the MDD at the planned n. Admit only if the control arm has room for the expected effect (for a gain, 100% minus the control rate is at least twice the MDD) and the MDD sits inside the claim margin. For behavior metrics, the control must sit near the floor with room above. The pilot's tasks never enter the confirmatory set.
 
 It is not a fixed band: an 81% control still admits a 19-point gain if the test can see it. Quick look 3 had already measured Opus at 79% on TB2 with no skills before stacks round 1 was built, and nothing forced a decision on it. This check is what forces it.
 
@@ -109,10 +109,10 @@ The findings index (org drive research/INDEX.md) lists every finding across the 
 ### 8. Publication order
 
 1. Now: nothing is posted. Captains write finding files privately and run the claim check.
-2. First public finding: GBrain-Evals' particle-1 result on LongMemEval, because its repo is already public, after a primary-source check of its report and receipts, a second-judge sensitivity and the disclosure check.
+2. First public finding: the gbrain Captain's particle-1 result on LongMemEval, because its repo is already public, after a primary-source check of its report and receipts, a second-judge sensitivity and the disclosure check.
 3. Then gstack's null, #108 and #109 as one finding (2026-11-01-geva-105-gstack-null-review-and-tb2), after GST-618 closes, the publish audit passes, the trial bundles and a direct-key rerun path exist and another crew has rerun it. Garry makes the repo public.
-4. Then Harness Evals' rule-delivery result (H10) with its frontier rerun, after its audit.
-5. GGStack after its held-out run.
+4. Then the harness Captain's rule-delivery result (H10) with its frontier rerun, after its audit.
+5. Another crew's private project, after its held-out run.
 
 Garry posts on X, from finding files the Captains hand him: at most one finding a week once the first repo is public, plus a monthly thread linking the month's files and the registry's new nulls.
 
@@ -126,3 +126,10 @@ E1 took the plan's lighter checked gates for docs and results, tried on three PR
 - The pilot runs on the next three docs or results PRs, and post-merge corrections are counted as its guardrail.
 
 Org R51 (2026-11-01) sets review depth meanwhile: docs, tests and eval or research write-ups get one reviewer and one round at /ship, the full panel runs only on code that touches security, user data, money or the merge checks, and no change gets more than two review rounds.
+
+<details>
+<summary>Agent notes</summary>
+
+Before any confirmatory preregistration, use data in hand or a small preregistered pilot on a dev split (about $20 to $60) to compute the control arm's rate per task and the MDD at the planned n. Admit only if the control arm has room for the expected effect (for a gain, 100% minus the control rate is at least twice the MDD) and the MDD sits inside the claim margin. For behavior metrics, the control must sit near the floor with room above. The pilot's tasks never enter the confirmatory set.
+
+</details>

@@ -1,0 +1,37 @@
+{
+  "meter_id": "m_3dadbbb5d3cb59ce30288a28",
+  "micros": 1820,
+  "requests": 12,
+  "unknown": 0,
+  "refused": 0,
+  "unsettled": 0,
+  "by_model": {
+    "anthropic:claude-opus-5-5": {
+      "micros": 1600,
+      "requests": 2
+    },
+    "typesafe:jev-1.13.0": {
+      "micros": 70,
+      "requests": 5
+    },
+    "openrouter:particle-ai/particle-1": {
+      "micros": 150,
+      "requests": 5
+    }
+  },
+  "upstream": {
+    "statuses": {
+      "200": 12
+    },
+    "failed": 0
+  },
+  "undrained": 0,
+  "peak_inflight_micros": 675345,
+  "peak_inflight_calls": 1,
+  "largest_prompt": 449,
+  "bytes_per_token": 60.05,
+  "cache_write": [
+    "none",
+    "5m"
+  ]
+}
