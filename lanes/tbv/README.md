@@ -80,7 +80,7 @@ B2 then passes a kept session's directory to assemble-a as `--task-dir`. tests/t
 `gstack-evals tbv dryrun <scratch dir>` runs three parts:
 
 1. The frozen bundle's own dry run with this checkout as the scorer. It must print PASS 150, FAIL 0, and its transcript must match the frozen dryrun.txt apart from the scorer HEAD line.
-2. The same 150 frozen checks against the head rule, through adapt.ts. Every check passes except the ordered changes dryrun.ts lists in ORDERED (today one: item 1 refuses a copy relabelled to the other family before the duplicate check does).
+2. The same 150 frozen checks against the head rule, through adapt.ts. Every check passes except the ordered changes dryrun.ts lists in ORDERED (today four: item 1 refuses a copy relabelled to the other family before the duplicate check does, and amendment 2 section 7 keeps the third Opus pass and the capy family in tbv-held's all-in check up to the $3,000 stop, so three frozen budget checks change).
 3. The amendment's and the build's rules: new end states, size drops against coverage, judge pricing by model and packet kind, the all-in check before every paid item, the leak exemption, held-out source B accrual, items 1 to 7 and 16, the regression table, each family's history limit, the skill-start check, the proxy's reservations beside the rule's worst cases, tbv-author's worst case per task, the driver, judge and key items end to end on stub upstreams through the real proxy and ledger, and source A's rebuild tier on fixtures.
 
 ## Tests
