@@ -127,12 +127,30 @@ const ARMS: Arm[] = ["none", "current", "principle", "lens"];
 const oneOf = <T extends string>(v: string, all: T[], what: string): T => (all.includes(v as T) ? (v as T) : fail("E_TBV_INPUT", what + " " + JSON.stringify(v) + " is not one of " + all.join(", ")));
 const count = (v: string, what: string) => (/^[1-9]\d*$/.test(v) ? Number(v) : fail("E_TBV_INPUT", what + " must be a positive integer"));
 
-/** tbv readings --records PATH --keys DIR --split FILE --packet-key FILE --judges FILE --out FILE --models a,b --passes m=n,...
- * --skill-arms a,b [--capy-passes N] [--principle-detector FILE (one regex per line, # comments)] [--dev-gap GAP,MDD]
- * [--held SEALED_DIR --seal-cmd CMD] */
-export async function run(argv: string[], io: Io): Promise<number> {
-  const a = parseFlags(argv.slice(1), ["records", "keys", "split", "packet-key", "judges", "out", "models", "passes", "skill-arms"], ["capy-passes", "principle-detector", "dev-gap", "held", "seal-cmd"]);
-  const seal = heldOutputs(a, ["out"], undefined, [basename(a.out!)]);
+/** Several packet keys and judge files, comma-separated, read as one (tbv-held and tbv-held-p3 judge their own batches). A
+ * packet, a judge record or a reading's packet of one kind in two of them refuses, so no batch is joined twice. The
+ * refusal prints counts only, since a label carries a held-out task id. */
+export function joinBatches(keys: PacketKeyEntry[][], judges: JudgeRecord[][]): { entries: PacketKeyEntry[]; judges: JudgeRecord[] } {
+  const once = (what: string, ids: string[][]) => {
+    const seen = new Set<string>();
+    let twice = 0;
+    for (const batch of ids) {
+      const mine = new Set(batch);
+      for (const id of mine) if (seen.has(id)) twice++;
+      for (const id of mine) seen.add(id);
+    }
+    if (twice) fail("E_TBV_INPUT", twice + " " + what + " in two of the files given; give each batch once");
+  };
+  once("packets are", keys.map((es) => es.map((e) => e.packet)));
+  once("packets of one kind and label are", keys.map((es) => es.map((e) => e.kind + " " + e.label)));
+  once("judge records of one packet and role are", judges.map((js) => js.map((j) => j.packet + " " + j.role)));
+  return { entries: keys.flat(), judges: judges.flat() };
+}
+
+export type ReadingsInput = Parameters<typeof buildReadings>[0];
+/** The readings writer's inputs from its parsed flags: the split manifest and its sha256, the records, the packet keys and
+ * judge records joined across batches, the keys and the plan flags. tbv r78 reads the same inputs. */
+export function readingsInput(a: Record<string, string>): ReadingsInput {
   const bytes = readFileSync(a.split!);
   let manifest: SplitManifest;
   try {
@@ -158,12 +176,13 @@ export async function run(argv: string[], io: Io): Promise<number> {
       })
     : null;
   if (principle && !principle.length) fail("E_TBV_INPUT", "the principle detector holds no regex");
-  const rd = buildReadings({
+  const batches = joinBatches(a["packet-key"]!.split(",").map(readPacketKey), a.judges!.split(",").map((f) => readNdjson<JudgeRecord>(f)));
+  return {
     manifest,
     manifestSha256: sha256(bytes),
     records: readRecords(a.records!),
-    entries: readPacketKey(a["packet-key"]!),
-    judges: readNdjson<JudgeRecord>(a.judges!),
+    entries: batches.entries,
+    judges: batches.judges,
     keys: readKeys(a.keys!),
     flags: {
       models: a.models!.split(",").map((m) => oneOf(m, MODELS, "--models")),
@@ -173,7 +192,16 @@ export async function run(argv: string[], io: Io): Promise<number> {
       ...(gap ? { devGap: { opusPrincipleMinusNone: gap[0]!, devMdd: gap[1]! } } : {}),
     },
     principle,
-  });
+  };
+}
+
+/** tbv readings --records PATH --keys DIR --split FILE --packet-key FILE[,FILE] --judges FILE[,FILE] --out FILE --models a,b --passes m=n,...
+ * --skill-arms a,b [--capy-passes N] [--principle-detector FILE (one regex per line, # comments)] [--dev-gap GAP,MDD]
+ * [--held SEALED_DIR --seal-cmd CMD] */
+export async function run(argv: string[], io: Io): Promise<number> {
+  const a = parseFlags(argv.slice(1), ["records", "keys", "split", "packet-key", "judges", "out", "models", "passes", "skill-arms"], ["capy-passes", "principle-detector", "dev-gap", "held", "seal-cmd"]);
+  const seal = heldOutputs(a, ["out"], undefined, [basename(a.out!)]);
+  const rd = buildReadings(readingsInput(a));
   writeFileSync(a.out!, JSON.stringify(rd, null, 2) + "\n");
   seal?.(a.out!);
   io.out("readings: " + rd.readings.length + " rows, " + (rd.controls?.length ?? 0) + " control rows");

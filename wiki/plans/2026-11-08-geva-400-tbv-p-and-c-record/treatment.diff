@@ -1,0 +1,1856 @@
+diff --git a/autoplan/SKILL.md b/autoplan/SKILL.md
+index 5413fe13a..b49a58eac 100644
+--- a/autoplan/SKILL.md
++++ b/autoplan/SKILL.md
+@@ -34,7 +34,7 @@ hooks:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/autoplan/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/autoplan/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/autoplan/sections/preamble.md b/autoplan/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/autoplan/sections/preamble.md
++++ b/autoplan/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/canary/SKILL.md b/canary/SKILL.md
+index 0ef61ffd7..ba33d4661 100644
+--- a/canary/SKILL.md
++++ b/canary/SKILL.md
+@@ -19,7 +19,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/canary/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/canary/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/canary/sections/preamble.md b/canary/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/canary/sections/preamble.md
++++ b/canary/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/captain/SKILL.md b/captain/SKILL.md
+index 41dd2db74..00f4e7de5 100644
+--- a/captain/SKILL.md
++++ b/captain/SKILL.md
+@@ -26,7 +26,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/captain/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/captain/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/captain/sections/preamble.md b/captain/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/captain/sections/preamble.md
++++ b/captain/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/captain/templates/READY.md b/captain/templates/READY.md
+index 221b1f538..211e68588 100644
+--- a/captain/templates/READY.md
++++ b/captain/templates/READY.md
+@@ -36,6 +36,8 @@ The lane's own lines, after the block:
+ 
+ ```text
+ pin: <sha40>                      # the full head SHA, restated
++Failed or skipped: <none | each check, case or step that failed or never ran, and why>
++Also changed: <none | each config, CI or out-of-scope file the PR touches>
+ screen choice: <--no-screen: cases <ids> ran focused and passed | --screen: <reason>>
+ flaky: <none | case, both run ids, logged in the ledger on <date>>
+ review passes: <n> (deferred: <items filed as issues, or none>)
+diff --git a/captain/templates/report.md b/captain/templates/report.md
+index 13c0319d9..abf46c4ab 100644
+--- a/captain/templates/report.md
++++ b/captain/templates/report.md
+@@ -4,7 +4,7 @@ Written by the lane when it finishes. The controller reads this before chat.
+ 
+ ## Outcome
+ 
+-<what shipped, in two or three sentences; what was out of scope and where it went>
++<first a `Failed or skipped:` line naming each test, check or step that failed or never ran, or none, and an `Also changed:` line for config, CI or files outside the ask, or none; then what shipped, in two or three sentences; what was out of scope and where it went>
+ 
+ Unverified: <none | each claim above that the lane did not check itself, and why>
+ 
+diff --git a/capy/skill/gstack/factory.md b/capy/skill/gstack/factory.md
+index e7db9c720..ffdf31aac 100644
+--- a/capy/skill/gstack/factory.md
++++ b/capy/skill/gstack/factory.md
+@@ -11,7 +11,7 @@ What seven Captain crews agreed on. Your crew's CREW.md and recorded approvals d
+ 7. **Measure before you act.** Run the real system on the merged tree you ship; a real run outranks a reviewed plan. Each number names its run, commit or uncapped query; say what you did not verify.
+ 8. **Evals decide, and losses get reported.** Preregister bars, cap and stop rule before paying [/eval-plan]. Cheap proof (a keyless fake, a smoke) first. Controls: no-skill and placebo arms, clean decoys. Report use and pass apart; quote spend from the meter. A new part needs proof it helps or a dated test plan [ETHOS.md: 9. Earn Its Place].
+ 9. **Flakes: one rerun, a ledger, a daily fix.** Only the policy's rerun, never for a harness or infra red; a second red is real; never loosen a test. [docs/captain.md: The daily flaky pass]
+-10. **Quiet.** Message on a decision, a blocker, a READY or a finished phase. A broadcast needing no reply goes in the Captain's notes; never reply just to acknowledge.
++10. **Quiet.** Message on a decision, a blocker, a READY or a finished phase. Reports and replies open with `Failed or skipped:`, `Unverified:` and `Also changed:` lines (each item, or none), under 250 words; top 10 of long lists. A broadcast needing no reply goes in the Captain's notes; never reply just to acknowledge.
+ 11. **Ask once, plainly.** One ask per decision, explained like the owner is five: your Captain's name, then a lettered line each: "A: <code> hit problem p, which happens when h. We could do 1) x, 2) y or 3) z. Recommendation x because why. A1 to take recommendation." "do it" takes every recommendation; "A2" takes option 2. Owner tasks: the exact link (in Capy: path and field), numbered steps, the reply word. Never re-ask a standing rule; check what you can yourself. [docs/captain.md: The ask format]
+ 12. **Fresh threads, closed out.** One thread per unit of work; past 500M tokens, rotate [/runaway-stopper]. Crew threads never create threads: ask your Captain (Captain to Captain across projects), or report one you made by code for crew.add. Its Captain archives only its crew's threads; threads outside every crew are the owner's, even its automation's. Size reviews to the diff; read the meter. [docs/ship-budget.md; docs/captain.md: New threads join the crew]
+ 13. **The owner's model preference.** `gstack-models resolve --role agent` picks agent models, except cross-family voices and eval subjects. [docs/model-policy.md: Your model preference]
+diff --git a/codex/SKILL.md b/codex/SKILL.md
+index 8a914356d..3e1bd3ff8 100644
+--- a/codex/SKILL.md
++++ b/codex/SKILL.md
+@@ -20,7 +20,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/codex/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/codex/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/codex/sections/preamble.md b/codex/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/codex/sections/preamble.md
++++ b/codex/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/context-restore/SKILL.md b/context-restore/SKILL.md
+index ee68c8752..1cf3f329e 100644
+--- a/context-restore/SKILL.md
++++ b/context-restore/SKILL.md
+@@ -21,7 +21,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/context-restore/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/context-restore/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/context-restore/sections/preamble.md b/context-restore/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/context-restore/sections/preamble.md
++++ b/context-restore/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/context-save/SKILL.md b/context-save/SKILL.md
+index 05c13659a..1815dc62b 100644
+--- a/context-save/SKILL.md
++++ b/context-save/SKILL.md
+@@ -21,7 +21,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/context-save/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/context-save/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/context-save/sections/preamble.md b/context-save/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/context-save/sections/preamble.md
++++ b/context-save/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/design-consultation/SKILL.md b/design-consultation/SKILL.md
+index 71ecbe7df..4abbb5906 100644
+--- a/design-consultation/SKILL.md
++++ b/design-consultation/SKILL.md
+@@ -45,7 +45,7 @@ gbrain:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/design-consultation/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/design-consultation/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/design-consultation/sections/preamble.md b/design-consultation/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/design-consultation/sections/preamble.md
++++ b/design-consultation/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/design-html/SKILL.md b/design-html/SKILL.md
+index 0eaaa3e97..db26e85a0 100644
+--- a/design-html/SKILL.md
++++ b/design-html/SKILL.md
+@@ -22,7 +22,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/design-html/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/design-html/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/design-html/sections/preamble.md b/design-html/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/design-html/sections/preamble.md
++++ b/design-html/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/design-motion/SKILL.md b/design-motion/SKILL.md
+index 01d2938cd..11d758003 100644
+--- a/design-motion/SKILL.md
++++ b/design-motion/SKILL.md
+@@ -21,7 +21,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/design-motion/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/design-motion/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/design-motion/sections/preamble.md b/design-motion/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/design-motion/sections/preamble.md
++++ b/design-motion/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/design-review/SKILL.md b/design-review/SKILL.md
+index 784ec2f66..570c2ac5f 100644
+--- a/design-review/SKILL.md
++++ b/design-review/SKILL.md
+@@ -22,7 +22,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/design-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/design-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/design-review/sections/preamble.md b/design-review/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/design-review/sections/preamble.md
++++ b/design-review/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/design-shotgun/SKILL.md b/design-shotgun/SKILL.md
+index e086e9bfa..35b3f697a 100644
+--- a/design-shotgun/SKILL.md
++++ b/design-shotgun/SKILL.md
+@@ -39,7 +39,7 @@ gbrain:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/design-shotgun/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/design-shotgun/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/design-shotgun/sections/preamble.md b/design-shotgun/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/design-shotgun/sections/preamble.md
++++ b/design-shotgun/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/devex-review/SKILL.md b/devex-review/SKILL.md
+index 1dc425e3c..54978efbc 100644
+--- a/devex-review/SKILL.md
++++ b/devex-review/SKILL.md
+@@ -21,7 +21,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/devex-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/devex-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/devex-review/sections/preamble.md b/devex-review/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/devex-review/sections/preamble.md
++++ b/devex-review/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/document-generate/SKILL.md b/document-generate/SKILL.md
+index 1c0dba743..d65898cd7 100644
+--- a/document-generate/SKILL.md
++++ b/document-generate/SKILL.md
+@@ -25,7 +25,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/document-generate/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/document-generate/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/document-generate/sections/preamble.md b/document-generate/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/document-generate/sections/preamble.md
++++ b/document-generate/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/document-release/SKILL.md b/document-release/SKILL.md
+index 437e8ffe5..9c1d010ce 100644
+--- a/document-release/SKILL.md
++++ b/document-release/SKILL.md
+@@ -21,7 +21,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/document-release/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/document-release/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/document-release/sections/preamble.md b/document-release/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/document-release/sections/preamble.md
++++ b/document-release/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/eval-plan/SKILL.md b/eval-plan/SKILL.md
+index 7dc0e5be6..06ee0cce1 100644
+--- a/eval-plan/SKILL.md
++++ b/eval-plan/SKILL.md
+@@ -24,7 +24,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/eval-plan/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/eval-plan/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/eval-plan/sections/preamble.md b/eval-plan/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/eval-plan/sections/preamble.md
++++ b/eval-plan/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/health/SKILL.md b/health/SKILL.md
+index ecde9b5f2..06dcde4a8 100644
+--- a/health/SKILL.md
++++ b/health/SKILL.md
+@@ -21,7 +21,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/health/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/health/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/health/sections/preamble.md b/health/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/health/sections/preamble.md
++++ b/health/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/investigate/SKILL.md b/investigate/SKILL.md
+index 81e8e62cc..6573425b1 100644
+--- a/investigate/SKILL.md
++++ b/investigate/SKILL.md
+@@ -92,7 +92,7 @@ Finish only when each of these exists (contract v1):
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/investigate/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/investigate/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+@@ -327,6 +327,9 @@ Output a structured debug report:
+ ```
+ DEBUG REPORT
+ ════════════════════════════════════════
++Failed or skipped: [anything that failed, even if fixed, was skipped or never ran, or none]
++Unverified:      [claims no tool output shows; hypotheses dropped untested, or none]
++Also changed:    [config, CI or files outside the ask, or none]
+ Symptom:         [what the user observed]
+ Root cause:      [what was actually wrong]
+ Fix:             [what was changed, with file:line references]
+diff --git a/investigate/SKILL.md.tmpl b/investigate/SKILL.md.tmpl
+index a9f7b2ecb..a8545254d 100644
+--- a/investigate/SKILL.md.tmpl
++++ b/investigate/SKILL.md.tmpl
+@@ -191,6 +191,9 @@ Output a structured debug report:
+ ```
+ DEBUG REPORT
+ ════════════════════════════════════════
++Failed or skipped: [anything that failed, even if fixed, was skipped or never ran, or none]
++Unverified:      [claims no tool output shows; hypotheses dropped untested, or none]
++Also changed:    [config, CI or files outside the ask, or none]
+ Symptom:         [what the user observed]
+ Root cause:      [what was actually wrong]
+ Fix:             [what was changed, with file:line references]
+diff --git a/investigate/sections/preamble.md b/investigate/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/investigate/sections/preamble.md
++++ b/investigate/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/ios-clean/SKILL.md b/ios-clean/SKILL.md
+index 099596af3..39003204c 100644
+--- a/ios-clean/SKILL.md
++++ b/ios-clean/SKILL.md
+@@ -20,7 +20,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ios-clean/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ios-clean/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/ios-clean/sections/preamble.md b/ios-clean/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/ios-clean/sections/preamble.md
++++ b/ios-clean/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/ios-design-review/SKILL.md b/ios-design-review/SKILL.md
+index 6000c79a5..013634972 100644
+--- a/ios-design-review/SKILL.md
++++ b/ios-design-review/SKILL.md
+@@ -19,7 +19,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ios-design-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ios-design-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/ios-design-review/sections/preamble.md b/ios-design-review/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/ios-design-review/sections/preamble.md
++++ b/ios-design-review/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/ios-fix/SKILL.md b/ios-fix/SKILL.md
+index 12c3e4c43..117e18758 100644
+--- a/ios-fix/SKILL.md
++++ b/ios-fix/SKILL.md
+@@ -21,7 +21,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ios-fix/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ios-fix/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/ios-fix/sections/preamble.md b/ios-fix/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/ios-fix/sections/preamble.md
++++ b/ios-fix/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/ios-qa/SKILL.md b/ios-qa/SKILL.md
+index 2fb38d735..fbcbe7dd0 100644
+--- a/ios-qa/SKILL.md
++++ b/ios-qa/SKILL.md
+@@ -24,7 +24,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ios-qa/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ios-qa/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/ios-qa/sections/preamble.md b/ios-qa/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/ios-qa/sections/preamble.md
++++ b/ios-qa/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/ios-sync/SKILL.md b/ios-sync/SKILL.md
+index 0597d91cb..5c6412912 100644
+--- a/ios-sync/SKILL.md
++++ b/ios-sync/SKILL.md
+@@ -21,7 +21,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ios-sync/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ios-sync/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/ios-sync/sections/preamble.md b/ios-sync/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/ios-sync/sections/preamble.md
++++ b/ios-sync/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/land-and-deploy/SKILL.md b/land-and-deploy/SKILL.md
+index 2243d5140..4d4923727 100644
+--- a/land-and-deploy/SKILL.md
++++ b/land-and-deploy/SKILL.md
+@@ -20,7 +20,7 @@ disable-model-invocation: true
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/land-and-deploy/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/land-and-deploy/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/land-and-deploy/sections/preamble.md b/land-and-deploy/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/land-and-deploy/sections/preamble.md
++++ b/land-and-deploy/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/landing-report/SKILL.md b/landing-report/SKILL.md
+index 449d24b80..a250346fd 100644
+--- a/landing-report/SKILL.md
++++ b/landing-report/SKILL.md
+@@ -20,7 +20,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/landing-report/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/landing-report/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/landing-report/sections/preamble.md b/landing-report/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/landing-report/sections/preamble.md
++++ b/landing-report/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/learn/SKILL.md b/learn/SKILL.md
+index 0d9f456c0..d5e38ab4e 100644
+--- a/learn/SKILL.md
++++ b/learn/SKILL.md
+@@ -21,7 +21,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/learn/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/learn/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/learn/sections/preamble.md b/learn/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/learn/sections/preamble.md
++++ b/learn/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/modernize/SKILL.md b/modernize/SKILL.md
+index 7322016ed..6bba64da3 100644
+--- a/modernize/SKILL.md
++++ b/modernize/SKILL.md
+@@ -23,7 +23,7 @@ disable-model-invocation: true
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/modernize/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/modernize/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/modernize/sections/preamble.md b/modernize/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/modernize/sections/preamble.md
++++ b/modernize/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/office-hours/SKILL.md b/office-hours/SKILL.md
+index 571f62648..52e28bd1c 100644
+--- a/office-hours/SKILL.md
++++ b/office-hours/SKILL.md
+@@ -49,7 +49,7 @@ gbrain:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/office-hours/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/office-hours/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/office-hours/sections/preamble.md b/office-hours/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/office-hours/sections/preamble.md
++++ b/office-hours/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/pair-agent/SKILL.md b/pair-agent/SKILL.md
+index e588551be..445176dd2 100644
+--- a/pair-agent/SKILL.md
++++ b/pair-agent/SKILL.md
+@@ -18,7 +18,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/pair-agent/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/pair-agent/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/pair-agent/sections/preamble.md b/pair-agent/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/pair-agent/sections/preamble.md
++++ b/pair-agent/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/plan-ceo-review/SKILL.md b/plan-ceo-review/SKILL.md
+index e64c876ec..27eae81b3 100644
+--- a/plan-ceo-review/SKILL.md
++++ b/plan-ceo-review/SKILL.md
+@@ -51,7 +51,7 @@ gbrain:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/plan-ceo-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/plan-ceo-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/plan-ceo-review/sections/preamble.md b/plan-ceo-review/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/plan-ceo-review/sections/preamble.md
++++ b/plan-ceo-review/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/plan-design-review/SKILL.md b/plan-design-review/SKILL.md
+index 213b5a34a..c3f9fe7b6 100644
+--- a/plan-design-review/SKILL.md
++++ b/plan-design-review/SKILL.md
+@@ -51,7 +51,7 @@ Recommendation: A when a branch diff exists, otherwise B. Reply with A, B, or C.
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/plan-design-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/plan-design-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (after scope gate)
+ 
+diff --git a/plan-design-review/sections/preamble.md b/plan-design-review/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/plan-design-review/sections/preamble.md
++++ b/plan-design-review/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/plan-devex-review/SKILL.md b/plan-devex-review/SKILL.md
+index b9e9f11ab..1b11c35eb 100644
+--- a/plan-devex-review/SKILL.md
++++ b/plan-devex-review/SKILL.md
+@@ -21,7 +21,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/plan-devex-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/plan-devex-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/plan-devex-review/sections/preamble.md b/plan-devex-review/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/plan-devex-review/sections/preamble.md
++++ b/plan-devex-review/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/plan-eng-review/SKILL.md b/plan-eng-review/SKILL.md
+index 4061ac83b..d969a24fa 100644
+--- a/plan-eng-review/SKILL.md
++++ b/plan-eng-review/SKILL.md
+@@ -63,7 +63,7 @@ Keep the reviewed target fixed when selecting the report destination.
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/plan-eng-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/plan-eng-review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (after scope gate)
+ 
+diff --git a/plan-eng-review/sections/preamble.md b/plan-eng-review/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/plan-eng-review/sections/preamble.md
++++ b/plan-eng-review/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/plan-tune/SKILL.md b/plan-tune/SKILL.md
+index d4e77e818..147041f67 100644
+--- a/plan-tune/SKILL.md
++++ b/plan-tune/SKILL.md
+@@ -25,7 +25,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/plan-tune/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/plan-tune/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/plan-tune/sections/preamble.md b/plan-tune/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/plan-tune/sections/preamble.md
++++ b/plan-tune/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/qa-only/SKILL.md b/qa-only/SKILL.md
+index 34dfe43d6..11a656f8b 100644
+--- a/qa-only/SKILL.md
++++ b/qa-only/SKILL.md
+@@ -19,7 +19,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/qa-only/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/qa-only/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/qa-only/sections/preamble.md b/qa-only/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/qa-only/sections/preamble.md
++++ b/qa-only/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/qa/SKILL.md b/qa/SKILL.md
+index 5c8b6ab91..2c037f1d9 100644
+--- a/qa/SKILL.md
++++ b/qa/SKILL.md
+@@ -22,7 +22,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/qa/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/qa/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/qa/sections/preamble.md b/qa/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/qa/sections/preamble.md
++++ b/qa/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/retro/SKILL.md b/retro/SKILL.md
+index 336dee513..66e2e5488 100644
+--- a/retro/SKILL.md
++++ b/retro/SKILL.md
+@@ -39,7 +39,7 @@ gbrain:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/retro/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/retro/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/retro/sections/preamble.md b/retro/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/retro/sections/preamble.md
++++ b/retro/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/review/SKILL.md b/review/SKILL.md
+index 9b560bd6f..2a83cda90 100644
+--- a/review/SKILL.md
++++ b/review/SKILL.md
+@@ -50,7 +50,7 @@ Finish only when each of these exists (contract v1):
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/review/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/review/sections/preamble.md b/review/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/review/sections/preamble.md
++++ b/review/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/scripts/resolvers/preamble/generate-voice-directive.ts b/scripts/resolvers/preamble/generate-voice-directive.ts
+index 07b3e0279..ccb72a3ae 100644
+--- a/scripts/resolvers/preamble/generate-voice-directive.ts
++++ b/scripts/resolvers/preamble/generate-voice-directive.ts
+@@ -31,8 +31,7 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: \`Failed or skipped:\` (anything that failed, even if fixed, was skipped or never ran), \`Unverified:\` (claims no output confirmed), \`Also changed:\` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.`;
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."`;
+ }
+diff --git a/setup-deploy/SKILL.md b/setup-deploy/SKILL.md
+index 1ad580a9f..730a9d5dd 100644
+--- a/setup-deploy/SKILL.md
++++ b/setup-deploy/SKILL.md
+@@ -21,7 +21,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/setup-deploy/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/setup-deploy/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/setup-deploy/sections/preamble.md b/setup-deploy/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/setup-deploy/sections/preamble.md
++++ b/setup-deploy/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/setup-gbrain/SKILL.md b/setup-gbrain/SKILL.md
+index c7ba1b728..cfe14cf2a 100644
+--- a/setup-gbrain/SKILL.md
++++ b/setup-gbrain/SKILL.md
+@@ -23,7 +23,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/setup-gbrain/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/setup-gbrain/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/setup-gbrain/sections/preamble.md b/setup-gbrain/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/setup-gbrain/sections/preamble.md
++++ b/setup-gbrain/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/ship/SKILL.md b/ship/SKILL.md
+index 769833bd7..4bb267b9d 100644
+--- a/ship/SKILL.md
++++ b/ship/SKILL.md
+@@ -24,7 +24,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ship/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ship/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/ship/sections/preamble.md b/ship/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/ship/sections/preamble.md
++++ b/ship/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/skillify/SKILL.md b/skillify/SKILL.md
+index fbf9b99ab..a5c4a47c2 100644
+--- a/skillify/SKILL.md
++++ b/skillify/SKILL.md
+@@ -19,7 +19,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/skillify/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/skillify/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/skillify/sections/preamble.md b/skillify/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/skillify/sections/preamble.md
++++ b/skillify/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/spec/SKILL.md b/spec/SKILL.md
+index 722483a88..72440e942 100644
+--- a/spec/SKILL.md
++++ b/spec/SKILL.md
+@@ -22,7 +22,7 @@ triggers:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/spec/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/spec/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/spec/sections/preamble.md b/spec/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/spec/sections/preamble.md
++++ b/spec/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/sync-gbrain/SKILL.md b/sync-gbrain/SKILL.md
+index b4d6ebfe4..1912145d5 100644
+--- a/sync-gbrain/SKILL.md
++++ b/sync-gbrain/SKILL.md
+@@ -22,7 +22,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/sync-gbrain/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/sync-gbrain/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/sync-gbrain/sections/preamble.md b/sync-gbrain/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/sync-gbrain/sections/preamble.md
++++ b/sync-gbrain/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/test-audit/SKILL.md b/test-audit/SKILL.md
+index 3072ea8cf..26de2bc65 100644
+--- a/test-audit/SKILL.md
++++ b/test-audit/SKILL.md
+@@ -21,7 +21,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/test-audit/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/test-audit/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/test-audit/sections/preamble.md b/test-audit/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/test-audit/sections/preamble.md
++++ b/test-audit/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/test/capy-skill-wrapper.test.ts b/test/capy-skill-wrapper.test.ts
+index e35bf2d98..4d2936c08 100644
+--- a/test/capy-skill-wrapper.test.ts
++++ b/test/capy-skill-wrapper.test.ts
+@@ -639,11 +639,12 @@ describe('capy skill: factory.md, the auto-loaded "how we work" page', () => {
+     return [...new Set(problems)];
+   }
+ 
+-  test('it fits the 3,450-byte budget, and every citation, heading and skill it names resolves', () => {
++  test('it fits the 3,600-byte budget, and every citation, heading and skill it names resolves', () => {
+     const text = fs.readFileSync(FACTORY, 'utf8');
+     // 3,300 since #3634; raised to 3,450 (the page's new size, rounded up to the next 25 bytes) for point 12's
+-    // R68 clause (Garry, 2026-11-03: crew threads ask their Captain for new threads). Raise it only by what a rule needs.
+-    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(3450);
++    // R68 clause (Garry, 2026-11-03: crew threads ask their Captain for new threads). Raised to 3,600 for point 10's
++    // GST-1455 report shape (Garry, 2026-11-05: "do it"). Raise it only by what a rule needs.
++    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(3600);
+     expect(text).toMatch(/^# How we work/);
+     expect(citationProblems(text)).toEqual([]);
+   });
+diff --git a/test/size-ledger/ship/reports-lead-with-failures.json b/test/size-ledger/ship/reports-lead-with-failures.json
+new file mode 100644
+index 000000000..8f317672f
+--- /dev/null
++++ b/test/size-ledger/ship/reports-lead-with-failures.json
+@@ -0,0 +1,4 @@
++{
++  "bytes": -4,
++  "why": "GST-1455: the shared closer opens status reports with failed-or-skipped, unverified and also-changed lines (-4 B)"
++}
+diff --git a/ubicloud/SKILL.md b/ubicloud/SKILL.md
+index 5bc7ab60b..c64727223 100644
+--- a/ubicloud/SKILL.md
++++ b/ubicloud/SKILL.md
+@@ -19,7 +19,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ubicloud/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/ubicloud/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/ubicloud/sections/preamble.md b/ubicloud/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/ubicloud/sections/preamble.md
++++ b/ubicloud/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 
+diff --git a/write-skill/SKILL.md b/write-skill/SKILL.md
+index 78688ecf5..6434a181e 100644
+--- a/write-skill/SKILL.md
++++ b/write-skill/SKILL.md
+@@ -22,7 +22,7 @@ allowed-tools:
+ 
+ ## Shared preamble (load first)
+ 
+-This skill follows gstack shared preamble `4e82fa4c839f` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/write-skill/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
++This skill follows gstack shared preamble `e69b43d39692` (AskUserQuestion format, voice, writing, completeness and completion rules). If your Read of that file, headed by this id, is still in context, do not read it again; otherwise Read `~/.claude/skills/gstack/write-skill/sections/preamble.md` in full before the command below. A section or subsection here with a shared heading replaces the shared one.
+ 
+ ## Preamble (run first)
+ 
+diff --git a/write-skill/sections/preamble.md b/write-skill/sections/preamble.md
+index 79e0a158c..234154b76 100644
+--- a/write-skill/sections/preamble.md
++++ b/write-skill/sections/preamble.md
+@@ -1,6 +1,6 @@
+ <!-- AUTO-GENERATED from scripts/resolvers/preamble-hoist.ts — do not edit directly -->
+ <!-- Regenerate: bun run gen:skill-docs -->
+-# gstack shared preamble 4e82fa4c839f
++# gstack shared preamble e69b43d39692
+ 
+ ## Plan Mode Safe Operations
+ 
+@@ -171,10 +171,9 @@ GStack voice: Garry-shaped product and engineering judgment.
+ Good: "auth.ts:47 returns undefined when the session cookie expires. Users hit a white screen. Fix: add a null check and redirect to /login. Two lines."
+ Bad: "I've identified a potential issue in the authentication flow that may cause problems under certain conditions."
+ 
+-**Bounded closer.** After completing work, report in at most a few short lines: what changed, what was skipped, what to watch. No feature tours or unrequested design notes. Exempt: decision briefs, completion-status blocks, requested explanations, and a skill's mandated report (/qa-only, /plan-*-review, /retro, /document-generate). The rule limits prose around the deliverable, never the deliverable.
++**Bounded closer.** A status report (after work or when asked) stays under 250 words and opens with three lines, each item named, or none: `Failed or skipped:` (anything that failed, even if fixed, was skipped or never ran), `Unverified:` (claims no output confirmed), `Also changed:` (config, CI, files outside the ask). Then what changed and ran; claim nothing more. Over 10 items: top 10, the rest counted, an offer to list. Exempt: decision briefs, requested explanations, mandated reports (/qa-only, /plan-*-review, /retro, /document-generate).
+ 
+-Good closer: "Renamed the flag in 3 files, regenerated docs, tests green. Skipped the CLI alias (unused since v1.2); watch the Windows job."
+-Bad closer: a tour of every edit, a restatement of the plan, and three paragraphs justifying choices nobody questioned.
++Good: "Failed or skipped: lint (fixed), 2 e2e tests (no key). Unverified: Windows alias. Also changed: none."
+ 
+ ## Context Recovery
+ 

@@ -27,6 +27,8 @@ export const SUBCOMMANDS: Record<string, { module: string; summary: string }> = 
   judge: { module: "judge.ts", summary: "run the judges over a packet batch" },
   readings: { module: "readings.ts", summary: "join records and judge replies into the readings file" },
   check: { module: "check.ts", summary: "the handoff check and the leak check over real inputs" },
+  "r78-key": { module: "r78.ts", summary: "the R78 addendum: the Astra run's packet key, every packet Sol read" },
+  r78: { module: "r78.ts", summary: "the R78 addendum: the judge check, Astra's controls and tasks worse; writes the Astra readings file" },
   dryrun: { module: "dryrun.ts", summary: "the keyless dry run" },
 };
 

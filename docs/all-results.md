@@ -171,6 +171,12 @@ These results have no numbers here, because they haven't yet had both checks the
 
 - **No counted result, the judge failed its check**, Gemini 4 Carbon as judge: in a pilot on fixed review findings sampled from /ship's own history, the judge agreed with the settled labels at kappa 0.36 on the 26 of 40 gold items it answered, under the 0.6 it needed, so the judged sample gives no number. 19 of 71 judge calls came back empty at a 16,000-token output cap, and 41 of 145 sampled findings had no readable text in the packets built for the judge. [Pilot results](../wiki/board/2026-11-21-capy-ship-panel-sample-results/README.md)
 
+**Trust-but-verify: whether an agent's report tells the user what happened**
+
+- **No difference we could measure, with more unsupported claims**, Opus 5.5: on held-out tasks built from finished agent work, gstack's trust-but-verify principle did not measurably raise how many of the key facts Opus's report told the user up front, and its reports carried more claims with no evidence behind them. The verdict is to fix the method first: how the principle reaches non-Claude models and how it keeps claims tied to evidence. [Results](../wiki/board/2026-11-23-geva-401-tbv-held-out-results/README.md)
+- **Couldn't test yet**, GPT-6.1 Sol and particle-1: most of their reports did not follow the principle, so the test could not measure what it adds. [Results](../wiki/board/2026-11-23-geva-401-tbv-held-out-results/README.md)
+- **A signal, not a verdict**, Opus 5.5 and GPT-6.1 Sol: in the skill layer, reports written with current gstack named fewer key facts up front than reports with no gstack, but current gstack's own report format showed up in too few reports for the frozen rule to count it. [Results](../wiki/board/2026-11-23-geva-401-tbv-held-out-results/README.md)
+
 ## Corrections
 
 Some posts still print the verdict they had when they merged, because a merged post never changes. These lines are the current reading.

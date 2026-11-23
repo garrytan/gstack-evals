@@ -1,0 +1,33 @@
+judge stand-in (R78 addendum): astra's labels in place of sol's on every reading sol read; second reads and controls as judged
+held read: agreement double-read sample 441 readings (second read never attempted 0, unjudged 0); double-read facts 1555; both 441, first only 115, second only 178, neither 821; positive agreement 0.751, raw 0.812, kappa 0.600
+controls planned on 20 tasks; never attempted 0, unjudged 0
+controls (sol): stock 0.000 (max 0.1), oracle 1.000 (min 0.85)
+controls (opus): stock 0.000 (max 0.1), oracle 1.000 (min 0.85)
+size drops: 0 tasks; outage stops: 0 readings; max_tokens replies: current:opus:d1 15, current:opus:d2 4, current:particle:d1 1, current:particle:d2 4, none:opus:d1 9, none:particle:d1 1, none:particle:d2 2, principle:opus:d1 18, principle:opus:d2 2, principle:particle:d1 5, principle:particle:d2 2, principle:particle:report 1
+skill layer opus principle - none: +0.025, 95% CI [-0.013, 0.065], Holm p 0.623, 88 clusters (97 tasks), coverage 0.990, exposure principle 0.869, none n/a, MDD 8.2 points, unsupported +1.866, clean-task caveats n/a; verdict not distinguished; flags: more unsupported claims
+skill layer opus principle - current: +0.063, 95% CI [0.032, 0.094], Holm p 1.000, 88 clusters (97 tasks), coverage 0.990, exposure principle 0.869, current 0.423, MDD 8.2 points, unsupported -0.220, clean-task caveats n/a; verdict untested (exposure principle 0.869, current 0.423)
+skill layer opus current - none: -0.038, 95% CI [-0.072, -0.001], Holm p 1.000, 88 clusters (97 tasks), coverage 0.990, exposure current 0.423, none n/a, MDD 8.2 points, unsupported +2.085, clean-task caveats n/a; verdict untested (exposure current 0.423, none n/a); flags: more unsupported claims
+  per family investigate opus principle - none: 0.082 (40 clusters)
+  per family ship opus principle - none: -0.022 (48 clusters)
+skill layer sol principle - none: -0.013, 95% CI [-0.058, 0.031], Holm p 1.000, 88 clusters (97 tasks), coverage 0.990, exposure principle 0.175, none n/a, MDD 10.0 points, unsupported +0.307, clean-task caveats n/a; verdict untested (exposure principle 0.175, none n/a); flags: more unsupported claims
+skill layer sol principle - current: +0.066, 95% CI [0.036, 0.098], Holm p 1.000, 88 clusters (97 tasks), coverage 0.990, exposure principle 0.175, current 0.247, MDD 10.0 points, unsupported +0.136, clean-task caveats n/a; verdict untested (exposure principle 0.175, current 0.247)
+skill layer sol current - none: -0.079, 95% CI [-0.117, -0.042], Holm p 1.000, 88 clusters (97 tasks), coverage 0.990, exposure current 0.247, none n/a, MDD 10.0 points, unsupported +0.170, clean-task caveats n/a; verdict untested (exposure current 0.247, none n/a); flags: more unsupported claims
+  per family investigate sol principle - none: 0.100 (40 clusters)
+  per family ship sol principle - none: -0.106 (48 clusters)
+skill layer particle principle - none: -0.005, 95% CI [-0.084, 0.073], Holm p 1.000, 88 clusters (97 tasks), coverage 0.990, exposure principle 0.366, none n/a, MDD 10.0 points, unsupported +0.611, clean-task caveats n/a; verdict untested (exposure principle 0.366, none n/a); flags: more unsupported claims
+skill layer particle principle - current: +0.023, 95% CI [-0.035, 0.081], Holm p 1.000, 88 clusters (97 tasks), coverage 0.990, exposure principle 0.366, current 0.196, MDD 10.0 points, unsupported -0.009, clean-task caveats n/a; verdict untested (exposure principle 0.366, current 0.196)
+skill layer particle current - none: -0.027, 95% CI [-0.102, 0.047], Holm p 1.000, 88 clusters (97 tasks), coverage 0.990, exposure current 0.196, none n/a, MDD 10.0 points, unsupported +0.619, clean-task caveats n/a; verdict untested (exposure current 0.196, none n/a); flags: more unsupported claims
+  per family investigate particle principle - none: -0.152 (40 clusters)
+  per family ship particle principle - none: 0.118 (48 clusters)
+capy opus principle - none: -0.023, 95% CI [-0.085, 0.041], Holm p 1.000, 48 clusters (50 tasks), coverage 1.000, exposure principle 0.930, none n/a, MDD 11.6 points, unsupported +1.625, clean-task caveats n/a; verdict not distinguished; flags: more unsupported claims
+capy opus principle - current: +0.019, 95% CI [-0.026, 0.065], Holm p 1.000, 48 clusters (50 tasks), coverage 1.000, exposure principle 0.930, current 0.010, MDD 11.6 points, unsupported -0.010, clean-task caveats n/a; verdict untested (exposure principle 0.930, current 0.010)
+capy opus current - none: -0.042, 95% CI [-0.091, 0.008], Holm p 1.000, 48 clusters (50 tasks), coverage 1.000, exposure current 0.010, none n/a, MDD 11.6 points, unsupported +1.635, clean-task caveats n/a; verdict untested (exposure current 0.010, none n/a); flags: more unsupported claims
+secondary none:opus: recall 0.348, full-reply 0.428, over 250 words 207/291, list handling named 0.667 order 0.250 rest 0.250 offer 0.000, short-list share 0.111, D1 completeness 0.269
+secondary current:opus: recall 0.300, full-reply 0.424, over 250 words 277/291, list handling named 0.583 order 0.500 rest 0.250 offer 0.000, short-list share 0.110, D1 completeness 0.131
+secondary principle:opus: recall 0.370, full-reply 0.409, over 250 words 258/291, list handling named 1.000 order 1.000 rest 0.250 offer 0.000, short-list share 0.109, D1 completeness 0.184
+secondary none:sol: recall 0.455, full-reply 0.455, over 250 words 0/194, list handling named 0.750 order 0.875 rest 0.250 offer 0.000, short-list share 0.048, D1 completeness 0.285
+secondary current:sol: recall 0.382, full-reply 0.382, over 250 words 0/194, list handling named 0.750 order 0.625 rest 0.375 offer 0.000, short-list share 0.065, D1 completeness 0.263
+secondary principle:sol: recall 0.449, full-reply 0.449, over 250 words 0/194, list handling named 0.750 order 0.875 rest 0.375 offer 0.000, short-list share 0.079, D1 completeness 0.282
+secondary none:particle: recall 0.284, full-reply 0.317, over 250 words 25/194, list handling named 0.375 order 0.500 rest 0.000 offer 0.000, short-list share 0.130, D1 completeness 0.122
+secondary current:particle: recall 0.243, full-reply 0.267, over 250 words 43/194, list handling named 0.500 order 0.875 rest 0.250 offer 0.000, short-list share 0.047, D1 completeness 0.092
+secondary principle:particle: recall 0.270, full-reply 0.275, over 250 words 35/194, list handling named 0.375 order 0.875 rest 0.125 offer 0.000, short-list share 0.109, D1 completeness 0.123

@@ -62,6 +62,8 @@ export interface DrivePlan {
   arms: Arm[];
   models: Model[];
   passes: Partial<Record<Model, number>>;
+  /** The first pass to run (default 1): passes firstPass to N, so tbv-held-p3 runs Opus's third pass on its own item. */
+  firstPass?: number;
   turns: Turns;
   shape: (arm: Arm, model: Model) => Shape;
   splice: (family: Family, arm: Arm) => SpliceSet | null;
@@ -98,6 +100,8 @@ export interface RunItemOptions extends ItemRunOptions {
 type Reading = { task: string; arm: Arm; model: Model; pass: number };
 type Attempt = { kind: AttemptKind; turn: Turn };
 const keyOf = (r: Reading) => [r.task, r.arm, r.model, r.pass].join("|");
+/** An OpenRouter generation id, the only id its generation endpoint accepts. OpenRouter sends it in the X-Generation-Id header on every route; on the Messages route the stream's own id is a msg_ id. */
+const GEN_ID = /^gen-[0-9A-Za-z-]+$/;
 
 const ledgerStep = <T>(f: () => T): T => {
   try {
@@ -238,10 +242,11 @@ export async function openItemRun(o: ItemRunOptions): Promise<DriveItemRun> {
       return {
         label,
         async send(req) {
-          let status = 0, problemCode: string | null = null, detail = "", body = "", broke = false;
+          let status = 0, problemCode: string | null = null, detail = "", body = "", broke = false, gen: string | null = null;
           try {
             const res = await fetch(base + b.slot + "/" + req.provider + req.route, { method: "POST", headers: { authorization: "Bearer " + b.token, "content-type": "application/json" }, body: JSON.stringify(req.body), timeout: false } as RequestInit);
             status = res.status;
+            gen = res.headers.get("x-generation-id");
             try {
               body = await res.text();
             } catch {
@@ -268,7 +273,9 @@ export async function openItemRun(o: ItemRunOptions): Promise<DriveItemRun> {
           const rid = key ? now.find((l) => l.kind === "request" && l.idempotency_key === key)?.reservation_id : undefined;
           const outcome = rid ? now.filter((l) => l.kind === "outcome" && l.reservation_id === rid).at(-1)?.outcome : undefined;
           const spent = outcome?.kind === "spent";
-          return { kind, status: status || null, reply: parsed && parsed.final ? parsed.reply : null, responseId: parsed?.id ?? null, idempotencyKey: key, problemCode, usage: spent ? (outcome.usage as TokenUsage) : null, micros: spent ? (outcome.spent_micros as number) : null };
+          const messageId = parsed?.id ?? null;
+          const ids = req.provider === "openrouter" ? (GEN_ID.test(gen ?? "") ? { responseId: gen, idFrom: "x-generation-id" as const } : { responseId: null, idFrom: null }) : { responseId: messageId, idFrom: messageId === null ? null : ("body" as const) };
+          return { kind, status: status || null, reply: parsed && parsed.final ? parsed.reply : null, ...ids, messageId, idempotencyKey: key, problemCode, usage: spent ? (outcome.usage as TokenUsage) : null, micros: spent ? (outcome.spent_micros as number) : null };
         },
         async micros() {
           return local.meters(leaseId).get(b.meter_id)?.held_micros ?? 0;
@@ -308,7 +315,7 @@ export async function openItemRun(o: ItemRunOptions): Promise<DriveItemRun> {
       const released: string[] = [];
       try {
         for (const s of sends) {
-          if (!/^[A-Za-z0-9_-]+$/.test(s.responseId)) return { released, missing: s.responseId };
+          if (!GEN_ID.test(s.responseId)) return { released, missing: s.responseId || "(no generation id)" };
           const res = await fetch(base + b.slot + "/openrouter/v1/generation?id=" + s.responseId, { headers: { authorization: "Bearer " + b.token } });
           const text = await res.text();
           let id: unknown;
@@ -340,10 +347,10 @@ export async function openItemRun(o: ItemRunOptions): Promise<DriveItemRun> {
   return run;
 }
 
-/** The frozen order: task, arm, model, then passes, so pass 1's report turn writes the cache before the rest. */
+/** The frozen order: task, arm, model, then passes, so the first pass's report turn writes the cache before the rest. */
 export function readingOrder(plan: DrivePlan): Reading[] {
   const out: Reading[] = [];
-  for (const h of plan.tasks) for (const arm of plan.arms) for (const model of plan.models) for (let pass = 1; pass <= (plan.passes[model] ?? 0); pass++) out.push({ task: h.task, arm, model, pass });
+  for (const h of plan.tasks) for (const arm of plan.arms) for (const model of plan.models) for (let pass = plan.firstPass ?? 1; pass <= (plan.passes[model] ?? 0); pass++) out.push({ task: h.task, arm, model, pass });
   return out;
 }
 
@@ -505,8 +512,8 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
         }
         const res = await slot.send(req);
         const transport = TRANSPORT.has(res.kind);
-        rec.sends.push({ turn: t, attempt, kind: res.kind, status: res.status, responseId: res.responseId, idempotencyKey: res.idempotencyKey, micros: res.micros, usage: res.usage });
-        if (res.micros === null && res.idempotencyKey && res.responseId && req.provider === "openrouter") unknown.push({ idempotencyKey: res.idempotencyKey, responseId: res.responseId });
+        rec.sends.push({ turn: t, attempt, kind: res.kind, status: res.status, responseId: res.responseId, messageId: res.messageId ?? null, idFrom: res.idFrom ?? null, idempotencyKey: res.idempotencyKey, micros: res.micros, usage: res.usage });
+        if (res.micros === null && res.idempotencyKey && req.provider === "openrouter" && res.status === 200 && !transport) unknown.push({ idempotencyKey: res.idempotencyKey, responseId: res.responseId ?? "" });
         leave(st, how, transport, route, !res.problemCode || res.problemCode === "UPSTREAM");
         if (transport && how === "probe") {
           if (stop?.cls === "outage") {
@@ -583,7 +590,7 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
       for (const k of rel.released) released.add(k);
       for (const rec of [...records.values()]) if (rec.sends.some((x) => x.idempotencyKey !== null && rel.released.includes(x.idempotencyKey))) recost(rec);
       if (rel.missing !== null) {
-        setStop("harness", "E_TBV_RUN no OpenRouter generation record for the send whose stream named " + rel.missing + ": its reservation stands at full and nothing retries; check that the stream's message_start id is the generation id");
+        setStop("harness", "E_TBV_RUN no OpenRouter generation record for the send whose generation id is " + rel.missing + ": its reservation stands at full and nothing retries; check the send's X-Generation-Id header");
         break;
       }
       s = await run.spend();
@@ -592,12 +599,13 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
         break;
       }
     }
-    for (const r of round) if (r.pass === 1) firsts.set(r.task + "|" + r.arm + "|" + r.model, deferred());
+    const firstPass = plan.firstPass ?? 1;
+    for (const r of round) if (r.pass === firstPass) firsts.set(r.task + "|" + r.arm + "|" + r.model, deferred());
     const settled = await Promise.allSettled(
       round.map(async (r) => {
         const group = r.task + "|" + r.arm + "|" + r.model;
-        if (r.pass > 1) await firsts.get(group)?.done;
-        const first = r.pass === 1 ? firsts.get(group) : undefined;
+        if (r.pass > firstPass) await firsts.get(group)?.done;
+        const first = r.pass === firstPass ? firsts.get(group) : undefined;
         return drive(r, first).catch((e) => {
           first?.fail(e);
           throw e;
@@ -651,6 +659,10 @@ export async function runItem(o: RunItemOptions): Promise<DriveResult & { crashe
   const kept = [...vault.all()];
   const done = kept.filter(([n]) => n.startsWith("reading-")).map(([, t]) => JSON.parse(t) as ReadingRecord);
   const starts = kept.filter(([n]) => n.startsWith("start-")).map(([, t]) => JSON.parse(t) as Reading & { label: string });
+  if (done.some((r) => ARM_MODELS[r.model].provider === "openrouter" && r.sends.some((x) => !("idFrom" in x)))) {
+    rmSync(root, { recursive: true, force: true });
+    fail("E_TBV_INPUT", "a sealed OpenRouter reading under --out predates the generation-id fix, so its sends name msg_ ids; drive it again under a fresh --run-id and --out");
+  }
   const run = await openItemRun(o);
   let result: DriveResult | null = null;
   const crashed: string[] = [];
@@ -696,15 +708,20 @@ export function spliceBy(sets: SpliceSet[], pinOf: (arm: Arm) => string | null, 
 const TURN_KEYS: Turn[] = ["report", "d1", "d2", "followup"];
 /** turns.txt at its frozen sha256: one "name: text" line per turn. */
 export function readTurns(path: string): Turns {
-  const text = readFileSync(path, "utf8");
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return fail("E_TBV_INPUT", "--turns cannot be read");
+  }
   const sha = new Bun.CryptoHasher("sha256").update(text).digest("hex");
-  if (sha !== BUNDLE.turns.sha256) fail("E_TBV_INPUT", path + " is not turns.txt at its frozen sha256 " + BUNDLE.turns.sha256);
+  if (sha !== BUNDLE.turns.sha256) fail("E_TBV_INPUT", "--turns is not turns.txt at its frozen sha256 " + BUNDLE.turns.sha256);
   const map = Object.fromEntries(text.split("\n").filter(Boolean).map((l) => [l.slice(0, l.indexOf(":")), l.slice(l.indexOf(":") + 1).trim()]));
-  for (const k of TURN_KEYS) if (!map[k]) fail("E_TBV_INPUT", path + " has no " + k + " turn");
+  for (const k of TURN_KEYS) if (!map[k]) fail("E_TBV_INPUT", "--turns has no " + k + " turn");
   return map as unknown as Turns;
 }
 
-const USAGE = "gstack-evals tbv drive --item <item> --run-id <id> --out <dir> --plaintext <dir> --tasks <dir> --shapes <dir> --splices <dir> --turns <turns.txt> --models opus,sol --arms none,current --passes opus=3,sol=2 --cwd <path> --date <yyyy-mm-dd> [--ledger <file>] [--ledger-record <dir>] [--seal-cmd <cmd> --unseal-cmd <cmd>] [--held] [--dev-plaintext] [--smoke]";
+const USAGE = "gstack-evals tbv drive --item <item> --run-id <id> --out <dir> --plaintext <dir> --tasks <dir> --shapes <dir> --splices <dir> --turns <turns.txt> --models opus,sol --arms none,current --passes opus=3,sol=2 [--first-pass <n>] --cwd <path> --date <yyyy-mm-dd> [--ledger <file>] [--ledger-record <dir>] [--seal-cmd <cmd> --unseal-cmd <cmd>] [--held] [--dev-plaintext] [--smoke]";
 
 /** gstack-evals tbv drive: argv[0] is "drive". Inputs are JSON files: one History per task, one Shape per arm, one SpliceSet per family. */
 export async function run(argv: string[], io: Io): Promise<number> {
@@ -734,6 +751,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
     if (!models.includes(m as Model) || !/^[1-9]$/.test(n ?? "")) fail("E_TBV_INPUT", "--passes takes model=n for each model, not " + p);
     passes[m as Model] = Number(n);
   }
+  const fp = flags.get("--first-pass");
+  if (fp !== undefined && !(/^[1-9]$/.test(fp) && models.every((m) => Number(fp) <= passes[m]!))) fail("E_TBV_INPUT", "--first-pass takes a pass from 1 to the fewest passes --passes gives a model, not " + JSON.stringify(fp));
   if (flags.has("--held")) {
     try {
       plaintextRoot(need("--tasks"), { devPlaintext: false, held: true });
@@ -749,6 +768,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     arms,
     models,
     passes,
+    ...(fp === undefined ? {} : { firstPass: Number(fp) }),
     turns: readTurns(need("--turns")),
     shape: (arm, model) => fillShape(shapes.get(arm) ?? fail("E_TBV_INPUT", "no shape for the " + arm + " arm in " + flags.get("--shapes")), model, fields),
     splice: spliceBy(dir<SpliceSet>(need("--splices")), (arm) => (shapes.get(arm) ?? fail("E_TBV_INPUT", "no shape for the " + arm + " arm in " + flags.get("--shapes"))).pin, need("--splices")),
