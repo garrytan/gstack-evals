@@ -93,10 +93,13 @@ describe("item 11: the all-in check before every paid item", () => {
     expect(allin({ item: "tbv-other" }).refused).toBe(true);
     expect(allin({ crewCredits: undefined }).err).toContain("crewCredits");
   });
-  test("other direction: before tbv-held the frozen branches stay", () => {
-    expect(allin({ item: "tbv-held", itemCap: 900, thirdPassCap: 200, capyCap: 150 }).verdict).toStartWith("STAGE 3 WITH THE THIRD OPUS PASS");
-    expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 150 }).verdict).toStartWith("STAGE 3 WITHOUT THE CAPY FAMILY");
-    expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 10 }).verdict).toStartWith("NO STAGE 3");
+  test("amendment 2: before tbv-held the third Opus pass and the capy family stay in up to the $3,000 stop", () => {
+    expect(allin({ item: "tbv-held", itemCap: 900, thirdPassCap: 200, capyCap: 150 }).verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($1430.00)");
+    const over = allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 150 });
+    expect(over.verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($2230.00)");
+    expect(over.out).toContain("line: $2230.00 with tbv-held's and the third Opus pass's caps, over the $2000.00 guideline (it does not bind); the stop is $3000.00");
+    expect(allin({ item: "tbv-held", itemCap: 2470, thirdPassCap: 200, capyCap: 150 }).verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($3000.00)");
+    expect(allin({ item: "tbv-held", itemCap: 2600, thirdPassCap: 200, capyCap: 150 }).verdict).toBe("NO STAGE 3 (to the Captain; $3130.00 over the $3000.00 stop)");
   });
   test("before tbv-held, a negative thirdPassCap or capyCap, or a capyCap over the held cap, is refused", () => {
     const held = (x: Record<string, unknown>) => allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 150, ...x });
@@ -108,7 +111,7 @@ describe("item 11: the all-in check before every paid item", () => {
   });
   test("other direction: zero caps and a capyCap equal to the held cap still run", () => {
     expect(allin({ item: "tbv-held", itemCap: 900, thirdPassCap: 0, capyCap: 0 }).verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($1230.00)");
-    expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 1700 }).verdict).toBe("STAGE 3 WITHOUT THE CAPY FAMILY ($330.00)");
+    expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 1700 }).verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($2230.00)");
   });
 });
 

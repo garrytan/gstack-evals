@@ -9,7 +9,7 @@
 //   bun tbv-rule.ts admit <round.json>          round admission against an item's cap
 //   bun tbv-rule.ts headroom <readings.json> --split <manifest.json>    stage 1: NO READ, JUDGE FAIL, agreement, the band, costs
 //   bun tbv-rule.ts projection <proj.json>      stage 1 to later stages: caps from measured costs
-//   bun tbv-rule.ts allin <allin.json>          the all-in check before every paid item; for tbv-held: third Opus pass, capy drop or stop
+//   bun tbv-rule.ts allin <allin.json>          the all-in check before every paid item; for tbv-held: stage 3 with the third Opus pass, or stop
 //   bun tbv-rule.ts caps <caps.json>            the money table: each item's cap from capOf, and the sums at caps
 //   bun tbv-rule.ts compare <readings.json> --split <manifest.json> [--base <dev-base readings.json>]     dev or held-out: families,
 //                                               verdicts, flags and secondaries; a climb joins tbv-dev-base's none and current rows
@@ -31,7 +31,7 @@ export const CAP_FACTOR = 1.15, ROUND = 4, MAX_TOKENS = 4000, RETRIES = 2;
 // A reading's worst case: four sends (report, follow-up, D1, D2); the first carries at most WORST_INPUT tokens, and each later one adds max_tokens and a user turn per earlier send.
 export const SENDS = 4, WORST_INPUT = 130_000, USER_TURN = 100;
 export const LINE_USD = 2000;
-/** Amendment 2 section 7: the $2,000 line is a guideline that does not bind, and a line past $3,000 stops. tbv-r78-astra judges with GPT-6 Astra, so its check takes the $4,000 guideline (org R71) and the $5,000 stop (org R42), as the Captain ruled on 2026-11-23. */
+/** Amendment 2 section 7: the $2,000 line is a guideline that does not bind, the third Opus pass and the capy family stay in, and a line past $3,000 stops. tbv-r78-astra judges with GPT-6 Astra, so its check takes the $4,000 guideline (org R71) and the $5,000 stop (org R42), as the Captain ruled on 2026-11-23. */
 export const LINE_STOP_USD = 3000, ASTRA_LINE_USD = 4000, ASTRA_STOP_USD = 5000;
 /** Amendment item 11: crew spend from each thread's counter at about $1 per 1,000 credits, against the $300 crew reserve. */
 export const CREDIT_USD = 0.001, CREW_RESERVE = 300;
@@ -333,19 +333,14 @@ function allin(a: { item: string; crewCredits: number; crewRest: number; settled
   const crewSpent = a.crewCredits * CREDIT_USD;
   const base = crewSpent + a.crewRest + a.settled + a.reserved + a.unknown;
   say("all-in before " + a.item + ": crew spent " + usd(crewSpent) + " (" + a.crewCredits + " credits; " + usd(crewSpent) + " of the " + usd(CREW_RESERVE) + " crew reserve) + crew to come " + usd(a.crewRest) + " + settled " + usd(a.settled) + " + reserved " + usd(a.reserved) + " + unknown " + usd(a.unknown) + " = " + usd(base));
-  if (a.item !== "tbv-held") {
-    const [guide, stop] = a.item === "tbv-r78-astra" ? [ASTRA_LINE_USD, ASTRA_STOP_USD] : [LINE_USD, LINE_STOP_USD];
-    const total = base + a.itemCap;
-    say("line: " + usd(total) + " with " + a.item + "'s cap, " + (total <= guide ? "under" : "over") + " the " + usd(guide) + " guideline (it does not bind); the stop is " + usd(stop));
-    say("Verdict: " + (total <= stop ? "START " + a.item + " (" + usd(total) + ")" : "NO START (to the Captain; " + usd(total) + " over the " + usd(stop) + " stop)"));
-    return;
-  }
-  if (!(Number.isFinite(a.thirdPassCap) && a.thirdPassCap! >= 0 && Number.isFinite(a.capyCap) && a.capyCap! >= 0 && a.capyCap! <= a.itemCap)) fail("E_USAGE the all-in check before tbv-held needs thirdPassCap and capyCap as numbers of at least 0, and capyCap no more than itemCap");
-  const heldCap = a.itemCap, thirdPassCap = a.thirdPassCap!, capyCap = a.capyCap!;
-  if (base + heldCap + thirdPassCap <= LINE_USD) { say("Verdict: STAGE 3 WITH THE THIRD OPUS PASS (" + usd(base + heldCap + thirdPassCap) + ")"); return; }
-  if (base + heldCap <= LINE_USD) { say("Verdict: STAGE 3, TWO PASSES (" + usd(base + heldCap) + ")"); return; }
-  if (base + heldCap - capyCap <= LINE_USD) { say("Verdict: STAGE 3 WITHOUT THE CAPY FAMILY (" + usd(base + heldCap - capyCap) + ")"); return; }
-  say("Verdict: NO STAGE 3 (to the Captain; " + usd(base + heldCap - capyCap) + " over " + usd(LINE_USD) + ")");
+  const held = a.item === "tbv-held";
+  if (held && !(Number.isFinite(a.thirdPassCap) && a.thirdPassCap! >= 0 && Number.isFinite(a.capyCap) && a.capyCap! >= 0 && a.capyCap! <= a.itemCap)) fail("E_USAGE the all-in check before tbv-held needs thirdPassCap and capyCap as numbers of at least 0, and capyCap no more than itemCap");
+  const [guide, stop] = a.item === "tbv-r78-astra" ? [ASTRA_LINE_USD, ASTRA_STOP_USD] : [LINE_USD, LINE_STOP_USD];
+  const total = base + a.itemCap + (held ? a.thirdPassCap! : 0);
+  say("line: " + usd(total) + " with " + (held ? "tbv-held's and the third Opus pass's caps" : a.item + "'s cap") + ", " + (total <= guide ? "under" : "over") + " the " + usd(guide) + " guideline (it does not bind); the stop is " + usd(stop));
+  const over = "(to the Captain; " + usd(total) + " over the " + usd(stop) + " stop)";
+  if (held) say("Verdict: " + (total <= stop ? "STAGE 3 WITH THE THIRD OPUS PASS (" + usd(total) + ")" : "NO STAGE 3 " + over));
+  else say("Verdict: " + (total <= stop ? "START " + a.item + " (" + usd(total) + ")" : "NO START " + over));
 }
 
 /** The MDD row for the largest tabled task count at or under n, so a smaller read never borrows a larger read's MDD; null under the smallest row. */

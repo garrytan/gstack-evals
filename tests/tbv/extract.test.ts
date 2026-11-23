@@ -112,6 +112,14 @@ test("coloured test output parses the same as plain: escape codes are stripped b
   expect(tests(plain).candidates).toEqual([["test", "tests/test_a.py::test_one", "FAILED"], ["test", "pkg.T.test_three", "ERROR"]]);
 });
 
+test("charset designations and 8-bit CSI codes are stripped too", () => {
+  const plain = "tests/test_a.py::test_one FAILED\ntests/test_a.py::test_two PASSED";
+  const reset = "\x1b(B\x1b[mtests/test_a.py::test_one \x9b31mFAILED\x9b0m\n\x1b)0tests/test_a.py::test_two PASSED";
+  const names = (out: string) => extract(histA([["pytest", out]])).lists.map((l) => l.map((i) => [i.name, i.state]));
+  expect(names(reset)).toEqual(names(plain));
+  expect(names(plain)).toEqual([[["tests/test_a.py::test_one", "FAILED"], ["tests/test_a.py::test_two", "PASSED"]]]);
+});
+
 test("other direction: plain text that only looks like an escape code keeps its brackets", () => {
   const x = extract(histA([["pytest", "tests/test_a.py::test_x[31m] FAILED\ntests/test_a.py::test_y PASSED"]]));
   expect(x.candidates.filter((c) => c.kind === "test").map((c) => c.name)).toEqual(["tests/test_a.py::test_x[31m]"]);
