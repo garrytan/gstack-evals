@@ -1,0 +1,7 @@
+comparison units 64, with a case row 64, exact 36, functional set differs 28, planted set differs 0
+differences (functional cases added/removed of sealed n): u7bc412e81987 +2/-3 of 3; ub0dfd897893e +2/-2 of 2; udcc876c077ac +0/-0 of 1; u10d5196dc2ad +0/-0 of 3; u8f131f648519 +0/-2 of 3; u64618b0c656c +3/-2 of 2; ud1306f7cd2cd +1/-0 of 2; ue7ea72684726 +2/-3 of 3; u2fa8814d8008 +1/-0 of 1; uf2fc9c9e6f42 +1/-4 of 4; u7a435c97ee00 +2/-1 of 2; u74ffa85b9c10 +1/-1 of 3; uad79ec3549e9 +1/-1 of 2; uf5b77693fe4b +1/-1 of 3; u0e6661dbe08b +1/-2 of 2; u8081dfebfc97 +1/-1 of 1; uab371e1a8895 +3/-1 of 1; u364b4bb87525 +1/-0 of 1; ua0dbf619119e +1/-3 of 3; ucc3e0cfc1543 +2/-2 of 2; udbd167e5cbd0 +2/-2 of 3; ueb1aded38cff +1/-1 of 2; u1a9a584b892d +0/-2 of 3; u801dc72675ae +0/-0 of 1; uf3fb0fdbacbc +2/-2 of 3; u68024e971537 +3/-2 of 2; ub257ad6159df +0/-0 of 2; u9f0977580a09 +2/-2 of 3
+wrote analysis-exact-lists.json: units 36, builds 396, reviews 324
+calls.medium.json vs counted, Carbon agrees 8 of 10
+calls.default.json vs counted, Carbon agrees 21 of 27
+calls.stream16k.json vs counted, Carbon agrees 34 of 37
+pilot units 20, paired 20; plain composite reps 1-2 (P) 0.306, rep 3 (P2) 0.297, rep 3 minus reps 1-2 -0.009 (higher on 2, lower on 3); pilot-flag reps 213,123

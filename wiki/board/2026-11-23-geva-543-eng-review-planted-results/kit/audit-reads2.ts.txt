@@ -1,0 +1,44 @@
+// GEVA-543: classify the stripped-name tool calls outside /testbed and the dependency caches by path prefix.
+import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+const run = process.env.EP_RUN_DIR!;
+const A = join(run, "analysis");
+const ids = new Set(JSON.parse(readFileSync(join(A, "analysis.json"), "utf8")).units.map((u: any) => u.id));
+const TOK = /[\w~./-]*(?:CLAUDE\.md|CLAUDE\.local\.md|AGENTS\.md|\.claude)(?![\w.-])[\w./-]*/g;
+const TESTBED = /\/testbed(?![\w.-])/;
+const CACHE = /\/go\/pkg\/mod|\/usr\/local\/cargo|\/opt\/venv\/lib|node_modules|site-packages|\/root\/\.cache|\/root\/\.cargo/;
+type Rec = Record<string, unknown>;
+const toolUses = (v: unknown, out: Rec[] = []): Rec[] => {
+  if (Array.isArray(v)) for (const x of v) toolUses(x, out);
+  else if (v && typeof v === "object") { const r = v as Rec; if (r.type === "tool_use" && "input" in r) out.push(r); for (const x of Object.values(r)) if (x && typeof x === "object") toolUses(x, out); }
+  return out;
+};
+const last = (dir: string) => readdirSync(dir).filter((d) => /^a\d+$/.test(d)).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1))).at(-1)!;
+const files: Array<[string, string]> = [];
+for (const phase of ["comparison", "stock", "authoring"]) {
+  const root = join(run, "builds", phase, "rig", "sessions");
+  for (const key of readdirSync(root)) {
+    if (!ids.has(key.split("_")[0]) || (phase === "authoring" && !key.includes("_none_"))) continue;
+    const jobs = join(root, key, last(join(root, key)), "jobs");
+    for (const j of readdirSync(jobs)) { try { for (const t of readdirSync(join(jobs, j))) { const f = join(jobs, j, t, "evaluator", "sdk-messages.jsonl"); if (t.startsWith("task__") && existsSync(f)) files.push(["build", f]); } } catch {} }
+  }
+}
+const rroot = join(run, "reviews", "comparison", "sessions");
+for (const key of readdirSync(rroot)) if (ids.has(key.split("_")[0])) files.push(["review", join(rroot, key, last(join(rroot, key)), "run", "host", "transcript.ndjson")]);
+const cls = new Map<string, Set<string>>();
+const norm = (t: string) => t.replace(/^(~|\/root|\/home\/[\w-]+)\/\.claude\/skills\/[^/]+.*/, "$1/.claude/skills/*").replace(/^(~|\/root|\/home\/[\w-]+)\/\.claude\/(?!skills).*/, "$1/.claude/<other>").replace(/^\/work\/repo\/.*\/(CLAUDE\.md|AGENTS\.md|CLAUDE\.local\.md|\.claude)$/, "/work/repo/**/$1").replace(/^\/work\/repo\/.*\/\.claude\/.*/, "/work/repo/**/.claude/*");
+for (const [kind, f] of files) {
+  for (const line of readFileSync(f, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    let rec: unknown; try { rec = JSON.parse(line); } catch { continue; }
+    for (const u of toolUses(rec)) {
+      const inp = JSON.stringify(u.input);
+      if (TESTBED.test(inp) || CACHE.test(inp)) continue;
+      for (const t of inp.match(TOK) ?? []) { const k = kind + " " + String(u.name) + " " + norm(t); (cls.get(k) ?? cls.set(k, new Set()).get(k)!).add(f); }
+    }
+  }
+}
+const rows = [...cls.entries()].map(([k, s]) => [k, s.size] as const).sort((a, b) => b[1] - a[1]);
+const out = rows.slice(0, 40).map(([k, n]) => n + " sessions: " + k).join("\n") + "\nclasses " + rows.length;
+writeFileSync(join(A, "audit-reads-classes.txt"), rows.map(([k, n]) => n + "\t" + k).join("\n") + "\n");
+console.log(out);

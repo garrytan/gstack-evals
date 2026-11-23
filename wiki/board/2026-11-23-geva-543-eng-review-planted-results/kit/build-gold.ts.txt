@@ -1,0 +1,28 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { reviewKey } from "~/work/head/lanes/eng-planted/stages/pipeline.ts";
+const run = process.env.EP_RUN_DIR!;
+const J = join(run, "judge");
+const out = join(J, "gold.json");
+if (existsSync(out)) throw new Error("gold.json exists");
+const rd = (p: string) => JSON.parse(readFileSync(p, "utf8"));
+const g = rd(join(run, "checks", "gold-bundles.json"));
+const [a, o, c] = ["judge-gold.json", "gold-opus.json", "gold-gemini.json"].map((f) => rd(join(J, f)));
+const map: Array<{ case: number; i: number; unit: string }> = rd(join(J, "settle-map.json"));
+const cases: Array<{ case: number; named: boolean; note: string }> = rd(join(J, "settle-cases.json"));
+const by = "GEVA-543 run thread (Claude Opus 5.5), reading F's message and diff with the hint, blind to arm, 2026-11-23";
+for (const x of [a, o, c]) if (x.length !== g.length) throw new Error("length");
+const rows = g.map((b: any, i: number) => {
+  for (const x of [a, o, c]) if (x[i].unit !== b.unit || x[i].source !== b.source || x[i].error) throw new Error("row " + i);
+  if (a[i].digest !== o[i].digest || o[i].digest !== c[i].digest) throw new Error("digest " + i);
+  const key = b.rep === null ? b.unit + "_" + b.source : (b.smoke ? "smoke_" : "") + reviewKey(b.unit, b.source, "opus", b.rep);
+  const dis = o[i].named !== c[i].named;
+  const m = map.find((x) => x.i === i);
+  if (dis !== Boolean(m) || (m && m.unit !== b.unit)) throw new Error("map " + i);
+  const s = m ? cases.find((x) => x.case === m.case) : null;
+  if (m && !s) throw new Error("unsettled " + i);
+  return { key, unit: b.unit, source: b.source, judge: a[i].named, labels: [o[i].named, c[i].named], settled: s ? { named: s.named, by, note: s.note } : null };
+});
+const bundles = rd(join(J, "judge.json"));
+writeFileSync(out, JSON.stringify({ gold: rows, bundles }, null, 1) + "\n", { mode: 0o600 });
+console.log("gold rows " + rows.length + ", settled " + rows.filter((r: any) => r.settled).length + ", unique keys " + new Set(rows.map((r: any) => r.key)).size + ", main bundles " + bundles.length);

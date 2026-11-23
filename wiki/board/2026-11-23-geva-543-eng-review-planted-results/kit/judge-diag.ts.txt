@@ -1,0 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { goldOf, kappaOf, stockControl } from "~/work/head/lanes/eng-planted/readings/judge.ts";
+const J = join(process.env.EP_RUN_DIR!, "judge");
+for (const [tag, f] of [["original", "gold.json"], ["revised", "gold-r1.json"]] as const) {
+  const g = JSON.parse(readFileSync(join(J, f), "utf8"));
+  const rows = g.gold as any[];
+  const part = (sel: (r: any) => boolean) => { const p = rows.filter(sel).map((r) => [r.judge, goldOf(r)!] as [boolean, boolean]); const k = kappaOf(p); return "n " + k.n + " gold+ " + p.filter(([, x]) => x).length + " judge+ " + p.filter(([j]) => j).length + " agree " + p.filter(([j, x]) => j === x).length; };
+  console.log(tag + ": agreed-label rows " + part((r) => !r.settled) + "; settled rows " + part((r) => !!r.settled));
+  const s = stockControl(g.bundles, tag === "original" ? 0 : 1);
+  console.log(tag + " stock control: " + s.lines.join(" / "));
+}

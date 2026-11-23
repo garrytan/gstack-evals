@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# GEVA-543: the planned readout at 915685f, then the two descriptive judged runs (judge check failed; not findings).
+set -u
+source ~/ep/env.sh >/dev/null 2>&1
+A=$EP_RUN_DIR/analysis
+log=~/ep/logs/analyze-chain1.log
+cd ~/work/head || exit 3
+{ [ "$(git rev-parse HEAD)" = 915685fb960eb0443c94dbf1a8a0b6e2782a1fe4 ] && [ "$(git status --porcelain | wc -l)" = 0 ]; } || { echo "head not clean" >> $log; exit 3; }
+for f in readout readout-descriptive-r0 readout-descriptive-r1; do [ ! -e $A/$f.txt ] || { echo "$f.txt exists" >> $log; exit 3; }; done
+echo "$(date -u +%FT%TZ) start" >> $log
+bin/gstack-evals ep analyze --in $A/analysis.json --seed 2496240758 > $A/readout.txt 2> $A/readout.err; echo "$(date -u +%FT%TZ) readout exit=$?" >> $log
+bin/gstack-evals ep analyze --in $A/analysis-descriptive-r0.json --seed 2496240758 > $A/readout-descriptive-r0.txt 2> $A/readout-descriptive-r0.err; echo "$(date -u +%FT%TZ) descriptive-r0 exit=$?" >> $log
+bin/gstack-evals ep analyze --in $A/analysis-descriptive-r1.json --seed 2496240758 > $A/readout-descriptive-r1.txt 2> $A/readout-descriptive-r1.err; echo "$(date -u +%FT%TZ) descriptive-r1 exit=$?" >> $log
+echo "$(date -u +%FT%TZ) done" >> $log

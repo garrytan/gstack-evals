@@ -1,0 +1,17 @@
+// GEVA-543: Carbon rating test-retest columns against the counted (streamed, default effort, 32k) rating.
+import { readFileSync, existsSync, readdirSync } from "node:fs";
+const run = process.env.EP_RUN_DIR!;
+const dir = run + "/author";
+const rating = (f: string) => { const j = JSON.parse(readFileSync(f, "utf8")); return j.foresee ? j.foresee.join("/") : "none(" + (j.drop ?? "?") + ")"; };
+for (const alt of ["calls.medium.json", "calls.default.json", "calls.stream16k.json"]) {
+  const rows: string[] = []; let agree = 0, n = 0;
+  for (const id of readdirSync(dir)) {
+    const a = dir + "/" + id + "/" + alt, c = dir + "/" + id + "/calls.json";
+    if (!existsSync(a) || !existsSync(c)) continue;
+    const x = rating(a), y = rating(c);
+    const cx = x.split("/")[0], cy = y.split("/")[0];
+    n++; if (cx === cy) agree++;
+    rows.push(id + " " + x + " -> " + y);
+  }
+  console.log(alt + " vs counted, Carbon agrees " + agree + " of " + n + " (opus/carbon): " + rows.join("; "));
+}

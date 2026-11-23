@@ -1,0 +1,20 @@
+// GEVA-543 ruling B1: case-list differences on the comparison units, and the analysis input restricted to units whose lists match the sealed ones exactly.
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+const run = process.env.EP_RUN_DIR!;
+const A = run + "/analysis";
+const f = JSON.parse(readFileSync(A + "/analysis.json", "utf8"));
+const rows = new Map<string, string[]>();
+for (const k of ["s0", "s1", "s2", "s3", "s4", "s5"]) for (const l of readFileSync(process.env.HOME + "/ep/pull/" + k + "/cases.tsv", "utf8").split("\n")) { const c = l.split("\t"); if (c[0]) rows.set(c[0], c); }
+const ids = f.units.map((u: any) => u.id);
+const miss = ids.filter((id: string) => !rows.has(id));
+const exact = ids.filter((id: string) => rows.get(id)?.[6] === "yes");
+const diff = ids.filter((id: string) => rows.get(id) && rows.get(id)![6] !== "yes");
+const planted = ids.filter((id: string) => rows.get(id) && rows.get(id)![2] !== "same");
+console.log("comparison units " + ids.length + ", with a case row " + (ids.length - miss.length) + ", exact " + exact.length + ", functional set differs " + diff.length + ", planted set differs " + planted.length);
+console.log("differences (functional cases added/removed of sealed n): " + diff.map((id: string) => { const c = rows.get(id)!; return id + " +" + c[3] + "/-" + c[4] + " of " + c[5]; }).join("; "));
+const keep = new Set(exact);
+const out = { ...f, units: f.units.filter((u: any) => keep.has(u.id)), builds: f.builds.filter((b: any) => keep.has(b.unit)), reviews: f.reviews.filter((r: any) => keep.has(r.unit)) };
+const p = A + "/analysis-exact-lists.json";
+if (existsSync(p)) throw new Error("exists");
+writeFileSync(p, JSON.stringify(out, null, 1) + "\n");
+console.log("wrote analysis-exact-lists.json: units " + out.units.length + ", builds " + out.builds.length + ", reviews " + out.reviews.length);
