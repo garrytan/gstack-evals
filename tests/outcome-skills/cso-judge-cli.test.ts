@@ -145,7 +145,9 @@ describe("cso judging commands", () => {
         else for (const k of outcome) expect([f, l.includes(k)]).toEqual([f, false]);
       }
     }
-    const a = await capture(() => COMMANDS.analyze!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "j", "scores.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.sealed"), "--key", keyPath]));
+    const a = await capture(() => COMMANDS.analyze!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "j", "scores.jsonl"), "--judged", join(dir, "j", "judged.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.sealed"), "--key", keyPath]));
     expect(JSON.parse(a.out).verdicts.map((v: { step: number }) => v.step)).toEqual([1, 1]);
+    expect(JSON.parse(a.out).secondaries.map((s: { miss: unknown }) => s.miss)).toEqual([{ none: {}, cso: {} }, { none: {}, cso: {} }]);
+    await expect(capture(() => COMMANDS.analyze!(["--work", work, "--sessions", join(dir, "sessions.jsonl"), "--scores", join(dir, "j", "scores.jsonl"), "--units", join(dir, "stage1.json"), "--check", join(dir, "c", "check-production.sealed"), "--key", keyPath]))).rejects.toThrow(/missing --judged/);
   });
 });
