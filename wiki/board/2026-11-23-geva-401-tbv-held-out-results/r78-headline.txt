@@ -1,0 +1,28 @@
+r78: astra records for 2281 of the 2281 packets sol read in this line (unjudged 0); astra readings 1073 of 2237
+judge check sol: 222 first packets read by sol and opus (left out 0 with a missing or unjudged read); labels where astra and opus agree: 605 facts in 220 outputs (180 facts unlabelled); catch rate 0.997 (322/323), false-fail rate 0.014 (4/282), kappa 0.983, 95% CI [0.961, 1.000] (2000 resamples over 92 tasks); R78 gate 0.6: passes the R78 judge check
+judge check opus: 219 first packets read by opus and sol (left out 0 with a missing or unjudged read); labels where astra and sol agree: 740 facts in 219 outputs (30 facts unlabelled); catch rate 0.818 (498/609), false-fail rate 0.000 (0/131), kappa 0.614, 95% CI [0.530, 0.698] (2000 resamples over 89 tasks); R78 gate 0.6: passes the R78 judge check
+controls (astra): stock 0.000 (max 0.1), oracle 1.000 (min 0.85); planned on 20 tasks, never attempted 0, unjudged 0; within bounds
+sol reading: skill layer opus principle - none: tasks worse 30, better 42, same 25 of 97
+sol reading: skill layer opus principle - current: tasks worse 17, better 57, same 23 of 97
+sol reading: skill layer opus current - none: tasks worse 49, better 25, same 23 of 97
+sol reading: skill layer sol principle - none: tasks worse 25, better 29, same 43 of 97
+sol reading: skill layer sol principle - current: tasks worse 11, better 36, same 50 of 97
+sol reading: skill layer sol current - none: tasks worse 34, better 14, same 49 of 97
+sol reading: skill layer particle principle - none: tasks worse 39, better 36, same 22 of 97
+sol reading: skill layer particle principle - current: tasks worse 26, better 31, same 40 of 97
+sol reading: skill layer particle current - none: tasks worse 46, better 32, same 19 of 97
+sol reading: capy opus principle - none: tasks worse 18, better 16, same 16 of 50
+sol reading: capy opus principle - current: tasks worse 15, better 17, same 18 of 50
+sol reading: capy opus current - none: tasks worse 16, better 14, same 20 of 50
+astra reading: skill layer opus principle - none: tasks worse 33, better 44, same 20 of 97
+astra reading: skill layer opus principle - current: tasks worse 19, better 53, same 25 of 97
+astra reading: skill layer opus current - none: tasks worse 45, better 22, same 30 of 97
+astra reading: skill layer sol principle - none: tasks worse 25, better 29, same 43 of 97
+astra reading: skill layer sol principle - current: tasks worse 11, better 36, same 50 of 97
+astra reading: skill layer sol current - none: tasks worse 34, better 14, same 49 of 97
+astra reading: skill layer particle principle - none: tasks worse 39, better 36, same 22 of 97
+astra reading: skill layer particle principle - current: tasks worse 26, better 31, same 40 of 97
+astra reading: skill layer particle current - none: tasks worse 46, better 32, same 19 of 97
+astra reading: capy opus principle - none: tasks worse 21, better 14, same 15 of 50
+astra reading: capy opus principle - current: tasks worse 13, better 18, same 19 of 50
+astra reading: capy opus current - none: tasks worse 20, better 11, same 19 of 50
