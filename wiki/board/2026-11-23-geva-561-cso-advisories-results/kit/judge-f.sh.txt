@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# GEVA-561 after the second readout (Captain's decision A): section 7's fallback route check (GPT-6.2 Astra judging the Opus
+# and particle-1 cells, gold by Opus 5.5 and Gemini 4 Argon) on the stage 0 and stage 1 reports with the repaired items, in
+# ~/judge-e so kept requests replay. Only if that route passes: Astra judges the 60 stage 1 and re-pilot sessions in a fresh
+# ~/judge-f, they are scored, and the third sealed readout is written with both checks. Removes the key copy at exit.
+set -uo pipefail
+export PATH=$HOME/.bun/bin:$HOME/uvbin:$HOME/.local/bin:$PATH
+L=$HOME/cso-ledger; export GSTACK_EVALS_LEDGER=$L/ledger.sqlite GSTACK_EVALS_LEDGER_RECORD=$L/record
+for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY; do export $k="$(cat $HOME/.keys/$k)"; done
+G=$HOME/work/gstack-evals; cd $G; GE=$G/bin/gstack-evals
+J=$HOME/judge-e; JF=$HOME/judge-f; K=/dev/shm/cso-readout.key; S1=$HOME/stage1; ROUTE=fallback-opus-particle
+BOUND=${BOUND:-85}
+step() { echo "== $1 $(date -u +%FT%TZ)"; }
+committed() { $GE ledger status --item $1 2>&1 | grep ITEM | sed 's/.*committed=\$\([0-9.]*\).*/\1/'; }
+finish() { rm -f $K; test ! -e $K && echo "key removed from /dev/shm $(date -u +%FT%TZ)"; }
+trap finish EXIT
+test -e $K && [ "$(sha256sum < $K | cut -c1-64)" = 32a5870e4838788e8084c9ad4ffeb07d073d86bc90bece91b1fd809140ac0a5e ] && echo "key copy checked" || { echo "key copy missing or wrong; stop"; exit 1; }
+step head; git log --oneline -1; git status --porcelain --untracked-files=all | wc -l
+[ -e $J/check-$ROUTE.sealed ] && { echo "fallback check exists; stop"; exit 1; }
+echo "bound \$$BOUND"
+C0=$(committed cso-judge); echo "C0 $C0"
+step probe
+$GE cso judge --probe --run cso-judge --out $HOME/judge-probe-f 2>&1 | grep -v "^RIG_UNPROVEN"; echo "probe exit ${PIPESTATUS[0]}"
+C1=$(committed cso-judge); echo "C1 $C1"
+step check
+N0=$(grep -c "" $J/calls.jsonl); echo "check starts at calls line $N0"
+$GE cso judge --check --route $ROUTE --work $HOME/units --sessions $S1/check-sessions.jsonl --out $J --run cso-judge --key $K > $HOME/check-f.out 2> $HOME/check-f.err &
+CP=$!
+bound=open
+while kill -0 $CP 2>/dev/null; do
+  sleep 30
+  X=$(tail -n +$((N0+1)) $J/calls.jsonl | jq -rs 'map(select(.event=="reply" and .micros != null) | .micros) | add // 0')
+  P=$(awk -v x=$X 'BEGIN { printf "%.2f", x/1e6 }')
+  if awk -v p=$P -v b=$BOUND 'BEGIN { exit !(p > b) }'; then kill -TERM $CP; bound=stopped; echo "BOUND STOP: the fallback check's spend \$$P passed \$$BOUND at $(date -u +%FT%TZ)"; break; fi
+done
+wait $CP; echo "check exit $? bound $bound"
+cat $HOME/check-f.out; grep -v "^RIG_UNPROVEN" $HOME/check-f.err | tail -5
+C2=$(committed cso-judge); echo "C2 $C2"
+[ $bound = open ] && [ -e $J/check-$ROUTE.sealed ] || { echo "no fallback check; stop"; exit 1; }
+NR=$(head -1 $HOME/check-f.out | jq -r .named_route)
+echo "fallback named_route $NR"
+[ "$NR" = pass ] || { echo "the fallback route fails: stop on JUDGE"; exit 0; }
+step judge-f
+[ -e $JF ] && { echo "$JF exists; stop"; exit 1; }
+$GE cso judge --route $ROUTE --work $HOME/units --sessions $S1/sessions-e.jsonl --out $JF --run cso-judge --key $K > $HOME/judge-f.out 2>&1; echo "judge exit $?"
+grep -v "^RIG_UNPROVEN" $HOME/judge-f.out
+C3=$(committed cso-judge); echo "C3 $C3"
+step score
+$GE cso score --work $HOME/units --sessions $S1/sessions-e.jsonl --judged $JF/judged.jsonl --out $S1/scores-f.jsonl --key $K; echo "score exit $?"
+step readout
+NJ=$(sed -n 's/^judged \([0-9]*\) sessions.*/\1/p' $HOME/judge-f.out | head -1)
+PER=$(awk -v c3=$C3 -v c2=$C2 -v n=$NJ 'BEGIN { printf "%.6f", (c3-c2)/n }')
+SPENT=$(awk -v s=$(committed cso-smoke) -v p=$(committed cso-pilot) -v j=$C3 'BEGIN { printf "%.6f", s+p+j }')
+echo "Astra judged $NJ sessions for \$$(awk -v c3=$C3 -v c2=$C2 'BEGIN{printf "%.6f", c3-c2}'); judging-per-session $PER; spent $SPENT; vm 40; vm-stage2 20"
+$GE cso readout --sessions $S1/sessions-e.jsonl --scores $S1/scores-f.jsonl --units $S1/units.jsonl --check $J/check-production.sealed --check $J/check-$ROUTE.sealed --key $K --sealed $S1/stage1-readout-f.sealed --spent $SPENT --judging-per-session $PER --vm 40 --vm-stage2 20 > $S1/stage1-release-f.json 2> $S1/stage1-readout-f.err; echo "readout exit $?"
+cat $S1/stage1-release-f.json; grep -v "^RIG_UNPROVEN" $S1/stage1-readout-f.err | tail -3
+sha256sum $S1/stage1-readout-f.sealed $J/check-$ROUTE.sealed
+$GE ledger status 2>&1 | grep ITEM
+step done

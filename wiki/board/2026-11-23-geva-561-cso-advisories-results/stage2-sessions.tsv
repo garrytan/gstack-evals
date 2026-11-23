@@ -1,0 +1,209 @@
+unit	model	arm	model_id	harness	harness_version	end	attempts	cost_usd	wall_sec	loaded	procedure_ran	completeness	findings_submitted	tooling_errors	host_reads_after_start	helper_scope
+a2aproject__a2a-java-ghsa-9rhm-2h4x-jwmx	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	1.041194	359	true	true	partial	2	0	1	daily/default
+a2aproject__a2a-java-ghsa-9rhm-2h4x-jwmx	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	6.320514	443							
+a2aproject__a2a-java-ghsa-9rhm-2h4x-jwmx	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.108857	372	true	true	partial	0	0	0	daily/default
+a2aproject__a2a-java-ghsa-9rhm-2h4x-jwmx	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.866147	425							
+amir20__dozzle-ghsa-p2w3-6x73-2f6x	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	1.058049	286	true	true	partial	3	1	7	daily/default
+amir20__dozzle-ghsa-p2w3-6x73-2f6x	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	1.030534	218							
+amir20__dozzle-ghsa-p2w3-6x73-2f6x	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.14124	249	true	true	partial	3	0	8	daily/default
+amir20__dozzle-ghsa-p2w3-6x73-2f6x	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.50106	446							
+backstage__backstage-ghsa-2cmg-v53w-8xfp	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.266467	125	true	false			0	0	
+backstage__backstage-ghsa-2cmg-v53w-8xfp	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	8.349025	638							
+backstage__backstage-ghsa-2cmg-v53w-8xfp	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.068929	502	true	true	partial	0	0	6	daily/default
+backstage__backstage-ghsa-2cmg-v53w-8xfp	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.873168	725							
+backstage__backstage-ghsa-xm5q-p7w3-x6cp	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.307014	110	true	false			0	0	
+backstage__backstage-ghsa-xm5q-p7w3-x6cp	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	8.321163	425							
+backstage__backstage-ghsa-xm5q-p7w3-x6cp	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.11275	481	true	true	partial	0	0	6	daily/default
+backstage__backstage-ghsa-xm5q-p7w3-x6cp	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_turns	1	2.416369	601							
+borewit__music-metadata-ghsa-53v6-4h7p-p4gj	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.454538	155	true	true		0	0	3	daily/default
+borewit__music-metadata-ghsa-53v6-4h7p-p4gj	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	1.582618	327							
+borewit__music-metadata-ghsa-53v6-4h7p-p4gj	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.182061	375	true	false		6	1	37	daily/default
+borewit__music-metadata-ghsa-53v6-4h7p-p4gj	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.464222	504							
+corazawaf__coraza-ghsa-prpw-wwv7-xjjr	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.595664	140	true	true		0	0	2	daily/default
+corazawaf__coraza-ghsa-prpw-wwv7-xjjr	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	4.45902	336							
+corazawaf__coraza-ghsa-prpw-wwv7-xjjr	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.081278	494	true	true	partial	0	0	20	daily/default
+corazawaf__coraza-ghsa-prpw-wwv7-xjjr	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	1.528474	838							
+coredns__coredns-ghsa-74w3-63xv-x9mv	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.231232	106	true	false			0	0	
+coredns__coredns-ghsa-74w3-63xv-x9mv	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	5.591908	448							
+coredns__coredns-ghsa-74w3-63xv-x9mv	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.056466	659	true	true	partial	0	0	21	daily/default
+coredns__coredns-ghsa-74w3-63xv-x9mv	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	2.624972	702							
+distribution__distribution-ghsa-685w-q87j-wqw3	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.573349	191	true	true	partial	0	0	0	daily/default
+distribution__distribution-ghsa-685w-q87j-wqw3	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	3.018035	376							
+distribution__distribution-ghsa-685w-q87j-wqw3	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.889919	1127	true	true	partial	0	0	283	daily/default
+distribution__distribution-ghsa-685w-q87j-wqw3	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	2.172053	762							
+expressjs__multer-ghsa-q7qp-rjg7-q26m	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.597441	159	true	true	partial	0	0	1	daily/default
+expressjs__multer-ghsa-q7qp-rjg7-q26m	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.612765	274							
+expressjs__multer-ghsa-q7qp-rjg7-q26m	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.076075	345	true	true	partial	0	0	2	daily/default
+expressjs__multer-ghsa-q7qp-rjg7-q26m	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.108217	351							
+follow-redirects__follow-redirects-ghsa-q3jh-wrc6-jgq8	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.670597	174	true	true	partial	0	0	0	daily/default
+follow-redirects__follow-redirects-ghsa-q3jh-wrc6-jgq8	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.322154	157							
+follow-redirects__follow-redirects-ghsa-q3jh-wrc6-jgq8	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.085908	476	true	true	partial	1	0	8	daily/default
+follow-redirects__follow-redirects-ghsa-q3jh-wrc6-jgq8	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.121204	568							
+forgekeep__nebula-mesh-ghsa-7rx3-5wx3-5v76	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.797911	214	true	true		2	1	0	daily/default
+forgekeep__nebula-mesh-ghsa-7rx3-5wx3-5v76	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	5.007821	326							
+forgekeep__nebula-mesh-ghsa-7rx3-5wx3-5v76	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.159453	279	true	true	partial	2	0	2	daily/default
+forgekeep__nebula-mesh-ghsa-7rx3-5wx3-5v76	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.364794	306							
+getarcaneapp__arcane-ghsa-mp22-58ff-6fhr	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.224476	111	true	false			0	0	
+getarcaneapp__arcane-ghsa-mp22-58ff-6fhr	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	8.709582	387							
+getarcaneapp__arcane-ghsa-mp22-58ff-6fhr	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.180259	385	true	false			0	0	
+getarcaneapp__arcane-ghsa-mp22-58ff-6fhr	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.853566	494							
+getarcaneapp__arcane-ghsa-pw5q-rjx4-7f7p	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.934826	241	true	true	partial	0	0	9	daily/default
+getarcaneapp__arcane-ghsa-pw5q-rjx4-7f7p	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	10.006954	494							
+getarcaneapp__arcane-ghsa-pw5q-rjx4-7f7p	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.225423	367	true	false			0	0	
+getarcaneapp__arcane-ghsa-pw5q-rjx4-7f7p	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	1.895773	438							
+getkin__kin-openapi-ghsa-g8cf-rcjf-c8cf	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.298373	102	true	false			0	0	
+getkin__kin-openapi-ghsa-g8cf-rcjf-c8cf	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.199811	105							
+getkin__kin-openapi-ghsa-g8cf-rcjf-c8cf	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.540948	930	true	true	partial	0	0	86	daily/default
+getkin__kin-openapi-ghsa-g8cf-rcjf-c8cf	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.417349	498							
+getkin__kin-openapi-ghsa-mmfr-pmjx-hw9w	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.30717	98	true	false			0	0	
+getkin__kin-openapi-ghsa-mmfr-pmjx-hw9w	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.501194	126							
+getkin__kin-openapi-ghsa-mmfr-pmjx-hw9w	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.109094	325	true	true	partial	4	1	7	daily/default
+getkin__kin-openapi-ghsa-mmfr-pmjx-hw9w	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.176996	247							
+go-jose__go-jose-ghsa-4w3g-jfj2-cw2q	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.478966	134	true	true	partial	0	0	6	daily/default
+go-jose__go-jose-ghsa-4w3g-jfj2-cw2q	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	1.166293	225							
+go-jose__go-jose-ghsa-4w3g-jfj2-cw2q	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.224309	544	true	true	partial	0	0	38	daily/default
+go-jose__go-jose-ghsa-4w3g-jfj2-cw2q	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.635548	920							
+grpc__grpc-go-ghsa-2v4p-qf9q-27wj	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.224727	110	true	false			0	0	
+grpc__grpc-go-ghsa-2v4p-qf9q-27wj	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	8.384154	600							
+grpc__grpc-go-ghsa-2v4p-qf9q-27wj	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	1.455556	1205	true	true	partial	0	0	331	daily/default
+grpc__grpc-go-ghsa-2v4p-qf9q-27wj	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_turns	1	2.749449	531							
+intlify__vue-i18n-ghsa-83rm-6c8r-g728	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.506097	169	true	true	partial	0	1	0	daily/default
+intlify__vue-i18n-ghsa-83rm-6c8r-g728	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.569678	170							
+intlify__vue-i18n-ghsa-83rm-6c8r-g728	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.068215	320	true	false			0	0	
+intlify__vue-i18n-ghsa-83rm-6c8r-g728	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	1.147638	694							
+jhaals__yopass-ghsa-6r69-c6wg-7g8m	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.460119	130	true	true		0	1	4	daily/default
+jhaals__yopass-ghsa-6r69-c6wg-7g8m	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	1.021891	169							
+jhaals__yopass-ghsa-6r69-c6wg-7g8m	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.116308	274	true	true	partial	5	1	1	daily/default
+jhaals__yopass-ghsa-6r69-c6wg-7g8m	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.293704	667							
+kite-org__kite-ghsa-c534-2w9c-x7fm	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.751212	232	true	false			1	0	
+kite-org__kite-ghsa-c534-2w9c-x7fm	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	4.506305	438							
+kite-org__kite-ghsa-c534-2w9c-x7fm	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.089879	260	true	true	partial	4	0	2	daily/default
+kite-org__kite-ghsa-c534-2w9c-x7fm	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.266998	315							
+lxsmnsyc__seroval-ghsa-wp97-x4hv-qvhp	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.613841	201	true	true	partial	2	0	2	daily/default
+lxsmnsyc__seroval-ghsa-wp97-x4hv-qvhp	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.683475	173							
+lxsmnsyc__seroval-ghsa-wp97-x4hv-qvhp	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.104941	360	true	true	partial	1	0	0	daily/default
+lxsmnsyc__seroval-ghsa-wp97-x4hv-qvhp	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.723823	807							
+markdown-it__markdown-it-ghsa-gfr2-rv44-r23c	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.38643	144	true	true		0	0	0	daily/default
+markdown-it__markdown-it-ghsa-gfr2-rv44-r23c	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.768368	272							
+markdown-it__markdown-it-ghsa-gfr2-rv44-r23c	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.142069	367	true	true	partial	1	0	2	daily/default
+markdown-it__markdown-it-ghsa-gfr2-rv44-r23c	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.601663	779							
+markdown-it__markdown-it-ghsa-r7fv-28h4-cvq7	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.452133	152	true	true	not_assessed	0	0	2	daily/default
+markdown-it__markdown-it-ghsa-r7fv-28h4-cvq7	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	1.090298	333							
+markdown-it__markdown-it-ghsa-r7fv-28h4-cvq7	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.079513	308	true	true	partial	1	0	1	daily/default
+markdown-it__markdown-it-ghsa-r7fv-28h4-cvq7	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	1.062594	1226							
+markdown-it__markdown-it-ghsa-vfgh-jcmw-g37q	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.440467	150	true	true		0	0	2	daily/default
+markdown-it__markdown-it-ghsa-vfgh-jcmw-g37q	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	1.107102	286							
+markdown-it__markdown-it-ghsa-vfgh-jcmw-g37q	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.107918	496	true	false			0	0	
+markdown-it__markdown-it-ghsa-vfgh-jcmw-g37q	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	2.558138	2194							
+mcollina__msgpack5-ghsa-5x5g-h9x8-2fh9	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.88004	249	true	true		3	0	0	daily/default
+mcollina__msgpack5-ghsa-5x5g-h9x8-2fh9	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.44554	295							
+mcollina__msgpack5-ghsa-5x5g-h9x8-2fh9	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.077452	298	true	true	partial	4	1	6	daily/default
+mcollina__msgpack5-ghsa-5x5g-h9x8-2fh9	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.047618	453							
+microsoft__openapi.net-ghsa-7pxr-59rr-hqj2	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.515272	154	true	true	partial	0	0	3	daily/default
+microsoft__openapi.net-ghsa-7pxr-59rr-hqj2	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.579185	149							
+microsoft__openapi.net-ghsa-7pxr-59rr-hqj2	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.101566	295	true	true	partial	3	0	3	daily/default
+microsoft__openapi.net-ghsa-7pxr-59rr-hqj2	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.846364	638							
+nodejs__undici-ghsa-2m5v-pch6-74hx	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.293693	95	true	false			0	0	
+nodejs__undici-ghsa-2m5v-pch6-74hx	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	5.722455	457							
+nodejs__undici-ghsa-2m5v-pch6-74hx	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.122419	321	true	true	partial	0	2	41	daily/default
+nodejs__undici-ghsa-2m5v-pch6-74hx	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_turns	1	2.533086	1199							
+nodejs__undici-ghsa-4w7w-5xrc-9h26	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.557276	175	true	true	partial	0	0	7	daily/default
+nodejs__undici-ghsa-4w7w-5xrc-9h26	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	8.189717	576							
+nodejs__undici-ghsa-4w7w-5xrc-9h26	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.240134	379	true	true	partial	0	0	67	daily/default
+nodejs__undici-ghsa-4w7w-5xrc-9h26	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.838107	590							
+nuxt__nuxt-ghsa-x287-wcfc-q46c	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.74489	408	true	true	partial	0	0	0	daily/default
+nuxt__nuxt-ghsa-x287-wcfc-q46c	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	3.507406	412							
+nuxt__nuxt-ghsa-x287-wcfc-q46c	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.072179	245	true	true	partial	0	0	15	daily/default
+nuxt__nuxt-ghsa-x287-wcfc-q46c	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.87769	901							
+nuxt__nuxt-ghsa-xfq5-w38q-pc2x	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.660162	202	true	true	partial	0	0	2	daily/default
+nuxt__nuxt-ghsa-xfq5-w38q-pc2x	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	7.377866	585							
+nuxt__nuxt-ghsa-xfq5-w38q-pc2x	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.084916	305	true	false		0	1	3	daily/default
+nuxt__nuxt-ghsa-xfq5-w38q-pc2x	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	2.704139	937							
+openchoreo__openchoreo-ghsa-52gf-6rpq-fgmx	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.995465	527	true	true	partial	0	0	1	daily/default
+openchoreo__openchoreo-ghsa-52gf-6rpq-fgmx	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	8.566874	551							
+openchoreo__openchoreo-ghsa-52gf-6rpq-fgmx	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.139436	247	true	true	partial	3	0	23	daily/default
+openchoreo__openchoreo-ghsa-52gf-6rpq-fgmx	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	2.269105	655							
+oras-project__oras-go-ghsa-h7vf-4x9w-h99v	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.700128	228	true	true	partial	0	1	1	daily/default
+oras-project__oras-go-ghsa-h7vf-4x9w-h99v	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	1.016776	203							
+oras-project__oras-go-ghsa-h7vf-4x9w-h99v	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.158555	400	true	true	partial	1	0	31	daily/default
+oras-project__oras-go-ghsa-h7vf-4x9w-h99v	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.28871	624							
+patrickjuchli__basic-ftp-ghsa-c475-qrg2-pj4r	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.415976	148	true	true		0	0	1	daily/default
+patrickjuchli__basic-ftp-ghsa-c475-qrg2-pj4r	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.637139	164							
+patrickjuchli__basic-ftp-ghsa-c475-qrg2-pj4r	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.116794	358	true	false			0	0	
+patrickjuchli__basic-ftp-ghsa-c475-qrg2-pj4r	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.203281	586							
+patriksimek__vm2-ghsa-c48m-32m9-vx93	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.693793	189	true	false		0	1	0	daily/default
+patriksimek__vm2-ghsa-c48m-32m9-vx93	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	4.529757	412							
+patriksimek__vm2-ghsa-c48m-32m9-vx93	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.083392	293	true	true	partial	1	0	26	daily/default
+patriksimek__vm2-ghsa-c48m-32m9-vx93	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	1.411221	1446							
+patriksimek__vm2-ghsa-x965-fc75-jpqh	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.656828	192	true	true	partial	1	1	0	daily/default
+patriksimek__vm2-ghsa-x965-fc75-jpqh	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	3.007758	363							
+patriksimek__vm2-ghsa-x965-fc75-jpqh	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.510847	424	true	true	partial	4	0	115	daily/default
+patriksimek__vm2-ghsa-x965-fc75-jpqh	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	1.667914	1393							
+payloadcms__payload-ghsa-4ww4-68q3-h7g5	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.514077	231	true	true	partial	1	0	2	daily/default
+payloadcms__payload-ghsa-4ww4-68q3-h7g5	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	9.177059	669							
+payloadcms__payload-ghsa-4ww4-68q3-h7g5	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.078971	539	true	false			1	0	
+payloadcms__payload-ghsa-4ww4-68q3-h7g5	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.892646	793							
+qax-os__excelize-ghsa-fq3v-74gv-27gm	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.665003	218	true	true		0	0	3	daily/default
+qax-os__excelize-ghsa-fq3v-74gv-27gm	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	5.851365	481							
+qax-os__excelize-ghsa-fq3v-74gv-27gm	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.085464	283	true	true	partial	5	0	1	daily/default
+qax-os__excelize-ghsa-fq3v-74gv-27gm	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	1.809895	730							
+qax-os__excelize-ghsa-g27h-8qhm-6pff	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.685649	195	true	true	partial	3	1	6	daily/default
+qax-os__excelize-ghsa-g27h-8qhm-6pff	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	5.730794	539							
+qax-os__excelize-ghsa-g27h-8qhm-6pff	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.063952	304	true	true	partial	3	2	3	daily/default
+qax-os__excelize-ghsa-g27h-8qhm-6pff	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.230229	1017							
+quasarframework__quasar-ghsa-r5mf-4r5x-q78f	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.684241	366	true	true	partial	0	2	1	daily/default
+quasarframework__quasar-ghsa-r5mf-4r5x-q78f	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	3.783946	401							
+quasarframework__quasar-ghsa-r5mf-4r5x-q78f	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.1353	329	true	true	partial	2	0	20	daily/default
+quasarframework__quasar-ghsa-r5mf-4r5x-q78f	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	1.545045	461							
+rclone__rclone-ghsa-cf44-9pgv-m4xc	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.567266	198	true	true		0	0	1	daily/default
+rclone__rclone-ghsa-cf44-9pgv-m4xc	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	5.48321	406							
+rclone__rclone-ghsa-cf44-9pgv-m4xc	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.084682	318	true	true	partial	4	0	2	daily/default
+rclone__rclone-ghsa-cf44-9pgv-m4xc	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.862957	922							
+rclone__rclone-ghsa-p6m2-r3w9-mpxw	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.390411	148	true	true		0	0	1	daily/default
+rclone__rclone-ghsa-p6m2-r3w9-mpxw	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	6.504153	402							
+rclone__rclone-ghsa-p6m2-r3w9-mpxw	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.202543	438	true	false			0	0	
+rclone__rclone-ghsa-p6m2-r3w9-mpxw	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_turns	1	2.518484	538							
+sveltejs__devalue-ghsa-mcm9-63f2-9j32	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	1.068655	314	true	true	partial	1	0	1	daily/default
+sveltejs__devalue-ghsa-mcm9-63f2-9j32	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.485245	186							
+sveltejs__devalue-ghsa-mcm9-63f2-9j32	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.094324	309	true	true	partial	1	0	1	daily/default
+sveltejs__devalue-ghsa-mcm9-63f2-9j32	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.714392	903							
+sveltejs__kit-ghsa-27mw-82g8-phjj	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.252797	115	true	false			0	0	
+sveltejs__kit-ghsa-27mw-82g8-phjj	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	4.139173	412							
+sveltejs__kit-ghsa-27mw-82g8-phjj	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.189308	413	true	false			0	0	
+sveltejs__kit-ghsa-27mw-82g8-phjj	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	1.360297	582							
+sveltejs__kit-ghsa-pfhg-q3qv-9q6r	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.401285	126	true	false			0	0	
+sveltejs__kit-ghsa-pfhg-q3qv-9q6r	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	3.808871	361							
+sveltejs__kit-ghsa-pfhg-q3qv-9q6r	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.137278	444	true	false			0	0	
+sveltejs__kit-ghsa-pfhg-q3qv-9q6r	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_turns	1	2.784303	832							
+tinacms__tinacms-ghsa-c42q-qvc3-j6vg	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.261324	114	true	false			0	0	
+tinacms__tinacms-ghsa-c42q-qvc3-j6vg	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	4.850236	451							
+tinacms__tinacms-ghsa-c42q-qvc3-j6vg	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.156489	366	true	true	partial	0	1	11	daily/default
+tinacms__tinacms-ghsa-c42q-qvc3-j6vg	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.855506	685							
+traefik__traefik-ghsa-42cj-m3vj-89wv	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.761024	203	true	true	partial	0	0	0	daily/default
+traefik__traefik-ghsa-42cj-m3vj-89wv	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	5.852217	412							
+traefik__traefik-ghsa-42cj-m3vj-89wv	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.17117	586	true	true	partial	1	0	42	daily/default
+traefik__traefik-ghsa-42cj-m3vj-89wv	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.866168	810							
+traefik__traefik-ghsa-7ghq-v6jf-g56c	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.903627	247	true	true		0	0	2	daily/default
+traefik__traefik-ghsa-7ghq-v6jf-g56c	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	5.481763	415							
+traefik__traefik-ghsa-7ghq-v6jf-g56c	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.24063	514	true	false		0	1	71	daily/default
+traefik__traefik-ghsa-7ghq-v6jf-g56c	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.87666	613							
+traefik__traefik-ghsa-v67p-phpq-fc8x	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.861734	235	true	true		0	1	6	daily/default
+traefik__traefik-ghsa-v67p-phpq-fc8x	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	8.680026	514							
+traefik__traefik-ghsa-v67p-phpq-fc8x	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.086896	281	true	true		0	0	4	daily/default
+traefik__traefik-ghsa-v67p-phpq-fc8x	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.849682	645							
+tryghost__ghost-ghsa-9m4w-fmjw-fvjq	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.527576	272	true	false		0	1	2	daily/default
+tryghost__ghost-ghsa-9m4w-fmjw-fvjq	opus	none	claude-opus-5-5	claude-code	2.1.325	limit_allowance	1	15.086374	909							
+tryghost__ghost-ghsa-9m4w-fmjw-fvjq	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.052658	196	true	true	partial	0	0	1	daily/default
+tryghost__ghost-ghsa-9m4w-fmjw-fvjq	particle	none	particle-ai/particle-1	claude-code	2.1.325	limit_allowance	1	2.881662	514							
+xmldom__xmldom-ghsa-4w3w-2rp5-g8jm	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.160739	96	true	false			0	0	
+xmldom__xmldom-ghsa-4w3w-2rp5-g8jm	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	1.200821	292							
+xmldom__xmldom-ghsa-4w3w-2rp5-g8jm	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.229345	412	true	true	partial	3	0	12	daily/default
+xmldom__xmldom-ghsa-4w3w-2rp5-g8jm	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.272913	544							
+yahoo__serialize-javascript-ghsa-gfhx-hw2g-v5hg	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.646532	199	true	true	partial	0	0	0	daily/default
+yahoo__serialize-javascript-ghsa-gfhx-hw2g-v5hg	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.293129	172							
+yahoo__serialize-javascript-ghsa-gfhx-hw2g-v5hg	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.270093	1289	true	true	partial	2	0	1	daily/default
+yahoo__serialize-javascript-ghsa-gfhx-hw2g-v5hg	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.179121	613							
+yahoo__serialize-javascript-ghsa-m5mm-p8h7-m29v	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.910602	306	true	true	partial	0	0	1	daily/default
+yahoo__serialize-javascript-ghsa-m5mm-p8h7-m29v	opus	none	claude-opus-5-5	claude-code	2.1.325	completed	1	0.417319	175							
+yahoo__serialize-javascript-ghsa-m5mm-p8h7-m29v	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.138153	390	true	true	partial	0	0	2	daily/default
+yahoo__serialize-javascript-ghsa-m5mm-p8h7-m29v	particle	none	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.061731	478							
