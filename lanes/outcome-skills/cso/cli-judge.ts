@@ -28,6 +28,9 @@ import { anchorSources, checkSetOrder, extraFindingPool, goldFill, judgeCheck, j
 import { judgeRoutes, routeClients, type Transport } from "./judge/client.ts";
 import { openJudgeMeter, probe } from "./judge/meter.ts";
 import { exportCmd } from "./export.ts";
+import { printCheck, rerunAnalysis } from "./analysis/rerun.ts";
+import { csoExposure } from "./exposure.ts";
+import { CSO_RECORDS_DIR, readRunRecords } from "./run.ts";
 
 /** JSON lines, or one JSON array. Rows sealed to the readout key open with key; without it they stop the read (E_USAGE),
  *  or are left out when skipSealed is set. */
@@ -255,4 +258,48 @@ async function readoutCmd(argv: string[]): Promise<number> {
   return 0;
 }
 
-export const JUDGE_COMMANDS: Record<string, Command> = { score, judge: (a) => judgeCmd(a), stage0, analyze: analyzeCmd, readout: readoutCmd, export: exportCmd };
+
+const RERUN_ANALYZE_HELP = "Usage: gstack-evals cso rerun-analyze --work <dir> --units <ids> --old-dir <export sessions/stage2> --old-scores <file> --sessions <file> --scores <file> --new-dir <out>/<stage> (--check <sealed file>... --key <path> | --print-check)\nThe rerun's before-and-after analysis (CSO_PLAN=rerun): the new cso arm against the parent's none arm (rows and verdicts)\nand its old cso arm (rows), exposure, yield and secondaries, as JSON. --print-check is the pilot's print check: it\nassumes the judge passed, marks what can't pair, and exits 1 unless every secondary and yield field prints.";
+async function rerunAnalyzeCmd(argv: string[]): Promise<number> {
+  const f = flags(argv, ["--work", "--units", "--old-dir", "--old-scores", "--sessions", "--scores", "--new-dir", "--key"], ["--print-check"], RERUN_ANALYZE_HELP, ["--check"]);
+  if (!f) return 0;
+  const p = loadCsoPrereg();
+  if (!p.rerun) csoFail("E_USAGE", "rerun-analyze reads the rerun plan; set CSO_PLAN=rerun");
+  const w = new Work(resolve(f.need("--work")));
+  const units = readIds(f.need("--units")).map((u) => w.unit(u));
+  const oldDir = resolve(f.need("--old-dir"));
+  const old: SessionRecord[] = [], oldProcedure: Record<string, boolean> = {};
+  for (const u of units)
+    for (const arm of ["none", "cso"] as const)
+      for (const m of ["opus", "particle"] as const) {
+        const d = join(oldDir, u.unit, arm + "-" + m + "-0");
+        if (!existsSync(join(d, "session.json"))) continue;
+        old.push(JSON.parse(readFileSync(join(d, "session.json"), "utf8")) as SessionRecord);
+        if (arm === "cso" && existsSync(join(d, "sdk-messages.jsonl"))) oldProcedure[u.unit + " " + m] = csoExposure(readFileSync(join(d, "sdk-messages.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)), [], { fixed: true }).exposure.procedure_ran;
+      }
+  const oldScores = readRows<CsoScore>(f.need("--old-scores"));
+  const newDir = resolve(f.need("--new-dir"));
+  const runRecords: Record<string, { runs: number; findings: number }> = {};
+  for (const u of existsSync(newDir) ? readdirSync(newDir) : [])
+    for (const s of existsSync(join(newDir, u)) ? readdirSync(join(newDir, u)) : []) {
+      const m = /^cso-(opus|particle)-\d+$/.exec(s);
+      if (!m) continue;
+      const recs = readRunRecords(join(newDir, u, s, CSO_RECORDS_DIR)) as { findings?: unknown[] }[];
+      const prev = runRecords[u + " " + m[1]] ?? { runs: 0, findings: 0 };
+      runRecords[u + " " + m[1]] = { runs: prev.runs + recs.length, findings: prev.findings + recs.reduce((a, r) => a + (Array.isArray(r.findings) ? r.findings.length : 0), 0) };
+    }
+  const k = f.has("--key") ? readKey(f.need("--key")) : null;
+  const judge = f.has("--print-check") ? { opus: { named: true, validity: true }, particle: { named: true, validity: true }, sol: { named: false, validity: false } } : judgeByModel(readChecks(f.all("--check"), k), p);
+  const split = (xs: SessionRecord[]) => ({ none: xs.filter((s) => s.arm === "none"), old: xs.filter((s) => s.arm === "cso") });
+  const sp = split(old);
+  const a = rerunAnalysis({ units, none: { sessions: sp.none, scores: oldScores }, old: { sessions: sp.old, scores: oldScores }, fresh: { sessions: readRows<SessionRecord>(f.need("--sessions")), scores: readRows<CsoScore>(f.need("--scores")) }, oldProcedure, runRecords, judge, headroom_admitted: true }, p);
+  if (!f.has("--print-check")) {
+    console.log(JSON.stringify(a, null, 1));
+    return 0;
+  }
+  const c = printCheck(a);
+  console.log(JSON.stringify({ print_check: { pass: c.pass, missing: c.missing }, analysis: c.out }, null, 1));
+  return c.pass ? 0 : 1;
+}
+
+export const JUDGE_COMMANDS: Record<string, Command> = { score, judge: (a) => judgeCmd(a), stage0, analyze: analyzeCmd, readout: readoutCmd, export: exportCmd, "rerun-analyze": rerunAnalyzeCmd };
