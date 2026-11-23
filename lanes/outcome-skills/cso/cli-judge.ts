@@ -17,7 +17,7 @@ import type { CsoArm, CsoModel, SessionRecord, UnitRecord } from "./types.ts";
 import type { CsoArmRecord } from "./arms.ts";
 import { judgeRelease, type JudgeCheck } from "./analysis/release.ts";
 import { isSealedRow, openCheck, openRow, readKey, readout, seal, sealCheck, sealedStage, sealRow } from "./analysis/readout.ts";
-import { secondaries } from "./analysis/secondaries.ts";
+import { missMap, secondaries } from "./analysis/secondaries.ts";
 import { stage0Readout } from "./analysis/stage0.ts";
 import { analyze, type AnalysisInput } from "./analysis/verdicts.ts";
 import { readTree, type TreeIndex } from "./score/checks.ts";
@@ -192,9 +192,9 @@ export function judgeByModel(checks: readonly JudgeCheck[], p: CsoPrereg): Analy
 const readChecks = (paths: string[], key: Buffer | null): JudgeCheck[] => paths.map((x) => openCheck(x, key ?? csoFail("E_USAGE", "--check needs --key, the readout key it was sealed to")).check);
 const readIds = (path: string): string[] => readRows<string | { unit: string }>(path).map((u) => (typeof u === "string" ? u : u.unit));
 
-const ANALYZE_HELP = "Usage: gstack-evals cso analyze --work <dir> --sessions <file> --scores <file> --units <stage 2 ids> --check <sealed file>... --key <path> [--headroom-admitted] [--headroom-failed] [--left-out <model>]...\nSection 10's rows, verdicts and secondaries on stage 2, printed as JSON.";
+const ANALYZE_HELP = "Usage: gstack-evals cso analyze --work <dir> --sessions <file> --scores <file> --judged <file> --units <stage 2 ids> --check <sealed file>... --key <path> [--headroom-admitted] [--headroom-failed] [--left-out <model>]...\nSection 10's rows, verdicts and secondaries on stage 2, printed as JSON. The miss anatomy reads each missed session's judged\nfindings (--judged) and its unit's audited tree (--work trees/).";
 async function analyzeCmd(argv: string[]): Promise<number> {
-  const f = flags(argv, ["--work", "--sessions", "--scores", "--units", "--key"], ["--headroom-admitted", "--headroom-failed"], ANALYZE_HELP, ["--check", "--left-out"]);
+  const f = flags(argv, ["--work", "--sessions", "--scores", "--judged", "--units", "--key"], ["--headroom-admitted", "--headroom-failed"], ANALYZE_HELP, ["--check", "--left-out"]);
   if (!f) return 0;
   const p = loadCsoPrereg(), w = new Work(resolve(f.need("--work")));
   const k = f.has("--key") ? readKey(f.need("--key")) : null;
@@ -203,7 +203,9 @@ async function analyzeCmd(argv: string[]): Promise<number> {
     left_out: Object.fromEntries(f.all("--left-out").map((m) => [m, true])), headroom_admitted: f.has("--headroom-admitted"), headroom_failed: f.has("--headroom-failed"),
   };
   const a = analyze(i, p);
-  console.log(JSON.stringify({ rows: a.rows.map((r) => ({ model: r.model, state: r.state, p_holm: r.p_holm, p_holm_bound: r.p_holm_bound, complete: r.stats.complete, bound: r.stats.bound, complete_only: r.complete_only, mdd_points: r.mdd_points, procedure: r.stats.procedure })), verdicts: a.verdicts, split: a.split, secondaries: secondaries(i, p) }, null, 1));
+  const judged = new Map(readRows<{ unit: string; arm: string; model: string; stage: string; judged: Judged | null }>(f.need("--judged"), k).map((r) => [key(r), r.judged]));
+  const misses = missMap(i, (s) => judged.get(key(s)) ?? null, (u) => w.tree(u), p);
+  console.log(JSON.stringify({ rows: a.rows.map((r) => ({ model: r.model, state: r.state, p_holm: r.p_holm, p_holm_bound: r.p_holm_bound, complete: r.stats.complete, bound: r.stats.bound, complete_only: r.complete_only, mdd_points: r.mdd_points, procedure: r.stats.procedure })), verdicts: a.verdicts, split: a.split, secondaries: secondaries(i, p, misses) }, null, 1));
   return 0;
 }
 
