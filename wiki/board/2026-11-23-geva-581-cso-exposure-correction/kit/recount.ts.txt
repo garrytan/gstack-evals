@@ -1,0 +1,139 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// Recount for the /cso exposure correction (GEVA-581). Reads the stage 2 cso transcripts from the GEVA-561 export and
+// reads section 8 of the plan as written, closing two gaps in the frozen detector: a start whose run id the model cut
+// from the visible output (piping through tail), and a finish the Bash tool flagged as failed only because a later
+// step in the same command failed. Then it reruns the plan's verdict code on the published scores with those counts.
+// Run from the repository root: bun recount.ts <export>/stage2 <results bundle dir>
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { csoExposure, helperCalls, RUN_ID } from "./lanes/outcome-skills/cso/exposure.ts";
+import { events } from "./lanes/outcome-skills/h2h/sessions/exposure.ts";
+import { loadCsoPrereg } from "./lanes/outcome-skills/cso/prereg.ts";
+import { analyze } from "./lanes/outcome-skills/cso/analysis/verdicts.ts";
+
+const [exportDir, bundle] = process.argv.slice(2) as [string, string];
+const REFUSAL = /"ok"\s*:\s*false\s*,\s*"error"\s*:\s*\{\s*"code"\s*:\s*"([A-Z_]+)"/;
+const SNAPSHOT = /"at"\s*:\s*"([^"]+)",\s*"kind"\s*:\s*"snapshot"/;
+const FINISHED = /"status"\s*:\s*"finished"|'status': 'finished'|\bexit[=:]\s*0\b/i;
+type Rec = Record<string, any>;
+const jsonl = (f: string): Rec[] => readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const resultBlock = (recs: Rec[], id: string): Rec | undefined => {
+  for (const r of recs) for (const b of Array.isArray(r.content) ? r.content : Array.isArray(r.message?.content) ? r.message.content : []) if (b?.tool_use_id === id) return b;
+  return undefined;
+};
+
+/** Close the two detector gaps in one session's records and say which ones applied. */
+function closeGaps(recs: Rec[]): { cut: boolean; flagged: number } {
+  const evs = events(recs), calls = helperCalls(evs);
+  const idAt = (at: number) => evs.find((e) => e.kind === "tool_use" && e.at === at)?.id;
+  let cut = false, run: string | null = null, startAt = -1;
+  for (const c of calls) {
+    if (c.op !== "start" || REFUSAL.test(c.out)) continue;
+    const visible = /"runId"\s*:\s*"(\d{13}-[0-9a-f]{16})"/.exec(c.out)?.[1];
+    if (visible) { run = visible; startAt = c.at; break; }
+    const snap = SNAPSHOT.exec(c.out)?.[1];
+    const next = calls.find((d) => d.at > c.at && d.op !== "start" && RUN_ID.test(d.args[0] ?? ""));
+    if (!snap || !next) continue;
+    const lead = Date.parse(snap) - Number(next.args[0]!.slice(0, 13));
+    if (lead < 0 || lead > 60_000) continue;
+    const b = resultBlock(recs, idAt(c.at)!);
+    if (!b || typeof b.content !== "string") continue;
+    b.content += '\n"runId": "' + next.args[0] + '"';
+    run = next.args[0]!; startAt = c.at; cut = true;
+    break;
+  }
+  let flagged = 0;
+  for (const c of calls) {
+    if (!run || c.op !== "finish" || c.at <= startAt || c.args[0] !== run || !c.error || REFUSAL.test(c.out) || !FINISHED.test(c.out)) continue;
+    const b = resultBlock(recs, idAt(c.at)!);
+    if (b && b.is_error === true && typeof b.content === "string" && !b.content.includes("<tool_use_error>")) { b.is_error = false; flagged++; }
+  }
+  return { cut, flagged };
+}
+
+/** The start helper's symlink refusal: first start refused, later starts, and whether the repository's files were moved. */
+function symlink(recs: Rec[]) {
+  const evs = events(recs), calls = helperCalls(evs);
+  const starts = calls.filter((c) => c.op === "start");
+  if (REFUSAL.exec(starts[0]?.out ?? "")?.[1] !== "UNSAFE_PATH") return null;
+  const cmdAt = (at: number) => String(evs.find((e) => e.kind === "tool_use" && e.at === at)?.input?.command ?? "");
+  const later = starts.slice(1);
+  const ok = later.find((c) => !REFUSAL.test(c.out) && (/"runId"/.test(c.out) || SNAPSHOT.test(c.out)));
+  const between = evs.filter((e) => e.kind === "tool_use" && e.name === "Bash" && e.at > starts[0]!.at && (!ok || e.at <= ok.at)).map((e) => String(e.input?.command ?? ""));
+  return {
+    prefixLimit: later.some((c) => REFUSAL.exec(c.out)?.[1] === "INVALID_ARGUMENT" && /32 prefixes/.test(c.out)),
+    pathsRefused: later.some((c) => REFUSAL.exec(c.out)?.[1] === "UNSAFE_PATH" && /--paths/.test(cmdAt(c.at))),
+    started: !!ok,
+    moved: between.some((c) => /(^|[;&|\s])(rm|mv|unlink|cp)\s/.test(c) && !/gstack-cso-launcher/.test(c.split(/[;&|]/)[0] ?? "")),
+  };
+}
+
+const ran = new Map<string, boolean>();
+const out: Record<string, Rec> = {};
+const sessions = join(exportDir, "sessions", "stage2");
+for (const model of ["opus", "particle"]) {
+  const table = () => ({ completeness: {} as Record<string, number>, submitted: 0, submitted_sessions: 0, host_reads: 0, host_read_sessions: 0 });
+  const tally = (x: ReturnType<typeof table>, e: ReturnType<typeof csoExposure>["exposure"]) => {
+    const k = e.completeness ?? "none recorded";
+    x.completeness[k] = (x.completeness[k] ?? 0) + 1;
+    if (e.findings_submitted) { x.submitted += e.findings_submitted; x.submitted_sessions++; }
+    if (e.host_reads_after_start) { x.host_reads += e.host_reads_after_start; x.host_read_sessions++; }
+  };
+  const rowsFrozen = table(), rowsWritten = table();
+  const t = { sessions: 0, frozen_started: 0, frozen_ran: 0, written_started: 0, written_ran: 0, cut_start: 0, flagged_finish: 0, added: 0,
+    symlink: { refused_first: 0, prefix_limit: 0, paths_refused: 0, both: 0, started_after: 0, moved_before_start: 0 } };
+  for (const unit of readdirSync(sessions).sort()) {
+    const f = join(sessions, unit, "cso-" + model + "-0", "sdk-messages.jsonl");
+    if (!existsSync(f)) continue;
+    const recs = jsonl(f);
+    t.sessions++;
+    const frozen = csoExposure(recs).exposure;
+    const s = symlink(recs);
+    if (s) {
+      t.symlink.refused_first++;
+      if (s.prefixLimit) t.symlink.prefix_limit++;
+      if (s.pathsRefused) t.symlink.paths_refused++;
+      if (s.prefixLimit && s.pathsRefused) t.symlink.both++;
+      if (s.started) t.symlink.started_after++;
+      if (s.started && s.moved) t.symlink.moved_before_start++;
+    }
+    const g = closeGaps(recs);
+    const written = csoExposure(recs).exposure;
+    tally(rowsFrozen, frozen);
+    tally(rowsWritten, written);
+    if (frozen.run_id) t.frozen_started++;
+    if (frozen.procedure_ran) t.frozen_ran++;
+    if (written.run_id) t.written_started++;
+    if (written.procedure_ran) t.written_ran++;
+    if (g.cut) t.cut_start++;
+    if (g.flagged) t.flagged_finish++;
+    if (written.procedure_ran && !frozen.procedure_ran) t.added++;
+    if (frozen.procedure_ran && !written.procedure_ran) throw new Error("closing a gap lost a run");
+    ran.set(model + "|" + unit, written.procedure_ran);
+  }
+  out[model] = { ...t, table_frozen: rowsFrozen, table_written: rowsWritten };
+}
+
+const scores = jsonl(join(bundle, "stage2-scores.jsonl"));
+const [head, ...rows] = readFileSync(join(bundle, "stage2-sessions.tsv"), "utf8").trim().split("\n").map((l) => l.split("\t"));
+const tsv = rows.map((r) => Object.fromEntries(head!.map((k, i) => [k, r[i]])));
+const repo = new Map(scores.map((s) => [s.unit, s.repo]));
+const units = [...new Set(tsv.map((r) => r.unit!))].map((unit) => ({ unit, repo: repo.get(unit) }));
+const named = new Map(scores.map((s) => [s.model + "|" + s.unit + "|" + s.arm, s]));
+const verdicts = (written: boolean) => {
+  const ss = tsv.map((r) => ({ stage: "stage2", unit: r.unit, model: r.model, arm: r.arm, end: r.end,
+    exposure: { procedure_ran: written && r.arm === "cso" ? ran.get(r.model + "|" + r.unit)! : r.procedure_ran === "true" } }));
+  const a = analyze({ units: units as never, sessions: ss as never, scores: scores as never, headroom_admitted: true,
+    judge: { opus: { named: true, validity: true }, particle: { named: true, validity: true } } as never }, loadCsoPrereg());
+  return a.rows.map((r, k) => ({ model: r.model, procedure: r.stats.procedure.ran + "/" + r.stats.procedure.of, row: a.verdicts[k]!.row,
+    delta: r.stats.complete.delta, ci95: r.stats.complete.ci95, mdd_points: r.mdd_points, verdict: a.verdicts[k]!.verdict, step: a.verdicts[k]!.step, why: a.verdicts[k]!.why }));
+};
+const split: Record<string, string> = {};
+for (const model of ["opus", "particle"]) for (const r of [true, false]) {
+  const us = units.filter((u) => ran.get(model + "|" + u.unit) === r);
+  for (const arm of ["cso", "none"]) {
+    const sc = us.map((u) => named.get(model + "|" + u.unit + "|" + arm)).filter((s) => s && s.named !== null);
+    split[model + " " + (r ? "ran" : "did not run") + " " + arm] = sc.filter((s) => s.named).length + "/" + sc.length;
+  }
+}
+console.log(JSON.stringify({ exposure: out, verdicts: { frozen: verdicts(false), written: verdicts(true) }, split }, null, 1));
