@@ -114,8 +114,10 @@ export function readingWorst(p: { inputTokens: number; price: Price }) {
   for (let k = 0; k < SENDS; k++) usd += ((p.inputTokens + k * (MAX_TOKENS + USER_TURN)) * Math.max(p.price.in, p.price.cacheWrite ?? 0) + MAX_TOKENS * p.price.out) / 1e6;
   return usd;
 }
-/** One round (4 readings) at the worst case of the costliest model, from a first send of WORST_INPUT tokens. */
-function roundWorst(models: Model[], prices: Record<string, Price>) {
+/** One round (4 readings) at the worst case of the costliest model, from a first send of WORST_INPUT tokens. A judge-only
+ * item, such as tbv-r78-astra, prices its round at its judges' price rows. */
+function roundWorst(models: (Model | Judge)[], prices: Record<string, Price>) {
+  if (!models.length) fail("E_USAGE no model to price a round at: give the item its readings or its judge packets");
   return ROUND * Math.max(...models.map((m) => readingWorst({ inputTokens: WORST_INPUT, price: prices[m] ?? fail("E_USAGE no price for " + m) })));
 }
 /** Every item's cap: 1.15 times its projection plus one round at its worst case, rounded up to the dollar. The projection check and the caps command both use it. */
@@ -302,7 +304,7 @@ function projection(p: { items: { item: string; readings: { model: Model; arm: A
       if (m === undefined) fail("E_USAGE no measured cost for " + r.arm + ":" + r.model + " (stage 1 must measure every model and arm path a later item runs)");
       proj += r.n * m;
     }
-    const worst = roundWorst(it.readings.map((r) => r.model), p.prices);
+    const worst = roundWorst(it.readings.length ? it.readings.map((r) => r.model) : it.packets.map((k) => k.judge), p.prices);
     const cap = capOf(proj, worst);
     total += cap;
     say(it.item + ": projected " + usd(proj) + ", round worst case " + usd(worst) + ", cap " + usd(cap));
