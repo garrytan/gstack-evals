@@ -238,15 +238,33 @@ export async function runFormatVariants(judge: JudgeClient, u: UnitRecord, tree:
 }
 
 /** Runs one check-set report down a route: production pass A and B, then both gold labellers. */
-export async function runReport(id: string, meta: Pick<ReportResult, "arm" | "model" | "anchor">, clients: { judge: JudgeClient; gold: [JudgeClient, JudgeClient] }, u: UnitRecord, s: Src, tree: TreeIndex, p: CsoPrereg): Promise<ReportResult> {
+export async function runReport(id: string, meta: Pick<ReportResult, "arm" | "model" | "anchor">, clients: { judge: JudgeClient; gold: [JudgeClient, JudgeClient] }, u: UnitRecord, s: Src, tree: TreeIndex, p: CsoPrereg, onJudged?: (run: JudgeRun) => void): Promise<ReportResult> {
   const st = scoredText(s, p);
   const run = await judgeSession(clients.judge, u, st, s, tree, p);
+  onJudged?.(run);
   const prod = namedOf(run, u, s, tree, p);
   const passA = run.judged && Array.isArray(run.judged.findings) ? run.judged.findings.slice(0, scoringRules(p).first_k) : [];
   const gold: GoldResult[] = [];
   for (const c of clients.gold) gold.push(await goldReport(c, u, st, s, passA, tree, p));
   const total = run.judged && Array.isArray(run.judged.findings) ? run.judged.findings.length : 0;
   return { id, ...meta, production: { named: prod.named, validity: prod.validity, refused: run.refused }, gold: [gold[0]!, gold[1]!], findings_total: total };
+}
+
+/** The rerun's pilot judge gate (rerun prereg section 7): on the pilot's new cso reports, no refusal by the judge or a
+ *  labeller, no judge gap, and gold (both labellers agreeing) disagrees with the judge on named in at most max_disagree.
+ *  A report the labellers split on has no gold and is listed, never counted as a disagreement. */
+export function pilotGate(reports: readonly ReportResult[], want: number, max_disagree = 2): { pass: boolean; reports: number; refused: string[]; judge_gaps: string[]; disagree: string[]; no_gold: string[]; why: string[] } {
+  const refused = reports.filter((r) => r.production.refused || r.gold.some((g) => g.refused)).map((r) => r.id);
+  const judge_gaps = reports.filter((r) => r.production.named === null).map((r) => r.id);
+  const disagree = reports.filter((r) => r.production.named !== null && goldNamed(r) !== null && goldNamed(r) !== r.production.named).map((r) => r.id);
+  const no_gold = reports.filter((r) => goldNamed(r) === null).map((r) => r.id);
+  const why = [
+    ...(reports.length !== want ? [reports.length + " pilot reports, not " + want] : []),
+    ...(refused.length ? [refused.length + " refused"] : []),
+    ...(judge_gaps.length ? [judge_gaps.length + " judge gaps"] : []),
+    ...(disagree.length > max_disagree ? ["gold disagrees on named in " + disagree.length + ", more than " + max_disagree] : []),
+  ];
+  return { pass: why.length === 0, reports: reports.length, refused, judge_gaps, disagree, no_gold, why };
 }
 
 /** Anchor sources for runReport: one oracle and one stock report per unit. */

@@ -24,7 +24,7 @@ import { analyze, type AnalysisInput } from "./analysis/verdicts.ts";
 import { readTree, type TreeIndex } from "./score/checks.ts";
 import { scoreSession, type CsoScore, type Judged } from "./score/outcomes.ts";
 import { scoredText } from "./score/text.ts";
-import { anchorSources, checkSetOrder, extraFindingPool, goldFill, judgeCheck, judgeSession, runFormatVariants, runReport, type FormatResult, type ReportResult } from "./judge/check.ts";
+import { anchorSources, checkSetOrder, extraFindingPool, goldFill, judgeCheck, judgeSession, pilotGate, runFormatVariants, runReport, type FormatResult, type JudgeRun, type ReportResult } from "./judge/check.ts";
 import { judgeRoutes, routeClients, type Transport } from "./judge/client.ts";
 import { openJudgeMeter, probe } from "./judge/meter.ts";
 import { exportCmd } from "./export.ts";
@@ -95,13 +95,13 @@ async function score(argv: string[]): Promise<number> {
   return 0;
 }
 
-const JUDGE_HELP = "Usage: gstack-evals cso judge --work <dir> --sessions <file> --out <dir> --run <id> [--route <name>] [--key <path>] [--check | --probe] [--record <path>] [--ledger <path>]\nSends through the metering proxy on one cso-judge lease. --probe: one call down each judge and labeller route (exit 1 if any\nfails). Default: passes A and B on every session not yet in <out>/judged.jsonl. --check: section 7's check on the stage 0\nand stage 1 reports, with anchors and format variants, sealed to the readout key in <out>/check-<route>.sealed (digest beside it);\nonly the release booleans print. With --key (needed for --check and for stage 1 or re-pilot sessions) stage 1 and re-pilot\njudged rows and every kept reply are sealed to the readout key.";
+const JUDGE_HELP = "Usage: gstack-evals cso judge --work <dir> --sessions <file> --out <dir> --run <id> [--route <name>] [--key <path>] [--check | --probe] [--record <path>] [--ledger <path>]\nSends through the metering proxy on one cso-judge lease. --probe: one call down each judge and labeller route (exit 1 if any\nfails). Default: passes A and B on every session not yet in <out>/judged.jsonl. --check: section 7's check on the stage 0\nand stage 1 reports, with anchors and format variants, sealed to the readout key in <out>/check-<route>.sealed (digest beside it);\nonly the release booleans print. With --key (needed for --check and for stage 1 or re-pilot sessions) stage 1 and re-pilot\njudged rows and every kept reply are sealed to the readout key. --pilot-gate (CSO_PLAN=rerun): judges the rerun pilot's\nsessions into <out>/judged.jsonl with gold from both labellers on each, writes <out>/pilot-gate.json and prints the gate;\nexit 1 when it fails.";
 
 /** gstack-evals cso judge; a transport replaces the metered one in tests. */
 export async function judgeCmd(argv: string[], o: { transport?: Transport; env?: Record<string, string | undefined>; fetch?: typeof fetch } = {}): Promise<number> {
-  const f = flags(argv, ["--work", "--sessions", "--out", "--run", "--route", "--record", "--ledger", "--key"], ["--check", "--probe"], JUDGE_HELP);
+  const f = flags(argv, ["--work", "--sessions", "--out", "--run", "--route", "--record", "--ledger", "--key"], ["--check", "--probe", "--pilot-gate"], JUDGE_HELP);
   if (!f) return 0;
-  if (f.has("--check") && f.has("--probe")) csoFail("E_USAGE", "--check and --probe are separate runs");
+  if ([f.has("--check"), f.has("--probe"), f.has("--pilot-gate")].filter(Boolean).length > 1) csoFail("E_USAGE", "--check, --probe and --pilot-gate are separate runs");
   const sealKey = f.has("--check") || f.has("--key") ? readKey(f.need("--key")) : null;
   const sessions = f.has("--probe") ? [] : readRows<SessionRecord>(f.need("--sessions"), sealKey);
   sealingKey(sealKey, sessions);
@@ -118,7 +118,8 @@ export async function judgeCmd(argv: string[], o: { transport?: Transport; env?:
     }
     const w = new Work(resolve(f.need("--work")));
     const clients = routeClients(route, p, transport);
-    if (!f.has("--check")) return await judgeAll(w, sessions, clients.judge, join(out, "judged.jsonl"), route.cells, sealKey, p);
+    if (f.has("--pilot-gate")) return await pilotGateRun(w, sessions, clients, route.route, route.cells, out, p);
+    if (!f.has("--check")) return await judgeAll(w, sessions, clients.judge, join(out, "judged.jsonl"), route.cells, sealKey, p, route.route);
     const pilot = sessions.filter((s) => (s.stage === "stage0" || s.stage === "stage1") && s.end !== "gap" && route.cells.includes(s.model));
     const stage1 = [...new Set(sessions.filter((s) => s.stage === "stage1").map((s) => s.unit))].sort();
     const items = [
@@ -154,14 +155,36 @@ export async function judgeCmd(argv: string[], o: { transport?: Transport; env?:
   }
 }
 
-async function judgeAll(w: Work, sessions: SessionRecord[], judge: ReturnType<typeof routeClients>["judge"], file: string, cells: readonly CsoModel[], k: Buffer | null, p: CsoPrereg): Promise<number> {
+/** The rerun pilot's judge gate: each pilot session judged once (its row into judged.jsonl, with its route) and gold from
+ *  both labellers on the same pass A; a pilot session that ended a gap has no report, so the gate's count fails. */
+async function pilotGateRun(w: Work, sessions: SessionRecord[], clients: ReturnType<typeof routeClients>, route: string, cells: readonly CsoModel[], out: string, p: CsoPrereg): Promise<number> {
+  const rerun = p.rerun ?? csoFail("E_USAGE", "--pilot-gate judges the rerun pilot; set CSO_PLAN=rerun");
+  const pilot = sessions.filter((s) => s.stage === "rerun-pilot");
+  const want = 2 * Number((rerun.units as { pilot?: { size?: number } }).pilot?.size ?? 5);
+  const file = join(out, "judged.jsonl");
+  if (existsSync(file) || existsSync(join(out, "pilot-gate.json"))) csoFail("E_USAGE", out + " already holds a pilot gate run; write to a new --out");
+  const reports: ReportResult[] = [];
+  for (const s of pilot) {
+    if (s.end === "gap" || !cells.includes(s.model)) continue;
+    let run: JudgeRun | null = null;
+    reports.push(await runReport(key(s), { arm: s.arm, model: s.model, anchor: null }, clients, w.unit(s.unit), s, w.tree(s.unit), p, (r) => (run = r)));
+    const j = run as JudgeRun | null;
+    appendFileSync(file, JSON.stringify({ unit: s.unit, arm: s.arm, model: s.model, stage: s.stage, route, judged: j?.judged ?? null, refused: j?.refused ?? false, over_cap: j?.over_cap ?? false }) + "\n");
+  }
+  const gate = pilotGate(reports, want);
+  writeNew(join(out, "pilot-gate.json"), JSON.stringify({ schema: "cso-rerun-pilot-gate.v1", route, gate, reports }, null, 1) + "\n");
+  console.log(JSON.stringify(gate));
+  return gate.pass ? 0 : 1;
+}
+
+async function judgeAll(w: Work, sessions: SessionRecord[], judge: ReturnType<typeof routeClients>["judge"], file: string, cells: readonly CsoModel[], k: Buffer | null, p: CsoPrereg, route: string): Promise<number> {
   const done = new Set(existsSync(file) ? readRows<{ unit: string; arm: string; model: string; stage: string }>(file, k).map(key) : []);
   let n = 0;
   for (const s of sessions) {
     if (done.has(key(s)) || s.end === "gap" || !cells.includes(s.model)) continue;
     const st = scoredText(s, p);
     const run = await judgeSession(judge, w.unit(s.unit), st, s, w.tree(s.unit), p);
-    appendFileSync(file, rowLine({ unit: s.unit, arm: s.arm, model: s.model, stage: s.stage, judged: run.judged, refused: run.refused, over_cap: run.over_cap }, s.stage, k) + "\n");
+    appendFileSync(file, rowLine({ unit: s.unit, arm: s.arm, model: s.model, stage: s.stage, route, judged: run.judged, refused: run.refused, over_cap: run.over_cap }, s.stage, k) + "\n");
     n++;
   }
   console.log("judged " + n + " sessions into " + file);
