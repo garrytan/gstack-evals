@@ -61,6 +61,11 @@ export function helperCalls(evs: readonly Ev[]): HelperCall[] {
 
 /** The JSON object a helper printed, or, when the output holds several, the last one that starts a line, or null. */
 export function helperJson(out: string): Rec | null {
+  return helperObjects(out).at(-1) ?? null;
+}
+
+/** Every JSON object a helper printed: the whole output when it parses as one, else each object that starts a line. */
+export function helperObjects(out: string): Rec[] {
   const parse = (t: string): Rec | null => {
     try {
       const v = JSON.parse(t);
@@ -70,10 +75,11 @@ export function helperJson(out: string): Rec | null {
     }
   };
   const i = out.indexOf("{"), j = out.lastIndexOf("}");
-  if (i < 0 || j <= i) return null;
+  if (i < 0 || j <= i) return [];
   const whole = parse(out.slice(i, j + 1));
-  if (whole) return whole;
-  let last: Rec | null = null, done = -1;
+  if (whole) return [whole];
+  const all: Rec[] = [];
+  let done = -1;
   for (const { index: at } of out.matchAll(/^\{/gm)) {
     if (at! <= done) continue;
     let depth = 0, str = false, esc = false, end = -1;
@@ -85,9 +91,12 @@ export function helperJson(out: string): Rec | null {
       else if (ch === "}" && --depth === 0) end = k;
     }
     const v = end < 0 ? null : parse(out.slice(at, end + 1));
-    if (v) [last, done] = [v, end];
+    if (v) {
+      all.push(v);
+      done = end;
+    }
   }
-  return last;
+  return all;
 }
 
 const COMPLETENESS: Record<string, Exposure["completeness"]> = { complete: "complete", partial: "partial", "not assessed": "not_assessed" };
@@ -121,7 +130,7 @@ export function csoExposure(records: readonly Rec[], tree: readonly string[] = [
   const used = calls.some((c) => after(c) && (c.op === "inspect" || c.op === "read"));
   const finish = calls.filter((c) => after(c) && c.op === "finish" && !c.error).at(-1);
   const fin = finish ? helperJson(finish.out) : null;
-  const submits = calls.filter((c) => after(c) && c.op === "submit" && !c.error).map((c) => helperJson(c.out)).filter((j): j is Rec => j !== null && typeof j.findings === "number");
+  const submits = calls.filter((c) => after(c) && c.op === "submit" && !c.error).map((c) => helperObjects(c.out).filter((j) => typeof j.findings === "number").at(-1)).filter((j): j is Rec => j !== undefined);
   const helper: HelperRecords = { snapshot_root: null, handles: {} };
   const root = start ? helperJson(start.out)?.source?.root : undefined;
   if (typeof root === "string" && root) helper.snapshot_root = root;

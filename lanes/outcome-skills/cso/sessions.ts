@@ -115,6 +115,16 @@ export function assistantTexts(records: readonly Rec[]): string[] {
 }
 
 const QUOTED = /^["']|["']$/g;
+const LOOP = /\bfor\s+([A-Za-z_]\w*)\s+in\s+([^;\n]*?)\s*[;\n]\s*do\b([\s\S]*?)\bdone\b/g;
+/** A command with each `for V in WORDS; do BODY; done` over listed words written out as BODY once per word. */
+function unrolled(cmd: string): string {
+  return cmd.replace(LOOP, (all, v: string, list: string, body: string) => {
+    const words = list.trim().split(/\s+/).filter(Boolean).map((w) => w.replace(QUOTED, ""));
+    if (!words.length || words.some((w) => /[$`()]/.test(w))) return all;
+    const ref = new RegExp("\\$\\{" + v + "\\}|\\$" + v + "(?!\\w)", "g");
+    return words.map((w) => body.replace(ref, w)).join("; ");
+  });
+}
 const SHELL_READ = /^(cat|head|tail|sed|less|more|nl|grep|egrep|rg|awk|wc|find|ls|tree|file|strings|xxd|od)$/;
 /** A shell command's path words for the tools that read files. */
 function shellPaths(cmd: string): string[] {
@@ -129,7 +139,7 @@ function shellPaths(cmd: string): string[] {
 
 /** Repository-relative paths the session opened or listed through any tool, in first-seen order: Read, Grep, Glob, LS
  *  and NotebookRead paths, the helper's read argument (every one in a command, through shell variables as exposure.ts
- *  expands them), and the path words of shell reads. Absolute paths outside repoDir are kept as they are. */
+ *  expands them and for loops over listed words), and the path words of shell reads. Absolute paths outside repoDir are kept as they are. */
 export function openedPaths(records: readonly Rec[], repoDir: string): string[] {
   const seen = new Set<string>();
   const add = (raw: unknown) => {
@@ -146,7 +156,7 @@ export function openedPaths(records: readonly Rec[], repoDir: string): string[] 
     if (["Read", "NotebookRead"].includes(e.name!)) add(i.file_path ?? i.notebook_path);
     else if (["Grep", "Glob", "LS"].includes(e.name!)) add(i.path ?? ".");
     else if (e.name === "Bash" && typeof i.command === "string") {
-      const reads = [...expandCommand(i.command).matchAll(/gstack-cso-launcher(?:\.exe)?['"]?\s+(read|history)\s+\S+\s+(\S+)/g)];
+      const reads = [...expandCommand(unrolled(i.command)).matchAll(/gstack-cso-launcher(?:\.exe)?['"]?\s+(read|history)\s+\S+\s+([^\s;&|<>]+)/g)];
       if (reads.length) for (const h of reads) add(h[2]!.replace(QUOTED, ""));
       else for (const p of shellPaths(i.command)) add(p);
     }

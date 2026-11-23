@@ -19,6 +19,7 @@ import { judgeRelease, type JudgeCheck } from "./analysis/release.ts";
 import { isSealedRow, openCheck, openRow, readKey, readout, seal, sealCheck, sealedStage, sealRow } from "./analysis/readout.ts";
 import { missMap, secondaries } from "./analysis/secondaries.ts";
 import { stage0Readout } from "./analysis/stage0.ts";
+import { drawPlan } from "./units/draw.ts";
 import { analyze, type AnalysisInput } from "./analysis/verdicts.ts";
 import { readTree, type TreeIndex } from "./score/checks.ts";
 import { scoreSession, type CsoScore, type Judged } from "./score/outcomes.ts";
@@ -173,6 +174,8 @@ async function stage0(argv: string[]): Promise<number> {
   const p = loadCsoPrereg(), w = new Work(resolve(f.need("--work")));
   const sessions = readRows<SessionRecord>(f.need("--sessions"), null, true).filter((s) => s.stage === "stage0");
   const units = [...new Set(sessions.map((s) => s.unit))].sort();
+  const drawn = drawPlan(p).stage0.length;
+  if (units.length !== drawn) csoFail("E_CSO_ANALYSIS_INPUT", "stage 0 draws " + drawn + " units but --sessions holds stage 0 sessions for " + units.length);
   const cells = stage0Readout({ units, sessions, scores: readRows<CsoScore>(f.need("--scores"), null, true), arms: w.arms(), trees: Object.fromEntries(units.filter(w.hasTree).map((u) => [u, w.tree(u)])) }, p);
   for (const c of cells) console.log((c.pass ? "PASS " : "FAIL ") + c.model + " " + c.arm + c.reasons.map((r) => "\n  " + (r.unit ?? "arm") + ": " + r.reason).join(""));
   return cells.every((c) => c.pass) ? 0 : 1;
