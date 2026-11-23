@@ -73,6 +73,17 @@ export function heldOutputs(a: Record<string, string | undefined>, outputs: stri
   };
 }
 
+/** Writes a held run's plaintext output fresh and owner-only (0600) on tmpfs. An existing file, whose mode this run did not
+ * set, is refused. */
+export function writePlain(path: string, text: string): void {
+  try {
+    writeFileSync(path, text, { mode: 0o600, flag: "wx" });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") fail("E_TBV_CUSTODY", path + " already exists; a held run writes its plaintext fresh and owner-only, so give a new --out or delete the old file");
+    throw e;
+  }
+}
+
 /** The leftover check (test ! -e): a dead run's plaintext root is deleted and the deletion logged. True when one was found. */
 export function leftover(dir: string, log: (text: string) => void): boolean {
   if (!existsSync(dir)) return false;

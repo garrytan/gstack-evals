@@ -2,7 +2,7 @@
 // The R78 addendum's tooling: the Astra run's packet key and route, the judge check, Astra's controls, the Astra readings
 // file and compare's Astra stand-in, and the tasks-worse counts. Keyless.
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { worstOf } from "../../lanes/tbv/judge.ts";
 import { astraControls, astraKey, astraReadings, astraRecords, judgeCheck, kappaInterval, kappaOf, r78Floor, run, tasksWorse } from "../../lanes/tbv/r78.ts";
@@ -88,6 +88,20 @@ describe("judgeCheck (addendum section 2)", () => {
     expect(at(39)).toMatchObject({ outputs: 39, kappa: 1, pass: false });
     expect(at(39).line).toEndWith("failed the R78 judge check (39 labelled outputs, under R78's floor of 40)");
     expect([r78Floor("2026-11-05"), r78Floor("2026-11-21"), r78Floor("2026-11-22"), r78Floor("2026-12-01")]).toEqual([40, 40, 100, 100]);
+  });
+  const twenty = () => {
+    const ps = [...Array(20)].map((_, i) => "q" + i);
+    const es = ps.map((p, i) => entry(p, "first", "t" + (i % 10), "opus", "sol"));
+    const fz = byKey(ps.flatMap((p) => [rec(p, "opus", "primary", [true, false]), rec(p, "sol", "second", [true, false])]));
+    return { es, fz, as: astraRecords(ps.map((p) => rec(p, "astra", "primary", [true, false]))) };
+  };
+  test("an output listed twice in the packet key is refused, so repeats can't reach R78's floor", () => {
+    const { es, fz, as } = twenty();
+    expect(() => judgeCheck("opus", [...es, ...es], fz, as)).toThrow(expect.objectContaining({ code: "E_TBV_INPUT", message: expect.stringContaining("lists one output's first packet twice") }));
+  });
+  test("other direction: the same outputs listed once count once each and stay under the floor", () => {
+    const { es, fz, as } = twenty();
+    expect(judgeCheck("opus", es, fz, as)).toMatchObject({ outputs: 20, kappa: 1, pass: false });
   });
   test("the checked judge makes no label: changing its own reads moves the score, never the label count", () => {
     const flipped = frozen.map((j) => (j.judge === "sol" && j.role === "primary" ? { ...j, answer: ans(j.answer!.facts.map((f) => !f.in)) } : j));
@@ -213,6 +227,18 @@ describe("r78-key and r78 runs", () => {
     expect(JSON.parse(readFileSync(join(plain, "astra-key.json"), "utf8"))).toEqual(want);
     expect(JSON.parse(unsealed(join(held, "astra-key.json.sealed")))).toEqual(want);
     expect(c.out.join("\n")).toBe("r78-key: 5 of 5 packets for Astra (first 2, d2 1, control 2)");
+  });
+  test("both R78 commands write their plaintext owner-only (0600)", async () => {
+    const { dir, plain, held, argv } = files();
+    expect(await run(["r78-key", "--key", join(dir, "packet-key.json"), "--out", join(plain, "astra-key.json"), "--held", held, "--seal-cmd", SEAL], capture().io)).toBe(0);
+    expect(await run(argv, capture().io)).toBe(0);
+    expect([statSync(join(plain, "astra-key.json")).mode & 0o777, statSync(join(plain, "astra-readings.json")).mode & 0o777]).toEqual([0o600, 0o600]);
+  });
+  test("other direction: an --out that already exists is refused and left as it was, since this run did not set its mode", async () => {
+    const { dir, plain, held } = files();
+    writeFileSync(join(plain, "astra-key.json"), "old");
+    await expect(run(["r78-key", "--key", join(dir, "packet-key.json"), "--out", join(plain, "astra-key.json"), "--held", held, "--seal-cmd", SEAL], capture().io)).rejects.toMatchObject({ code: "E_TBV_CUSTODY", message: expect.stringContaining("already exists") });
+    expect(readFileSync(join(plain, "astra-key.json"), "utf8")).toBe("old");
   });
   test("both R78 commands refuse with E_USAGE without --held or --seal-cmd, before they read or write anything", async () => {
     const { plain, held, argv } = files();

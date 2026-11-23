@@ -3,9 +3,8 @@
 // every packet the frozen routing sent to Sol, judged once by Astra. r78 prints the judge check, Astra's controls and the
 // tasks that got worse under each reading, and writes the Astra readings file, which tbv compare reads with Astra standing
 // in for Sol. Counted readings, judge records and scoring are untouched. It calls no model and needs no key.
-import { writeFileSync } from "node:fs";
 import { basename } from "node:path";
-import { heldOutputs } from "./custody.ts";
+import { heldOutputs, writePlain } from "./custody.ts";
 import { fail } from "./errors.ts";
 import { parseFlags, readNdjson, readPacketKey } from "./judge.ts";
 import { buildReadings, joinBatches, readingsInput, type ReadingsInput } from "./readings.ts";
@@ -84,8 +83,11 @@ export function judgeCheck(judge: "sol" | "opus", entries: PacketKeyEntry[], fro
   const partner = judge === "sol" ? "opus" : "sol";
   const byTask = new Map<string, Tally>();
   let packets = 0, outputs = 0, excluded = 0, labelled = 0, unlabelled = 0;
+  const seen = new Set<string>();
   for (const e of entries) {
     if (e.kind !== "first" || e.primary !== judge || e.second !== partner) continue;
+    if (seen.has(e.label)) fail("E_TBV_INPUT", "the packet key lists one output's first packet twice; give each output once");
+    seen.add(e.label);
     const c = frozen.get(e.packet + ":primary"), p = frozen.get(e.packet + ":second"), a = astra.get(e.packet);
     if (c?.status !== "judged" || p?.status !== "judged" || a?.status !== "judged" || !c.answer || !p.answer || !a.answer) { excluded++; continue; }
     if (c.judge !== judge || p.judge !== partner) fail("E_TBV_INPUT", "a judge record does not match its packet key entry's judges");
@@ -175,7 +177,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     const seal = heldOutputs(a, ["out"], undefined, [basename(a.out!)]);
     const entries = readPacketKey(a.key!);
     const out = astraKey(entries);
-    writeFileSync(a.out!, JSON.stringify({ schema: "tbv-packet-key.v1", entries: out }, null, 2) + "\n");
+    writePlain(a.out!, JSON.stringify({ schema: "tbv-packet-key.v1", entries: out }, null, 2) + "\n");
     seal?.(a.out!);
     const n = (k: string) => out.filter((e) => e.kind === k).length;
     io.out("r78-key: " + out.length + " of " + entries.length + " packets for Astra (first " + n("first") + ", d2 " + n("d2") + ", control " + n("control") + ")");
@@ -191,7 +193,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   const line = input.entries.filter((e) => (e.kind === "control" ? planned.includes(e.task) : labels.has(e.label)));
   const frozen = new Map(input.judges.map((j) => [j.packet + ":" + j.role, j]));
   const astraRd = astraReadings(input, astra);
-  writeFileSync(a.out!, JSON.stringify(astraRd, null, 2) + "\n");
+  writePlain(a.out!, JSON.stringify(astraRd, null, 2) + "\n");
   seal?.(a.out!);
   const mine = astraKey(line);
   const lines = [
