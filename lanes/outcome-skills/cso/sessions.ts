@@ -117,12 +117,13 @@ export function assistantTexts(records: readonly Rec[]): string[] {
 const QUOTED = /^["']|["']$/g;
 const LOOP = /\bfor\s+([A-Za-z_]\w*)\s+in\s+([^;\n]*?)\s*[;\n]\s*do\b((?:(?!\bfor\s+[A-Za-z_]\w*\s+in\s[^;\n]*[;\n]\s*do\b)[\s\S])*?)\bdone\b/g;
 /** A command with each `for V in WORDS; do BODY; done` over listed words written out as BODY once per word, innermost
- *  loops first. A glob word stays a glob, which missAnatomy matches against the fix files. */
+ *  loops first. A glob word stays a glob, which missAnatomy matches against the fix files; a loop over words it can't
+ *  list (a substitution or a quoted glob) becomes BODY once with V left as it is. */
 function unrolled(cmd: string): string {
   for (let pass = 0; pass < 8; pass++) {
-    const next = cmd.replace(LOOP, (all, v: string, list: string, body: string) => {
+    const next = cmd.replace(LOOP, (_, v: string, list: string, body: string) => {
       const raw = list.trim().split(/\s+/).filter(Boolean);
-      if (!raw.length || raw.some((w) => /[$`()]/.test(w) || (/^["']/.test(w) && /[*?]/.test(w)))) return all;
+      if (!raw.length || raw.some((w) => /[$`()]/.test(w) || (/^["']/.test(w) && /[*?]/.test(w)))) return body;
       const words = raw.map((w) => w.replace(QUOTED, ""));
       const ref = new RegExp("\\$\\{" + v + "\\}|\\$" + v + "(?!\\w)", "g");
       return words.map((w) => body.replace(ref, w)).join("; ");
