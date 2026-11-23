@@ -51,7 +51,7 @@ Call settled: /cso at gstack 1.101.0.0 is not shown to name more real advisories
 
 **The procedure didn't always run.** /cso loaded in all 52 Opus sessions, but its helper run started in 39 and the full procedure (start, an inspect or read on that run, and finish) ran in 37 (71%). On particle-1 it ran in 40 of 52 (77%). Both are under the 80% rule, so both rows read "skill not exercised as designed", which the plan maps to FIX-METHOD.
 
-**In half its misses it never looked at the vulnerable code.** The plan's miss anatomy classifies every unit one arm named and the other missed, by the first matching cause. Of the 10 advisories plain Opus named and /cso missed, the /cso session never opened a file the fix changed in 5, ended at a limit, a tooling error or a not-assessed helper result in 2, named the right file with another flaw or class in 2, and fit none of the plan's causes in 1. For the one advisory only /cso named, plain Opus named the right file with another flaw or class.
+**In half its misses it never opened the files the fix changed.** The plan's miss anatomy classifies every unit one arm named and the other missed, by the first matching cause. Of the 10 advisories plain Opus named and /cso missed, the /cso session never opened a file the fix changed in 5, ended at a limit, a tooling error or a not-assessed helper result in 2, named the right file with another flaw or class in 2, and fit none of the plan's causes in 1. For the one advisory only /cso named, plain Opus named the right file with another flaw or class.
 
 **GPT-6.2 Sol did not run, so /cso is untested on Sol.** The plan made Sol, in Codex CLI, a conditional stage. The owner deferred it until /cso's method is fixed: with the procedure running in under 80% of sessions on both models, a Sol run would most likely read FIX-METHOD too, and the harness can't run /cso sessions in Codex CLI yet.
 
@@ -198,7 +198,7 @@ Carbon gave the same named label to 8 of the 10 format pairs (a table row and a 
 This covers the Opus loss and the particle-1 null.
 
 - **Exposure.** /cso loaded every time, but the full procedure ran in 71% of Opus sessions and 77% of particle-1 sessions, under the 80% rule, so neither row can carry a cut. In the exploratory split, completed runs named 2 of 37 on Opus against 9 of 37 for the plain audit on the same units; the split is descriptive and can't show what the skipped runs would have found. The miss anatomy says where it goes wrong: in 5 of the 10 advisories /cso missed on Opus, its session never opened a file the fix changed.
-- **Task fit.** The plan flagged that libraries may suit /cso's application-security model badly. The Opus loss shows in both libraries (-15.8 [-31.4, -2.5]) and services (-23.1 [-54.5, 0.0]), so task fit doesn't explain it either.
+- **Task fit.** The plan flagged that libraries may suit /cso's application-security model badly. In the descriptive strata, the Opus loss shows in both libraries (38 units, -15.8 [-31.4, -2.5]) and services (a subgroup of 13 units, -23.1 [-54.5, 0.0]). That is descriptive, with no interaction test, and the service interval reaches zero, so it suggests rather than shows that task fit doesn't explain the loss.
 - **Power and headroom.** The plain audit named 23.5% on Opus and 25.0% on particle-1, so there was room to gain. Power at 52 units is thin (computed after the data, the MDD at 0.05 is about 20 points), which is why the particle-1 null says nothing about /cso on particle-1. The Opus loss showed anyway.
 - **Does Opus do it unaided?** Partly. A plain audit request found about one advisory in four. /cso found about one in seventeen.
 
@@ -245,18 +245,19 @@ Stage 1's first two readouts stopped stage 2. The first stopped on the judge's f
 
 ## Replicate it
 
-Recount the primary from the published scores:
+Recount the primary from the published scores, paired by unit: a unit counts only when both arms were scored, so Opus's one judge gap leaves 51 pairs.
 
 ~~~bash
-jq -s -c 'group_by(.model, .arm) | map({model: .[0].model, arm: .[0].arm, named: map(select(.named == true)) | length, scored: map(select(.named != null)) | length})' stage2-scores.jsonl
+jq -s -r 'group_by(.model)[] | (group_by(.unit) | map(select(length == 2 and all(.[]; .named != null)))) as $p | "\(.[0].model): cso \([$p[][] | select(.arm == "cso" and .named)] | length)/\($p | length), none \([$p[][] | select(.arm == "none" and .named)] | length)/\($p | length)"' stage2-scores.jsonl
 ~~~
 
-Recount the exploratory split from the session table and the scores:
+Recount the exploratory split from the session table and the scores. It prints each arm's named count on the units where /cso's procedure ran or didn't; the plain audit's judge gap is on an Opus unit where the procedure didn't run, so that row has 14 scored units.
 
 ~~~bash
-join <(awk -F'\t' 'NR > 1 && $3 == "cso" { print $1 "|" $2, $12 }' stage2-sessions.tsv | sort) \
-     <(jq -r 'select(.arm == "cso") | "\(.unit)|\(.model) \(.named)"' stage2-scores.jsonl | sort) |
-  awk '{ split($1, a, "|"); k = a[2] " ran=" $2; n[k]++; if ($3 == "true") h[k]++ } END { for (k in n) print k, h[k] + 0 "/" n[k] }'
+jq -r '"\(.unit)|\(.model)\t\(.arm)\t\(.named)"' stage2-scores.jsonl |
+  awk -F'\t' 'NR == FNR { if (FNR > 1 && $3 == "cso") ran[$1 "|" $2] = $12; next }
+    $3 != "null" { split($1, a, "|"); k = a[2] " ran=" ran[$1] " " $2; n[k]++; if ($3 == "true") h[k]++ }
+    END { for (k in n) print k, h[k] + 0 "/" n[k] }' stage2-sessions.tsv - | sort
 ~~~
 
 stage2-analysis.as-run.json is the analysis command's output as it ran. stage2-analysis.json is the same command after the miss anatomy wiring and the opened reader fix, identical but for its miss fields; it ran as `cso analyze --work <units and trees> --sessions <sessions.jsonl with each opened list read again from its transcript> --scores scores.jsonl --judged judged.jsonl --units <stage 2 ids> --check check-production.sealed --check check-fallback-opus-particle.sealed --key <readout key> --headroom-admitted`. The scripts that ran stage 2 and the analysis are in kit/: stage2.sh.txt (admission, the driver, 208 sessions, judging and scoring), judge-f.sh.txt (the fallback judge check and stage 1's judging), analyze.sh.txt and open-s1.ts.txt (the analysis and the opening of stage 1's sealed file; the published open-s1 has its import's absolute host path made relative to the repository root, and nothing else changed). mdd.ts.txt computed the MDD after the data; its import is made relative the same way. That record leaves out the unit build, the arm installs, the host setup and the spend approvals, which the plan's harness section and the deviations post describe. A rerun of the sessions needs model keys and spends money: `bin/gstack-evals cso units`, `cso draw`, `outcome serve` and `cso rerun` rebuild and run it, then `cso judge --route fallback-opus-particle`, `cso score` and `cso analyze`.
