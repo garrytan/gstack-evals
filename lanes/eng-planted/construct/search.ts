@@ -50,6 +50,9 @@ export async function search(github: GitHub, eco: Ecosystem, pages = 10): Promis
   return { queries: qs, rows };
 }
 
+/** A repository's key in an exclusion list: the sha256 hex of its lowercase owner/name, so the list names no repository. */
+export const repoKey = (repo: string): string => createHash("sha256").update(repo.toLowerCase()).digest("hex");
+
 /** A seed for the draw, minted from random bytes. */
 export const mintSeed = (): string => randomBytes(16).toString("hex");
 

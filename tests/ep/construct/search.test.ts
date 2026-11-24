@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ManifestRow } from "../../../lanes/eng-planted/construct/local.ts";
 import { earliestPublic } from "../../../lanes/eng-planted/construct/mine.ts";
-import { draw, freeze, queries, search } from "../../../lanes/eng-planted/construct/search.ts";
+import { draw, freeze, queries, repoKey, search } from "../../../lanes/eng-planted/construct/search.ts";
 
 const row = (repo: string, over: Partial<ManifestRow> = {}): ManifestRow => ({ repo, eco: "go", stars: 500, sizeKB: 1000, pushedAt: "2026-10-20T00:00:00Z", query: 0, ...over });
 
@@ -31,6 +31,14 @@ describe("search", () => {
     expect(one.filter((r) => r.eco === "go")).toHaveLength(2);
     expect(one.map((r) => r.repo)).not.toContain("a/4");
     expect(draw(rows, "seed-1", 10).map((r) => r.repo).sort()).toEqual(["a/1", "a/2", "a/3", "b/1"]);
+  });
+
+  test("an exclusion key is the sha256 of the lowercase name, so a listed repository leaves the draw whatever its case", () => {
+    expect(repoKey("Owner/Repo")).toBe(repoKey("owner/repo"));
+    expect(repoKey("owner/repo")).toMatch(/^[0-9a-f]{64}$/);
+    const out = new Set([repoKey("a/2")]);
+    const rows = [row("a/1"), row("A/2"), row("a/3")];
+    expect(draw(rows.filter((r) => !out.has(repoKey(r.repo))), "seed-1", 10).map((r) => r.repo).sort()).toEqual(["a/1", "a/3"]);
   });
 
   test("the manifest freezes by the digest of its text", () => {
