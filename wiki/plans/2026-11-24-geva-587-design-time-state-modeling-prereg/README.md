@@ -73,12 +73,12 @@ The terms. For arms X and Y, X minus Y is the mean over units and models of X's 
 - If C gains over N and beats G, but C minus N's point estimate is below 0 on Opus or on Sol: no step yet. C is replicated against N on that model on fresh state units first, because the step would ship to that host too.
 - If C minus N's lower bound is above 0 but its point estimate is under +10: no step. A real gain below the action line doesn't pay for a step that costs about twice a plain review; it is reported as a small gain and kept as a lead.
 - If C minus N is +10 or more but its lower bound is 0 or below: not shown. No step, FIX-METHOD, and the MDD is printed beside it.
-- If C minus N's upper bound is under +10: no modeling step from C. A negative reading is reported as a loss.
+- If C minus N's upper bound is under +10: no modeling step from C. At 64 units a negative reading is reported as a loss; a C stopped at the interim look reports no loss (the Interim look section).
 - If D minus N's lower bound is above 0, at any size: KEEP for the diagram lines in plan-ceo-review (124, 451) and plan-eng-review (SKILL.md.tmpl 110 to 112, review-sections 553 to 555). At +10 or more, users are told it helps, with the interval.
 - If D minus N is +10 or more but its lower bound is 0 or below, or its interval holds both 0 and +10: not distinguished. The lines stay with no claim either way, FIX-METHOD, with the MDD printed.
 - If D minus N's upper bound is under +10 and its lower bound is 0 or below, with D exposed in at least 0.80 of cells on every model: after one R48 "Why null?" cycle, the lines become CUT-CANDIDATES for the before/after skill eval, which reads them inside each skill. Garry hears it in plain words. If the upper bound is under 0, the brief says the diagram request measurably cost points.
 - If G gains over N: the report says plan-eng-review helps on state bugs, beside attempt 3's no measurable difference on mixed bugs. Nothing in gstack changes.
-- If G minus N's upper bound is under 0: GStack Minder gets a brief to find out why before the next stable cut, using the length and exposure lines.
+- If G minus N's upper bound is under 0 at 64 units, with G not stopped at the interim look: GStack Minder gets a brief to find out why before the next stable cut, using the length and exposure lines.
 - If no arm gains over N: no modeling step goes into gstack's plan skills, any loss is reported as one, the design-time question closes with a registry row, and eval 4 (the blind hunt, gated on this eval) is dropped.
 - If C or P gains over N under any row above: eval 4 goes back to Garry for a go, as the approval says.
 
@@ -221,7 +221,7 @@ At: half the units, 32 of 64, in seeded order, with every cell of those units sc
 Stop bounds: futility only; C, P and G stop their remaining cells if the pooled 95% upper bounds of both C minus N and P minus N sit below +5 points; N and D always finish; no stop for a gain, so the final tests keep alpha 0.05
 Other looks: none
 
-Cells run interleaved in seeded unit order, so the look has every arm's cells on its 32 units. The look reads only the two upper bounds above. If the stop fires, C, P and G read "stopped for futility": the rows that take no action fire for them (no modeling step from C, nothing from pstack, no change from G), and their 32-unit estimates and intervals print as description only. No row that claims a gain or a loss, or sends GStack Minder a brief, reads a stopped arm, because the stop chose those 32-unit results and their intervals are not adjusted for it. The D and N rows read on all 64 units as planned. If the stop does not fire, every row reads at 64 units; the futility-only look never rejects, so it adds no false positive to those tests.
+Cells run interleaved in seeded unit order, so the look has every arm's cells on its 32 units. The look reads only the two upper bounds above. If the stop fires, C, P and G read "stopped for futility": the rows that take no action fire for them (no modeling step from C, nothing from pstack, no change from G), and their 32-unit estimates and intervals print as description only. No row that claims a gain or a loss, or sends GStack Minder a brief, reads a stopped arm, because the stop chose those 32-unit results and their intervals are not adjusted for it. The D and N rows read on all 64 units as planned. Cells a stop leaves unrun are not gaps: they leave the exposure and gap denominators, so a stopped arm's exposure and gap shares count only the cells it ran. If the stop does not fire, every row reads at 64 units; the futility-only look never rejects, so it adds no false positive to those tests.
 
 ## 9. Order and stops
 
