@@ -16,8 +16,8 @@ links:
   - lanes/review-noloss/
   - src/trial/review/
 attachments:
-  - b88b524c39e875115401feeadd28a00fc83fc55abacfac30cd7b97f77dbdfecc  power-rows.txt
-  - e1e209a2b9b07fb97d73536d4cdf9da245da3db9deb643b2885fcd7c2d18d0d8  power-sim.txt
+  - aaac7061ee366ec270e29c6edf67abc90e149ef010defa499cf0cbde26d49692  power-rows.txt
+  - 50de7721b34fbf60898ba46c15130d84650eb1ca22c8724d339e581e94e5e4b4  power-sim.txt
 ---
 
 # Preregistration: is a review pass better with Opus 5.5 and Sol, or with Fable 5.2 and Astra?

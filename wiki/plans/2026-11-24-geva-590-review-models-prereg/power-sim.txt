@@ -1,4 +1,4 @@
-# power-sim.txt: the scripts behind power-rows.txt (numpy 2.5.5). fit_he.py reads the HARN-154 CSV; power2.py is part 1 (it prints the rows that power-rows.txt quotes); mdd_refit.py is part 2 and execs calib.py and mdd_cal.py for its helpers.
+# power-sim.txt: the scripts behind power-rows.txt (numpy 2.5.5). fit_he.py reads the HARN-154 CSV; bounds.py finds the final bound that, with z 2.797 at the look, holds the one-sided error at 5% (it prints final c 1.655 alpha 0.0495); power2.py is part 1 (it prints the rows that power-rows.txt quotes); mdd_refit.py is part 2 and execs calib.py and mdd_cal.py for its helpers.
 
 ## fit_he.py
 
@@ -31,6 +31,14 @@ for s in (0.3,0.5,0.8,1.2,1.8,2.5,4.0):
     best.append((err,s,sig,round(wa,3),round(wb,3),round(cr,3),round(sd,3)))
 best.sort()
 for b in best[:6]: print(b)
+
+## bounds.py
+import numpy as np
+rng=np.random.default_rng(1)
+z=rng.standard_normal((2000000,2)); z1=z[:,0]; z2=np.sqrt(.5)*z[:,0]+np.sqrt(.5)*z[:,1]
+for c in np.arange(1.60,1.75,0.005):
+    a=((z1>2.797)|(z2>c)).mean()
+    if a<=0.05: print('final c',round(c,3),'alpha',round(a,4)); break
 
 ## power2.py
 
