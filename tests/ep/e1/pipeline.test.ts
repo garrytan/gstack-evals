@@ -26,7 +26,7 @@ describe("items", () => {
     expect(Math.round(c.reduce((s, i) => s + i.projectionUsd, 0))).toBe(2898);
     expect(Math.round(c.reduce((s, i) => s + i.capUsd, 0))).toBe(3478);
     expect(e1Item("e1-pilot").capUsd).toBe(165);
-    expect(() => e1Item("e1-P-sol")).toThrow(/no line item/);
+    expect(() => e1Item("e1-p-sol")).toThrow(/no line item/);
   });
   test("cells: every arm on its models, two a unit, units in order, a unit's cells seeded", () => {
     const cs = e1Cells("s1", ["u1", "u2"]);
@@ -61,7 +61,7 @@ describe("reviews then builds, scored", () => {
       const plan = "# Plan\nAdd a state.\nidle -> running\nrunning -> done\ndone -> idle\n";
       return { end: upstream ? "upstream" : "completed", costUsd: 0.2, result: { dir: s.dir, host: "claude", plan, transcript: JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "ok" }] } }) + "\n", stateRoot: null, written: { files: [{ path: "/tmp/m.tla", text: "MODULE" }], binary: 1, large: 0 }, repoEdits: 0 } };
     };
-    const gate = new ItemGate(e1Item("e1-D-opus"));
+    const gate = new ItemGate(e1Item("e1-d-opus"));
     const recs = await e1Reviews({ run, cells, units, session, gate });
     expect(calls).toEqual(["u1_D_opus_0/a1", "u1_D_opus_0/a2", "u1_D_opus_1/a1", "u1_D_opus_1/a2"]);
     expect(recs.map((r) => [r.rep, r.outcome, r.exposed, r.writtenFiles, r.binaryLeftOut])).toEqual([[0, "completed", true, 1, 1], [1, "upstream_gap", null, 0, 0]]);
@@ -83,7 +83,7 @@ describe("reviews then builds, scored", () => {
         return { outcome: "completed", tree, costUsd: 0.3 };
       },
       grader: { grade: async () => ({ planted: [{ id: "t1", runs: ["pass", "pass", "assert"] }, { id: "t2", runs: ["assert", "crash", "pass"] }], functional: [] }), catchOf: async () => ({ catch: true, drop: null }) },
-      gate: new ItemGate(e1Item("e1-D-opus")),
+      gate: new ItemGate(e1Item("e1-d-opus")),
     });
     expect(built).toBe(1);
     expect(builds.map((x) => [x.rep, x.outcome, x.readReview])).toEqual([[0, "completed", true], [1, "upstream_gap", null]]);

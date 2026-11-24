@@ -1,0 +1,426 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// gstack-evals ep e1-* subcommands: eval 1's ledger lines, its review and build stages under one lease per item, the
+// interim look, the pilot readout and the final readings (prereg 2026-11-24-geva-587-design-time-state-modeling). The
+// lane's cli.ts merges this table. Launchers are seams, so the tests and the dry run drive the same code with stubs.
+//
+// Run folder (outside the repository; held-out material, sealed with the run):
+//   author/<unit>/plan.md      the authored plan (attempt 3's authoring, or wave 2's at Sol 6.2)
+//   e1/draw.json               the draw (supply.ts e1Draw), with its seed
+//   e1/seeds.json              the bootstrap seed, minted from random bytes before the pilot is read
+//   e1/reviews, e1/builds      records, mounts and sessions (pipeline.ts)
+//   e1/look.json               the one interim look, written once
+//   costs/<item>.jsonl, state/  the gates' journals and all-in states
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
+import { buildLauncher } from "../../eng-build/launch.ts";
+import { underLease, type Launcher } from "../../eng-build/pipeline.ts";
+import { openLease, settleLease } from "../../../src/runner/ledger/ledger.ts";
+import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
+import { ledgerPath } from "../../../src/runner/ledger/paths.ts";
+import { readItem } from "../../../src/runner/ledger/record.ts";
+import { plantedGrader } from "../construct/grade.ts";
+import { fail } from "../errors.ts";
+import { avoid, catchScore, isGap } from "../readings/score.ts";
+import { ebSession, type MountTable, type PlantedSession } from "../stages/build.ts";
+import { allInProjection, checkAllIn, ItemGate, type AllIn } from "../stages/ledger.ts";
+import { owedOnRefusal, stagePlan, driverCells } from "../stages/rerun-log.ts";
+import { unitFolders, type UnitSource } from "../stages/pipeline.ts";
+import type { Command, GradedBuild, PlantedGrader, PlantedUnit } from "../types.ts";
+import { ALLOWANCE_USD } from "../stages/local.ts";
+import { pMarker, P_COMMANDS, type PCommand } from "./arms.ts";
+import { decide, readAll } from "./decide.ts";
+import { E1, RUNS_ON, type E1Arm, type E1Model } from "./frozen.ts";
+import { e1ReviewLauncher, type E1ReviewSession } from "./launch.ts";
+import { look } from "./look.ts";
+import { cellKey, e1Builds, e1Cells, e1Item, E1_ITEMS, e1Reviews, itemName, reviewRecordPath, buildRecordPath, scoredCells, type CellKey, type E1Build, type E1ReviewRecord, type E1Unit } from "./pipeline.ts";
+import { armState, holm, rng, type Cell } from "./readings.ts";
+import type { E1Draw } from "./supply.ts";
+
+type Args = Parameters<Command["run"]>[0];
+type Io = Parameters<Command["run"]>[1];
+
+export const E1_RUN = "geva-587-e1";
+export const E1_PROGRAM = "geva-587-e1";
+export const E1_SKILL = "e1-run";
+/** The all-in pieces that are not ledger items (section 11). */
+export const E1_NOT_ITEMS = { supply: { capUsd: 220 }, hosts: { capUsd: 200 }, crew: { capUsd: 700 }, reserve: { capUsd: 150 } } as const;
+
+const need = (a: Args, flag: string): string => a.flags.get(flag) ?? fail("E_USAGE", "missing " + flag);
+const whole = (a: Args, flag: string, dflt: number): number => {
+  const v = a.flags.has(flag) ? Number(a.flags.get(flag)) : dflt;
+  if (!Number.isSafeInteger(v) || v < 1) fail("E_USAGE", flag + " takes a whole number from 1");
+  return v;
+};
+const logTo = (io: Io) => (l: string) => (/^E_[A-Z_0-9]+ /.test(l) ? io.err : io.out)(l);
+const readJson = <T>(p: string): T | null => (existsSync(p) ? (JSON.parse(readFileSync(p, "utf8")) as T) : null);
+const REPO = resolve(import.meta.dir, "..", "..", "..");
+const runDir = (a: Args): string => {
+  const run = resolve(need(a, "--run"));
+  const real = (p: string) => (existsSync(p) ? realpathSync(p) : resolve(p));
+  const r = relative(real(REPO), real(run));
+  if (r === "" || !r.startsWith("..")) fail("E_USAGE", "--run " + run + " is inside the gstack-evals repository; held-out material stays outside it");
+  return run;
+};
+
+/** The ledger lines for eval 1's items, with the owner's words left to fill in. */
+export function e1RunSteps(): string[] {
+  const cap = E1_ITEMS.reduce((s, i) => s + i.capUsd, 0);
+  const tail = " --words <owner's words> --by <who> --source <ref>";
+  return [
+    "gstack-evals ledger envelope --program " + E1_PROGRAM + " --cap " + Math.round(cap * 100) / 100 + " --skill-cap " + Math.round(cap * 100) / 100 + " --skills " + E1_SKILL + " --credit-rate 1" + tail,
+    ...E1_ITEMS.map((i) => "gstack-evals ledger init --item " + i.item + " --cap " + i.capUsd + " --admission required --program " + E1_PROGRAM + " --skills " + E1_SKILL + tail),
+    "# Supply ($" + E1_NOT_ITEMS.supply.capUsd + "), hosts ($" + E1_NOT_ITEMS.hosts.capUsd + ") and crew ($" + E1_NOT_ITEMS.crew.capUsd + ") pass their running figures to every paid e1 command as --supply-usd, --hosts-usd and --crew-usd; the $" + E1_NOT_ITEMS.reserve.capUsd + " reserve stays with the Captain.",
+  ];
+}
+
+export interface E1Paid {
+  item: string;
+  capUsd: number;
+  record: string;
+  ledger: string;
+  allIn: AllIn;
+}
+
+/** A paid command's flags, refused before any lease opens. */
+export function e1Paid(a: Args, run: string, allowed: (item: string) => boolean): E1Paid {
+  const missing = ["--item", "--cap-usd", "--ledger-record", "--ledger", "--crew-usd", "--hosts-usd", "--supply-usd"].filter((f) => !a.flags.get(f));
+  if (missing.length) fail("E_USAGE", "a paid e1 stage runs only under a ledger lease with the all-in figures; it needs " + missing.join(", ") + ", and nothing ran");
+  const item = a.flags.get("--item")!;
+  if (!allowed(item)) fail("E_USAGE", "this stage does not spend from " + item);
+  const plan = e1Item(item).capUsd;
+  const capUsd = Number(a.flags.get("--cap-usd"));
+  if (!Number.isFinite(capUsd) || capUsd <= 0 || capUsd > plan) fail("E_USAGE", "--cap-usd " + a.flags.get("--cap-usd") + " is not a positive amount at or under item " + item + "'s plan cap of $" + plan);
+  const fig = (f: string) => {
+    const v = Number(a.flags.get(f));
+    return Number.isFinite(v) && v >= 0 ? v : fail("E_USAGE", f + " takes the running figure in dollars, not " + a.flags.get(f));
+  };
+  return { item, capUsd, record: a.flags.get("--ledger-record")!, ledger: a.flags.get("--ledger")!, allIn: { stateDir: join(run, "state"), crewUsd: fig("--crew-usd") + fig("--supply-usd"), hostsUsd: fig("--hosts-usd") } };
+}
+
+export function e1Gate(p: E1Paid, run: string, planned?: number): ItemGate {
+  const cap = readItem(p.record, p.item).cap_micros;
+  if (!cap) return fail("E_USAGE", "line item " + p.item + " has no recorded cap in " + p.record + "; ep e1-ledger prints the init lines");
+  return new ItemGate(e1Item(p.item), { capUsd: cap / 1_000_000, ...(planned !== undefined ? { planned: { "review:plain": planned, build: planned } } : {}), journal: join(run, "costs", p.item + ".jsonl"), allIn: p.allIn, items: E1_ITEMS });
+}
+
+/** A launcher for stub backends (the dry run and the tests): one lease on an e1 item for run E1_RUN, settled on close. */
+export const e1StubLauncher = <B>(backend: B): Launcher<B> => async (p) => {
+  e1Item(p.item);
+  const local = openLocalLedger(ledgerPath(p.ledger));
+  try {
+    const lease = openLease(p.record, local, { item: p.item, run_id: E1_RUN, amount_micros: Math.round(p.capUsd * 1_000_000), requireAdmission: () => null });
+    return {
+      lease_id: lease.lease_id,
+      backend,
+      close: async () => {
+        try {
+          settleLease(p.record, local, lease.lease_id);
+        } finally {
+          local.close();
+        }
+      },
+    };
+  } catch (e) {
+    local.close();
+    throw e;
+  }
+};
+
+const paidStage = async <B, T>(p: E1Paid, launch: Launcher<B>, body: (b: B) => Promise<T>): Promise<T> => {
+  checkAllIn(p.allIn, E1_ITEMS);
+  return underLease(p, launch, body);
+};
+
+export const parseItem = (item: string): { arm: E1Arm; model: E1Model } | null => {
+  const m = /^e1-([ndcpg])-(opus|sol|particle)$/.exec(item);
+  const arm = m?.[1]!.toUpperCase() as E1Arm;
+  return m && RUNS_ON[arm].includes(m[2] as E1Model) ? { arm, model: m[2] as E1Model } : null;
+};
+
+export const drawOf = (run: string): E1Draw => readJson<E1Draw>(join(run, "e1", "draw.json")) ?? fail("E_USAGE", run + "/e1/draw.json is missing; the draw comes first");
+
+/** The units a phase and half name, and each one's cells for an arm and model. */
+export function phaseCells(run: string, phase: "pilot" | "comparison", half: 1 | 2 | null, arm: E1Arm | null, model: E1Model | null): { units: string[]; cells: CellKey[] } {
+  const d = drawOf(run);
+  const all = phase === "pilot" ? d.calibration : d.comparison;
+  const cut = Math.floor(all.length * E1.look.fraction);
+  const units = phase === "pilot" || half === null ? all : half === 1 ? all.slice(0, cut) : all.slice(cut);
+  const cells = e1Cells(d.seed, units, phase === "pilot" ? 1 : E1.cells).filter((c) => (arm === null || c.arm === arm) && (model === null || c.model === model));
+  return { units, cells };
+}
+
+export interface LookFile {
+  stop: boolean;
+  units: string[];
+  CN: unknown;
+  PN: unknown;
+  exposedOn: { C: E1Model[]; P: E1Model[] };
+  at: string;
+}
+export const lookPath = (run: string) => join(run, "e1", "look.json");
+
+export function e1Units(src: UnitSource, run: string, ids: readonly string[]): Map<string, E1Unit & { dir: string; note: string }> {
+  const all = new Map(src.units().map((u) => [u.id, u]));
+  return new Map(
+    ids.map((id) => {
+      const unit = all.get(id) ?? fail("E_USAGE", "unit " + id + " is not in the units folder");
+      const plan = join(run, "author", id, "plan.md");
+      if (!existsSync(plan)) fail("E_USAGE", "unit " + id + " has no authored plan at " + plan);
+      return [id, { unit, base: src.base(id), plan, dir: src.dir(id), note: src.note(id) }];
+    }),
+  );
+}
+
+export interface E1Seams {
+  review(o: { out: string; arm: E1Arm; model: E1Model; log: (l: string) => void }): Launcher<E1ReviewSession>;
+  build(o: { out: string; driver: string; src: UnitSource; units: string; repos: string; ids: string[]; cells: string[]; a: Args }): Launcher<PlantedSession>;
+  grader(o: { work: string; log: (l: string) => void }): Promise<PlantedGrader>;
+  marker(harness: string): string;
+}
+
+export const E1_REAL: E1Seams = {
+  review: (o) => e1ReviewLauncher({ arms: [o.arm], model: o.model, out: o.out, env: process.env, runId: E1_RUN, log: o.log }),
+  build: (o) => {
+    const table: MountTable = new Map();
+    const mountOf = (cell: string) => table.get(cell) ?? fail("E_USAGE", "cell " + cell + " has no mounts filed; only ebSession starts an e1 build");
+    const plan = stagePlan(o.driver, E1_RUN, "plain", o.cells);
+    const inner = buildLauncher({
+      arm: "plain",
+      units: new Map(o.ids.map((id) => [id, { dir: o.src.dir(id) }])),
+      repos: o.repos,
+      plans: o.out,
+      bundles: null,
+      out: o.out,
+      host: need(o.a, "--host"),
+      envelopeHost: need(o.a, "--envelope-host"),
+      sidecar: need(o.a, "--sidecar"),
+      forbidden: [o.units, join(homedir(), ".capy", "drive")],
+      planned: plan.planned,
+      planFor: (cell) => mountOf(cell).plan,
+      reviewFor: (cell) => mountOf(cell).review,
+      runId: E1_RUN,
+      skill: E1_SKILL,
+      serve: { dir: o.driver, unheld_ok: true, reruns: plan.reruns },
+      stripBase: true,
+      ...(o.a.flags.has("--harbor") ? { harbor: o.a.flags.get("--harbor")! } : {}),
+    });
+    return async (p) => {
+      const h = await inner(p);
+      return { ...h, backend: owedOnRefusal(ebSession(h.backend, table), o.driver, E1_RUN, join(o.out, "sessions")) };
+    };
+  },
+  grader: async (o) => plantedGrader({ work: o.work }),
+  marker: pMarker,
+};
+
+/** The bootstrap seed, minted from random bytes once and recorded before anything reads a contrast. */
+export function bootstrapSeed(run: string): number {
+  const p = join(run, "e1", "seeds.json");
+  const have = readJson<{ bootstrap: number }>(p);
+  if (have) return have.bootstrap;
+  const bootstrap = randomBytes(4).readUInt32BE(0);
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, JSON.stringify({ bootstrap, minted_at: new Date().toISOString(), rule: "crypto random bytes, minted once before any contrast is read" }) + "\n", { flag: "wx" });
+  return bootstrap;
+}
+
+/** Scored cells for a set of units, with the stopped arms' unrun cells marked. */
+export function cellsFor(run: string, src: UnitSource, units: readonly string[], unrunArms: ReadonlySet<E1Arm> = new Set(), reps: number = E1.cells): Cell[] {
+  const d = drawOf(run);
+  const by = new Map(src.units().map((u) => [u.id, u]));
+  const cells = e1Cells(d.seed, units, reps);
+  const m = new Map(units.map((id) => [id, { unit: by.get(id) ?? fail("E_USAGE", "no unit " + id), repo: (by.get(id) as PlantedUnit).repo }]));
+  const unrun = new Set(cells.filter((c) => unrunArms.has(c.arm) && !existsSync(buildRecordPath(run, c))).map(cellKey));
+  return scoredCells(run, cells, m, unrun);
+}
+
+const fmt = (r: { estimate: number; lo: number; hi: number; p: number; pairs: number; repos: number; worse: number } | null) => (r ? (r.estimate >= 0 ? "+" : "") + r.estimate.toFixed(1) + " [" + r.lo.toFixed(1) + ", " + r.hi.toFixed(1) + "], p " + r.p.toFixed(3) + ", " + r.pairs + " pairs, " + r.repos + " repositories, " + r.worse + " worse" : "not read (no pool)");
+
+/** A build record as the lane's scorers read one. */
+export const asGraded = (b: E1Build): GradedBuild => ({ ...b, arm: "plain", reviewer: b.model, pilot: true, coverage: null });
+
+/** The pilot's gates (prereg, the Pilots section): exposure in 5 of 6 sessions per arm and model (P on Opus and
+ * particle-1 only), the builder opening /work/review/ in 5 of 6 for D and C, N's pooled composite in band, and the limit
+ * and cost lines that double the allowance. ok is false when any gate fails or a cell is missing. */
+export function pilotReadout(reviews: readonly E1ReviewRecord[], builds: readonly E1Build[], units: Map<string, PlantedUnit>, planned: number, seed: number): { lines: string[]; ok: boolean; doubleAllowance: boolean } {
+  const lines: string[] = [];
+  let ok = reviews.length === planned && builds.length === planned;
+  if (!ok) lines.push("MISSING: " + reviews.length + " reviews and " + builds.length + " builds of " + planned + " cells recorded");
+  let doubleAllowance = false;
+  const need = E1.exposure.pilot.min;
+  for (const arm of Object.keys(RUNS_ON) as E1Arm[]) for (const m of RUNS_ON[arm]) {
+    const rs = reviews.filter((r) => r.arm === arm && r.model === m);
+    const bs = builds.filter((b) => b.arm === arm && b.model === m);
+    const exposed = rs.filter((r) => r.exposed === true).length;
+    const opened = bs.filter((b) => b.readReview === true).length;
+    const limits = rs.filter((r) => r.outcome === "limit").length;
+    const costs = rs.map((r) => r.costUsd).sort((x, y) => x - y);
+    const p95 = costs.length ? costs[Math.min(costs.length - 1, Math.ceil(0.95 * costs.length) - 1)]! : 0;
+    const exposureOk = arm === "N" || exposed >= need;
+    const openedOk = !(arm === "D" || arm === "C") || opened >= need;
+    if (limits > 1 || p95 > ALLOWANCE_USD.review / 2) doubleAllowance = true;
+    ok &&= exposureOk && openedOk;
+    lines.push((exposureOk && openedOk ? "PASS " : "FAIL ") + arm + " on " + m + ": exposed " + exposed + " of " + rs.length + ", builder opened /work/review/ in " + opened + " of " + bs.length + ", limit stops " + limits + ", gaps " + rs.filter(isGap).length + ", review cost p95 $" + p95.toFixed(2));
+  }
+  const n = builds.filter((b) => b.arm === "N" && !isGap(b));
+  const comp = n.map((b) => ({ repo: units.get(b.unit)!.repo, x: (avoid(asGraded(b), units.get(b.unit)!) ?? 0) / 2 + catchScore(asGraded(b))! / 2 }));
+  const repos = [...new Set(comp.map((c) => c.repo))];
+  const mean = comp.length ? comp.reduce((s, c) => s + c.x, 0) / comp.length : null;
+  const rand = rng(seed);
+  const boots: number[] = [];
+  for (let i = 0; i < 10000 && repos.length; i++) {
+    const xs = Array.from({ length: repos.length }, () => repos[Math.floor(rand() * repos.length)]!).flatMap((r) => comp.filter((c) => c.repo === r).map((c) => c.x));
+    boots.push(xs.reduce((s, x) => s + x, 0) / xs.length);
+  }
+  boots.sort((x, y) => x - y);
+  const lo = boots.length ? boots[Math.floor(0.025 * (boots.length - 1))]! : null;
+  const band = mean !== null && lo !== null && mean >= 0.15 && mean <= 0.75 && lo <= 0.65;
+  ok &&= band;
+  lines.push((band ? "PASS " : "FAIL ") + "N's composite over " + comp.length + " builds: " + (mean === null ? "none" : mean.toFixed(3) + ", lower bound " + lo!.toFixed(3)) + " (band 0.15 to 0.75, lower bound at most 0.65; out of band stops for the Captain as FLOOR or CEILING)");
+  if (doubleAllowance) lines.push("ALLOWANCE: more than 1 of 6 limit stops or a p95 review cost past half the allowance; every review allowance doubles through a dated change");
+  return { lines, ok, doubleAllowance };
+}
+
+export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
+  const source = (a: Args): UnitSource => unitFolders(need(a, "--units"), need(a, "--repos"));
+  const phaseOf = (a: Args) => {
+    const phase = need(a, "--phase");
+    if (phase !== "pilot" && phase !== "comparison") fail("E_USAGE", "--phase is pilot or comparison");
+    const half = phase === "pilot" ? null : Number(need(a, "--half"));
+    if (half !== null && half !== 1 && half !== 2) fail("E_USAGE", "--half is 1 or 2");
+    return { phase: phase as "pilot" | "comparison", half: half as 1 | 2 | null };
+  };
+  const stagePlanFor = (a: Args, run: string) => {
+    const { phase, half } = phaseOf(a);
+    const p = e1Paid(a, run, (item) => (phase === "pilot" ? item === "e1-pilot" : parseItem(item) !== null));
+    const which = phase === "pilot" ? null : parseItem(p.item)!;
+    if (phase === "comparison" && half === 2 && (which!.arm === "C" || which!.arm === "P")) {
+      const l = readJson<LookFile>(lookPath(run)) ?? fail("E_USAGE", "C and P's second half waits for the interim look (ep e1-look); nothing ran");
+      if (l.stop) fail("E_USAGE", "the interim look stopped C and P for futility; their second half is never run");
+    }
+    return { p, phase, half, which };
+  };
+
+  const reviews: Command["run"] = async (a, io) => {
+    const run = runDir(a);
+    const { p, phase, half, which } = stagePlanFor(a, run);
+    const src = source(a);
+    const log = logTo(io);
+    const pCommand = (a.flags.get("--p-command") ?? "/statechart") as PCommand;
+    if (!P_COMMANDS.includes(pCommand)) fail("E_USAGE", "--p-command is " + P_COMMANDS.join(" or "));
+    const groups = which ? [which] : (Object.keys(RUNS_ON) as E1Arm[]).flatMap((arm) => RUNS_ON[arm].map((model) => ({ arm, model })));
+    for (const g of groups) {
+      const { units, cells } = phaseCells(run, phase, half, g.arm, g.model);
+      const marker = g.arm === "P" ? seams.marker(need(a, "--pstack")) : undefined;
+      const gate = e1Gate(p, run, phase === "pilot" ? undefined : E1.units.target * E1.cells);
+      const recs = await paidStage(p, seams.review({ out: join(run, "e1", "reviews", "rig", itemName(g.arm, g.model)), arm: g.arm, model: g.model, log }), (session) => e1Reviews({ run, cells, units: e1Units(src, run, units), session, gate, pCommand, ...(marker ? { statechartMarker: marker } : {}), parallel: whole(a, "--parallel", 1), log }));
+      io.out("reviews " + g.arm + " on " + g.model + ": " + recs.length + " of " + cells.length + " recorded, " + recs.filter(isGap).length + " gaps, $" + recs.reduce((s, r) => s + r.costUsd, 0).toFixed(2));
+    }
+    return 0;
+  };
+
+  const builds: Command["run"] = async (a, io) => {
+    const run = runDir(a);
+    const { p, phase, half, which } = stagePlanFor(a, run);
+    const src = source(a);
+    const log = logTo(io);
+    const grader = await seams.grader({ work: need(a, "--work"), log });
+    const driver = join(run, "e1", "builds", "driver");
+    const opened = driverCells(driver, E1_RUN);
+    const groups = which ? [which] : (Object.keys(RUNS_ON) as E1Arm[]).flatMap((arm) => RUNS_ON[arm].map((model) => ({ arm, model })));
+    const all = groups.flatMap((g) => phaseCells(run, phase, half, g.arm, g.model).cells);
+    const units = [...new Set(all.map((c) => c.unit))];
+    const gate = e1Gate(p, run, phase === "pilot" ? undefined : E1.units.target * E1.cells);
+    const done = await paidStage(p, seams.build({ out: join(run, "e1", "builds", "rig"), driver, src, units: need(a, "--units"), repos: need(a, "--repos"), ids: units, cells: all.map(cellKey), a }), (session) => e1Builds({ run, cells: all, units: e1Units(src, run, units), session, grader, gate, parallel: whole(a, "--parallel", 1), earlier: (cell) => opened.get(cell)?.opens ?? 0, log }));
+    io.out("builds: " + done.length + " of " + all.length + " cells recorded, " + done.filter(isGap).length + " gaps, $" + done.reduce((s, b) => s + b.costUsd, 0).toFixed(2));
+    return 0;
+  };
+
+  const ledger: Command["run"] = (a, io) => {
+    if (!a.bools.has("--projection")) {
+      for (const l of e1RunSteps()) io.out(l);
+      for (const i of E1_ITEMS) io.out("# " + i.item + ": " + i.row + "; projection $" + i.projectionUsd + ", cap $" + i.capUsd);
+      return 0;
+    }
+    const run = runDir(a);
+    const allIn: AllIn = { stateDir: join(run, "state"), crewUsd: Number(need(a, "--crew-usd")) + Number(need(a, "--supply-usd")), hostsUsd: Number(need(a, "--hosts-usd")) };
+    if (![allIn.crewUsd, allIn.hostsUsd].every((v) => Number.isFinite(v) && v >= 0)) fail("E_USAGE", "--crew-usd, --supply-usd and --hosts-usd take dollars");
+    const r = allInProjection(allIn, E1_ITEMS);
+    for (const l of r.lines) io.out(l);
+    io.out("all-in projection $" + r.usd.toFixed(2) + " against the $5000 stop");
+    checkAllIn(allIn, E1_ITEMS);
+    return 0;
+  };
+
+  const lookCmd: Command["run"] = (a, io) => {
+    const run = runDir(a);
+    if (existsSync(lookPath(run))) fail("E_USAGE", "the interim look was already taken (" + lookPath(run) + "); it is taken once");
+    const src = source(a);
+    const d = drawOf(run);
+    const order = d.comparison;
+    const half = order.slice(0, Math.floor(order.length * E1.look.fraction));
+    const cells = cellsFor(run, src, half);
+    const want = e1Cells(d.seed, half).filter((c) => !existsSync(reviewRecordPath(run, c)) || !existsSync(buildRecordPath(run, c)));
+    if (want.length) fail("E_USAGE", "the look waits on " + want.length + " cells of its units that are not terminal yet (first " + cellKey(want[0]!) + ")");
+    const l = look(order, cells, bootstrapSeed(run), a.flags.has("--draws") ? whole(a, "--draws", 1) : undefined);
+    if (!l.ready) fail("E_USAGE", "the look is not ready: " + l.missing.length + " cells missing");
+    const file: LookFile = { stop: l.stop, units: l.units, CN: l.CN, PN: l.PN, exposedOn: l.exposedOn, at: new Date().toISOString() };
+    mkdirSync(dirname(lookPath(run)), { recursive: true });
+    writeFileSync(lookPath(run), JSON.stringify(file, null, 1) + "\n", { flag: "wx" });
+    io.out("look on " + l.units.length + " units: C minus N " + fmt(l.CN) + "; P minus N " + fmt(l.PN) + "; C exposed on " + (l.exposedOn.C.join(", ") || "no model") + ", P on " + (l.exposedOn.P.join(", ") || "no model"));
+    io.out(l.stop ? "STOP: C and P stop their remaining cells for futility; their figures above print as description only" : "CONTINUE: every arm runs its second half");
+    return 0;
+  };
+
+  const read: Command["run"] = (a, io) => {
+    const run = runDir(a);
+    const src = source(a);
+    const d = drawOf(run);
+    const l = readJson<LookFile>(lookPath(run));
+    const stopped = new Set<E1Arm>(l?.stop ? ["C", "P"] : []);
+    const cells = cellsFor(run, src, d.comparison, stopped);
+    const seed = bootstrapSeed(run);
+    const r = readAll(cells, seed, a.flags.has("--draws") ? whole(a, "--draws", 1) : undefined);
+    for (const m of ["opus", "sol", "particle"] as E1Model[]) for (const arm of Object.keys(RUNS_ON) as E1Arm[]) {
+      if (!RUNS_ON[arm].includes(m)) continue;
+      const s = armState(cells, arm, m);
+      io.out("arm " + arm + " on " + m + ": " + s.cells + " cells, " + s.gaps + " gaps, exposure " + (s.exposure === null ? "n/a" : s.exposure.toFixed(2)) + (s.untested ? ", UNTESTED" : ""));
+    }
+    for (const [k, v] of Object.entries(r)) io.out(k + ": " + fmt(v));
+    const h = holm((["DN", "CN", "PN", "GN"] as const).flatMap((k) => (r[k] ? [{ key: k, p: r[k]!.p }] : [])));
+    for (const x of h) io.out("Holm " + x.key + ": adjusted p " + x.adjusted.toFixed(3) + (x.rejects ? ", rejects" : ""));
+    const dec = decide({ cells, r, stopped, units: d.comparison.length });
+    for (const row of dec.rows) io.out("ROW " + row);
+    io.out("eval 4: " + dec.eval4);
+    return 0;
+  };
+
+  const pilot: Command["run"] = (a, io) => {
+    const run = runDir(a);
+    const src = source(a);
+    const d = drawOf(run);
+    const byId = new Map(src.units().map((u) => [u.id, u]));
+    const keys = e1Cells(d.seed, d.calibration, 1);
+    const reviewsOf = keys.map((c) => readJson<E1ReviewRecord>(reviewRecordPath(run, c))).filter((x): x is E1ReviewRecord => x !== null);
+    const buildsOf = keys.map((c) => readJson<E1Build>(buildRecordPath(run, c))).filter((x): x is E1Build => x !== null);
+    const lines = pilotReadout(reviewsOf, buildsOf, byId, keys.length, bootstrapSeed(run));
+    for (const l of lines.lines) io.out(l);
+    const pj = { builds: buildsOf.filter((b) => b.arm === "N" && !isGap(b)).map((b) => ({ unit: b.unit, repo: byId.get(b.unit)!.repo, model: b.model, avoid: avoid(asGraded(b), byId.get(b.unit)!), catch: catchScore(asGraded(b)) })), unforeseeable: 0 };
+    writeFileSync(join(run, "e1", "pilot.json"), JSON.stringify(pj) + "\n");
+    io.out("power.py's input: " + join(run, "e1", "pilot.json") + " (uv run -q --with numpy python lanes/eng-planted/e1/power.py --fit it)");
+    return lines.ok ? 0 : 3;
+  };
+
+  return {
+    "e1-ledger": { bools: ["--projection"], usage: "[--projection --run <dir> --crew-usd <usd> --supply-usd <usd> --hosts-usd <usd>]", summary: "eval 1's ledger lines, or its all-in projection", run: ledger },
+    "e1-reviews": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --phase pilot|comparison [--half 1|2] --item <item> --cap-usd <usd> --ledger-record <dir> --ledger <file> --crew-usd <usd> --supply-usd <usd> --hosts-usd <usd> [--pstack <harness dir>] [--p-command /statechart|/pstack:statechart] [--parallel <n>]", summary: "eval 1's review cells of one item (or every pair in the pilot) under one lease each", run: reviews },
+    "e1-builds": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --phase pilot|comparison [--half 1|2] --item <item> <paid flags> --work <dir> --host <ip> --envelope-host <id> --sidecar <url> [--harbor <bin>] [--parallel <n>]", summary: "eval 1's build cells of one item under one lease", run: builds },
+    "e1-look": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> [--draws <n>]", summary: "eval 1's one interim look (futility only), written once", run: lookCmd },
+    "e1-read": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> [--draws <n>]", summary: "eval 1's readings: arm states, the pooled contrasts, Holm and the Decision rows", run: read },
+    "e1-pilot": { bools: [], usage: "--run <dir> --units <dir> --repos <dir>", summary: "eval 1's pilot readout per arm and model", run: pilot },
+  };
+}
+
+export const E1_COMMANDS = e1Commands();

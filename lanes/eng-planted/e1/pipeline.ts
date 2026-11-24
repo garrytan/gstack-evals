@@ -42,8 +42,11 @@ export const FIGURE: Readonly<Record<E1Model, Partial<Record<E1Arm, number>>>> =
 };
 export const BUILD_FIGURE = 0.61;
 export const CAP_RATIO = 1.2;
-export const itemName = (arm: E1Arm, model: E1Model) => "e1-" + arm + "-" + model;
-const plan = (item: string, row: string, cells: number, figure: number, projection: number, cap: number): ItemPlan => ({ item, row, projectionUsd: projection, capUsd: cap, kinds: { "review:plain": { planned: cells, usd: Math.max(0, figure - BUILD_FIGURE) }, build: { planned: cells, usd: BUILD_FIGURE } } });
+/** A cell's figure split between its review and its build: the build takes $0.61 (attempt 3's builds ran $0.45 to
+ * $0.77), and where that leaves the review under a quarter of the cell, the review keeps a quarter. */
+export const reviewShare = (figure: number) => Math.max(figure - BUILD_FIGURE, figure / 4);
+export const itemName = (arm: E1Arm, model: E1Model) => "e1-" + arm.toLowerCase() + "-" + model;
+const plan = (item: string, row: string, cells: number, figure: number, projection: number, cap: number): ItemPlan => ({ item, row, projectionUsd: projection, capUsd: cap, kinds: { "review:plain": { planned: cells, usd: reviewShare(figure) }, build: { planned: cells, usd: figure - reviewShare(figure) } } });
 const pairs = (Object.keys(RUNS_ON) as E1Arm[]).flatMap((a) => RUNS_ON[a].map((m) => [a, m] as const));
 const COUNTED = E1.units.target * E1.cells;
 export const E1_ITEMS: readonly ItemPlan[] = [

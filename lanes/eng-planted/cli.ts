@@ -3,6 +3,7 @@
 // error line on stderr starts with its reason code. Each module plugs its subcommands into SUBCOMMANDS when it lands.
 import { CODES, docAnchor, type ReasonCode } from "../../src/errors/codes.ts";
 import { COMMANDS as CONSTRUCT } from "./construct/commands.ts";
+import { E1_COMMANDS } from "./e1/commands.ts";
 import { dryRun, PARTS } from "./dryrun.ts";
 import { EpError } from "./errors.ts";
 import { COMMANDS as READINGS } from "./readings/commands.ts";
@@ -57,7 +58,7 @@ const dryrun: Command = {
 };
 
 const SUBCOMMANDS: Record<string, Command> = { dryrun };
-for (const table of [CONSTRUCT, STAGES, READINGS]) {
+for (const table of [CONSTRUCT, STAGES, READINGS, E1_COMMANDS]) {
   for (const [name, command] of Object.entries(table)) {
     if (SUBCOMMANDS[name]) throw new Error("gstack-evals ep: two parts define the subcommand " + name);
     SUBCOMMANDS[name] = command;
