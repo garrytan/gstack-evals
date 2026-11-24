@@ -546,6 +546,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_B2_LOOK](#e_b2_look) | 2 | U20 |
 | [E_B2_SESSIONS](#e_b2_sessions) | 2 | U20 |
 | [E_B2_SCORER](#e_b2_scorer) | 2 | U20 |
+| [E_CELL_CHECK](#e_cell_check) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4348,6 +4349,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 B2's scorer seam is not built yet (lanes/test-first/scorer.ts): the Codex rollout reader comes with the B2 scorer branch.
 
 Fix: Merge the B2 scorer branch into the run lane, then build the table again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CELL_CHECK
+
+The review-models eval's keyless rig check (review-units cell-check, src/trial/review/rm-check.ts) could not run: the gstack checkout is not at the pin, the Claude Code CLI or the voice's codex is missing, or a step it needs failed. A check that ran and failed prints FAIL on its line, and the command exits 1.
+
+Fix: Point --gstack at a set-up gstack checkout at the pin, run bun install --frozen-lockfile for the Claude Code CLI, give --codex-dir the directory holding Codex 0.170.0 (docker cp it out of the trial image), and run the check again.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

@@ -13,7 +13,11 @@
     "gpt-5.4-mini": {"provider": "openai", "roles": [], "refused_because": "Never gpt-5.4-mini (CREW.md)."},
     "particle-ai/particle-1": {"provider": "openrouter", "roles": ["subject"]},
     "deepseek/deepseek-v4.1-flash-1017": {"provider": "openrouter", "roles": ["subject"]},
-    "openai/gpt-6.1-sol": {"provider": "openrouter", "roles": ["subject"]}
+    "openai/gpt-6.1-sol": {"provider": "openrouter", "roles": ["subject"]},
+    "claude-fable-5-2": {"provider": "anthropic", "roles": ["subject"]},
+    "gpt-6.2-sol": {"provider": "openai", "roles": ["subject"]},
+    "gpt-6.2-astra": {"provider": "openai", "roles": ["subject", "judge"]},
+    "google/gemini-4-carbon": {"provider": "openrouter", "roles": ["judge"]}
   },
   "defaults": {"judge": {"anthropic": "gpt-6.1-sol", "openai": "claude-opus-5-5", "openrouter": "claude-opus-5-5"}, "adjudicator": {"anthropic": "gpt-6.1-sol", "openai": "claude-opus-5-5", "openrouter": "claude-opus-5-5"}, "usersim": "gpt-6-luna"}
 }

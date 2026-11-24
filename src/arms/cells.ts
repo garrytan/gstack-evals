@@ -13,6 +13,10 @@
 //   arm (gstackConfig: the CEO stage 2 enforced arm's ceo_review_gate on), so the cell tree carries them.
 // - Codex: in a voice cell, an arm whose stack keeps a voice (gstack's outside voice, tstack's Sol reviewer) gets the
 //   Claude Code driver's codex option, which writes the session's ~/.codex/config.toml with no credential in it.
+// - A run may choose a cell's voice instead of VOICES' default (cellFor's voice), so one run holds main reviewer by voice
+//   cells (the review-models eval, GEVA-590), and may name the voice's Codex CLI (cli: the directory whose codex goes
+//   first on PATH, run without Codex's own sandbox, its rollouts copied out). Both ride in the cell's codex setting, so
+//   they change the cell tree; a cell that sets neither keeps today's tree.
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,6 +29,13 @@ export interface Cell {
   model: string;
   /** The cross-family voice the cell's proxy allowlist admits, or null when every role runs on model. */
   voice: string | null;
+  /** The voice's Codex CLI, when the run names one; unset keeps the image's codex on PATH and Codex's own sandbox. */
+  voice_cli?: VoiceCli;
+}
+
+/** How a cell's voice runs Codex: bin_dir goes first on PATH, GSTACK_CODEX_NO_SANDBOX=1, and the rollouts are copied out. */
+export interface VoiceCli {
+  bin_dir: string;
 }
 
 export interface CellSettings {
@@ -33,8 +44,8 @@ export interface CellSettings {
   layer: Layer | null;
   /** Keys the trial appends to the gstack state root's config.yaml; empty for an arm without gstack. */
   gstack_config: Record<string, string>;
-  /** The Claude Code driver's codex option for this cell, or null. */
-  codex: { model: string } | null;
+  /** The Claude Code driver's codex option for this cell, or null. cli is set only when the cell names its voice's CLI. */
+  codex: { model: string; cli?: VoiceCli } | null;
   /** The arm's tree for this cell: the session key's arm tree when cells differ. */
   tree_sha256: string;
 }
@@ -47,7 +58,11 @@ const GROK = /^grok-\d+(?:\.\d+)*-(?:max|xhigh|high|medium|low)(?:-fast)?$/;
 /** The cross-family voice each model's cell keeps (plan section 5): gpt-6.1-sol in the Opus 5.5 cells. Every other model's cell runs every role on the model. */
 export const VOICES: Readonly<Record<string, string>> = { "claude-opus-5-5": "gpt-6.1-sol" };
 
-export const cellFor = (model: string): Cell => ({ model, voice: VOICES[model] ?? null });
+/** The cell for a model: VOICES' voice, or the voice given (null for none), and the voice's CLI when one is named. */
+export const cellFor = (model: string, voice?: string | null, cli?: VoiceCli): Cell => {
+  const v = voice === undefined ? (VOICES[model] ?? null) : voice;
+  return { model, voice: v, ...(v && cli ? { voice_cli: { bin_dir: cli.bin_dir } } : {}) };
+};
 
 /**
  * pstack's model rule for a cell, from setup-pstack's SKILL.md; null when the file holds no rule shape with role lines.
@@ -119,7 +134,7 @@ export function cellSettings(install: ArmInstall, cell: Cell, dir: string, gstac
     layer = { src: at, dest: "" };
   }
   const gstack_config: Record<string, string> = install.gstack ? { agent_model: "host", codex_reviews: cell.voice ? "enabled" : "disabled", ...gstackConfig } : {};
-  const codex = cell.voice && (install.gstack || kind?.voice) ? { model: cell.voice } : null;
+  const codex = cell.voice && (install.gstack || kind?.voice) ? { model: cell.voice, ...(cell.voice_cli ? { cli: { bin_dir: cell.voice_cli.bin_dir } } : {}) } : null;
   const parts = [install.tree_sha256, layer ? PSTACK_RULE + " " + dirTreeSha256(layer.src) : "", JSON.stringify(gstack_config), JSON.stringify(codex)];
   return { cell, layer, gstack_config, codex, tree_sha256: createHash("sha256").update(parts.join("\n")).digest("hex") };
 }

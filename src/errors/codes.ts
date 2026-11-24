@@ -4691,6 +4691,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CELL_CHECK: {
+    exit: 2,
+    meaning: "The review-models eval's keyless rig check (review-units cell-check, src/trial/review/rm-check.ts) could not run: the gstack checkout is not at the pin, the Claude Code CLI or the voice's codex is missing, or a step it needs failed. A check that ran and failed prints FAIL on its line, and the command exits 1.",
+    fix: "Point --gstack at a set-up gstack checkout at the pin, run bun install --frozen-lockfile for the Claude Code CLI, give --codex-dir the directory holding Codex 0.170.0 (docker cp it out of the trial image), and run the check again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

@@ -123,7 +123,7 @@ import { DEFAULT_MAX_OUTPUT_TOKENS } from "../../runner/proxy/metering-proxy.ts"
 import type { SessionEnd, Termination, TokenUsage } from "../../types.ts";
 import { parseClaudeCode, skillUse, type SkillRef } from "../../grade/transcript.ts";
 import { UserSim } from "../../usersim/sim.ts";
-import { codexConfig, type CodexProvider } from "../codex/driver.ts";
+import { codexConfig, copyRollouts, type CodexProvider } from "../codex/driver.ts";
 import type { PersonaAnswer } from "../../usersim/persona.ts";
 import type { AskQuestion } from "../../usersim/classifier.ts";
 
@@ -187,14 +187,16 @@ export interface ClaudeCodeOptions {
   stopHook?: (transcript: string) => string | null;
   /** Plugin roots in the agent's HOME, loaded for the session as plugin directories. */
   plugins?: string[];
-  /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs, and, when set, the voice's own proxy slot and bearer in place of the session's. */
-  codex?: { provider: CodexProvider; model: string; proxy?: { slot: string; token: string } };
+  /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs, and, when set, the voice's own proxy slot and bearer in place of the session's, and the directory whose codex goes first on PATH. */
+  codex?: { provider: CodexProvider; model: string; proxy?: { slot: string; token: string }; binDir?: string };
   /** MCP servers the session gets, by name: HTTP servers only, such as a browser container's Playwright server. */
   mcpServers?: Record<string, { type: "http"; url: string }>;
   /** When set, canUseTool denies every tool not named here (AskUserQuestion keeps its own rule), and ToolSearch is disallowed unless named, so the CLI declares every MCP tool up front instead of deferring it behind a search the session may not call. */
   onlyTools?: readonly string[];
   /** GSTACK_CODEX_NO_SANDBOX=1 for the agent env: gstack runs the Codex voice without Codex's own sandbox, which cannot start in the trial container, so the container is the sandbox. Only with codex. */
   codexNoSandbox?: boolean;
+  /** After the session, copy every rollout under the session's $CODEX_HOME/sessions to codex-sessions/ beside the records, so the voice's own events can be read. Only with codex. */
+  codexRollouts?: boolean;
 }
 
 /** What nextUser returns: the next user message, the session's end, or a termination that ends it. */
@@ -212,6 +214,7 @@ export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | 
   return {
     ...(o.codex ? { OPENAI_API_KEY: (o.codex.proxy ?? o.proxy).token } : {}),
     ...(o.codex && o.codexNoSandbox ? { GSTACK_CODEX_NO_SANDBOX: "1" } : {}),
+    ...(o.codex?.binDir ? { PATH: o.codex.binDir + ":/usr/local/bin:/usr/bin:/bin" } : {}),
     ANTHROPIC_BASE_URL: o.proxy.baseUrl.replace(/\/+$/, "") + "/" + o.proxy.slot + "/" + o.provider,
     ANTHROPIC_AUTH_TOKEN: o.proxy.token,
     ANTHROPIC_MODEL: o.model,
@@ -691,6 +694,10 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
         if (idleSince !== null) waited += performance.now() - idleSince;
         inbox.close();
         if (!abort.signal.aborted) abort.abort();
+      }
+      if (o.codex && o.codexRollouts) {
+        const rollouts = await copyRollouts(session, join(o.out, "codex-sessions"));
+        if (rollouts.failed.length) log("adapter: rollout copy: " + rollouts.failed.join("; ") + "\n");
       }
       const held = holding();
       const session_end: SessionEnd = { cause: overdue ? "deadline" : held.length ? "tasks_pending" : "clean", pending: held, waited_ms: Math.ceil(waited), released_wakeups: wakeup && wakeup.running.length && !running().length ? [wakeup] : [] };
