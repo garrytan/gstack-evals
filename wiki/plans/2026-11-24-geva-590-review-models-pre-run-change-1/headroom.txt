@@ -1,0 +1,6 @@
+source sha256 fae7595bafb1016b3c91fd66f4c0091f9dc6706c7375398aaf71b93973aff6a3
+units 54 caught 42 rate 0.7778
+one-sided 95% Clopper-Pearson lower bound 0.6650; headroom, all-P set 0.3350
+break-even cost gap per review at $25 a catch: $8.38
+Sol voice: OS $6.50 vs FS: Fable leaves when its cell costs 2.29x the Opus cell or more
+Astra voice: OA $11.00 vs FA: Fable leaves when its cell costs 1.76x the Opus cell or more
