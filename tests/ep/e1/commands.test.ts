@@ -98,6 +98,18 @@ describe("ledger", () => {
   });
 });
 
+describe("leases", () => {
+  test("one lease opens and settles on every eval 1 item, on a temporary ledger, and a name outside them refuses", async () => {
+    const f = fixture();
+    for (const i of E1_ITEMS) {
+      const h = await e1StubLauncher("x")({ item: i.item, capUsd: i.capUsd, record: f.record, ledger: join(f.dir, "l.sqlite") });
+      await h.close();
+      expect(readItem(f.record, i.item).leases).toHaveLength(1);
+    }
+    expect(await codeOf(() => e1StubLauncher("x")({ item: "ep-comparison", capUsd: 1, record: f.record, ledger: join(f.dir, "l.sqlite") }))).toBe("E_USAGE");
+  });
+});
+
 describe("paid flags", () => {
   test("a missing flag, a counted item in the pilot, a cap past the plan's and a run inside the repository refuse before any lease", async () => {
     const f = fixture();
