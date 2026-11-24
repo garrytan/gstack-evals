@@ -16,8 +16,8 @@ links:
   - lanes/review-noloss/
   - src/trial/review/
 attachments:
-  - a2f8ba5e6553c3af0538d7532e4eca5334033811cf0a4e169512fd47947dae4f  power-rows.txt
-  - 99aed57f2e1c0b0d7932781a77f1fbec5649497359ba28d32cb299de6d5de62d  power-sim.txt
+  - b88b524c39e875115401feeadd28a00fc83fc55abacfac30cd7b97f77dbdfecc  power-rows.txt
+  - ebb4b28adec6b8fbcab5d1138ef7299e8e6dde0d88d53899e76dc2a889efde12  power-sim.txt
 ---
 
 # Preregistration: is a review pass better with Opus 5.5 and Sol, or with Fable 5.2 and Astra?
@@ -26,7 +26,7 @@ attachments:
 
 Garry asked on 2026-11-24: "Can you do some evals to see if review passes are better as opus and sol or fable and astra?" A gstack /review pass has two model choices. The main reviewer is the Claude Code session that runs /review, its specialist subagents, its red team and its adversarial subagent. The second-model voice is the Codex pass /review calls on another model family. This eval crosses the two: main reviewer Opus 5.5 or Fable 5.2, voice GPT-6.2 Sol or GPT-6.2 Astra, plus a plain Opus review with no gstack. It runs them on 100 real bugs from other people's repositories, each with a later real fix, and 15 clean PRs.
 
-Fable costs about 2.5 times Opus per review and Astra about 4 times Sol, so the question that changes a decision is whether the gain pays for the cost. At the factory's rule of about $25 per extra catch (R38), Fable must catch about 30 more bugs per 100 and Astra about 18 more. The eval is sized to settle that, and it can't see gains of a few points: its smallest detectable main effect is about 9 to 11 points.
+Fable costs about 2.5 times Opus per review and Astra about 4 times Sol, so the question that changes a decision is whether the gain pays for the cost. At the factory's rule of about $25 per extra catch (R38), Fable must catch about 30 more bugs per 100 and Astra about 18 more. The eval is sized to settle that, and it can't see gains of a few points: its smallest detectable main effect is about 9 to 10 points.
 
 Nothing measured yet says what the voice adds. In Harness Evals' review-real-bugs eval the voice ran in none of 178 /review passes, because its image could not start Codex's sandbox.
 
@@ -48,7 +48,7 @@ The eval does not test the shipped gpt-6-astra default, /ship's review steps (wh
 
 ## Decision
 
-Net value per unit for a contrast B against A = $25 x (B's catch minus A's) minus (B's cost minus A's). "Pays" means the 95% interval of mean net value is above 0; "doesn't pay" means its one-sided 95% upper bound is below 0; anything else is "unsettled". Each unit holds one known bug, so the cost per extra catch here is a floor: on real PRs, most of which hold no such bug, it is higher.
+Net value per unit for a contrast B against A = $25 x (B's catch minus A's) minus (B's cost minus A's). "Pays" means the 95% interval of mean net value is above 0; "doesn't pay" means its one-sided upper bound (section 8) is below 0; anything else is "unsettled". Each unit holds one known bug, so the cost per extra catch here is a floor: on real PRs, most of which hold no such bug, it is higher.
 
 | Outcome | What we do |
 |---|---|
@@ -98,10 +98,10 @@ New B units' answer keys (the BIC to advisory map) stay out of this repo until t
 | N, no gstack (R44) | claude-opus-5-5, plain review prompt | none |
 
 - gstack at 284214fd896f493471b1bb5e98bcdc899a87bcdb (v1.103.2.0), installed the way the review-units rig installs it, never changed during the run. /review's told line is Harness Evals' told-review.txt (no fixes, no edits, report findings).
-- The voice runs exactly as review/sections/adversarial.md calls it at the pin: the Codex adversarial challenge on every diff, and the Codex structured review on diffs of 200 lines or more, codex exec at effort high, skills off, web_search "cached". The cell's voice model is written to Codex's config.toml model, which gstack's resolver reads. In the trial container Codex's own sandbox can't start, so the rig sets GSTACK_CODEX_NO_SANDBOX=1, gstack's documented setting for a container that is itself the sandbox (the rig's existing codexNoSandbox option). Any file the voice writes is caught by the rig's dirty-tree check and the review is flagged.
+- The voice runs exactly as review/sections/adversarial.md calls it at the pin: the Codex adversarial challenge on every diff, and the Codex structured review on diffs of 200 lines or more, codex exec at effort high, skills off. gstack's command also asks for web_search "cached"; the metering proxy refuses any request carrying a hosted tool (src/runner/pricing/prices.ts, the hosted-tool rule), so the run branch makes the proxy remove that one tool from the voice's requests and record each removal, instead of refusing the request. The voice therefore runs without web search, in every cell alike. The cell's voice model is written to Codex's config.toml model, which gstack's resolver reads. In the trial container Codex's own sandbox can't start, so the rig sets GSTACK_CODEX_NO_SANDBOX=1, gstack's documented setting for a container that is itself the sandbox (the rig's existing codexNoSandbox option). Any file the voice writes is caught by the rig's dirty-tree check and the review is flagged.
 - The main reviewer runs on the Claude host, because the Codex host strips Review Army (scripts/resolvers/review-army.ts, generateReviewArmy).
 - Each model at its Claude Code or Codex default, recorded per session (Fable 5.2's vendor default effort is high). This is a comparison of configurations as shipped, and the results page says so.
-- CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every arm. Claude Code's tools are the rig's defaults in every arm.
+- CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every arm. Claude Code runs with the rig's default tools, which disallow WebSearch and WebFetch (src/adapters/claude-code/driver.ts, DISALLOWED_TOOLS), in every arm.
 - N: "Review the change on this branch against its base. List every bug you find with its file, line and severity." No gstack, no drive, no Codex; clean by construction in its container, with a read audit reported after the run.
 - One review per unit per arm, in an order seeded by order seed 1795598571 that interleaves arms within each unit.
 
@@ -125,12 +125,14 @@ Limits that gate a default change in the "both pay" row: the cell's blocking fin
 
 ## 5. Contamination
 
-Both hosts keep their default search tools, so every search is logged and read:
+Search is off on both hosts, the same in every arm: Claude Code's WebSearch and WebFetch are disallowed by the rig, and the voice's hosted web search is removed by the proxy (section 3). The container reaches nothing but the proxy. So a review can't look up the fix, the advisory or the suite's public answer files. This is a limit as well as a guard: gstack's voice as shipped can search, and this eval tests it without that.
 
-- Every Claude Code WebSearch or WebFetch call and every Codex web_search call, with its query and returned URLs, is extracted from the session record and the Codex events.
-- A review is contaminated when a search query or a returned URL or title names the unit's PR or its fix PR, the fix commit, the advisory or CVE id, or the review-real-bugs suite or its answer files (g-harness-evals, harness-evals). A blind second read (Opus 5.5 for OpenAI voice searches, GPT-6.2 Astra for Claude searches) decides doubtful cases from the logged text only.
+Every search is still logged and read:
+
+- Every attempted search is extracted per review: a Claude Code WebSearch or WebFetch call (refused), the proxy's record of each web_search tool it removed, and any search or fetch through Bash or Codex shell commands (curl, wget, gh, git fetch or clone to a remote), with its query or URL.
+- A review is contaminated when any search or fetch reached content that names the unit's PR or fix PR, the fix commit, the advisory or CVE id, or the review-real-bugs suite or its answer files (g-harness-evals, harness-evals). With search off this should never happen; if one does, a blind second read (Opus 5.5 for OpenAI voice searches, GPT-6.2 Astra for Claude searches) decides doubtful cases from the logged text only.
 - A contaminated review is a gap: the primary is scored with it dropped and with it scored as a miss, and both readings print. An arm with more than 10% contaminated reviews reads "untested" for any contrast it is in.
-- Counts of searches and contaminated reviews print per arm.
+- Counts of attempted searches, removed web_search tools and contaminated reviews print per arm.
 
 ## 6. Exposure: did each arm run its procedure?
 
@@ -170,11 +172,11 @@ The 120 labelled reviews are fresh, at least 20 per arm: the pilot's 55 plus cou
 
 ## 7. The staged rule (frozen before the pilot)
 
-After the pilot, for the main reviewer only:
+The counted set (section 2) is drawn before the pilot, so its share of P and B units is known. After the pilot, for the main reviewer only:
 
 - Cost gap = the pilot's lower 95% bound on (Fable cell cost minus Opus cell cost) per review, paired by unit and voice.
-- Headroom = 100% minus the lower 95% bound of the Opus catch rate, from Harness Evals' 54 Opus /review units pooled with the pilot's OS and OA reviews. This never understates the room Fable has.
-- If cost gap / $25 is greater than the headroom, Fable can't pay even by catching every bug left. FS and FA leave the counted run, and the outcome is the "Fable leaves at the pilot" row. With today's figures that happens when Fable costs about 2.85 times Opus per review or more.
+- Headroom = the counted set's P share times (100% minus the Clopper-Pearson lower 95% bound of the Opus catch rate on P units, from Harness Evals' 54 Opus /review units pooled with the pilot's OS and OA reviews on P units), plus its B share times (100% minus the same bound on the pilot's OS and OA reviews on B units alone). B has no history and few pilot reviews, so its bound is low and its headroom large; the rule never takes a rate from P to stand for B.
+- If cost gap / $25 is greater than that headroom, Fable can't pay even by catching every bug left in the counted set. FS and FA leave the counted run, and the outcome is the "Fable leaves at the pilot" row. With an all-P set and today's figures that happens when Fable costs about 2.85 times Opus per review or more; with B units in the set it needs a larger ratio.
 - The voice is never dropped this way: its break-even (about 18 points) sits inside any plausible headroom.
 
 ## 8. Analysis
@@ -182,22 +184,23 @@ After the pilot, for the main reviewer only:
 - Main effect of the main reviewer = mean over units of (FS + FA)/2 minus (OS + OA)/2; of the voice, (OA + FA)/2 minus (OS + FS)/2. After Fable leaves, the voice contrast is OA minus OS.
 - 95% intervals by bootstrap clustered by PR for P and by repository for B, 10,000 draws, seed 20261124.
 - Catches more: two-sided, Holm over the two main effects.
-- Pays or doesn't: the paired net value per unit, one-sided 95% bounds, Holm over the two contrasts; cost and catch come from the same units, so their uncertainty is joint.
+- Pays or doesn't: the paired net value per unit, with one-sided bounds at z 1.655 at the end and z 2.797 at the look (see Interim look), which hold each contrast's one-sided error at 5% across both looks; Holm over the two contrasts; cost and catch come from the same units, so their uncertainty is joint.
 - The package (FA minus OS) and the interaction are secondary, printed with intervals.
 - Strata P and B print beside the pooled result; S2-openai units (found by OpenAI-model tools) print apart for the voice contrast.
 - Gaps: a review that ends on a provider or infrastructure error reruns once; a second failure is a gap, scored dropped and as a miss. A provider safety stop is its own outcome (R95) and is never moved to another model.
 
 ## 9. Power and MDD
 
-Simulated in power-sim.txt; every row is in power-rows.txt. Each bug has its own catch chance (a strongly uneven beta, fitted to Harness Evals' plain curve: 56.5%, 64.8%, 67.6% and 72.2% at 1, 2, 4 and 8 merged passes), plus a per-arm, per-bug wobble sized so a two-arm contrast at 52 PRs and 2 passes has Harness Evals' measured 95% half-width of about 9.5 points. The beta overshoots the plain curve at 8 passes (78.7% against 72.2%), so the table is a calibrated range, not a fit. If Harness Evals shares per-unit repeat data, a dated pre-run change refits it before the pilot.
+Simulated in power-sim.txt; every row is in power-rows.txt. Each bug has its own catch chance, drawn from a beta with concentration 0.5, plus a per-arm, per-bug logit wobble of 2.0, both fitted to Harness Evals' per-pass stage 1 data (HARN-154: 54 outside bugs, /review and plain on Opus 5.5, 2 passes each). The fit matches pass-to-pass disagreement within an arm (11% and 13% observed), disagreement across arms (23%) and the spread of per-bug differences (SD 0.39). It comes from /review against a plain prompt, which differ more than two models running the same /review, so it is likely conservative here.
 
 | Reading at 100 bug units | Result |
 |---|---|
-| MDD, main effects, catches more (80% power, Holm) | about 9 to 11 points (8.2 optimistic, 10.7 pessimistic) |
-| Fable doesn't pay, true gain up to 11 points | power 1.00 |
-| Astra doesn't pay, full 2x2, true gain 0, 6 and 8 points | power 0.99 to 1.00, 0.87 and 0.74 |
-| Astra doesn't pay, Opus-only pair after Fable leaves, true gain 0, 6 and 8 | power 0.93 to 0.94, 0.69 to 0.71 and 0.57 to 0.58 |
-| Floor, 80 bug units | MDD about 10 to 12 points |
+| MDD, main effects, catches more (80% power, Holm) | 8.7 to 10.2 points (P-like pool to P+B mix) |
+| MDD, Opus-only voice pair after Fable leaves | 11.8 to 14.3 points |
+| Fable doesn't pay, true gain up to 10 points | power 1.00 |
+| Astra doesn't pay, full 2x2, true gain 0, 5 and 7 points | power 0.99, 0.90 and 0.78 to 0.80 |
+| Astra doesn't pay, Opus-only pair, true gain 0, 5 and 7 points | power 0.94 to 0.95, 0.74 to 0.76 and 0.62 to 0.66 |
+| Floor, 80 bug units: MDD, main effects | 9.5 to 11.9 points |
 
 So this run can settle the per-dollar calls and can't tell a gain of a few points from nothing. A 5-point MDD would need about 400 bug units, which we don't have.
 
@@ -205,7 +208,7 @@ So this run can settle the per-dollar calls and can't tell a gain of a few point
 
 Planned paid spend: $5,819
 At: half the bug units, 50 of 100, in seeded order, with the decoys run alongside
-Stop bounds: futility only, per contrast; a contrast's cells that no other contrast needs stop when the one-sided 99.5% upper bound of its paired net value is below 0; the final test uses one-sided 95%; there is no early stop for a gain
+Stop bounds: futility only, per contrast; a contrast's cells that no other contrast needs stop when its paired net value's upper bound at z 2.797 is below 0; the final test uses z 1.655, so the one-sided error over both looks is 5%; there is no early stop for a gain
 Other looks: none
 
 ## 10. Harness: what the run branch builds
@@ -213,7 +216,7 @@ Other looks: none
 All on the run branch, before the pilot, each with a test:
 
 1. Per-cell voices: src/arms/cells.ts maps only claude-opus-5-5 to gpt-6.1-sol today (line 47). The run branch adds the four cells' voice models and the policy entries for claude-fable-5-2 (policy/models.json lists only claude-fable-5-1, smoke only) and the two 6.2 voices, with the keyless cell check in section 6.
-2. Search extraction and the contamination rule (section 5), tested on planted session records.
+2. The proxy's removal of the voice's hosted web_search tool, with a record per removal (the hosted-tool refusal stays for every other tool and caller), and the search extraction and contamination rule (section 5), each tested on planted requests and session records; a keyless preflight shows a gstack voice request passes the proxy with the tool removed.
 3. The B-unit builder: SZZ, gates, containment, and the unit as a PR on the BIC's parent.
 4. The Carbon judge call, the location hit and the scorer, in shared tested modules.
 5. The staged rule and the look, as code that reads the ledger's cost rows.
@@ -251,4 +254,4 @@ The full path passes the $5,000 heads-up line (R42), so the Captain takes it to 
 
 ## 12. What could change this plan
 
-Only a dated pre-run change merged before the pilot: Garry's value per catch, a per-unit refit of the power table, a Codex version that can run the 6.2 models if 0.170.0 can't, or a unit gate that the keyless build shows is wrong. Nothing changes after the first paid call except through a deviation recorded with its reason.
+Only a dated pre-run change merged before the pilot: Garry's value per catch, a Codex version that can run the 6.2 models if 0.170.0 can't, or a unit gate that the keyless build shows is wrong. Nothing changes after the first paid call except through a deviation recorded with its reason.
