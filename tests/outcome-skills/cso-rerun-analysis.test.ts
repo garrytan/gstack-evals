@@ -7,6 +7,7 @@ import { loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
 import { NO_PAIR, printCheck, rerunAnalysis, type RerunInput } from "../../lanes/outcome-skills/cso/analysis/rerun.ts";
 import type { CsoScore } from "../../lanes/outcome-skills/cso/score/outcomes.ts";
 import type { CsoArm, CsoModel, CsoStage, SessionRecord, UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
+import { treeIndex } from "../../lanes/outcome-skills/cso/score/checks.ts";
 
 const p = loadCsoPrereg();
 const units: UnitRecord[] = Array.from({ length: 8 }, (_, k) => ({ unit: "u" + k, repo: "r" + k, part: "part1", kind: "library", source_files: 100, published: "2026-08-01", ecosystem: "npm" }) as UnitRecord);
@@ -69,4 +70,30 @@ test("the pilot's parent records from stage 0 pair as stage 2", () => {
   expect(a.second.rows.find((r) => r.model === "opus")!.complete.n).toBe(2);
   expect(a.exposure[0]).toMatchObject({ old_of: 2 });
   expect(printCheck(a).pass).toBe(true);
+});
+
+test("the miss anatomy reads the new arm's judged rows for cso misses and the parent's for the none arm and the old cso baseline", () => {
+  const TREE = treeIndex({ "src/a.js": Array.from({ length: 30 }, (_, i) => "a " + (i + 1)).join("\n") + "\n", "src/b.js": "b\n" });
+  const mu = ["m0", "m1"].map((u) => ({ ...units[0]!, unit: u, repo: "r-" + u, hunks: [{ file: "src/a.js", start: 10, end: 12, insert_only: false, text: "x" }] }) as UnitRecord);
+  const ses = (unit: string, arm: CsoArm, m: CsoModel, stage: CsoStage, o: Partial<SessionRecord> = {}) => ({
+    schema: "cso-session.v1", unit, arm, model: m, stage, end: "completed", texts: ["Report\nDONE"], opened: ["src/a.js"], helper: { snapshot_root: null, handles: {} },
+    exposure: { loaded: arm !== "none", procedure_ran: arm !== "none", completeness: "complete", tooling_errors: 0 }, ...o,
+  }) as unknown as SessionRecord;
+  const named: Record<string, boolean> = { "m0 none": true, "m0 old": false, "m0 new": false, "m1 none": false, "m1 old": false, "m1 new": true };
+  const both = (f: (m: CsoModel) => unknown[]) => MODELS.flatMap(f) as never[];
+  const i: RerunInput = {
+    units: mu,
+    none: { sessions: both((m) => mu.map((u) => ses(u.unit, "none", m, "stage2", u.unit === "m1" ? { end: "limit_allowance" } : {}))), scores: both((m) => mu.map((u) => sc(u, "none", m, "stage2", m === "opus" && named[u.unit + " none"]!, 5))) },
+    old: { sessions: both((m) => mu.map((u) => ses(u.unit, "cso", m, "stage2", { opened: [] }))), scores: both((m) => mu.map((u) => sc(u, "cso", m, "stage2", false, 1))) },
+    fresh: { sessions: both((m) => mu.map((u) => ses(u.unit, "cso", m, "rerun", u.unit === "m0" ? { opened: ["src/b.js"] } : {}))), scores: both((m) => mu.map((u) => sc(u, "cso", m, "rerun", m === "opus" && named[u.unit + " new"]!, 2))) },
+    oldProcedure: {}, runRecords: {}, judge: { opus: { named: true, validity: true }, particle: { named: true, validity: true }, sol: { named: false, validity: false } }, headroom_admitted: true,
+  };
+  const asked: string[] = [];
+  i.miss = { fresh: (u, m) => (asked.push("fresh " + u + " " + m), { findings: [], labels: [] } as never), parent: (u, arm, m) => (asked.push("parent " + u + " " + arm + " " + m), { findings: [], labels: [] } as never), tree: () => TREE };
+  const a = rerunAnalysis(i, p);
+  expect(a.secondaries.primary[0]!.miss).toEqual({ none: { limit_tooling_or_not_assessed: 1 }, cso: { never_opened_fix_file: 1 } });
+  expect(a.secondaries.second[0]!.miss).toEqual({ none: { never_opened_fix_file: 1 }, cso: {} });
+  expect(asked.sort()).toEqual(["fresh m0 opus", "parent m1 cso opus", "parent m1 none opus"]);
+  delete i.miss;
+  expect(rerunAnalysis(i, p).secondaries.primary[0]!.miss).toEqual({ none: {}, cso: {} });
 });

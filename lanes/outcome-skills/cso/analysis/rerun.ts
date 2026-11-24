@@ -7,8 +7,9 @@
 // secondary prints a value, or "no pair in the pilot" where the records in hand can't pair it.
 import type { CsoPrereg } from "../prereg.ts";
 import type { CsoModel, SessionRecord, UnitRecord } from "../types.ts";
-import type { CsoScore, Miss } from "../score/outcomes.ts";
-import { secondaries, type Diff } from "./secondaries.ts";
+import type { CsoScore, Judged, Miss } from "../score/outcomes.ts";
+import type { TreeIndex } from "../score/checks.ts";
+import { missMap, secondaries, type Diff } from "./secondaries.ts";
 import { analyze, PRIMARY_MODELS, rows, type AnalysisInput } from "./verdicts.ts";
 
 export const NO_PAIR = "no pair in the pilot";
@@ -20,6 +21,8 @@ export const MISS_LABEL: Record<Miss, string> = {
 };
 
 export interface RerunArm { sessions: SessionRecord[]; scores: CsoScore[] }
+/** The miss anatomy's inputs: the new arm's judged rows by unit and model, the parent's by unit, arm and model, and the audited trees. */
+export interface RerunMissInput { fresh: (unit: string, model: CsoModel) => Judged | null; parent: (unit: string, arm: "none" | "cso", model: CsoModel) => Judged | null; tree: (unit: string) => TreeIndex }
 export interface RerunInput {
   units: UnitRecord[];
   /** The parent's records, one stage each (stage 2 for the counted run, stage 0 for the pilot), read as stage 2: its none arm and its old cso arm. */
@@ -32,6 +35,8 @@ export interface RerunInput {
   runRecords: Record<string, { runs: number; findings: number }>;
   judge: AnalysisInput["judge"];
   headroom_admitted: boolean;
+  /** Without it the miss anatomy prints empty (the pilot's print check). */
+  miss?: RerunMissInput;
 }
 
 const k = (x: { unit: string; model: string }) => x.unit + " " + x.model;
@@ -67,6 +72,7 @@ export function rerunAnalysis(i: RerunInput, p: CsoPrereg) {
     return { model: m, new_loaded: n.filter((s) => s.exposure.loaded).length, new_ran: n.filter((s) => s.exposure.procedure_ran).length, new_of: n.length, old_ran_fixed: old.filter((s) => i.oldProcedure[k(s)] === true).length, old_of: old.length };
   };
   const named = (x: AnalysisInput) => rows(x, p).map((r) => ({ model: r.model, pairs: r.stats.complete.n, baseline_named: Math.round((r.stats.complete.a_rate ?? 0) * r.stats.complete.n), cso_named: Math.round((r.stats.complete.b_rate ?? 0) * r.stats.complete.n) }));
+  const misses = (x: AnalysisInput, baseline: "none" | "cso") => (i.miss ? missMap(x, (s) => (s.arm === "cso" ? i.miss!.fresh(s.unit, s.model) : i.miss!.parent(s.unit, baseline, s.model)), i.miss.tree, p) : {});
   const a = analyze(primary, p);
   return {
     schema: "cso-rerun-analysis.v1" as const,
@@ -74,7 +80,7 @@ export function rerunAnalysis(i: RerunInput, p: CsoPrereg) {
     second: { note: "new cso minus old cso; decides what we tell the maintainer, never the verdict", rows: rows(second, p).map(rowOut) },
     exposure: PRIMARY_MODELS.map(exposure),
     yield: PRIMARY_MODELS.map(yieldOf),
-    secondaries: { primary: secondaries(primary, p), second: secondaries(second, p) },
+    secondaries: { primary: secondaries(primary, p, misses(primary, "none")), second: secondaries(second, p, misses(second, "cso")) },
     reused_join: named(reused),
     miss_labels: MISS_LABEL,
   };

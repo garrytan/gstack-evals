@@ -306,9 +306,9 @@ async function readoutCmd(argv: string[]): Promise<number> {
 }
 
 
-const RERUN_ANALYZE_HELP = "Usage: gstack-evals cso rerun-analyze --work <dir> --units <ids> --old-dir <export sessions/stage2> --old-scores <file> --sessions <file> --scores <file> --new-dir <out>/<stage> (--check <sealed file>... --key <path> | --print-check)\nThe rerun's before-and-after analysis (CSO_PLAN=rerun): the new cso arm against the parent's none arm (rows and verdicts)\nand its old cso arm (rows), exposure, yield and secondaries, as JSON. --print-check is the pilot's print check: it\nassumes the judge passed, marks what can't pair, and exits 1 unless every secondary and yield field prints.";
+const RERUN_ANALYZE_HELP = "Usage: gstack-evals cso rerun-analyze --work <dir> --units <ids> --old-dir <export sessions/stage2> --old-scores <file> --sessions <file> --scores <file> --new-dir <out>/<stage> (--check <sealed file>... --key <path> | --print-check) [--judged <file> --old-judged <file>]\nThe rerun's before-and-after analysis (CSO_PLAN=rerun): the new cso arm against the parent's none arm (rows and verdicts)\nand its old cso arm (rows), exposure, yield and secondaries, as JSON. --print-check is the pilot's print check: it\nassumes the judge passed, marks what can't pair, and exits 1 unless every secondary and yield field prints. --judged (the new arm's\njudged rows) with --old-judged (the parent's) fills the miss anatomy from them and the audited trees under --work trees/.";
 async function rerunAnalyzeCmd(argv: string[]): Promise<number> {
-  const f = flags(argv, ["--work", "--units", "--old-dir", "--old-scores", "--sessions", "--scores", "--new-dir", "--key"], ["--print-check"], RERUN_ANALYZE_HELP, ["--check"]);
+  const f = flags(argv, ["--work", "--units", "--old-dir", "--old-scores", "--sessions", "--scores", "--new-dir", "--key", "--judged", "--old-judged"], ["--print-check"], RERUN_ANALYZE_HELP, ["--check"]);
   if (!f) return 0;
   const p = loadCsoPrereg();
   if (!p.rerun) csoFail("E_USAGE", "rerun-analyze reads the rerun plan; set CSO_PLAN=rerun");
@@ -337,9 +337,14 @@ async function rerunAnalyzeCmd(argv: string[]): Promise<number> {
     }
   const k = f.has("--key") ? readKey(f.need("--key")) : null;
   const judge = f.has("--print-check") ? { opus: { named: true, validity: true }, particle: { named: true, validity: true }, sol: { named: false, validity: false } } : judgeByModel(readChecks(f.all("--check"), k), p);
+  if (f.has("--judged") !== f.has("--old-judged")) csoFail("E_USAGE", "--judged and --old-judged go together");
+  type JRow = { unit: string; arm: string; model: string; judged: Judged | null };
+  const fresh = f.has("--judged") ? new Map(readRows<JRow>(f.need("--judged")).filter((r) => r.arm === "cso").map((r) => [r.unit + " " + r.model, r.judged])) : null;
+  const parent = f.has("--old-judged") ? new Map(readRows<JRow>(f.need("--old-judged")).map((r) => [r.unit + " " + r.arm + " " + r.model, r.judged])) : null;
+  const miss = fresh && parent ? { fresh: (u: string, m: string) => fresh.get(u + " " + m) ?? null, parent: (u: string, arm: string, m: string) => parent.get(u + " " + arm + " " + m) ?? null, tree: (u: string) => w.tree(u) } : undefined;
   const split = (xs: SessionRecord[]) => ({ none: xs.filter((s) => s.arm === "none"), old: xs.filter((s) => s.arm === "cso") });
   const sp = split(old);
-  const a = rerunAnalysis({ units, none: { sessions: sp.none, scores: oldScores }, old: { sessions: sp.old, scores: oldScores }, fresh: { sessions: readRows<SessionRecord>(f.need("--sessions")), scores: readRows<CsoScore>(f.need("--scores")) }, oldProcedure, runRecords, judge, headroom_admitted: true }, p);
+  const a = rerunAnalysis({ units, none: { sessions: sp.none, scores: oldScores }, old: { sessions: sp.old, scores: oldScores }, fresh: { sessions: readRows<SessionRecord>(f.need("--sessions")), scores: readRows<CsoScore>(f.need("--scores")) }, oldProcedure, runRecords, judge, headroom_admitted: true, ...(miss ? { miss } : {}) }, p);
   if (!f.has("--print-check")) {
     console.log(JSON.stringify(a, null, 1));
     return 0;
