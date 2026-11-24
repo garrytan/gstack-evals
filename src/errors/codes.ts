@@ -4745,6 +4745,42 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_RM_JUDGE: {
+    exit: 2,
+    meaning: "The review-models Carbon judge call cannot be built or read (lanes/review-models/score/judge.ts): Carbon's price row is not pinned to google-vertex alone, a review's finding ids repeat, or the call answered with an HTTP status other than 200.",
+    fix: "Keep Carbon's row in src/runner/pricing/prices.ts pinned to google-vertex alone, give each finding its own id, and let the run driver retry or stop a transport failure; an empty, cut-off or unreadable reply is retried once and then ruled can't tell, never refused.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_RM_SCORE_INPUT: {
+    exit: 2,
+    meaning: "The review-models scorer, staged rule or look refused its input (lanes/review-models/score/): a unit reviewed twice by one arm, a scored review with no metered cost or no judge result, cost rows that are not cost.tsv's columns, a pilot unit missing an OS or OA review, shares that do not add to 1, or a seeded look order that does not list the counted units.",
+    fix: "Rebuild the reviews from the run's findings, judge results and cost.tsv rows so each unit and arm appears once with its cost; the message names the first problems.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_RM_HISTORY: {
+    exit: 2,
+    meaning: "The review-models staged rule refused Harness Evals' per-pass stage 1 CSV: its sha256 is not the one pre-run change 1 freezes, a column is missing, or it does not hold 54 outside bugs with 2 passes each.",
+    fix: "Pass the path of review-real-bugs-stage1-per-pass.csv from Harness Evals' stage 1 grid (sha256 fae7595b...). Never commit it.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_RM_LABELS: {
+    exit: 2,
+    meaning: "The review-models judge check's label inputs are incomplete (lanes/review-models/score/labels.ts): a review's unit has no bug, a first read is missing, a disagreement has no adjudication read, or a decoy review was given to the check.",
+    fix: "Supply both labellers' first reads for every item and both adjudication reads for every disagreement; decoy reviews stay out of the check.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

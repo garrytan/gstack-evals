@@ -552,6 +552,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_RMS_GIT](#e_rms_git) | 2 | U20 |
 | [E_RMS_PENDING](#e_rms_pending) | 2 | U20 |
 | [E_RMS_FLOOR](#e_rms_floor) | 2 | U20 |
+| [E_RM_JUDGE](#e_rm_judge) | 2 | U20 |
+| [E_RM_SCORE_INPUT](#e_rm_score_input) | 2 | U20 |
+| [E_RM_HISTORY](#e_rm_history) | 2 | U20 |
+| [E_RM_LABELS](#e_rm_labels) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4402,6 +4406,38 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 The review-models draw cannot fill a set: the pilot lacks 5 never-run P units, 5 B units or a decoy, or the counted set holds fewer than 80 bug units. The plan does not start the run below its floor.
 
 Fix: Take the counts to the Captain; the run does not start until the supply reaches the floor.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_JUDGE
+
+The review-models Carbon judge call cannot be built or read (lanes/review-models/score/judge.ts): Carbon's price row is not pinned to google-vertex alone, a review's finding ids repeat, or the call answered with an HTTP status other than 200.
+
+Fix: Keep Carbon's row in src/runner/pricing/prices.ts pinned to google-vertex alone, give each finding its own id, and let the run driver retry or stop a transport failure; an empty, cut-off or unreadable reply is retried once and then ruled can't tell, never refused.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_SCORE_INPUT
+
+The review-models scorer, staged rule or look refused its input (lanes/review-models/score/): a unit reviewed twice by one arm, a scored review with no metered cost or no judge result, cost rows that are not cost.tsv's columns, a pilot unit missing an OS or OA review, shares that do not add to 1, or a seeded look order that does not list the counted units.
+
+Fix: Rebuild the reviews from the run's findings, judge results and cost.tsv rows so each unit and arm appears once with its cost; the message names the first problems.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_HISTORY
+
+The review-models staged rule refused Harness Evals' per-pass stage 1 CSV: its sha256 is not the one pre-run change 1 freezes, a column is missing, or it does not hold 54 outside bugs with 2 passes each.
+
+Fix: Pass the path of review-real-bugs-stage1-per-pass.csv from Harness Evals' stage 1 grid (sha256 fae7595b...). Never commit it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_LABELS
+
+The review-models judge check's label inputs are incomplete (lanes/review-models/score/labels.ts): a review's unit has no bug, a first read is missing, a disagreement has no adjudication read, or a decoy review was given to the check.
+
+Fix: Supply both labellers' first reads for every item and both adjudication reads for every disagreement; decoy reviews stay out of the check.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
