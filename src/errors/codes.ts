@@ -4709,6 +4709,42 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_RMS_INPUT: {
+    exit: 2,
+    meaning: "The review-models supply (rm-supply) was given input it cannot use: a missing option, a suite or frame in another shape, or a record that does not match.",
+    fix: "Pass the files gstack-evals rm-supply --help names, in the shapes it writes.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_RMS_GIT: {
+    exit: 2,
+    meaning: "The review-models supply could not read what a gate needs from git or GitHub: a clone, a commit, a diff, a blame, or a review comment's or pull request's date.",
+    fix: "Check the network and the clone under --work, then run the same subcommand again; records already written are kept and skipped.",
+    side_effects: "Records for units already checked are kept in the out file; nothing is paid.",
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_RMS_PENDING: {
+    exit: 2,
+    meaning: "The review-models draw found a unit whose gate results are not all in: a gate not yet run, or a B unit that passed gates 1, 2 and 4 with no settled visibility read.",
+    fix: "Finish p-gates, b-gates and the visibility read (vis-requests, vis-send, vis-read), then draw again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_RMS_FLOOR: {
+    exit: 2,
+    meaning: "The review-models draw cannot fill a set: the pilot lacks 5 never-run P units, 5 B units or a decoy, or the counted set holds fewer than 80 bug units. The plan does not start the run below its floor.",
+    fix: "Take the counts to the Captain; the run does not start until the supply reaches the floor.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

@@ -27,6 +27,9 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
   Carbon judge request routes and settles at Carbon's 2026-12-01 rate. `bun src/trial/review/proxy-preflight.ts`.
 - contamination.ts: that eval's search extraction and contamination rule (section 5): every attempted search per review,
   per-arm counts, and the blind second read's input file. `bun src/trial/review/contamination.ts <input.json> <out>`.
+- supply/: the review-models eval's unit supply (`gstack-evals rm-supply`, plan 2026-11-24-geva-590): P units from Harness
+  Evals' review-real-bugs suite, B units by SZZ on the skill-pack security frame, gates 1 to 5, the visibility read's
+  requests and reader, and the draw. Its gate records are answer keys and stay outside the repository.
 
 ## Unit repositories
 

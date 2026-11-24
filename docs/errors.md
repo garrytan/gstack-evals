@@ -548,6 +548,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_B2_SCORER](#e_b2_scorer) | 2 | U20 |
 | [E_CELL_CHECK](#e_cell_check) | 2 | U20 |
 | [E_RM_PROXY_PREFLIGHT](#e_rm_proxy_preflight) | 2 | U20 |
+| [E_RMS_INPUT](#e_rms_input) | 2 | U20 |
+| [E_RMS_GIT](#e_rms_git) | 2 | U20 |
+| [E_RMS_PENDING](#e_rms_pending) | 2 | U20 |
+| [E_RMS_FLOOR](#e_rms_floor) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4366,6 +4370,38 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 The review-models eval's keyless proxy preflight failed (src/trial/review/proxy-preflight.ts): the recorded gstack voice request did not pass the metering proxy with its web_search tool removed, a web_search from any other caller was not refused, or a Carbon judge request did not route and settle at Carbon's 2026-12-01 rate. The line names each failed check.
 
 Fix: Read the printed report, fix the proxy's voice removal (removeVoiceWebSearch) or the Carbon row in src/runner/pricing/prices.ts, and run the preflight again before any review spends.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RMS_INPUT
+
+The review-models supply (rm-supply) was given input it cannot use: a missing option, a suite or frame in another shape, or a record that does not match.
+
+Fix: Pass the files gstack-evals rm-supply --help names, in the shapes it writes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_RMS_GIT
+
+The review-models supply could not read what a gate needs from git or GitHub: a clone, a commit, a diff, a blame, or a review comment's or pull request's date.
+
+Fix: Check the network and the clone under --work, then run the same subcommand again; records already written are kept and skipped.
+
+Exit 2. Side effects: Records for units already checked are kept in the out file; nothing is paid. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_RMS_PENDING
+
+The review-models draw found a unit whose gate results are not all in: a gate not yet run, or a B unit that passed gates 1, 2 and 4 with no settled visibility read.
+
+Fix: Finish p-gates, b-gates and the visibility read (vis-requests, vis-send, vis-read), then draw again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_RMS_FLOOR
+
+The review-models draw cannot fill a set: the pilot lacks 5 never-run P units, 5 B units or a decoy, or the counted set holds fewer than 80 bug units. The plan does not start the run below its floor.
+
+Fix: Take the counts to the Captain; the run does not start until the supply reaches the floor.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
