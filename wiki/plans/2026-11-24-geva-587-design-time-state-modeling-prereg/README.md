@@ -78,7 +78,7 @@ The terms. For arms X and Y, X minus Y is the mean over units and models of X's 
 - If D minus N is +10 or more but its lower bound is 0 or below, or its interval holds both 0 and +10: not distinguished. The lines stay with no claim either way, FIX-METHOD, with the MDD printed.
 - If D minus N's upper bound is under +10 and its lower bound is 0 or below, with D exposed in at least 0.80 of cells on every model: after one R48 "Why null?" cycle, the lines become CUT-CANDIDATES for the before/after skill eval, which reads them inside each skill. Garry hears it in plain words. If the upper bound is under 0, the brief says the diagram request measurably cost points.
 - If G gains over N: the report says plan-eng-review helps on state bugs, beside attempt 3's no measurable difference on mixed bugs. Nothing in gstack changes.
-- If G minus N's upper bound is under 0 at 64 units, with G not stopped at the interim look: GStack Minder gets a brief to find out why before the next stable cut, using the length and exposure lines.
+- If G minus N's upper bound is under 0: GStack Minder gets a brief to find out why before the next stable cut, using the length and exposure lines.
 - If no arm gains over N: no modeling step goes into gstack's plan skills, any loss in an arm that ran all 64 units is reported as one, the design-time question closes with a registry row, and eval 4 (the blind hunt, gated on this eval) is dropped.
 - If C or P gains over N under any row above: eval 4 goes back to Garry for a go, as the approval says.
 
@@ -218,10 +218,10 @@ The pooled rows treat each reviewer model's two builds as two more builds of the
 
 Planned paid spend: $2,898
 At: half the units, 32 of 64, in seeded order, with every cell of those units scored
-Stop bounds: futility only; C, P and G stop their remaining cells if the pooled 95% upper bounds of both C minus N and P minus N sit below +5 points; N and D always finish; no stop for a gain, so the final tests keep alpha 0.05
+Stop bounds: futility only; C and P stop their remaining cells if the pooled 95% upper bounds of both C minus N and P minus N sit below +5 points; N, D and G always finish; no stop for a gain, so the final tests keep alpha 0.05
 Other looks: none
 
-Cells run interleaved in seeded unit order, so the look has every arm's cells on its 32 units. The look reads only the two upper bounds above. If the stop fires, C, P and G read "stopped for futility": the rows that take no action fire for them (no modeling step from C, nothing from pstack, no change from G), and each counts as not gaining over N in the no-gain row, so that row can still close the design-time question and drop eval 4. That is the stop's purpose: it ends the C and P cells only when neither can reach +5, half the 10-point line, and their 32-unit estimates and intervals print as description only. No row that claims a gain or a loss, or sends GStack Minder a brief, reads a stopped arm, because the stop chose those 32-unit results and their intervals are not adjusted for it. The D and N rows read on all 64 units as planned. Cells a stop leaves unrun are not gaps: they leave the exposure and gap denominators, so a stopped arm's exposure and gap shares count only the cells it ran. If the stop does not fire, every row reads at 64 units; the futility-only look never rejects, so it adds no false positive to those tests.
+Cells run interleaved in seeded unit order, so the look has every arm's cells on its 32 units. The look reads only the two upper bounds above. If the stop fires, C and P read "stopped for futility": the rows that take no action fire for them (no modeling step from C, nothing from pstack), and each counts as not gaining over N in the no-gain row, so that row can still close the design-time question and drop eval 4. That is the stop's purpose: it ends the C and P cells only when neither can reach +5, half the 10-point line, and their 32-unit estimates and intervals print as description only. No row that claims a gain or a loss, or sends GStack Minder a brief, reads a stopped arm, because the stop chose those 32-unit results and their intervals are not adjusted for it. The N, D and G rows read on all 64 units as planned, and C minus G prints as description only. Cells a stop leaves unrun are not gaps: they leave the exposure and gap denominators, so a stopped arm's exposure and gap shares count only the cells it ran. If the stop does not fire, every row reads at 64 units; the futility-only look never rejects, so it adds no false positive to those tests.
 
 ## 9. Order and stops
 
@@ -272,7 +272,7 @@ Counted cells: 64 units x 2 cells per arm and model, 14 arm and model pairs, 1,7
 | Reserve, held by the Captain | | $150 |
 | **All-in** | **about $4,014** | **$4,913** |
 
-This is about $700 over the $3,300 line #448 gave, for three reasons: G on particle-1 (about $131), Sol review figures above #448's guess, and supply and crew lines #448 left rough. Arms, cells and power are sized for the question, so the plan doesn't trim them (R71). If the look stops C, P and G, about $1,000 of the counted line goes unspent. The spend order keeps the early risk small: supply and the pilot cost about $316 before any counted cell.
+This is about $700 over the $3,300 line #448 gave, for three reasons: G on particle-1 (about $131), Sol review figures above #448's guess, and supply and crew lines #448 left rough. Arms, cells and power are sized for the question, so the plan doesn't trim them (R71). If the look stops C and P, about $600 of the counted line goes unspent. The spend order keeps the early risk small: supply and the pilot cost about $316 before any counted cell.
 
 ## 12. Risks and limits
 
