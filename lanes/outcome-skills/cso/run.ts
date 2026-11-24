@@ -233,8 +233,8 @@ async function session(i: CsoSessionInput, key: Buffer | null): Promise<{ record
     const summary = ev && existsSync(join(ev, SUMMARY)) ? (withRefusalFallback(JSON.parse(readFileSync(join(ev, SUMMARY), "utf8")) as Rec, join(ev, "sdk-messages.jsonl")) as Rec) : null;
     await csoHaltCheck(i, attempt, summary, ev, dir);
     if (ev) for (const f of KEEP) if (existsSync(join(ev, f))) copyFileSync(join(ev, f), join(i.out, f));
+    rmSync(join(i.out, CSO_RECORDS_DIR), { recursive: true, force: true });
     if (ev && existsSync(join(ev, CSO_RECORDS_DIR))) {
-      rmSync(join(i.out, CSO_RECORDS_DIR), { recursive: true, force: true });
       cpSync(join(ev, CSO_RECORDS_DIR), join(i.out, CSO_RECORDS_DIR), { recursive: true });
     }
     const records = ev ? [...readJsonl(join(ev, "sdk-messages.jsonl"))] : [];

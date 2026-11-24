@@ -61,17 +61,21 @@ const completed = (spent = 1_000_000) => ({ done: true, continuations: 0, turns:
 const upstream = (spent = 500_000) => ({ done: false, turns: [{ termination: "error_result", drive: {} }], slot: { id: "ses_1", close: close(spent, { refusals: ["E_UPSTREAM 529"] }) } });
 
 /** A stub Harbor: copies stub/a<N>/* into <-o>/<job>/trial/agent/evaluator and appends its job name to stub/jobs.txt. */
-function stub(attempts: Array<{ summary?: unknown; opens?: boolean }>): { bin: string; dir: string } {
+function stub(attempts: Array<{ summary?: unknown; opens?: boolean; records?: boolean }>): { bin: string; dir: string } {
   const dir = tmp();
   attempts.forEach((a, n) => {
     const d = join(dir, "a" + (n + 1));
     mkdirSync(d, { recursive: true });
     if (a.summary) writeFileSync(join(d, "h2h-summary.json"), JSON.stringify(a.summary));
     if (a.opens) writeFileSync(join(d, "h2h-opens.jsonl"), "{\"open\":1}\n");
+    if (a.records) {
+      mkdirSync(join(d, "cso-records", "repo", RUN), { recursive: true });
+      writeFileSync(join(d, "cso-records", "repo", RUN, "report.json"), JSON.stringify({ runId: RUN, status: "finished" }));
+    }
     writeFileSync(join(d, "sdk-messages.jsonl"), transcript.map((r) => JSON.stringify(r)).join("\n") + "\n");
   });
   const bin = join(dir, "harbor");
-  writeFileSync(bin, "#!/usr/bin/env bash\nout=; job=\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) out=$2; shift;; --job-name) job=$2; shift;; esac; shift; done\nn=$(echo \"$job\" | sed 's/.*-a//')\nmkdir -p \"$out/$job/trial/agent/evaluator\"\ncp " + JSON.stringify(dir) + "/a$n/* \"$out/$job/trial/agent/evaluator/\"\necho \"$job\" >> " + JSON.stringify(join(dir, "jobs.txt")) + "\n");
+  writeFileSync(bin, "#!/usr/bin/env bash\nout=; job=\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) out=$2; shift;; --job-name) job=$2; shift;; esac; shift; done\nn=$(echo \"$job\" | sed 's/.*-a//')\nmkdir -p \"$out/$job/trial/agent/evaluator\"\ncp -r " + JSON.stringify(dir) + "/a$n/* \"$out/$job/trial/agent/evaluator/\"\necho \"$job\" >> " + JSON.stringify(join(dir, "jobs.txt")) + "\n");
   chmodSync(bin, 0o755);
   return { bin, dir };
 }
@@ -116,6 +120,22 @@ test("an upstream end gets one retry naming meta.rerun; a second is a gap; spend
   expect(JSON.parse(readFileSync(join(i.out, "a2/h2h-config.json"), "utf8")).arm).toBe("cso:none");
   expect(record).toMatchObject({ end: "gap", attempts: 2, cost_usd: 1 });
   expect(record.reason).toStartWith("E_CSO_GAP_UPSTREAM");
+});
+
+test("a retry whose attempt saved no helper records keeps none of the earlier attempt's", async () => {
+  const s = stub([{ summary: upstream(), records: true }, { summary: completed() }]);
+  const i = input({ harbor: s.bin });
+  const { record } = await runCsoSession(i);
+  expect(existsSync(join(i.out, "a1/jobs"))).toBe(true);
+  expect(record).toMatchObject({ end: "completed", attempts: 2 });
+  expect(existsSync(join(i.out, "cso-records"))).toBe(false);
+});
+
+test("an attempt's saved helper records are kept with the session", async () => {
+  const s = stub([{ summary: completed(), records: true }]);
+  const i = input({ harbor: s.bin });
+  await runCsoSession(i);
+  expect(existsSync(join(i.out, "cso-records", "repo", RUN, "report.json"))).toBe(true);
 });
 
 test("a retry the spend cap can't cover is not run, and the session is a gap that says so", async () => {
