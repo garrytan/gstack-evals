@@ -17,7 +17,7 @@ links:
   - src/trial/review/
 attachments:
   - b88b524c39e875115401feeadd28a00fc83fc55abacfac30cd7b97f77dbdfecc  power-rows.txt
-  - ebb4b28adec6b8fbcab5d1138ef7299e8e6dde0d88d53899e76dc2a889efde12  power-sim.txt
+  - e1e209a2b9b07fb97d73536d4cdf9da245da3db9deb643b2885fcd7c2d18d0d8  power-sim.txt
 ---
 
 # Preregistration: is a review pass better with Opus 5.5 and Sol, or with Fable 5.2 and Astra?
@@ -184,7 +184,7 @@ The counted set (section 2) is drawn before the pilot, so its share of P and B u
 - Main effect of the main reviewer = mean over units of (FS + FA)/2 minus (OS + OA)/2; of the voice, (OA + FA)/2 minus (OS + FS)/2. After Fable leaves, the voice contrast is OA minus OS.
 - 95% intervals by bootstrap clustered by PR for P and by repository for B, 10,000 draws, seed 20261124.
 - Catches more: two-sided, Holm over the two main effects.
-- Pays or doesn't: the paired net value per unit, with one-sided bounds at z 1.655 at the end and z 2.797 at the look (see Interim look), which hold each contrast's one-sided error at 5% across both looks; Holm over the two contrasts; cost and catch come from the same units, so their uncertainty is joint.
+- Pays or doesn't: the paired net value per unit, with one-sided bounds at z 1.655 at the end and z 2.797 at the look (see Interim look), which hold each contrast's one-sided error at 5% across both looks. The two contrasts are separate decisions with separate actions (the factory's main reviewer, and the voice), so each is tested at its own 5% with no Holm step; the chance that at least one of the two reads "doesn't pay" when both are exactly at break-even is up to about 10%, and the results page says so. Cost and catch come from the same units, so their uncertainty is joint.
 - The package (FA minus OS) and the interaction are secondary, printed with intervals.
 - Strata P and B print beside the pooled result; S2-openai units (found by OpenAI-model tools) print apart for the voice contrast.
 - Gaps: a review that ends on a provider or infrastructure error reruns once; a second failure is a gap, scored dropped and as a miss. A provider safety stop is its own outcome (R95) and is never moved to another model.

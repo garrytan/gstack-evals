@@ -1,4 +1,4 @@
-# power-sim.txt: the scripts behind power-rows.txt (numpy 2.5.5). fit_he.py reads the HARN-154 CSV; power2.py is part 1; mdd_refit.py is part 2 and execs calib.py and mdd_cal.py for its helpers.
+# power-sim.txt: the scripts behind power-rows.txt (numpy 2.5.5). fit_he.py reads the HARN-154 CSV; power2.py is part 1 (it prints the rows that power-rows.txt quotes); mdd_refit.py is part 2 and execs calib.py and mdd_cal.py for its helpers.
 
 ## fit_he.py
 
@@ -77,7 +77,7 @@ for tag,mean in (('P-like control 75%',0.75),('P+B mix control 60%',0.60)):
       pdp,pcm=sim(100,mean,0.5,2.0,b,g,contrast)
       line=f"{tag} | {contrast} | true gain {100*td:.1f} pts | P(shows doesn't pay) {pdp:.2f} | P(two-sided Holm catches-more) {pcm:.2f}"
       print(line,flush=True); out.append(line)
-open('power-rows.txt','w').write("Seed 20261124. 100 bug units, one review per cell, beta(0.6) catch chances with a per-arm, per-bug logit wobble of 1.5 (calibrated to Harness Evals' 9.5-point half-width), 5% gaps scored as misses, per-review cost lognormal (cv 0.5) around OS $6.50, OA $11.00, FS $14.00, FA $18.50, the test is on paired net value per unit ($25 x catch gain minus cost gap), shown when its upper bound is below 0, one look at 50 units (z 2.797) and the final at z 1.655, which together hold the one-sided error at 5%. Fable's break-even here is about 30 points, Astra's about 18.\n"+"\n".join(out)+"\n")
+# Rows print to stdout; power-rows.txt quotes them under a header written by hand.
 
 ## calib.py
 
