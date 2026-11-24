@@ -215,7 +215,7 @@ The MDD is the smallest pooled difference the sign-flip test finds at 80% power,
 | floor: pooled over 2 models at 48 units | 48x4 | 10 to 12 |
 | floor: pooled over 3 models at 48 units | 48x6 | 9 to 10 |
 
-The pooled rows treat each reviewer model's two builds as two more builds of the same unit with the same effect. Every build is by the same Opus builder, so a unit's difficulty is shared across models; letting the effect differ by model would narrow the interval, so the rows err high. Attempt 3's realized MDDs came in below its simulated design (7.6 and 8.3 against 10 to 11 at 64x3). The smallest effect worth acting on is 10 points. The pooled designs detect it at 64 units, and at the 48-unit floor too, except the two-model P contrasts, whose MDD reaches 12.
+The pooled rows assume independent builds: they treat each reviewer model's two builds as two more builds of the same unit with the same effect, and power.py has no review-by-unit term that one model's builds on a unit would share. So the direction of their error is unknown, and they may understate the MDD. Before the pilot, power.py's fit is re-printed with a shared review-by-unit term, and the start rule applies to that re-print: a C minus N or D minus N MDD over 10 points goes to the Captain before any counted cell. Attempt 3's realized MDDs came in below its simulated design (7.6 and 8.3 against 10 to 11 at 64x3). The smallest effect worth acting on is 10 points. On these rows, the pooled designs detect it at 64 units, and at the 48-unit floor too, except the two-model P contrasts, whose MDD reaches 12.
 
 ## Interim look
 
