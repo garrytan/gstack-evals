@@ -6,7 +6,7 @@
 //   CSO_PROXY    the metering proxy of the driver stage that serves the item
 //   CSO_WORK     cso units' work dir: trees/<unit>, units/<unit>.json and arms/<arm>.json
 //   CSO_HOME     the arm's installed home (cso and untold; none runs with no home)
-//   CSO_STAGE    the stage the records name (stage0, stage1, repilot or stage2; stage2 by default)
+//   CSO_STAGE    the stage the records name (stage0, stage1, repilot, stage2, or the rerun's rerun-pilot and rerun; stage2 by default)
 //   CSO_OUT      where session dirs go; CSO_WORK/sessions by default
 //   CSO_READOUT_KEY  the readout key's path (stage1 and repilot, whose session dirs are sealed to it)
 // Harbor runs from PATH (the venv that holds claude-agent-sdk). Sol's Codex runner is a stub until the Captain's go.
@@ -20,7 +20,7 @@ import { csoFail } from "./prereg.ts";
 import { buildCsoImage, runCsoSession } from "./run.ts";
 import type { CsoArm, CsoModel, CsoStage, UnitRecord } from "./types.ts";
 
-const STAGES: readonly CsoStage[] = ["stage0", "stage1", "repilot", "stage2"];
+const STAGES: readonly CsoStage[] = ["stage0", "stage1", "repilot", "stage2", "rerun-pilot", "rerun"];
 const need = (env: Record<string, string | undefined>, k: string): string => env[k] || csoFail("E_CSO_RERUN_PRECONDITION", k + " is not set; gstack-evals cso rerun reads the driver, work dir and home from CSO_CONTROL, CSO_PROXY, CSO_WORK and CSO_HOME");
 const readJson = <T>(f: string, what: string): T => (existsSync(f) ? (JSON.parse(readFileSync(f, "utf8")) as T) : csoFail("E_CSO_RERUN_PRECONDITION", what + " " + f + " does not exist; run cso units first"));
 

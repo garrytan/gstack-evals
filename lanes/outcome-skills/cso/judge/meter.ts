@@ -26,6 +26,8 @@ import { csoFail, JUDGE_MAX_OUTPUT_D, type CsoPrereg } from "../prereg.ts";
 import { judgeRoutes, LABELLER_MAX_OUTPUT, routeClients, type JudgeClient, type Transport } from "./client.ts";
 
 export const JUDGE_ITEM = "cso-judge";
+/** The ledger item the judge leases: cso2-judge under the rerun plan (GEVA-583 prereg section 9), else cso-judge. */
+export const judgeItem = (p: CsoPrereg): string => (p.rerun ? "cso2-judge" : JUDGE_ITEM);
 const VERTEX = /^(google|google vertex|google-vertex)$/i;
 const RETRY: RetryBudget = { attempts: 3, elapsed_ms: 900_000 };
 /** The fields the metering proxy adds before it prices a request, sent up front so the worst case priced here is the one
@@ -33,13 +35,13 @@ const RETRY: RetryBudget = { attempts: 3, elapsed_ms: 900_000 };
 const PROXY_FIELDS = { openai: { service_tier: "default" }, anthropic: { inference_geo: "global" }, openrouter: { usage: { include: true } } } as const;
 const KEY_ENV = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" } as const;
 
-export interface MeterOptions { run_id: string; out: string; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; warn?: (line: string) => void; seal?: Buffer }
+export interface MeterOptions { run_id: string; out: string; item?: string; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; warn?: (line: string) => void; seal?: Buffer }
 export interface JudgeMeter { lease_id: string; transport: Transport; sent(): number; close(): Promise<{ spent_micros: number; unknown_micros: number }> }
 
-/** Leases cso-judge for the run (settling this run's own stale lease first), starts the proxy and returns its transport.
+/** Leases the judge item (o.item, default cso-judge) for the run (settling this run's own stale lease first), starts the proxy and returns its transport.
  *  E_KEY_MISSING when a provider key is unset. */
 export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
-  const env = o.env ?? process.env;
+  const env = o.env ?? process.env, item = o.item ?? JUDGE_ITEM;
   const missing = Object.values(KEY_ENV).filter((k) => !env[k]);
   if (missing.length) csoFail("E_KEY_MISSING", "the judge routes need " + missing.join(", ") + ", not set; nothing was opened");
   const record = recordPath(o.record, env).path;
@@ -56,9 +58,9 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
       await reconcileJournal(journal, local);
       renameSync(journal, join(out, "journal." + Date.now() + ".dead.ndjson"));
     }
-    const open = readItem(record, JUDGE_ITEM).open;
+    const open = readItem(record, item).open;
     if (open && open.run_id === o.run_id && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
-    lease = openLease(record, local, { item: JUDGE_ITEM, run_id: o.run_id, warn, requireAdmission: rigAdmission({ proof: "direct" }) });
+    lease = openLease(record, local, { item, run_id: o.run_id, warn, requireAdmission: rigAdmission({ proof: "direct" }) });
     proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "cso-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: Math.max(LABELLER_MAX_OUTPUT, JUDGE_MAX_OUTPUT_D), refuseServerTools: true });
     proxy.start();
   } catch (e) {
@@ -84,9 +86,9 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
     const worst = reservationMicros(priceRequest(provider, body, maxOut, route));
     const room = lease.reserved_micros - local.held(lease.lease_id);
     if (room < worst) {
-      local.stageStop(lease.lease_id, JUDGE_ITEM + " only");
-      recordStop(record, lease.lease_id, JUDGE_ITEM + " only");
-      csoFail("E_CSO_CAP_STOP", JUDGE_ITEM + " has " + usd(Math.max(room, 0)) + " of room on lease " + lease.lease_id + "; the next call's worst case is " + usd(worst) + ". Do not retry: the item ends incomplete");
+      local.stageStop(lease.lease_id, item + " only");
+      recordStop(record, lease.lease_id, item + " only");
+      csoFail("E_CSO_CAP_STOP", item + " has " + usd(Math.max(room, 0)) + " of room on lease " + lease.lease_id + "; the next call's worst case is " + usd(worst) + ". Do not retry: the item ends incomplete");
     }
     const model = String(body.model);
     const b = px.bind({ cell: { run_id: o.run_id, arm: "judge", task: digest.slice(0, 16), model, trial: 1, attempt: 1 }, models: [provider + ":" + model], allowance_micros: worst });

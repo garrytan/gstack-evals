@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
+import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { serveStages, type ServeOptions, type StageSpec } from "../../lanes/outcome-skills/driver/stage.ts";
 import { CSO_STAGES, csoDriverLimits, csoDriverModels, csoItemCapUsd } from "../../lanes/outcome-skills/cso/driver.ts";
@@ -124,6 +125,36 @@ test("one slot per session at the model's allowance on its provider, one whole-s
   doubled.local.close?.();
 });
 
+test("a cso slot whose proxy finalize fails halts its stage: the next open is refused and a relaunch names the session", async () => {
+  const lines: string[] = [];
+  const { serve, local, root } = ledger({ "cso-main": { cap: 100 }, "cso-smoke": { cap: 62 } });
+  const served = await serve([{ item: "cso-main", arm: "cso-main", arms: ["cso:cso"] }, { item: "cso-smoke", arm: "cso-smoke", arms: ["cso:none"] }], { log: (l: string) => void lines.push(l) });
+  const { open, close } = client(served.control);
+  const s1 = await open({ arm: "cso:cso" });
+  expect(s1.status).toBe(200);
+  const finalize = MeteringProxy.prototype.finalize;
+  MeteringProxy.prototype.finalize = async () => {
+    throw new Error("finalize failed in this test");
+  };
+  let answer: Record<string, any>;
+  try {
+    answer = await close(s1.json.id);
+  } finally {
+    MeteringProxy.prototype.finalize = finalize;
+  }
+  expect(answer).toMatchObject({ finalized: false, allowance_stops: null });
+  expect(lines.filter((l) => l.startsWith("E_CSO_FINALIZE_HALT outcome driver: session " + s1.json.id + " on line item cso-main"))).toHaveLength(1);
+  const events = readFileSync(join(root, "run", "sessions.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  expect(events.filter((e) => e.event === "halt")).toEqual([expect.objectContaining({ item: "cso-main", id: s1.json.id })]);
+  const next = await open({ arm: "cso:cso", task: "u2" });
+  expect([next.status, next.json.code, next.json.item]).toEqual([423, "E_SM_FINALIZE_HALT", "cso-main"]);
+  expect(await served.stop()).toBe(2);
+  const relaunch = await serve([{ item: "cso-main", arm: "cso-main", arms: ["cso:cso"] }]).then(async (s) => (await s.stop(), "served"), (err: { code?: string; message: string }) => err.code + " " + err.message);
+  expect(relaunch).toStartWith("E_SM_FINALIZE_HALT line item cso-main halted in run r1");
+  expect(relaunch).toContain(s1.json.id);
+  local.close?.();
+});
+
 test("the cso session runner's finalize halt stops the driver, which exits 2", async () => {
   const logs: string[] = [];
   const { serve, local } = ledger({ "cso-smoke": { cap: 62 } });
@@ -132,5 +163,23 @@ test("the cso session runner's finalize halt stops the driver, which exits 2", a
   expect(res.status).toBeLessThan(500);
   expect(await served.stop()).toBe(2);
   expect(logs.some((l) => l.startsWith("E_CSO_FINALIZE_HALT outcome driver: the cso session runner halted session u1/none/stage0/0 attempt 1"))).toBe(true);
+  local.close?.();
+});
+
+test("a cso runner's finalize halt holds the next launch until a relaunch lifts it by the session the halt names", async () => {
+  const { serve, local, root } = ledger({ "cso-smoke": { cap: 62 } });
+  const stages: StageSpec[] = [{ item: "cso-smoke", arm: "cso-smoke", arms: ["cso:none"] }];
+  const served = await serve(stages);
+  await fetch(served.control + "/stop", { method: "POST", body: JSON.stringify({ code: "E_CSO_FINALIZE_HALT", session: "u1/none/stage0/0 attempt 1" }) });
+  expect(await served.stop()).toBe(2);
+  const tryServe = (extra: Partial<ServeOptions> = {}) => serve(stages, extra).then(async (s) => (await s.stop(), "served"), (err: { code?: string; message: string }) => err.code + " " + err.message);
+  const held = await tryServe();
+  expect(held).toStartWith("E_CSO_FINALIZE_HALT line item cso-smoke halted in run r1");
+  expect(held).toContain("--lift-halt 'u1/none/stage0/0 attempt 1'");
+  expect(await tryServe({ lift_halts: ["u1/none/stage0/0 attempt 2"] })).toStartWith("E_USAGE --lift-halt u1/none/stage0/0 attempt 2 names no halt still standing");
+  expect(await tryServe({ lift_halts: ["u1/none/stage0/0 attempt 1"] })).toBe("served");
+  const events = readFileSync(join(root, "run", "sessions.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  expect(events.filter((e) => e.event === "lift").map((e) => [e.id, e.item])).toEqual([["u1/none/stage0/0 attempt 1", ""]]);
+  expect(await tryServe()).toBe("served");
   local.close?.();
 });

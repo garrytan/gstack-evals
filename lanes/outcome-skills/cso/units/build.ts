@@ -163,6 +163,9 @@ export function answerKey(dir: string, parent: string, fix: string, langs: reado
   return { fix_files: fixFiles, hunks: fixFiles.flatMap((p) => preFixHunks(dir, parent, fix, p)), code_files: fixFiles.filter((p) => codeChanged(dir, parent, fix, p, langOf(langs, p))) };
 }
 
+/** A session tree's digest: every file's bytes and mode outside .git, raw (h2h/arms/hash.ts). */
+export const sessionTreeSha256 = (dir: string): string => treeSha256(homeEntries(dir, true).filter((e) => e.path !== ".git" && !e.path.startsWith(".git/")));
+
 /** Section 3's session tree: the parent's tree checked out into out, stripped, and committed as one fresh commit. */
 export function sessionTree(dir: string, parent: string, out: string): { stripped: string[]; head: string; tree_sha256: string } {
   rmSync(out, { recursive: true, force: true });
@@ -196,7 +199,7 @@ export function sessionTree(dir: string, parent: string, out: string): { strippe
   step(["add", "-A", "-f"]);
   const head = step(["commit-tree", step(["write-tree"]), "-m", TREE_IDENT.message]);
   step(["update-ref", "HEAD", head]);
-  return { stripped: stripped.sort(), head, tree_sha256: treeSha256(homeEntries(out, true).filter((e) => e.path !== ".git" && !e.path.startsWith(".git/"))) };
+  return { stripped: stripped.sort(), head, tree_sha256: sessionTreeSha256(out) };
 }
 
 /** The repository's other reviewed advisories whose fix commit is not an ancestor of the audited commit, with their fix's

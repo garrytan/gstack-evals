@@ -32,7 +32,7 @@ import { EFFORT_KEYS, reservationBound } from "../pfchecks/session.ts";
 import { H2H_SKILL, h2hLimits, h2hModel } from "../h2h/sessions/driver.ts";
 import { extFirstRequestFields, extStageProvider, h2hItems, h2hStageArms, h2hStageLimits, h2hStageModel, isExtStage, isStageArm } from "../h2h/ext/driver.ts";
 import { H2hError } from "../h2h/prereg.ts";
-import { CSO_SKILL, CSO_STAGES, csoDriverLimits, csoDriverModels, csoItemCapUsd, isCsoArm } from "../cso/driver.ts";
+import { CSO_SKILL, csoDriverLimits, csoStages, csoDriverModels, csoItemCapUsd, isCsoArm } from "../cso/driver.ts";
 import { CsoError } from "../cso/prereg.ts";
 
 export const DEFAULT_TTL_MS = 72 * 3_600_000;
@@ -342,7 +342,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     if (csoStage(st)) {
       const arms = st.arms ?? [st.arm];
       if (arms.some((a) => !isCsoArm(a))) fail("E_USAGE", "stage " + st.item + " mixes cso arms with other lanes' arms; a cso stage serves cso arms only");
-      const own = Object.hasOwn(CSO_STAGES, st.item) ? CSO_STAGES[st.item]! : fail("E_USAGE", "cso stage " + st.item + " is not a cso session item; cso stages are " + Object.keys(CSO_STAGES).join(", "));
+      const stages = csoStages();
+      const own = Object.hasOwn(stages, st.item) ? stages[st.item]! : fail("E_USAGE", "cso stage " + st.item + " is not a cso session item; cso stages are " + Object.keys(stages).join(", "));
       if (st.model !== undefined) fail("E_USAGE", "cso stage " + st.item + " serves prereg.json's models, not a stage model");
       const stray = arms.filter((a) => !own.includes(a));
       if (!arms.length || stray.length) fail("E_USAGE", "cso stage " + st.item + " serves " + own.join(", ") + ", not " + (stray.join(", ") || "no arm"));
@@ -387,7 +388,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       closeSync(fd);
     }
   };
-  const lines: Array<{ at?: string; event?: string; id?: string; item?: string; lease_id?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string; journal?: string; model?: string; reason?: string; finalized?: boolean; cause?: string }> = [];
+  const lines: Array<{ at?: string; event?: string; id?: string; item?: string; lease_id?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string; journal?: string; model?: string; reason?: string; finalized?: boolean; cause?: string; session?: string }> = [];
   for (const line of existsSync(sessionsFile) ? readFileSync(sessionsFile, "utf8").split("\n") : []) {
     try {
       const e = JSON.parse(line);
@@ -418,9 +419,10 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     }
   }
   for (const e of lines) if (e.item && (e.event === "stop" || (e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) noteStop(e.item, { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" });
-  const halts = new Map<string, { item: string; at: string; journal: string; cause?: string }>();
+  const halts = new Map<string, { item: string; at: string; journal: string; cause?: string; runner?: true }>();
   for (const e of lines) {
     if (e.event === "halt" && e.id && e.item) halts.set(e.id, { item: e.item, at: e.at ?? "an unrecorded time", journal: e.journal ?? "(no journal path)", ...(e.cause ? { cause: e.cause } : {}) });
+    if (e.event === "halt_stop" && e.code === "E_CSO_FINALIZE_HALT" && e.session) halts.set(e.session, { item: "", at: e.at ?? "an unrecorded time", journal: "(the halted attempt's lease journal under " + dir + ")", runner: true });
     if (e.event === "lift" && e.id) halts.delete(e.id);
   }
   const lifts = [...new Set(o.lift_halts ?? [])];
@@ -470,7 +472,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     if (unheld.length) fail("E_USAGE", "line item " + st.item + " holds run " + o.run_id + "'s leases " + unheld.map((l) => l.lease_id).join(", ") + ", which name no holder, so no run directory's sessions.jsonl counts their sessions and the driver can't serve the item for this run; nothing was opened");
     const stop = capped.get("") ?? capped.get(st.item);
     if (stop) fail("CAP_STOP", (capped.has("") ? "the none stage cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends both skills incomplete" : "stage " + st.item + " cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends its skill incomplete") + "; a cap stop is not retried (plan section 6); nothing was opened");
-    const halt = [...halts].find(([, h]) => h.item === st.item);
+    const halt = [...halts].find(([, h]) => h.item === st.item || h.item === "");
+    if (halt?.[1].runner) fail("E_CSO_FINALIZE_HALT", "line item " + st.item + " halted in run " + o.run_id + " at " + halt[1].at + ": the cso session runner halted session " + halt[0] + " and stopped the driver, so its spend is unknown and its retry waits for the Captain's ruling on " + halt[1].journal + "; once the Captain rules, relaunch with --lift-halt '" + halt[0] + "'; nothing was opened");
     if (halt) fail("E_SM_FINALIZE_HALT", "line item " + st.item + " halted in run " + o.run_id + " at " + halt[1].at + ": session " + halt[0] + (halt[1].cause ? " was closed as " + halt[1].cause + ", never by the driver's own close, so its proxy finalize never ran" : " closed with its proxy finalize failed") + ", so its allowance stops are unknown and its retry waits for the Captain's ruling on the proxy journal " + halt[1].journal + "; once the Captain rules, relaunch with --lift-halt " + halt[0] + "; nothing was opened");
     if (s.cap_micros === null) return fail("E_LEDGER_MISSING", "no approved cap is on record for line item " + st.item + "; nothing was opened");
     if (csoStage(st) && s.cap_micros > Math.round(csoItemCapUsd(st.item, o.cso_caps_usd) * 1e6)) fail("E_USAGE", "line item " + st.item + " records a cap of " + s.cap_micros + " micros, above the $" + csoItemCapUsd(st.item, o.cso_caps_usd) + " prereg.json or a re-priced cap allows; nothing was opened");
@@ -675,7 +678,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       if (hold?.task === sess.id) hold.until = now() + grace;
       s.live.delete(sess.id);
       s.finished++;
-      const halt = !meter && s.model !== undefined;
+      const halt = !meter && (s.model !== undefined || s.cso);
       const pfHalt = s.pf && !meter;
       if (halt || pfHalt) record({ event: "halt", item: s.item, id: sess.id, lease_id: s.lease_id, meter_id: sess.meter_id, journal: s.journal }, true);
       record({ event: "close", item: s.item, ...answer });

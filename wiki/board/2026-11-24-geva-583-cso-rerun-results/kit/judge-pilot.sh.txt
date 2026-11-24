@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# GEVA-583 pilot judging (rerun prereg section 8 step 2): cso2-judge admission, the judge pilot gate on the 10 pilot
+# sessions (route fallback-opus-particle, gold from both labellers), scoring, and the print check against the parent's
+# stage 0 records (happy-dom and vm2 pair; the rest print "no pair in the pilot"). Runs from a separate clone so the
+# pilot checkout stays at its admitted head.
+set -uo pipefail
+export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
+L=$HOME/cso2-ledger; export GSTACK_EVALS_LEDGER=$L/ledger.sqlite GSTACK_EVALS_LEDGER_RECORD=$L/record
+for k in ANTHROPIC_API_KEY OPENROUTER_API_KEY OPENAI_API_KEY; do export $k="$(cat $HOME/.keys/$k)"; done
+unset CSO_READOUT_KEY
+G=$HOME/work/judge/gstack-evals; cd $G; GE=$G/bin/gstack-evals
+export CSO_PLAN=rerun
+J=$HOME/judge-pilot; mkdir -p $J
+step() { echo "== $1 $(date -u +%FT%TZ)"; }
+step head; git log --oneline -1; echo "dirty $(git status --porcelain --untracked-files=all | wc -l)"
+step admit
+[ -e $J/admitted ] || { GSTACK_EVALS_GH_BIN=$HOME/bin/ghshim sg docker -c "$GE rig admit --item cso2-judge --proof direct --prereg wiki/plans/2026-11-23-geva-583-cso-rerun-prereg/README.md --run cso2-judge --check-run $(cat $HOME/ci-run-judge) --repo garrytan/gstack-evals" && touch $J/admitted || { echo "admit failed"; exit 1; }; }
+step judge
+$GE cso judge --work $HOME/units --sessions $HOME/pilot/sessions.jsonl --out $J --run cso2-judge --route fallback-opus-particle --pilot-gate; echo "judge exit $?"
+step score
+[ -e $J/scores.jsonl ] || $GE cso score --work $HOME/units --sessions $HOME/pilot/sessions.jsonl --judged $J/judged.jsonl --out $J/scores.jsonl; echo "score exit $?"
+jq -c '{unit: .unit[0:24], model, gap, named, findings_total, counted, supported, unsupported, cant_tell}' $J/scores.jsonl
+step print-check
+for u in $(cat $HOME/pilot-units.txt); do echo "\"$u\""; done > $J/units.jsonl
+$GE cso rerun-analyze --work $HOME/units --units $J/units.jsonl --old-dir $HOME/work/export0/sessions/stage0 --old-scores $HOME/work/export0/scores.jsonl --sessions $HOME/pilot/sessions.jsonl --scores $J/scores.jsonl --new-dir $HOME/pilot/sessions/rerun-pilot --print-check > $J/print-check.json; echo "print-check exit $?"
+jq -c .print_check $J/print-check.json
+$GE ledger status --item cso2-judge 2>&1 | head -12
+echo JUDGE_PILOT_DONE

@@ -6,6 +6,7 @@
 // fails), the per-arm gate, the format variants and near misses, the refusal limit, the over-cap gold-drop limit and
 // validity kappa. Anchors (an oracle report and a stock report per stage 1 unit) are at most anchor_share_max of the check
 // set as sent. The judging order is seeded with check_seed.
+import { createHash } from "node:crypto";
 import { seededRandom } from "../../../../src/runner/stats/paired.ts";
 import { csoFail, type CsoPrereg } from "../prereg.ts";
 import type { CsoArm, CsoModel, HelperRecords, SessionRecord, UnitRecord } from "../types.ts";
@@ -238,15 +239,46 @@ export async function runFormatVariants(judge: JudgeClient, u: UnitRecord, tree:
 }
 
 /** Runs one check-set report down a route: production pass A and B, then both gold labellers. */
-export async function runReport(id: string, meta: Pick<ReportResult, "arm" | "model" | "anchor">, clients: { judge: JudgeClient; gold: [JudgeClient, JudgeClient] }, u: UnitRecord, s: Src, tree: TreeIndex, p: CsoPrereg): Promise<ReportResult> {
+export async function runReport(id: string, meta: Pick<ReportResult, "arm" | "model" | "anchor">, clients: { judge: JudgeClient; gold: [JudgeClient, JudgeClient] }, u: UnitRecord, s: Src, tree: TreeIndex, p: CsoPrereg, onJudged?: (run: JudgeRun) => void): Promise<ReportResult> {
+  const run = await judgeSession(clients.judge, u, scoredText(s, p), s, tree, p);
+  onJudged?.(run);
+  return goldOnRun(id, meta, run, clients.gold, u, s, tree, p);
+}
+
+/** Gold from both labellers on a report the production judge already judged, so the check compares the judgement that
+ *  scored it. */
+export async function goldOnRun(id: string, meta: Pick<ReportResult, "arm" | "model" | "anchor">, run: JudgeRun, labellers: [JudgeClient, JudgeClient], u: UnitRecord, s: Src, tree: TreeIndex, p: CsoPrereg): Promise<ReportResult> {
   const st = scoredText(s, p);
-  const run = await judgeSession(clients.judge, u, st, s, tree, p);
   const prod = namedOf(run, u, s, tree, p);
   const passA = run.judged && Array.isArray(run.judged.findings) ? run.judged.findings.slice(0, scoringRules(p).first_k) : [];
   const gold: GoldResult[] = [];
-  for (const c of clients.gold) gold.push(await goldReport(c, u, st, s, passA, tree, p));
+  for (const c of labellers) gold.push(await goldReport(c, u, st, s, passA, tree, p));
   const total = run.judged && Array.isArray(run.judged.findings) ? run.judged.findings.length : 0;
   return { id, ...meta, production: { named: prod.named, validity: prod.validity, refused: run.refused }, gold: [gold[0]!, gold[1]!], findings_total: total };
+}
+
+/** The rerun's pilot judge gate (rerun prereg section 7): on the pilot's new cso reports, no refusal by the judge or a
+ *  labeller, no judge gap, and gold (both labellers agreeing) disagrees with the judge on named in at most max_disagree.
+ *  A report the labellers split on has no gold and is listed, never counted as a disagreement. */
+export function pilotGate(reports: readonly ReportResult[], want: number, max_disagree = 2): { pass: boolean; reports: number; refused: string[]; judge_gaps: string[]; disagree: string[]; no_gold: string[]; why: string[] } {
+  const refused = reports.filter((r) => r.production.refused || r.gold.some((g) => g.refused)).map((r) => r.id);
+  const judge_gaps = reports.filter((r) => r.production.named === null).map((r) => r.id);
+  const disagree = reports.filter((r) => r.production.named !== null && goldNamed(r) !== null && goldNamed(r) !== r.production.named).map((r) => r.id);
+  const no_gold = reports.filter((r) => goldNamed(r) === null).map((r) => r.id);
+  const why = [
+    ...(reports.length !== want ? [reports.length + " pilot reports, not " + want] : []),
+    ...(refused.length ? [refused.length + " refused"] : []),
+    ...(judge_gaps.length ? [judge_gaps.length + " judge gaps"] : []),
+    ...(disagree.length > max_disagree ? ["gold disagrees on named in " + disagree.length + ", more than " + max_disagree] : []),
+  ];
+  return { pass: why.length === 0, reports: reports.length, refused, judge_gaps, disagree, no_gold, why };
+}
+
+/** The rerun's counted gold draw (rerun prereg section 7): the counted units by the sha256 of "<gold_seed>:<unit id>",
+ *  ascending as hex strings, each unit's Opus report then its particle-1 report, skipping a report has() rules out. */
+export function countedGoldOrder(units: readonly string[], seed: number, has: (unit: string, model: CsoModel) => boolean): { unit: string; model: CsoModel }[] {
+  const sha = (u: string) => createHash("sha256").update(seed + ":" + u).digest("hex");
+  return [...units].sort((a, b) => (sha(a) < sha(b) ? -1 : sha(a) > sha(b) ? 1 : 0)).flatMap((unit) => (["opus", "particle"] as const).filter((model) => has(unit, model)).map((model) => ({ unit, model })));
 }
 
 /** Anchor sources for runReport: one oracle and one stock report per unit. */

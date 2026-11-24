@@ -17,6 +17,7 @@ import { buildCsoImage, CSO_BASE_IMAGE, CSO_RERUN, csoRunCopy, runCsoSession, tr
 import { csoRunner } from "../../lanes/outcome-skills/cso/rerunner.ts";
 import { isSealedRow, openBytes, openRow, readKey } from "../../lanes/outcome-skills/cso/analysis/readout.ts";
 import type { UnitRecord } from "../../lanes/outcome-skills/cso/types.ts";
+import { sessionTreeSha256 } from "../../lanes/outcome-skills/cso/units/build.ts";
 
 const p = loadCsoPrereg();
 const roots: string[] = [];
@@ -60,17 +61,21 @@ const completed = (spent = 1_000_000) => ({ done: true, continuations: 0, turns:
 const upstream = (spent = 500_000) => ({ done: false, turns: [{ termination: "error_result", drive: {} }], slot: { id: "ses_1", close: close(spent, { refusals: ["E_UPSTREAM 529"] }) } });
 
 /** A stub Harbor: copies stub/a<N>/* into <-o>/<job>/trial/agent/evaluator and appends its job name to stub/jobs.txt. */
-function stub(attempts: Array<{ summary?: unknown; opens?: boolean }>): { bin: string; dir: string } {
+function stub(attempts: Array<{ summary?: unknown; opens?: boolean; records?: boolean }>): { bin: string; dir: string } {
   const dir = tmp();
   attempts.forEach((a, n) => {
     const d = join(dir, "a" + (n + 1));
     mkdirSync(d, { recursive: true });
     if (a.summary) writeFileSync(join(d, "h2h-summary.json"), JSON.stringify(a.summary));
     if (a.opens) writeFileSync(join(d, "h2h-opens.jsonl"), "{\"open\":1}\n");
+    if (a.records) {
+      mkdirSync(join(d, "cso-records", "repo", RUN), { recursive: true });
+      writeFileSync(join(d, "cso-records", "repo", RUN, "report.json"), JSON.stringify({ runId: RUN, status: "finished" }));
+    }
     writeFileSync(join(d, "sdk-messages.jsonl"), transcript.map((r) => JSON.stringify(r)).join("\n") + "\n");
   });
   const bin = join(dir, "harbor");
-  writeFileSync(bin, "#!/usr/bin/env bash\nout=; job=\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) out=$2; shift;; --job-name) job=$2; shift;; esac; shift; done\nn=$(echo \"$job\" | sed 's/.*-a//')\nmkdir -p \"$out/$job/trial/agent/evaluator\"\ncp " + JSON.stringify(dir) + "/a$n/* \"$out/$job/trial/agent/evaluator/\"\necho \"$job\" >> " + JSON.stringify(join(dir, "jobs.txt")) + "\n");
+  writeFileSync(bin, "#!/usr/bin/env bash\nout=; job=\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) out=$2; shift;; --job-name) job=$2; shift;; esac; shift; done\nn=$(echo \"$job\" | sed 's/.*-a//')\nmkdir -p \"$out/$job/trial/agent/evaluator\"\ncp -r " + JSON.stringify(dir) + "/a$n/* \"$out/$job/trial/agent/evaluator/\"\necho \"$job\" >> " + JSON.stringify(join(dir, "jobs.txt")) + "\n");
   chmodSync(bin, 0o755);
   return { bin, dir };
 }
@@ -117,6 +122,22 @@ test("an upstream end gets one retry naming meta.rerun; a second is a gap; spend
   expect(record.reason).toStartWith("E_CSO_GAP_UPSTREAM");
 });
 
+test("a retry whose attempt saved no helper records keeps none of the earlier attempt's", async () => {
+  const s = stub([{ summary: upstream(), records: true }, { summary: completed() }]);
+  const i = input({ harbor: s.bin });
+  const { record } = await runCsoSession(i);
+  expect(existsSync(join(i.out, "a1/jobs"))).toBe(true);
+  expect(record).toMatchObject({ end: "completed", attempts: 2 });
+  expect(existsSync(join(i.out, "cso-records"))).toBe(false);
+});
+
+test("an attempt's saved helper records are kept with the session", async () => {
+  const s = stub([{ summary: completed(), records: true }]);
+  const i = input({ harbor: s.bin });
+  await runCsoSession(i);
+  expect(existsSync(join(i.out, "cso-records", "repo", RUN, "report.json"))).toBe(true);
+});
+
 test("a retry the spend cap can't cover is not run, and the session is a gap that says so", async () => {
   const s = stub([{ summary: upstream(500_000) }, { summary: completed() }]);
   const { record } = await runCsoSession(input({ harbor: s.bin, capLeftUsd: 8.4 }));
@@ -135,7 +156,27 @@ test("a failed finalize halts with no record; an open with no summary posts E_CS
   const i2 = input({ harbor: stub([{ opens: true }]).bin, control: "http://127.0.0.1:" + server.port });
   await expect(runCsoSession(i2)).rejects.toThrow(/^E_CSO_FINALIZE_HALT .*driver was stopped through POST \/stop/);
   expect(posts).toEqual([{ code: "E_CSO_FINALIZE_HALT", session: "u1/none/opus/stage0/0 attempt 1" }]);
+  const i3 = input({ harbor: stub([{ summary: bad }]).bin, control: "http://127.0.0.1:" + server.port });
+  await expect(runCsoSession(i3)).rejects.toThrow(/^E_CSO_FINALIZE_HALT .*ses_9.*driver was stopped through POST \/stop/);
+  expect(posts).toHaveLength(2);
   server.stop(true);
+});
+
+test("under the rerun plan a session tree that no longer hashes to its unit record does not run", async () => {
+  const before = process.env.CSO_PLAN;
+  process.env.CSO_PLAN = "rerun";
+  try {
+    const s = stub([{ summary: completed() }]);
+    const t = tree();
+    writeFileSync(join(t, "index.js"), "module.exports = 2;\n");
+    const i = input({ harbor: s.bin, tree: t, unit: { ...UNIT, tree_sha256: sessionTreeSha256(tree()) } });
+    await expect(runCsoSession(i)).rejects.toThrow(/^E_CSO_SESSION u1's session tree .* hashes to [0-9a-f]{64}, not its unit record's/);
+    expect(existsSync(i.out)).toBe(false);
+    expect(existsSync(join(s.dir, "jobs.txt"))).toBe(false);
+  } finally {
+    if (before === undefined) delete process.env.CSO_PLAN;
+    else process.env.CSO_PLAN = before;
+  }
 });
 
 test("a home that no longer hashes to its arm record, a none arm with a home, and a used out dir are refused before Harbor", async () => {
@@ -258,7 +299,13 @@ test("deviation (e): a session image runs by a tag pinned to its own image id, s
     const img = buildCsoImage(UNIT, tree());
     expect(img.image_id).toBe(id);
     expect(img.tag).toBe("gstack-evals-cso-session:" + "a".repeat(16) + "-" + "0123456789ab");
-    expect(readFileSync(log, "utf8")).toContain("tag " + id + " " + img.tag);
+    const calls = readFileSync(log, "utf8");
+    expect(calls).toContain("tag " + id + " " + img.tag);
+    const building = /^build -q -t (gstack-evals-cso-session:a{16}-build-[0-9a-f]{12}) /m.exec(calls)?.[1];
+    expect(building).toBeDefined();
+    expect(calls).toContain("rmi " + building);
+    buildCsoImage(UNIT, tree());
+    expect(new Set([...readFileSync(log, "utf8").matchAll(/^build -q -t (\S+)/gm)].map((m) => m[1])).size).toBe(2);
   } finally {
     process.env.PATH = old;
   }

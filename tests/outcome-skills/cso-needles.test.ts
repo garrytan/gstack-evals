@@ -51,3 +51,19 @@ test("an archive holding a file name that is not UTF-8 is still opened and scann
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("a CVE id beside a byte that is not UTF-8 is still found: the scan reads bytes under the C locale", () => {
+  const root = mkdtempSync(join(tmpdir(), "cso-needles-bytes-"));
+  const before = process.env.LC_ALL;
+  process.env.LC_ALL = "C.UTF-8";
+  try {
+    writeFileSync(join(root, "blob.bin"), Buffer.concat([Buffer.from("see CVE-2026-1111"), Buffer.from([0xff, 0xfe]), Buffer.from(" here\n")]));
+    const hits = scanIds(root, [{ unit: "u1", ghsa: "GHSA-2222-3333-4444", cves: ["CVE-2026-1111"], fix_commit: "b".repeat(40) }]).hits;
+    expect(hits.map((h) => [h.unit, h.kind, h.path])).toEqual([["u1", "cve", "blob.bin"]]);
+  } finally {
+    if (before === undefined) delete process.env.LC_ALL;
+    else process.env.LC_ALL = before;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+

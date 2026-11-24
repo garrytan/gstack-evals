@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# GEVA-583 pilot (rerun prereg section 8 step 2): the new cso arm at a3ecfd53 on the 5 pilot units, Opus 5.5 then
+# particle-1 per unit, one session at a time, under cso2-pilot's $40 cap split Opus $33.20 and particle-1 $6.80. Each
+# rerun's spend cap is its model's room left after finished sessions. Any cap stop ends the pilot; it is never re-piloted.
+set -uo pipefail
+export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
+L=$HOME/cso2-ledger; export GSTACK_EVALS_LEDGER=$L/ledger.sqlite GSTACK_EVALS_LEDGER_RECORD=$L/record
+for k in ANTHROPIC_API_KEY OPENROUTER_API_KEY; do export $k="$(cat $HOME/.keys/$k)"; done
+unset OPENAI_API_KEY CSO_READOUT_KEY
+G=$HOME/work/gstack-evals; cd $G; GE=$G/bin/gstack-evals
+export CSO_PLAN=rerun
+S=$HOME/pilot; mkdir -p $S/units
+declare -A CAP=([opus]=33.20 [particle]=6.80)
+step() { echo "== $1 $(date -u +%FT%TZ)"; }
+step head; git log --oneline -1; echo "dirty $(git status --porcelain --untracked-files=all | wc -l)"
+mapfile -t UNITS < $HOME/pilot-units.txt; echo "units ${#UNITS[@]}: ${UNITS[*]}"
+[ ${#UNITS[@]} = 5 ] || { echo "need 5 pilot units"; exit 1; }
+step admit
+[ -e $S/admitted ] || { GSTACK_EVALS_GH_BIN=$HOME/bin/ghshim sg docker -c "$GE rig admit --item cso2-pilot --proof direct --prereg wiki/plans/2026-11-23-geva-583-cso-rerun-prereg/README.md --run cso2-pilot --check-run $(cat $HOME/ci-run) --repo garrytan/gstack-evals" && touch $S/admitted || { echo "admit failed"; exit 1; }; }
+step serve
+GW=$(sg docker -c "docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}'")
+MID=$(cat $HOME/machine-id)
+setsid -f $GE outcome serve --run cso2-pilot --envelope-host $MID --stage cso2-pilot=cso:cso --host $GW --dir $S/driver --planned 10 --reruns 4 --cso-allowance claude-opus-5-5=16 > $S/serve.log 2>&1 < /dev/null
+for i in $(seq 60); do grep -q '^stage=' $S/serve.log && break; grep -q '^E_' $S/serve.log && break; sleep 2; done
+cat $S/serve.log
+export CSO_CONTROL=$(sed -n 's/^control=//p' $S/serve.log) CSO_PROXY=$(sed -n 's/^stage=.* proxy=//p' $S/serve.log)
+[ -n "$CSO_CONTROL" ] && [ -n "$CSO_PROXY" ] || { echo "driver did not start"; exit 1; }
+export CSO_WORK=$HOME/units CSO_HOME=$HOME/homes/cso CSO_STAGE=rerun-pilot CSO_OUT=$S/sessions
+alive() { pgrep -f "[o]utcome serve --run cso2-pilot" > /dev/null; }
+spent() { find $S/sessions -path "*-$1-*" -name session.json -print0 2>/dev/null | xargs -0 -r jq -s '[.[].cost_usd // 0] | add // 0'; }
+n=0; stop=""
+for U in "${UNITS[@]}"; do
+  for m in opus particle; do
+    n=$((n + 1))
+    echo "[\"$U\"]" > $S/units/$U.json
+    f=$(spent $m); f=${f:-0}
+    ROOM=$(awk -v c=${CAP[$m]} -v f=$f 'BEGIN { printf "%.2f", c - f }')
+    extra=""; [ $m = opus ] && extra="--allowance 16"
+    step "session $n $U cso $m room $ROOM"
+    t0=$(date +%s)
+    if awk -v r=$ROOM 'BEGIN { exit !(r > 0) }'; then sg docker -c "$GE cso rerun --arm cso --model $m --units $S/units/$U.json --spend-cap $ROOM $extra"; rc=$?; else rc=10; echo "room $ROOM: nothing left under \$${CAP[$m]}"; fi
+    echo "rerun exit $rc wall $(( $(date +%s) - t0 ))s session $n"
+    [ $rc = 10 ] && { stop="cap stop on $m at session $n"; break 2; }
+    [ $rc != 0 ] && ! alive && { stop="driver gone after session $n"; break 2; }
+  done
+done
+[ -n "$stop" ] && echo "PILOT STOPPED: $stop"
+step stop
+curl -s -X POST $CSO_CONTROL/stop; sleep 15; alive && pkill -TERM -f "[o]utcome serve --run cso2-pilot"; sleep 10; tail -5 $S/serve.log
+$GE ledger status --item cso2-pilot 2>&1 | head -12
+step sessions-file
+find $S/sessions/rerun-pilot -name session.json | sort | xargs -I{} jq -c . {} > $S/sessions.jsonl; echo "sessions $(wc -l < $S/sessions.jsonl)"
+jq -c '{unit, model, end, cost_usd, wall_sec, loaded: .exposure.loaded, ran: .exposure.procedure_ran, findings_submitted: .exposure.findings_submitted}' $S/sessions.jsonl
+echo PILOT_DONE

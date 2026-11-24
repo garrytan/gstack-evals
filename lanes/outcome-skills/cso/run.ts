@@ -12,6 +12,7 @@
 // session needs the readout key (section 12): its session.json is one sealed row, and when it ends, halts or fails every
 // other file in its dir (transcripts, Claude Code's session log, Harbor's logs and job dirs) becomes <file>.sealed.
 import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,6 +27,7 @@ import { CSO_PREFIX, csoDriverModels } from "./driver.ts";
 import { events } from "../h2h/sessions/exposure.ts";
 import { csoExposure, loaded } from "./exposure.ts";
 import { sealBytes, sealedStage, sealRow } from "./analysis/readout.ts";
+import { sessionTreeSha256 } from "./units/build.ts";
 import { csoFail, loadCsoPrereg, type CsoPrereg } from "./prereg.ts";
 import { csoConfig, csoLimits, csoSessionRecord, harborModel, modelId, readEnd, withRefusalFallback, type EndRead } from "./sessions.ts";
 import type { CsoArm, CsoModel, CsoStage, SessionRecord, UnitRecord } from "./types.ts";
@@ -40,11 +42,27 @@ export const CSO_PROBE_NODE = "/usr/local/bin/node";
 /** The whole-session retry's meta.rerun. */
 export const CSO_RERUN = "upstream or infra end";
 const KEEP = ["sdk-messages.jsonl", "claude-session.jsonl", SUMMARY];
+/** The /cso helper's run records the session agent saves out of the container under the rerun plan (cso_records=save). */
+export const CSO_RECORDS_DIR = "cso-records";
+/** Every helper run record (report.json) saved from one session, in path order; an unreadable one is left out. */
+export function readRunRecords(dir: string): Record<string, unknown>[] {
+  if (!existsSync(dir)) return [];
+  const out: Record<string, unknown>[] = [];
+  for (const repo of readdirSync(dir).sort())
+    for (const run of existsSync(join(dir, repo)) ? readdirSync(join(dir, repo)).sort() : []) {
+      const f = join(dir, repo, run, "report.json");
+      if (!existsSync(f)) continue;
+      try {
+        out.push(JSON.parse(readFileSync(f, "utf8")));
+      } catch {}
+    }
+  return out;
+}
 type Rec = Record<string, any>;
 
 /** Builds a unit's session image: CSO_BASE_IMAGE with the session tree (one commit) at /work/repo, pinned by image id. The
- *  session runs by a tag that carries the built id (deviation (e)), so another build of the same unit, which moves the
- *  unit's own tag, can't change the image a running session's task resolves. */
+ *  session runs by a tag that carries the built id (deviation (e)), and the build itself tags a name of its own, so two
+ *  builds of one unit at once never share a tag (the rerun lost three first attempts to a shared one). */
 export function buildCsoImage(unit: UnitRecord, tree: string, base: string = CSO_BASE_IMAGE): SessionImage {
   const head = spawnSync("git", ["-C", tree, "rev-parse", "HEAD"], { encoding: "utf8" });
   if (head.status !== 0) csoFail("E_CSO_SESSION", tree + " is not the unit's session tree: " + head.stderr.trim());
@@ -52,12 +70,13 @@ export function buildCsoImage(unit: UnitRecord, tree: string, base: string = CSO
   try {
     cpSync(tree, join(ctx, "repo"), { recursive: true, verbatimSymlinks: true });
     writeFileSync(join(ctx, "Dockerfile"), "FROM " + base + "\nCOPY repo " + CSO_REPO_DIR + "\nWORKDIR " + CSO_REPO_DIR + "\n");
-    const tag = "gstack-evals-cso-session:" + unit.tree_sha256.slice(0, 16);
-    const b = spawnSync("docker", ["build", "-q", "-t", tag, ctx], { encoding: "utf8", maxBuffer: 16 << 20 });
+    const tag = "gstack-evals-cso-session:" + unit.tree_sha256.slice(0, 16), building = tag + "-build-" + randomBytes(6).toString("hex");
+    const b = spawnSync("docker", ["build", "-q", "-t", building, ctx], { encoding: "utf8", maxBuffer: 16 << 20 });
     if (b.status !== 0) csoFail("E_CSO_SESSION", "docker build of " + unit.unit + "'s session image failed: " + String(b.stderr).trim().slice(-500));
     const id = b.stdout.trim(), pinned = tag + "-" + id.replace(/^sha256:/, "").slice(0, 12);
     const t = spawnSync("docker", ["tag", id, pinned], { encoding: "utf8" });
     if (t.status !== 0) csoFail("E_CSO_SESSION", "docker tag of " + unit.unit + "'s session image failed: " + String(t.stderr).trim().slice(-500));
+    spawnSync("docker", ["rmi", building], { encoding: "utf8" });
     return { image_id: id, tag: pinned, runtime_id: base, volume: "", commits: 1, head: head.stdout.trim(), home: "none", tree_patch_sha256: null, qa_home: null, removed: [] };
   } finally {
     rmSync(ctx, { recursive: true, force: true });
@@ -105,6 +124,7 @@ export function csoRunCopy(i: CsoSessionInput, attempt: 1 | 2, dir: string, p: C
   const ak: Record<string, string> = {
     skip_install: "true", task_json: taskJson, h2h_config: h2hJson, arm: CSO_PREFIX + i.arm, arm_tar: armTar, upstream_model: upstream, control_url: i.control, ledger: "u4", task_label: label(i), trial_n: "1",
     ...(attempt === 2 ? { rerun: CSO_RERUN } : {}), image_id: i.image.image_id, manifest, manifest_sha256: manifestSha, repo_dir: CSO_REPO_DIR, workdir: CSO_WORK_DIR, probe_node: CSO_PROBE_NODE, ...(i.home.dir ? { home_owner: "session" } : {}),
+    ...(p.rerun && i.home.dir ? { cso_records: "save" } : {}),
   };
   const argv = ["run", "-y", "-p", task, "-a", "h2h_agent:H2hAgent", "-m", harborModel(i.model, p), "--base-url", /^https?:\/\//.test(i.proxy) ? i.proxy : "http://" + i.proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "--extra-docker-compose", compose, "-o", join(dir, "jobs"), "--job-name", (i.jobName ?? "cso-" + i.unit.unit + "-" + i.arm + "-" + i.model + "-" + i.index) + "-a" + attempt, "--disable-verification"];
   return { argv, env, config };
@@ -147,11 +167,13 @@ function find(dir: string, name: string): string | null {
 export async function csoHaltCheck(i: Pick<CsoSessionInput, "unit" | "arm" | "model" | "stage" | "index" | "control">, attempt: 1 | 2, summary: Rec | null, ev: string | null, dir: string): Promise<void> {
   const at = label(i) + " attempt " + attempt;
   const close = summary?.slot?.close;
-  if (close?.finalized === false && !((close.allowance_stops ?? 0) > 0)) csoFail("E_CSO_FINALIZE_HALT", at + ": the proxy's finalize failed at the close of slot " + summary?.slot?.id + ", so its counts are unknown; the session halts with no retry and no record, and the driver's journal names it; " + dir);
+  const stopDriver = () => fetch(i.control + "/stop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "E_CSO_FINALIZE_HALT", session: at }), signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? null : "it answered " + r.status), (e: Error) => e.message);
+  const stopped = (stop: string | null) => (stop ? "POST " + i.control + "/stop failed (" + stop + "): stop the driver by hand; " : "the driver was stopped through POST /stop; ");
+  if (close?.finalized === false && !((close.allowance_stops ?? 0) > 0)) csoFail("E_CSO_FINALIZE_HALT", at + ": the proxy's finalize failed at the close of slot " + summary?.slot?.id + ", so its counts are unknown; the session halts with no retry and no record, the driver's journal names it, and " + stopped(await stopDriver()) + dir);
   const opened = !summary && ev !== null && existsSync(join(ev, OPENS)) && readFileSync(join(ev, OPENS), "utf8").trim() !== "";
   if (!opened) return;
-  const stop = await fetch(i.control + "/stop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "E_CSO_FINALIZE_HALT", session: at }), signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? null : "it answered " + r.status), (e: Error) => e.message);
-  csoFail("E_CSO_FINALIZE_HALT", at + ": the attempt wrote an open line (" + join(ev!, OPENS) + ") and left no summary, so its slot may have spent; the session halts with no retry and no record, and " + (stop ? "POST " + i.control + "/stop failed (" + stop + "): stop the driver by hand; " : "the driver was stopped through POST /stop; ") + dir);
+  const stop = await stopDriver();
+  csoFail("E_CSO_FINALIZE_HALT", at + ": the attempt wrote an open line (" + join(ev!, OPENS) + ") and left no summary, so its slot may have spent; the session halts with no retry and no record, and " + stopped(stop) + dir);
 }
 
 const readJsonl = (f: string): Rec[] => (existsSync(f) ? readFileSync(f, "utf8").split("\n").filter((l) => l.trim()).flatMap((l) => { try { return [JSON.parse(l) as Rec]; } catch { return []; } }) : []);
@@ -171,6 +193,10 @@ export async function runCsoSession(i: CsoSessionInput): Promise<{ record: Sessi
   if (existsSync(i.out)) csoFail("E_CSO_SESSION", i.out + " exists; each session writes a new run dir");
   if ((i.arm === "none") !== (i.home.dir === null)) csoFail("E_CSO_ARM", i.arm + (i.arm === "none" ? " runs with no home" : " needs its installed home"));
   if (i.home.dir !== null && homeTreeSha256(i.home.dir) !== i.home.home_tree_sha256) csoFail("E_CSO_ARM", i.arm + "'s home " + i.home.dir + " no longer hashes to its arm record's " + i.home.home_tree_sha256);
+  if (loadCsoPrereg().rerun) {
+    const got = sessionTreeSha256(i.tree);
+    if (got !== i.unit.tree_sha256) csoFail("E_CSO_SESSION", i.unit.unit + "'s session tree " + i.tree + " hashes to " + got + ", not its unit record's " + i.unit.tree_sha256 + "; the session does not run");
+  }
   const key = sealedStage(i.stage) ? (i.seal ?? csoFail("E_CSO_SESSION", label(i) + ": stage 1 and re-pilot sessions are sealed to the readout key (section 12), and none was given")) : null;
   mkdirSync(i.out, { recursive: true });
   try {
@@ -209,6 +235,10 @@ async function session(i: CsoSessionInput, key: Buffer | null): Promise<{ record
     const summary = ev && existsSync(join(ev, SUMMARY)) ? (withRefusalFallback(JSON.parse(readFileSync(join(ev, SUMMARY), "utf8")) as Rec, join(ev, "sdk-messages.jsonl")) as Rec) : null;
     await csoHaltCheck(i, attempt, summary, ev, dir);
     if (ev) for (const f of KEEP) if (existsSync(join(ev, f))) copyFileSync(join(ev, f), join(i.out, f));
+    rmSync(join(i.out, CSO_RECORDS_DIR), { recursive: true, force: true });
+    if (ev && existsSync(join(ev, CSO_RECORDS_DIR))) {
+      cpSync(join(ev, CSO_RECORDS_DIR), join(i.out, CSO_RECORDS_DIR), { recursive: true });
+    }
     const records = ev ? [...readJsonl(join(ev, "sdk-messages.jsonl"))] : [];
     usage.push(attemptUsage(attempt, summary as never, allowance));
     const end = readEnd(summary, attempt, records);
@@ -220,7 +250,9 @@ async function session(i: CsoSessionInput, key: Buffer | null): Promise<{ record
       break;
     }
   }
-  const read = csoExposure(last!.records, tree);
+  const runRecords = p.rerun ? readRunRecords(join(i.out, CSO_RECORDS_DIR)) : [];
+  const read = csoExposure(last!.records, tree, p.rerun ? { fixed: true, runRecords } : {});
+  if (p.rerun) writeFileSync(join(i.out, "exposure.json"), JSON.stringify({ schema: "cso-rerun-exposure.v1", fixed: read.exposure, frozen: csoExposure(last!.records, tree).exposure, run_records: runRecords.length }, null, 1) + "\n", { flag: "wx" });
   const exposure = { ...read.exposure, loaded: read.exposure.loaded || loaded(events(last!.log as never)) };
   const helper = read.helper;
   const record = csoSessionRecord({ unit: i.unit.unit, arm: i.arm, model: i.model, stage: i.stage, attempts: last!.attempt, end: last!.end, summary: last!.summary, records: last!.records, repoDir: CSO_REPO_DIR, exposure, helper, usage, wall_sec: Math.round((Date.now() - started) / 1000) });
