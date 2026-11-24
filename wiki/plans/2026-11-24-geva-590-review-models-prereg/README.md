@@ -207,7 +207,7 @@ So this run can settle the per-dollar calls and can't tell a gain of a few point
 ## Interim look
 
 Planned paid spend: $5,819
-At: half the bug units, 50 of 100, in seeded order, with the decoys run alongside
+At: half the counted bug units, rounded down, in seeded order (50 of 100; 40 at the 80-unit floor), with the decoys run alongside; the look sits at an information fraction of 0.5 whatever the size of the counted set
 Stop bounds: futility only, per contrast; a contrast's cells that no other contrast needs stop when its paired net value's upper bound at z 2.797 is below 0; the final test uses z 1.655, so the one-sided error over both looks is 5%; there is no early stop for a gain
 Other looks: none
 
