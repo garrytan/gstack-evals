@@ -17,7 +17,7 @@ links:
   - src/trial/review/
 attachments:
   - aaac7061ee366ec270e29c6edf67abc90e149ef010defa499cf0cbde26d49692  power-rows.txt
-  - 1e73f9a0b6323aa19bb25c3e4bd2ce122ec24e7695d75c5713de1d435ef13954  power-sim.txt
+  - d46e197a412aa9579db066c5db250772c523f82799b8570b3a519080d903b2da  power-sim.txt
 ---
 
 # Preregistration: is a review pass better with Opus 5.5 and Sol, or with Fable 5.2 and Astra?
@@ -26,13 +26,13 @@ attachments:
 
 Garry asked on 2026-11-24: "Can you do some evals to see if review passes are better as opus and sol or fable and astra?" A gstack /review pass has two model choices. The main reviewer is the Claude Code session that runs /review, its specialist subagents, its red team and its adversarial subagent. The second-model voice is the Codex pass /review calls on another model family. This eval crosses the two: main reviewer Opus 5.5 or Fable 5.2, voice GPT-6.2 Sol or GPT-6.2 Astra, plus a plain Opus review with no gstack. It runs them on 100 real bugs from other people's repositories, each with a later real fix, and 15 clean PRs.
 
-Fable costs about 2.5 times Opus per review and Astra about 4 times Sol, so the question that changes a decision is whether the gain pays for the cost. At the factory's rule of about $25 per extra catch (R38), Fable must catch about 30 more bugs per 100 and Astra about 18 more. The eval is sized to settle that, and it can't see gains of a few points: its smallest detectable main effect is about 9 to 10 points.
+Fable costs about 2.5 times Opus per review and Astra about 4 times Sol, so the question that changes a decision is whether the gain pays for the cost. At the factory's rule of about $25 per extra catch (R38), Fable must catch about 30 more bugs per 100 and Astra about 18 more. The eval is sized to settle that, and it can't see gains of a few points: its smallest detectable main effect is about 9 to 10 points, where the power check reached 0.77 to 0.80 rather than a full 80% (section 9).
 
 Nothing measured yet says what the voice adds. In Harness Evals' review-real-bugs eval the voice ran in none of 178 /review passes, because its image could not start Codex's sandbox.
 
 ## Approval
 
-The Captain (GEVA-2) approved the staged design on 2026-11-24 ("A: the staged design at 100 bugs") and is taking the line to Garry. This post approves no spend. No paid call runs until this post merges, Garry approves the line, and the Captain records each ledger item's cap in its approvals file. If Garry names a value per catch other than $25, a dated pre-run change replaces $25 everywhere below before the pilot.
+Garry approved the line on 2026-11-24 ("do it", relayed by the Captain, GEVA-2, and recorded in its approvals/2026-11-24-review-models-eval.md): A1, the staged design at 100 bugs (section 7), and C1, $25 per extra caught bug. The full four-way counted run comes back to him only if Fable survives the staged rule. This post approves no spend. No paid call runs until this post merges and the Captain records each ledger item's cap in its approvals file.
 
 ## 1. Question
 
@@ -48,14 +48,15 @@ The eval does not test the shipped gpt-6-astra default, /ship's review steps (wh
 
 ## Decision
 
-Net value per unit for a contrast B against A = $25 x (B's catch minus A's) minus (B's cost minus A's). "Pays" means the 95% interval of mean net value is above 0; "doesn't pay" means its one-sided upper bound (section 8) is below 0; anything else is "unsettled". Each unit holds one known bug, so the cost per extra catch here is a floor: on real PRs, most of which hold no such bug, it is higher.
+Garry set both decision rules on 2026-11-24: the staged path (A1) and $25 per extra catch (C1). Net value per unit for a contrast B against A = $25 x (B's catch minus A's) minus (B's cost minus A's). "Pays" means the 95% interval of mean net value is above 0; "doesn't pay" means its one-sided upper bound (section 8) is below 0; anything else is "unsettled". Each unit holds one known bug, so the cost per extra catch here is a floor: on real PRs, most of which hold no such bug, it is higher.
 
 | Outcome | What we do |
 |---|---|
 | Neither Fable nor Astra pays (the expected result) | Factory keeps Opus and Sol for review; R38's Fable line gains a review row with the measured cost per extra catch. GStack Minder gets the case to ship gpt-6.2-sol as gstack's default voice in place of gpt-6-astra, with this eval's limit (it tested 6.2 Astra, not 6 Astra) stated. |
 | Fable catches more (two-sided interval above 0) but doesn't pay | R38 stands. Its record gains "Fable finds N more real bugs per 100 at $X each", and Garry hears it in plain words so he can say if a review catch is worth more than a coding solve. |
 | Fable pays | R38 gains a review exception: /ship's review and high-stakes /review run in a Fable session. gstack's docs recommend Fable for review sessions, with the cost. |
-| Astra pays and Fable doesn't (the voice matters, the main reviewer doesn't) | Factory voice moves to GPT-6.2 Astra; GStack Minder gets the case to ship gpt-6.2-astra as the default voice; the main reviewer stays Opus. |
+| Astra pays and Fable doesn't, and the paired OA-minus-OS net value pays too (the voice matters on Opus, the main reviewer doesn't) | Factory voice moves to GPT-6.2 Astra; GStack Minder gets the case to ship gpt-6.2-astra as the default voice; the main reviewer stays Opus. |
+| Astra pays on average but OA minus OS doesn't pay or is unsettled | Factory keeps Sol with Opus; the result prints the voice effect on each main reviewer with its interval, and no default moves on the averaged effect alone. |
 | Astra catches more but doesn't pay | Factory keeps Sol; GStack Minder gets the case for Sol as the default, with Astra's measured gain stated beside its cost. |
 | Both pay | The best net-value cell is recommended for review sessions in the factory and gstack's docs; defaults change only in the cell whose false blockers and wall time are within the limits in section 5. |
 | Only Fable with Astra pays (an interaction) | gstack documents an opt-in deep-review setting (Fable session, Astra voice); defaults stay. |
@@ -147,7 +148,7 @@ A review is exposed when all of these hold. Exposure prints per arm beside every
 
 ## Pilots
 
-The pilot runs 10 bug units that the counted run never uses (5 from P that Harness Evals never ran, 5 from B) and 1 decoy, every arm once: 55 reviews. Budget below is each arm's counted cap; the pilot cap is at most a tenth of it.
+The pilot runs 10 bug units that the counted run never uses (5 from P that Harness Evals never ran, which are the last 5 such units in suite rank order and are held back before the counted set is drawn, and 5 from B) and 1 decoy, every arm once: 55 reviews. Budget below is each arm's counted cap; the pilot cap is at most a tenth of it. A pilot rerun under section 8's gap rule draws on the retry reserve (section 11), not on the arm's pilot cap, so N's $11 holds its 11 reviews at the $1 per-review cap.
 
 | Arm | Budget | Pilot cap | Part ran | Judge check | Supply |
 |---|---|---|---|---|---|
@@ -168,15 +169,15 @@ Labelled outputs: 120
 Kappa at least: 0.6
 Errors read: per arm
 
-The 120 labelled reviews are fresh, at least 20 per arm: the pilot's 55 plus counted reviews drawn in seeded order before any score is read. Two labellers read each review fix-aware and blind to arm: Claude Opus 5.5 and GPT-6.2 Astra, both from families under test, so both are shown normalised reports with model names, voice headers and severity vocabulary mapped to one set. Disagreements go to a blind adjudication read by both labellers with each other's reasons, and stay in the check with the adjudicated label; nothing is dropped for disagreeing. Carbon's kappa against those labels must be at least 0.6 pooled, with its errors, abstentions and empty replies printed per arm and per pool (P, B). No counted number is read before the check passes. If it fails, the judge brief gets one revision on the labelled set and one re-check; a second failure leaves the primary unreported and the location hit printed alone as description.
+The 120 labelled reviews are fresh: the pilot's 55 plus counted reviews drawn in seeded order before any score is read, with at least 20 for each arm the counted run scores. If Fable leaves at the pilot, FS and FA keep their 22 pilot labels in the check but count toward no arm's 20; each surviving arm reaches 20 or more from counted reviews, and the check reaches 120 by topping up with further labels from the Opus arms (OS and OA). The results page says so. Two labellers read each review fix-aware and blind to arm: Claude Opus 5.5 and GPT-6.2 Astra, both from families under test, so both are shown normalised reports with model names, voice headers and severity vocabulary mapped to one set. Disagreements go to a blind adjudication read by both labellers with each other's reasons, and stay in the check with the adjudicated label; nothing is dropped for disagreeing. Carbon's kappa against those labels must be at least 0.6 pooled, with its errors, abstentions and empty replies printed per arm and per pool (P, B). No counted number is read before the check passes. If it fails, the judge brief gets one revision on the labelled set and one re-check; a second failure leaves the primary unreported and the location hit printed alone as description.
 
 ## 7. The staged rule (frozen before the pilot)
 
 The counted set (section 2) is drawn before the pilot, so its share of P and B units is known. After the pilot, for the main reviewer only:
 
 - Cost gap = the pilot's lower 95% bound on (Fable cell cost minus Opus cell cost) per review, paired by unit and voice.
-- Headroom = the counted set's P share times (100% minus the Clopper-Pearson lower 95% bound of the Opus catch rate on P units, from Harness Evals' 54 Opus /review units pooled with the pilot's OS and OA reviews on P units), plus its B share times (100% minus the same bound on the pilot's OS and OA reviews on B units alone). B has no history and few pilot reviews, so its bound is low and its headroom large; the rule never takes a rate from P to stand for B.
-- If cost gap / $25 is greater than that headroom, Fable can't pay even by catching every bug left in the counted set. FS and FA leave the counted run, and the outcome is the "Fable leaves at the pilot" row. With an all-P set and today's figures that happens when Fable costs about 2.85 times Opus per review or more; with B units in the set it needs a larger ratio.
+- Headroom = the counted set's P share times (100% minus the lower of two Clopper-Pearson lower 95% bounds of the Opus catch rate on P units: one from Harness Evals' 54 Opus /review units pooled with the pilot's OS and OA reviews on P units, and one from the pilot's OS and OA reviews on P units alone). Taking the lower bound means older Opus runs that caught more than today's Opus cells can't shrink the headroom and drop Fable; the rule errs toward keeping Fable, plus its B share times (100% minus the same bound on the pilot's OS and OA reviews on B units alone). B has no history and few pilot reviews, so its bound is low and its headroom large; the rule never takes a rate from P to stand for B.
+- If cost gap / $25 is greater than that headroom, Fable can't pay even by catching every bug left in the counted set. FS and FA leave the counted run, and the outcome is the "Fable leaves at the pilot" row. With the pooled bound alone, an all-P set and today's figures, that happens when Fable costs about 2.85 times Opus per review or more; the lower bound can only raise that ratio, by an amount the pilot sets, and B units in the set raise it further.
 - The voice is never dropped this way: its break-even (about 18 points) sits inside any plausible headroom.
 
 ## 8. Analysis
@@ -184,23 +185,23 @@ The counted set (section 2) is drawn before the pilot, so its share of P and B u
 - Main effect of the main reviewer = mean over units of (FS + FA)/2 minus (OS + OA)/2; of the voice, (OA + FA)/2 minus (OS + FS)/2. After Fable leaves, the voice contrast is OA minus OS.
 - 95% intervals by bootstrap clustered by PR for P and by repository for B, 10,000 draws, seed 20261124.
 - Catches more: two-sided, Holm over the two main effects.
-- Pays or doesn't: the paired net value per unit, with one-sided bounds at z 1.655 at the end and z 2.797 at the look (see Interim look), which hold each contrast's one-sided error at 5% across both looks. The two contrasts are separate decisions with separate actions (the factory's main reviewer, and the voice), so each is tested at its own 5% with no Holm step; the chance that at least one of the two reads "doesn't pay" when both are exactly at break-even is up to about 10%, and the results page says so. Cost and catch come from the same units, so their uncertainty is joint.
+- Pays or doesn't: the paired net value per unit, with one-sided bounds at z 1.655 at the end and z 2.797 at the look (see Interim look), which hold each contrast's one-sided error at 5% across both looks. Each bound is the mean paired net value plus z times its clustered bootstrap standard error (from the same 10,000 draws), not a bootstrap percentile. The two contrasts are separate decisions with separate actions (the factory's main reviewer, and the voice), so each is tested at its own 5% with no Holm step; the chance that at least one of the two reads "doesn't pay" when both are exactly at break-even is up to about 10%, and the results page says so. Cost and catch come from the same units, so their uncertainty is joint.
 - The package (FA minus OS) and the interaction are secondary, printed with intervals.
 - Strata P and B print beside the pooled result; S2-openai units (found by OpenAI-model tools) print apart for the voice contrast.
 - Gaps: a review that ends on a provider or infrastructure error reruns once; a second failure is a gap, scored dropped and as a miss. A provider safety stop is its own outcome (R95) and is never moved to another model.
 
 ## 9. Power and MDD
 
-Simulated in power-sim.txt; every row is in power-rows.txt. Each bug has its own catch chance, drawn from a beta with concentration 0.5, plus a per-arm, per-bug logit wobble of 2.0, both fitted to Harness Evals' per-pass stage 1 data (HARN-154: 54 outside bugs, /review and plain on Opus 5.5, 2 passes each). The fit matches pass-to-pass disagreement within an arm (11% and 13% observed), disagreement across arms (23%) and the spread of per-bug differences (SD 0.39). It comes from /review against a plain prompt, which differ more than two models running the same /review, so it is likely conservative here.
+Simulated in power-sim.txt; every row is in power-rows.txt. Each bug has its own catch chance, drawn from a beta with concentration 0.5, plus a per-arm, per-bug logit wobble of 2.0, both fitted to Harness Evals' per-pass stage 1 data (HARN-154: 54 outside bugs, /review and plain on Opus 5.5, 2 passes each). The fit matches pass-to-pass disagreement within an arm (11% and 13% observed), disagreement across arms (23%) and the spread of per-bug differences (SD 0.39). It comes from /review against a plain prompt, which differ more than two models running the same /review, so on that count it likely overstates the spread here. Two things go the other way: the simulation draws bugs independently and has no gaps, while the analysis clusters by PR or repository and scores gaps as misses. Real power at these MDDs is likely lower than the check run's, and the results page says so.
 
 | Reading at 100 bug units | Result |
 |---|---|
-| MDD, main effects, catches more (80% power, Holm) | 8.7 to 10.2 points (P-like pool to P+B mix) |
-| MDD, Opus-only voice pair after Fable leaves | 11.8 to 14.3 points |
+| MDD, main effects, catches more (Holm; calibrated for 80% power, and the check run reached 0.77 to 0.80 at these values) | 8.7 to 10.2 points (P-like pool to P+B mix) |
+| MDD, Opus-only voice pair after Fable leaves (the check run reached 0.74 to 0.82) | 11.8 to 14.3 points |
 | Fable doesn't pay, true gain up to 10 points | power 1.00 |
 | Astra doesn't pay, full 2x2, true gain 0, 5 and 7 points | power 0.99, 0.90 and 0.78 to 0.80 |
 | Astra doesn't pay, Opus-only pair, true gain 0, 5 and 7 points | power 0.94 to 0.95, 0.74 to 0.76 and 0.62 to 0.66 |
-| Floor, 80 bug units: MDD, main effects | 9.5 to 11.9 points |
+| Floor, 80 bug units: MDD, main effects (the check run reached 0.77 to 0.84) | 9.5 to 11.9 points |
 
 So this run can settle the per-dollar calls and can't tell a gain of a few points from nothing. A 5-point MDD would need about 400 bug units, which we don't have.
 
@@ -208,7 +209,7 @@ So this run can settle the per-dollar calls and can't tell a gain of a few point
 
 Planned paid spend: $5,819
 At: half the counted bug units, rounded down, in seeded order (50 of 100; 40 at the 80-unit floor), with the decoys run alongside; the look sits at an information fraction of 0.5 for an even counted size and just under it for an odd one (0.494 at 81 units), and frac.py in power-sim.txt shows the bounds' one-sided error stays at 0.0495 across that range
-Stop bounds: futility only, per contrast; a contrast's cells that no other contrast needs stop when its paired net value's upper bound at z 2.797 is below 0; the final test uses z 1.655, so the one-sided error over both looks is 5%; there is no early stop for a gain
+Stop bounds: futility only, per contrast. A contrast whose paired net value's upper bound at z 2.797 is below 0 at the look is decided then, as a binding "doesn't pay", and is not read again at the end. Its cells stop only when no open contrast needs them: in the full 2x2 both main effects use all four cells, so cells stop only when both contrasts cross; after Fable leaves, OA stops when the OA-minus-OS pair crosses. The final test uses z 1.655, so the one-sided error over both looks is 5%; there is no early stop for a gain
 Other looks: none
 
 ## 10. Harness: what the run branch builds
@@ -220,6 +221,7 @@ All on the run branch, before the pilot, each with a test:
 3. The B-unit builder: SZZ, gates, containment, and the unit as a PR on the BIC's parent.
 4. The Carbon judge call, the location hit and the scorer, in shared tested modules.
 5. The staged rule and the look, as code that reads the ledger's cost rows.
+6. The Carbon judge route at its 2026-12-01 rate: src/runner/pricing/prices.ts pins Carbon to google-vertex with a $2 and $10 ceiling, and the proxy routes with that ceiling, so the run branch moves the row to the new rate before that date, with a keyless route preflight that shows a judge request routes at the new ceiling before any review spends.
 
 ## 11. Money
 
