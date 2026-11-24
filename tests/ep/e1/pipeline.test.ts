@@ -21,11 +21,12 @@ const unit = (id: string): PlantedUnit => ({ id, repo: "r-" + id, set: "comparis
 
 describe("items", () => {
   test("14 counted items and the pilot; sums match section 11", () => {
-    const c = E1_ITEMS.filter((i) => i.item !== "e1-pilot");
+    const c = E1_ITEMS.filter((i) => i.item !== "e1-pilot" && i.item !== "e1-supply");
     expect(c.length).toBe(14);
     expect(Math.round(c.reduce((s, i) => s + i.projectionUsd, 0))).toBe(2898);
     expect(Math.round(c.reduce((s, i) => s + i.capUsd, 0))).toBe(3478);
     expect(e1Item("e1-pilot").capUsd).toBe(165);
+    expect(e1Item("e1-supply").capUsd).toBe(220);
     expect(() => e1Item("e1-p-sol")).toThrow(/no line item/);
   });
   test("cells: every arm on its models, two a unit, units in order, a unit's cells seeded", () => {

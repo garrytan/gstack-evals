@@ -56,6 +56,7 @@ export const E1_ITEMS: readonly ItemPlan[] = [
     return plan(itemName(a, m), "Counted cells, " + a + " on " + m + ": " + COUNTED + " x $" + f.toFixed(2), COUNTED, f, p, Math.round(p * CAP_RATIO * 100) / 100);
   }),
   plan("e1-pilot", "Pilot: 84 cells on the 6 calibration units", E1.units.calibration * pairs.length, 136 / (E1.units.calibration * pairs.length), 136, 165),
+  { item: "e1-supply", row: "Supply: state labels and reach ratings on the pool and wave 2 (one call cell a unit screened), wave 2's authoring (calls and a hinted build a unit)", projectionUsd: 180, capUsd: 220, kinds: { call: { planned: 500, usd: (180 - 60 * BUILD_FIGURE) / 500 }, build: { planned: 60, usd: BUILD_FIGURE } } },
 ];
 export const e1Item = (name: string): ItemPlan => E1_ITEMS.find((i) => i.item === name) ?? fail("E_USAGE", "eval 1 has no line item " + name);
 

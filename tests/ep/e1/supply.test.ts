@@ -39,7 +39,7 @@ describe("state screen", () => {
 
 describe("draw", () => {
   const pass: ScreenRecord = { state: { astra: null, opus: null, eligible: true, packet: "" }, reach: ["yes", "yes"], drop: null, bothYes: true, costUsd: 0 };
-  const u = (i: number, o: Partial<DrawUnit> = {}): DrawUnit => ({ id: "u" + i, repo: "r" + (i % 30), authored: true, foresee: ["yes", "yes"], screen: pass, ...o });
+  const u = (i: number, o: Partial<DrawUnit> = {}): DrawUnit => ({ id: "u" + i, repo: "r" + (i % 30), authoring: "passed", by: "attempt3", foresee: ["yes", "yes"], screen: pass, ...o });
   test("calibration first, comparison, reserve; at most 3 a repository", () => {
     const d = e1Draw("s", Array.from({ length: 120 }, (_, i) => u(i)));
     expect([d.calibration.length, d.comparison.length, d.reserve.length, d.waiting]).toEqual([6, 64, 6, null]);
@@ -55,5 +55,17 @@ describe("draw", () => {
     expect(d.skipped.filter((s) => s.reason === "unforeseeable").length).toBe(4);
     const w = e1Draw("s", [u(1, { screen: null, repo: "a" }), u(2, { repo: "b" })]);
     expect(w.waiting === "u1" ? w.calibration.length <= 1 : true).toBe(true);
+  });
+  test("units authored here follow attempt 3's; a dropped unit is skipped and an owed one stops the walk", () => {
+    const a3 = Array.from({ length: 8 }, (_, i) => u(i, { repo: "a" + i }));
+    const here = Array.from({ length: 8 }, (_, i) => u(100 + i, { repo: "h" + i, by: "here" }));
+    const d = e1Draw("s", [...here, ...a3]);
+    expect(d.calibration.every((id) => Number(id.slice(1)) < 100)).toBe(true);
+    expect(d.comparison.slice(0, 2).every((id) => Number(id.slice(1)) < 100)).toBe(true);
+    expect(d.comparison.slice(2).every((id) => Number(id.slice(1)) >= 100)).toBe(true);
+    const owed = e1Draw("s", [...a3, u(100, { by: "here", authoring: "owed", repo: "h" }), u(101, { by: "here", authoring: "dropped", repo: "g" })]);
+    expect(owed.calibration).toEqual(d.calibration);
+    expect(owed.comparison.length).toBe(2);
+    expect(owed.waiting).toBe("u100");
   });
 });

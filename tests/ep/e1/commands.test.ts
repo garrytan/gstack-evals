@@ -3,7 +3,7 @@
 // comparison's first half, C and P's second half held for the look, the look's refusals and write-once, and the readings.
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordApproval } from "../../../src/runner/ledger/ledger.ts";
@@ -15,6 +15,7 @@ import { E1_ITEMS, itemName } from "../../../lanes/eng-planted/e1/pipeline.ts";
 import { codeOf } from "../../../lanes/eng-planted/stages/cases.ts";
 import type { PlantedSession } from "../../../lanes/eng-planted/stages/build.ts";
 import type { PlantedUnit } from "../../../lanes/eng-planted/types.ts";
+import type { E1Draw, SupplyRole } from "../../../lanes/eng-planted/e1/supply.ts";
 
 const io = () => {
   const out: string[] = [];
@@ -52,7 +53,7 @@ function fixture() {
   mkdirSync(tree);
   writeFileSync(join(tree, "final.patch"), "");
   writeFileSync(join(tree, "sdk-messages.jsonl"), JSON.stringify({ type: "tool_use", input: { file_path: "/work/review/plan.md" } }) + "\n");
-  const calls = { reviews: [] as string[], builds: [] as string[], markers: [] as string[] };
+  const calls = { reviews: [] as string[], builds: [] as string[], markers: [] as string[], supply: [] as string[] };
   const review: E1ReviewSession = async (s) => {
     calls.reviews.push(s.cell);
     const plan = "# Plan\nAdd a state.\nidle -> running\nrunning -> done\ndone -> idle\n";
@@ -70,8 +71,13 @@ function fixture() {
       calls.markers.push(h);
       return MARKER;
     },
+    supply: () => e1StubLauncher(async (role: SupplyRole, prompt: string) => {
+      calls.supply.push(role);
+      const odd = /odd-unit/.test(prompt);
+      return { text: role.startsWith("state") ? JSON.stringify({ defect: "yes", state_shaped: odd ? "no" : "yes", reason: "r" }) : "REACH: yes", costUsd: 0.01 };
+    }),
   };
-  const paid = (item: string, extra: Record<string, string> = {}) => ({ "--run": run, "--units": units, "--repos": repos, "--item": item, "--cap-usd": String(E1_ITEMS.find((i) => i.item === item)!.capUsd), "--ledger-record": record, "--ledger": join(dir, "l.sqlite"), "--crew-usd": "0", "--supply-usd": "0", "--hosts-usd": "0", "--pstack": join(dir, "pstack"), "--work": join(dir, "work"), ...extra });
+  const paid = (item: string, extra: Record<string, string> = {}) => ({ "--run": run, "--units": units, "--repos": repos, "--item": item, "--cap-usd": String(E1_ITEMS.find((i) => i.item === item)!.capUsd), "--ledger-record": record, "--ledger": join(dir, "l.sqlite"), "--crew-usd": "0", "--hosts-usd": "0", "--cache": join(dir, "cache"), "--pstack": join(dir, "pstack"), "--work": join(dir, "work"), ...extra });
   return { dir, run, units, repos, record, calls, cmds: e1Commands(seams), paid };
 }
 
@@ -84,11 +90,11 @@ describe("ledger", () => {
     expect(await f.cmds["e1-ledger"]!.run(args({}), o.io)).toBe(0);
     expect(o.out.filter((l) => l.startsWith("gstack-evals ledger init --item "))).toHaveLength(E1_ITEMS.length);
     expect(o.out[0]).toStartWith("gstack-evals ledger envelope --program geva-587-e1 ");
-    expect(o.out.some((l) => l.includes("--supply-usd"))).toBe(true);
+    expect(o.out.some((l) => l.includes("--item e1-supply --cap 220 "))).toBe(true);
     const p = io();
-    expect(await f.cmds["e1-ledger"]!.run(args({ "--run": f.run, "--crew-usd": "0", "--supply-usd": "0", "--hosts-usd": "0" }, ["--projection"]), p.io)).toBe(0);
+    expect(await f.cmds["e1-ledger"]!.run(args({ "--run": f.run, "--crew-usd": "0", "--hosts-usd": "0" }, ["--projection"]), p.io)).toBe(0);
     expect(p.out.at(-1)).toContain("against the $5000 stop");
-    expect(await codeOf(() => f.cmds["e1-ledger"]!.run(args({ "--run": f.run, "--crew-usd": "1100", "--supply-usd": "900", "--hosts-usd": "0" }, ["--projection"]), io().io))).toBe("E_EP_PROJECTION");
+    expect(await codeOf(() => f.cmds["e1-ledger"]!.run(args({ "--run": f.run, "--crew-usd": "1900", "--hosts-usd": "0" }, ["--projection"]), io().io))).toBe("E_EP_PROJECTION");
   });
 });
 
@@ -96,7 +102,7 @@ describe("paid flags", () => {
   test("a missing flag, a counted item in the pilot, a cap past the plan's and a run inside the repository refuse before any lease", async () => {
     const f = fixture();
     const base = { ...f.paid("e1-pilot"), "--phase": "pilot" };
-    const { ["--supply-usd"]: _, ...noSupply } = base;
+    const { ["--hosts-usd"]: _, ...noSupply } = base;
     expect(await codeOf(() => f.cmds["e1-reviews"]!.run(args(noSupply), io().io))).toBe("E_USAGE");
     expect(await codeOf(() => f.cmds["e1-reviews"]!.run(args({ ...base, "--item": "e1-n-opus" }), io().io))).toBe("E_USAGE");
     expect(await codeOf(() => f.cmds["e1-reviews"]!.run(args({ ...base, "--cap-usd": "165.01" }), io().io))).toBe("E_USAGE");
@@ -176,5 +182,48 @@ describe("comparison", () => {
     expect(f.calls.reviews).toEqual([]);
     expect(await f.cmds["e1-reviews"]!.run(half("e1-g-sol"), io().io)).toBe(0);
     expect([...f.calls.reviews].sort()).toEqual(["k2_G_sol_0", "k2_G_sol_1"]);
+  });
+});
+
+describe("supply", () => {
+  test("screens walk the draw's order under the supply item; the draw only grows and waits on owed authoring", async () => {
+    const f = fixture();
+    const units = join(f.dir, "units2");
+    const ids = Array.from({ length: 10 }, (_, i) => "s" + i);
+    for (const [i, id] of ids.entries()) {
+      mkdirSync(join(units, id), { recursive: true });
+      writeFileSync(join(units, id, "ep-unit.json"), JSON.stringify(unit(id, "q" + i)));
+      writeFileSync(join(units, id, "ep-author.json"), JSON.stringify({ stubbed: [], implementation: [], tests: [], callers: [], fix: { message: i % 2 ? "odd-unit" : "even-unit", diff: "--- a\n+++ b" } }));
+      const a = join(f.run, "author", id);
+      mkdirSync(a, { recursive: true });
+      if (i === 9) continue;
+      writeFileSync(join(a, "calls.json"), JSON.stringify({ drop: i === 8 ? "plan-audit" : null, foresee: ["yes", "yes"] }));
+      if (i === 8) continue;
+      writeFileSync(join(a, "hinted.json"), JSON.stringify({ drop: null }));
+      writeFileSync(join(a, "hint.txt"), "The flag must reset.\n");
+      writeFileSync(join(a, "plan.md"), "# Plan\n");
+    }
+    const run = (cmd: string, extra: Record<string, string> = {}) => f.cmds[cmd]!.run(args({ ...f.paid("e1-supply"), "--units": units, ...extra }), io().io);
+    expect(await run("e1-screen", { "--limit": "3" })).toBe(0);
+    expect(f.calls.supply.filter((r) => r === "stateAstra")).toHaveLength(3);
+    expect(readItem(f.record, "e1-supply").leases).toHaveLength(1);
+    const o = io();
+    expect(await f.cmds["e1-screen"]!.run(args({ ...f.paid("e1-supply"), "--units": units }), o.io)).toBe(0);
+    expect(o.out[0]).toContain("8 in all: 4 state-shaped, 4 passing both screens");
+    expect(f.calls.supply.filter((r) => r === "stateAstra")).toHaveLength(8);
+    expect(f.calls.supply.filter((r) => r === "reachCarbon")).toHaveLength(4);
+    expect(await run("e1-screen")).toBe(0);
+    expect(f.calls.supply.filter((r) => r === "stateAstra")).toHaveLength(8);
+    const seg = JSON.parse(readFileSync(join(f.run, "e1", "segments.json"), "utf8"));
+    expect(seg.attempt3.sort()).toEqual(ids.slice(0, 9));
+    rmSync(join(f.run, "e1", "draw.json"));
+    const dr = io();
+    expect(await f.cmds["e1-draw"]!.run(args({ "--run": f.run, "--units": units, "--repos": f.repos }), dr.io)).toBe(0);
+    const d = JSON.parse(readFileSync(join(f.run, "e1", "draw.json"), "utf8")) as E1Draw;
+    expect([d.calibration.length, d.comparison.length, d.waiting]).toEqual([4, 0, "s9"]);
+    expect(d.calibration.every((id) => Number(id.slice(1)) % 2 === 0)).toBe(true);
+    expect(dr.out[0]).toContain("the walk waits");
+    writeFileSync(join(f.run, "e1", "screen", d.calibration[0] + ".json"), JSON.stringify({ state: { astra: null, opus: null, eligible: false, packet: "" }, reach: null, drop: "state", bothYes: false, costUsd: 0 }));
+    expect(await codeOf(() => f.cmds["e1-draw"]!.run(args({ "--run": f.run, "--units": units, "--repos": f.repos }), io().io))).toBe("E_USAGE");
   });
 });

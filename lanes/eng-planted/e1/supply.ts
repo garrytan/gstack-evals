@@ -89,8 +89,10 @@ export function stateAgreement(rows: ReadonlyArray<ScreenRecord>): { defect: num
 export interface DrawUnit {
   id: string;
   repo: string;
-  /** Passed attempt 3's authoring (plan, audits, hint, foreseeability ratings, hinted build). */
-  authored: boolean;
+  /** Authoring (plan, audits, hint, foreseeability ratings, hinted build): passed, dropped, or still owed. */
+  authoring: "passed" | "dropped" | "owed";
+  /** Who authored it: attempt 3, or this run (pool units attempt 3 never finished, and wave 2's). */
+  by: "attempt3" | "here";
   foresee: readonly [Foresee, Foresee] | null;
   screen: ScreenRecord | null;
 }
@@ -110,18 +112,21 @@ const order = (seed: string, ids: readonly string[]) => [...ids].sort((a, b) => 
   return k(a) < k(b) ? -1 : 1;
 });
 
-/** Attempt 3's walk over the seeded order with this eval's screens; it stops at the first passing unit not yet screened. */
+/** Attempt 3's walk with this eval's screens: attempt 3's authored units in seeded order, then the units this run
+ * authors in seeded order, so authoring that lands later never displaces a unit already drawn. The walk stops at the
+ * first unit still owed its authoring or its screen. */
 export function e1Draw(seed: string, units: readonly DrawUnit[]): E1Draw {
   const by = new Map(units.map((u) => [u.id, u]));
   const d: E1Draw = { seed, calibration: [], comparison: [], reserve: [], skipped: [], waiting: null };
   const perRepo = new Map<string, number>();
-  for (const id of order(seed, units.map((u) => u.id))) {
+  const ids = (who: DrawUnit["by"]) => order(seed, units.filter((u) => u.by === who).map((u) => u.id));
+  for (const id of [...ids("attempt3"), ...ids("here")]) {
     const u = by.get(id)!;
-    if (!u.authored) {
+    if (u.authoring === "dropped") {
       d.skipped.push({ id, reason: "authoring" });
       continue;
     }
-    if (!u.screen) {
+    if (u.authoring === "owed" || !u.screen) {
       d.waiting = id;
       break;
     }

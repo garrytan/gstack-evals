@@ -24,10 +24,10 @@ import { plantedGrader } from "../construct/grade.ts";
 import { fail } from "../errors.ts";
 import { avoid, catchScore, isGap } from "../readings/score.ts";
 import { ebSession, type MountTable, type PlantedSession } from "../stages/build.ts";
-import { allInProjection, checkAllIn, ItemGate, type AllIn } from "../stages/ledger.ts";
+import { allInProjection, checkAllIn, ItemGate, runGated, type AllIn } from "../stages/ledger.ts";
 import { owedOnRefusal, stagePlan, driverCells } from "../stages/rerun-log.ts";
 import { unitFolders, type UnitSource } from "../stages/pipeline.ts";
-import type { Command, GradedBuild, PlantedGrader, PlantedUnit } from "../types.ts";
+import type { Command, Foresee, GradedBuild, PlantedGrader, PlantedUnit } from "../types.ts";
 import { ALLOWANCE_USD } from "../stages/local.ts";
 import { pMarker, P_COMMANDS, type PCommand } from "./arms.ts";
 import { decide, readAll } from "./decide.ts";
@@ -36,7 +36,10 @@ import { e1ReviewLauncher, type E1ReviewSession } from "./launch.ts";
 import { look } from "./look.ts";
 import { cellKey, e1Builds, e1Cells, e1Item, E1_ITEMS, e1Reviews, itemName, reviewRecordPath, buildRecordPath, scoredCells, type CellKey, type E1Build, type E1ReviewRecord, type E1Unit } from "./pipeline.ts";
 import { armState, holm, rng, type Cell } from "./readings.ts";
-import type { E1Draw } from "./supply.ts";
+import { e1Draw, screenUnit, stateAgreement, SUPPLY_MODELS, type DrawUnit, type E1Draw, type ScreenRecord, type SupplyCall, type SupplyRole } from "./supply.ts";
+import { meterLauncher } from "../stages/commands.ts";
+import { AUTHOR_MAX_TOKENS } from "../stages/local.ts";
+import type { ModelKey } from "../../product-value/meter.ts";
 
 type Args = Parameters<Command["run"]>[0];
 type Io = Parameters<Command["run"]>[1];
@@ -45,7 +48,9 @@ export const E1_RUN = "geva-587-e1";
 export const E1_PROGRAM = "geva-587-e1";
 export const E1_SKILL = "e1-run";
 /** The all-in pieces that are not ledger items (section 11). */
-export const E1_NOT_ITEMS = { supply: { capUsd: 220 }, hosts: { capUsd: 200 }, crew: { capUsd: 700 }, reserve: { capUsd: 150 } } as const;
+export const E1_NOT_ITEMS = { hosts: { capUsd: 200 }, crew: { capUsd: 700 }, reserve: { capUsd: 150 } } as const;
+/** The supply screens' meter routes, each at its model's default effort. */
+export const SUPPLY_ROUTES: Readonly<Record<SupplyRole, ModelKey | null>> = { stateAstra: "astra-6.2", stateOpus: "opus", reachCarbon: "carbon", reachOpus: "opus" };
 
 const need = (a: Args, flag: string): string => a.flags.get(flag) ?? fail("E_USAGE", "missing " + flag);
 const whole = (a: Args, flag: string, dflt: number): number => {
@@ -71,7 +76,7 @@ export function e1RunSteps(): string[] {
   return [
     "gstack-evals ledger envelope --program " + E1_PROGRAM + " --cap " + Math.round(cap * 100) / 100 + " --skill-cap " + Math.round(cap * 100) / 100 + " --skills " + E1_SKILL + " --credit-rate 1" + tail,
     ...E1_ITEMS.map((i) => "gstack-evals ledger init --item " + i.item + " --cap " + i.capUsd + " --admission required --program " + E1_PROGRAM + " --skills " + E1_SKILL + tail),
-    "# Supply ($" + E1_NOT_ITEMS.supply.capUsd + "), hosts ($" + E1_NOT_ITEMS.hosts.capUsd + ") and crew ($" + E1_NOT_ITEMS.crew.capUsd + ") pass their running figures to every paid e1 command as --supply-usd, --hosts-usd and --crew-usd; the $" + E1_NOT_ITEMS.reserve.capUsd + " reserve stays with the Captain.",
+    "# Hosts ($" + E1_NOT_ITEMS.hosts.capUsd + ") and crew ($" + E1_NOT_ITEMS.crew.capUsd + ") pass their running figures to every paid e1 command as --hosts-usd and --crew-usd; the $" + E1_NOT_ITEMS.reserve.capUsd + " reserve stays with the Captain.",
   ];
 }
 
@@ -85,7 +90,7 @@ export interface E1Paid {
 
 /** A paid command's flags, refused before any lease opens. */
 export function e1Paid(a: Args, run: string, allowed: (item: string) => boolean): E1Paid {
-  const missing = ["--item", "--cap-usd", "--ledger-record", "--ledger", "--crew-usd", "--hosts-usd", "--supply-usd"].filter((f) => !a.flags.get(f));
+  const missing = ["--item", "--cap-usd", "--ledger-record", "--ledger", "--crew-usd", "--hosts-usd"].filter((f) => !a.flags.get(f));
   if (missing.length) fail("E_USAGE", "a paid e1 stage runs only under a ledger lease with the all-in figures; it needs " + missing.join(", ") + ", and nothing ran");
   const item = a.flags.get("--item")!;
   if (!allowed(item)) fail("E_USAGE", "this stage does not spend from " + item);
@@ -96,7 +101,7 @@ export function e1Paid(a: Args, run: string, allowed: (item: string) => boolean)
     const v = Number(a.flags.get(f));
     return Number.isFinite(v) && v >= 0 ? v : fail("E_USAGE", f + " takes the running figure in dollars, not " + a.flags.get(f));
   };
-  return { item, capUsd, record: a.flags.get("--ledger-record")!, ledger: a.flags.get("--ledger")!, allIn: { stateDir: join(run, "state"), crewUsd: fig("--crew-usd") + fig("--supply-usd"), hostsUsd: fig("--hosts-usd") } };
+  return { item, capUsd, record: a.flags.get("--ledger-record")!, ledger: a.flags.get("--ledger")!, allIn: { stateDir: join(run, "state"), crewUsd: fig("--crew-usd"), hostsUsd: fig("--hosts-usd") } };
 }
 
 export function e1Gate(p: E1Paid, run: string, planned?: number): ItemGate {
@@ -178,6 +183,7 @@ export interface E1Seams {
   build(o: { out: string; driver: string; src: UnitSource; units: string; repos: string; ids: string[]; cells: string[]; a: Args }): Launcher<PlantedSession>;
   grader(o: { work: string; log: (l: string) => void }): Promise<PlantedGrader>;
   marker(harness: string): string;
+  supply(o: { out: string; cacheDir: string }): Launcher<SupplyCall>;
 }
 
 export const E1_REAL: E1Seams = {
@@ -213,7 +219,43 @@ export const E1_REAL: E1Seams = {
   },
   grader: async (o) => plantedGrader({ work: o.work }),
   marker: pMarker,
+  supply: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "e1-supply", models: SUPPLY_MODELS, routes: SUPPLY_ROUTES, roles: Object.keys(SUPPLY_MODELS) as SupplyRole[], runId: E1_RUN }),
 };
+
+/** A stand-in screen that lets e1-screen walk the draw's order before the screens exist. */
+const SCREEN_OWED: ScreenRecord = { state: { astra: null, opus: null, eligible: true, packet: "" }, reach: ["yes", "yes"], drop: null, bothYes: true, costUsd: 0 };
+const screenPath = (run: string, id: string) => join(run, "e1", "screen", id + ".json");
+const segmentsPath = (run: string) => join(run, "e1", "segments.json");
+
+/** The draw's seed: 16 random bytes, minted once. */
+export function drawSeed(run: string): string {
+  const p = join(run, "e1", "draw-seed.json");
+  const have = readJson<{ seed: string }>(p);
+  if (have) return have.seed;
+  const seed = randomBytes(16).toString("hex");
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, JSON.stringify({ seed, minted_at: new Date().toISOString(), rule: "crypto random bytes, minted once" }) + "\n", { flag: "wx" });
+  return seed;
+}
+
+/** Each unit's authoring state from attempt 3's records in the run, and its segment of the walk. Attempt 3's segment is
+ * frozen the first time it is read (e1/segments.json): the units whose authoring had passed then. */
+export function drawUnits(run: string, src: UnitSource): DrawUnit[] {
+  const state = (id: string): DrawUnit["authoring"] => {
+    const calls = readJson<{ drop: string | null }>(join(run, "author", id, "calls.json"));
+    const hinted = readJson<{ drop: string | null }>(join(run, "author", id, "hinted.json"));
+    return calls?.drop || hinted?.drop ? "dropped" : calls && hinted ? "passed" : "owed";
+  };
+  const units = src.units().map((u) => ({ u, authoring: state(u.id) }));
+  let seg = readJson<{ attempt3: string[] }>(segmentsPath(run));
+  if (!seg) {
+    seg = { attempt3: units.filter((x) => x.authoring !== "owed").map((x) => x.u.id) };
+    mkdirSync(dirname(segmentsPath(run)), { recursive: true });
+    writeFileSync(segmentsPath(run), JSON.stringify(seg) + "\n", { flag: "wx" });
+  }
+  const a3 = new Set(seg.attempt3);
+  return units.map(({ u, authoring }) => ({ id: u.id, repo: u.repo, authoring, by: a3.has(u.id) ? "attempt3" : "here", foresee: readJson<{ foresee: [Foresee, Foresee] | null }>(join(run, "author", u.id, "calls.json"))?.foresee ?? null, screen: readJson<ScreenRecord>(screenPath(run, u.id)) }));
+}
 
 /** The bootstrap seed, minted from random bytes once and recorded before anything reads a contrast. */
 export function bootstrapSeed(run: string): number {
@@ -345,8 +387,8 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
       return 0;
     }
     const run = runDir(a);
-    const allIn: AllIn = { stateDir: join(run, "state"), crewUsd: Number(need(a, "--crew-usd")) + Number(need(a, "--supply-usd")), hostsUsd: Number(need(a, "--hosts-usd")) };
-    if (![allIn.crewUsd, allIn.hostsUsd].every((v) => Number.isFinite(v) && v >= 0)) fail("E_USAGE", "--crew-usd, --supply-usd and --hosts-usd take dollars");
+    const allIn: AllIn = { stateDir: join(run, "state"), crewUsd: Number(need(a, "--crew-usd")), hostsUsd: Number(need(a, "--hosts-usd")) };
+    if (![allIn.crewUsd, allIn.hostsUsd].every((v) => Number.isFinite(v) && v >= 0)) fail("E_USAGE", "--crew-usd and --hosts-usd take dollars");
     const r = allInProjection(allIn, E1_ITEMS);
     for (const l of r.lines) io.out(l);
     io.out("all-in projection $" + r.usd.toFixed(2) + " against the $5000 stop");
@@ -397,6 +439,53 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
     return 0;
   };
 
+  const screen: Command["run"] = async (a, io) => {
+    const run = runDir(a);
+    const src = source(a);
+    const p = e1Paid(a, run, (item) => item === "e1-supply");
+    const units = drawUnits(run, src);
+    const seed = drawSeed(run);
+    const walk = e1Draw(seed, units.map((u) => (u.authoring === "passed" ? { ...u, screen: u.screen ?? SCREEN_OWED } : u)));
+    const order = [...walk.calibration, ...walk.comparison, ...walk.reserve, ...walk.skipped.map((s) => s.id)];
+    const todo = order.filter((id) => units.find((u) => u.id === id)!.authoring === "passed" && !existsSync(screenPath(run, id))).slice(0, a.flags.has("--limit") ? whole(a, "--limit", 1) : undefined);
+    const gate = e1Gate(p, run);
+    await paidStage(p, seams.supply({ out: join(run, "e1", "screen", "meter"), cacheDir: need(a, "--cache") }), (call) =>
+      runGated(todo, {
+        gate,
+        parallel: whole(a, "--parallel", 1),
+        kind: () => "call",
+        key: (id) => "screen:" + id,
+        run: async (id) => {
+          const m = src.material(id);
+          const dir = join(run, "author", id);
+          const r = await screenUnit(call, { message: m.fix.message, diff: m.fix.diff, hint: readFileSync(join(dir, "hint.txt"), "utf8").trim(), plan: readFileSync(join(dir, "plan.md"), "utf8"), stubbed: m.stubbed, callers: m.callers });
+          return { costUsd: r.costUsd, commit: () => {
+            mkdirSync(dirname(screenPath(run, id)), { recursive: true });
+            writeFileSync(screenPath(run, id), JSON.stringify(r) + "\n");
+          } };
+        },
+      }),
+    );
+    const done = drawUnits(run, src).flatMap((u) => (u.screen ? [u.screen] : []));
+    const k = stateAgreement(done);
+    io.out("screened " + todo.length + " now, " + done.length + " in all: " + done.filter((s) => s.state.eligible).length + " state-shaped, " + done.filter((s) => s.drop === null).length + " passing both screens; kappa defect " + (k.defect?.toFixed(2) ?? "n/a") + ", state-shaped " + (k.stateShaped?.toFixed(2) ?? "n/a") + " over " + k.n);
+    return 0;
+  };
+
+  const draw: Command["run"] = (a, io) => {
+    const run = runDir(a);
+    const d = e1Draw(drawSeed(run), drawUnits(run, source(a)));
+    const old = readJson<E1Draw>(join(run, "e1", "draw.json"));
+    for (const set of ["calibration", "comparison", "reserve"] as const)
+      if (old && old[set].some((id, i) => d[set][i] !== id)) fail("E_USAGE", "the draw would change its " + set + " set, which only grows; nothing written");
+    mkdirSync(join(run, "e1"), { recursive: true });
+    writeFileSync(join(run, "e1", "draw.json"), JSON.stringify(d, null, 1) + "\n");
+    const why = new Map<string, number>();
+    for (const s of d.skipped) why.set(s.reason, (why.get(s.reason) ?? 0) + 1);
+    io.out("draw: calibration " + d.calibration.length + " of " + E1.units.calibration + ", comparison " + d.comparison.length + " of " + E1.units.target + " (floor " + E1.units.floor + "), reserve " + d.reserve.length + " of " + E1.units.reserve + "; skipped " + ([...why].map(([r, n]) => r + " " + n).join(", ") || "none") + (d.waiting ? "; the walk waits on a unit owed its authoring or screen" : "; the walk is complete"));
+    return 0;
+  };
+
   const pilot: Command["run"] = (a, io) => {
     const run = runDir(a);
     const src = source(a);
@@ -414,11 +503,13 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
   };
 
   return {
-    "e1-ledger": { bools: ["--projection"], usage: "[--projection --run <dir> --crew-usd <usd> --supply-usd <usd> --hosts-usd <usd>]", summary: "eval 1's ledger lines, or its all-in projection", run: ledger },
-    "e1-reviews": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --phase pilot|comparison [--half 1|2] --item <item> --cap-usd <usd> --ledger-record <dir> --ledger <file> --crew-usd <usd> --supply-usd <usd> --hosts-usd <usd> [--pstack <harness dir>] [--p-command /statechart|/pstack:statechart] [--parallel <n>]", summary: "eval 1's review cells of one item (or every pair in the pilot) under one lease each", run: reviews },
+    "e1-ledger": { bools: ["--projection"], usage: "[--projection --run <dir> --crew-usd <usd> --hosts-usd <usd>]", summary: "eval 1's ledger lines, or its all-in projection", run: ledger },
+    "e1-reviews": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --phase pilot|comparison [--half 1|2] --item <item> --cap-usd <usd> --ledger-record <dir> --ledger <file> --crew-usd <usd> --hosts-usd <usd> [--pstack <harness dir>] [--p-command /statechart|/pstack:statechart] [--parallel <n>]", summary: "eval 1's review cells of one item (or every pair in the pilot) under one lease each", run: reviews },
     "e1-builds": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --phase pilot|comparison [--half 1|2] --item <item> <paid flags> --work <dir> --host <ip> --envelope-host <id> --sidecar <url> [--harbor <bin>] [--parallel <n>]", summary: "eval 1's build cells of one item under one lease", run: builds },
     "e1-look": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> [--draws <n>]", summary: "eval 1's one interim look (futility only), written once", run: lookCmd },
     "e1-read": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> [--draws <n>]", summary: "eval 1's readings: arm states, the pooled contrasts, Holm and the Decision rows", run: read },
+    "e1-screen": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --cache <dir> --item e1-supply <paid flags> [--limit <n>] [--parallel <n>]", summary: "eval 1's state and reach screens on authored units, in the walk's order, under the supply item", run: screen },
+    "e1-draw": { bools: [], usage: "--run <dir> --units <dir> --repos <dir>", summary: "eval 1's draw from the screens: calibration, comparison and reserve, each only growing", run: draw },
     "e1-pilot": { bools: [], usage: "--run <dir> --units <dir> --repos <dir>", summary: "eval 1's pilot readout per arm and model", run: pilot },
   };
 }

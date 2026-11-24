@@ -127,12 +127,12 @@ const CARBON_FIX = "add a carbon ModelKey (google/gemini-4-carbon on OpenRouter,
  * with that cost on its error (spend.ts), which the gated callers settle. A role routed to Carbon asks for
  * CARBON_MAX_TOKENS; every other role asks for maxTokens. effort is one setting for every role, or one per role. fetch
  * and env reach the meter for the keyless tests. */
-export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null | Readonly<Record<R, string | null>>; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[]; fetch?: typeof fetch; env?: Record<string, string | undefined> }): Launcher<Metered<R>> {
+export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null | Readonly<Record<R, string | null>>; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[]; fetch?: typeof fetch; env?: Record<string, string | undefined>; runId?: string }): Launcher<Metered<R>> {
   return async (p) => {
     const problems = routeProblems(o.models, o.routes, o.roles);
     if (problems.length) return fail("E_EP_NOT_BUILT", "the " + o.label + " routes are not all built, so no lease opened:\n" + problems.join("\n") + "\n" + CARBON_FIX);
     const capOf = (role: R) => (o.routes[role] === "carbon" ? CARBON_MAX_TOKENS : o.maxTokens);
-    const meter = await openMeter({ item: p.item, runId: EP_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: Math.max(...o.roles.map(capOf)), amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger, ...(o.fetch ? { fetch: o.fetch } : {}), ...(o.env ? { env: o.env } : {}) });
+    const meter = await openMeter({ item: p.item, runId: o.runId ?? EP_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: Math.max(...o.roles.map(capOf)), amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger, ...(o.fetch ? { fetch: o.fetch } : {}), ...(o.env ? { env: o.env } : {}) });
     const call: Metered<R> = async (role, prompt, attempt) => {
       if (!o.roles.includes(role)) return fail("E_USAGE", "this launch did not check the route for " + role);
       let r: Awaited<ReturnType<typeof meter.call>>;
