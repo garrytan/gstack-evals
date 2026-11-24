@@ -32,7 +32,7 @@ links:
 
 | Group | Change | gstack file at main f7402213 | Evidence |
 |---|---|---|---|
-| a, add now | A check that runs a model, not the product code, is not a regression test: replay the counterexample as a code test that fails before the fix and passes after | review/specialists/testing.md, beside "Regression test without red proof" (lines 156 to 159) | #358: code tests did 25 of 28 of the chain's catches, and 35 of 90 model checks stayed red after the real fix |
+| a, add now | A check that runs a model, not the product code, is not a regression test: replay the counterexample as a code test that fails before the fix and passes after | review/specialists/testing.md, beside "Regression test without red proof" (lines 156 to 159) | #358: a code test made 25 of the chain's 28 catches, and in 35 of its 90 sessions a model check stayed red after the real fix |
 | a, already there | Ask for a code test that fails before the fix and passes after, when the job is to leave a check | qa/SKILL.md.tmpl 181 to 204 and 212 to 214; ship/sections/pr-body.md.tmpl 105 to 106; captain/SKILL.md.tmpl 335 to 338; review/specialists/testing.md 156 to 159 | #358: the plain request caught 69% to 72%. Nothing to add |
 | b, after eval 1 | Model the plan's state machine, check it, and write a test per counterexample into the plan | plan-eng-review/sections/review-sections.md.tmpl 553 to 561 (Diagrams, Failure modes), reached by autoplan Phase 3 | Untested |
 | b, after eval 1 | Keep or cut "ASCII diagram for every new stateful object" | plan-ceo-review/sections/review-sections.md.tmpl 124 and 451; plan-eng-review/SKILL.md.tmpl 110 to 112 | Untested; these lines have no eval behind them |
@@ -157,7 +157,7 @@ Status words: **tested** means #358 or #360 measured whether it was met; **teste
 
 **Where pstack's text and our results disagree.**
 
-- CF 23 to 24 and CF 28 promise a check that is true to the code, able to fail, and cheap to rerun on every change. On #358's 90 sessions, 35 model checks that failed before the real fix stayed red after it, so a rerun told the next agent nothing about the code.
+- CF 23 to 24 and CF 28 promise a check that is true to the code, able to fail, and cheap to rerun on every change. In 35 of #358's 90 pstack sessions, a model check that failed before the real fix stayed red after it, so a rerun told the next agent nothing about the code.
 - SC 82 asks the agent to replay every bug path on the real code. pstack's sessions left a code test in 36 of 90, against 84 of 90 for a one-line test request; the plain-words version of the same steps left one in 83 of 90. pstack's text lowers the chance of the step it asks for.
 - MF 9 warns that a stale pass looks like a proof, and leaves the fix to an agent who reruns /maintain-formal-verification-skill. That agrees with our reading of #358: a mechanical rerun can't keep a hand model in step with code. It is also why MF stays untested by us: it is the hand loop.
 - Where our results agree with pstack: findings stayed findings (no product edits in our exploration's pstack runs), and CF 19's fallback for languages with no verifier, testing the real code with generated inputs, is a code-tied check, which is the kind that worked.
@@ -175,7 +175,7 @@ Each eval below carries items 1, 3, 5 and 6 of the team's eval-loop checklist: t
 **Decision it changes (item 1).**
 
 - If the plain-words model check (C) beats the plain review (N) by 10 composite points or more, pooled over models, with its interval above 0, and beats gstack's current review (G): add C's step to plan-eng-review's Diagrams and Failure modes (review-sections.md.tmpl 553 to 561), so autoplan's eng phase carries it too.
-- If pstack (P) beats N by 10 or more and C doesn't: pstack's text does something plain words don't. Port the idea with credit, the way gstack's NOTICE.md records other pstack ideas.
+- If pstack (P) beats C by 10 points or more on the models that ran both (Opus and particle-1), paired by unit and model, and P beats N: pstack's text does something plain words don't. Port the idea with credit, the way gstack's NOTICE.md records other pstack ideas. A pooled C that looks weaker only because it includes Sol is not evidence for P.
 - If the plain-words diagram arm (D, gstack's current "ASCII diagram for every new stateful object") reads no gain over N, with its interval below +10: those lines in plan-ceo-review (124, 451) and plan-eng-review (SKILL.md.tmpl 110 to 112, review-sections 553) become cut candidates for the before/after skill eval.
 - If everything reads within 10 of N: no modeling step goes into gstack's plan skills, and the design-time question closes with a registry row.
 
@@ -241,7 +241,11 @@ Every arm gets TLC and Java from a read-only tools volume, as #358 did, so the c
 
 **Question.** Shown a plan that either keeps a real bug's behavior or doesn't, does an owner who sees a checked statechart beside it send back the flawed plan and approve the sound one more often than an owner who reads prose alone?
 
-**Decision it changes.** Garry approves plain-language plans before builds. If P or C beats N by 10 points of balanced accuracy: add a checked statechart, rendered through /diagram, to plan-ceo-review's Diagrams list (review-sections.md.tmpl 448 to 454) for plans with stateful objects. If D reads no better than N: the ASCII state diagram isn't helping owners decide, which adds to eval 1's reading on those lines.
+**Decision it changes.** Garry approves plain-language plans before builds. The model-reader result only admits a human stage; it ships nothing by itself.
+
+- If P beats N by 10 points of balanced accuracy with the model reader: run a human-reader pilot on P and N. Add a checked statechart, rendered through /diagram, to plan-ceo-review's Diagrams list (review-sections.md.tmpl 448 to 454) for plans with stateful objects only if P's chart also beats N with human readers.
+- If only C beats N: the gain comes from a plain-words rule check, not a chart. Fold the rule-check summary into the plan text, and ship no chart.
+- If D reads no better than N: the ASCII state diagram isn't helping owners decide, which adds to eval 1's reading on those lines.
 
 **Attack.** A flawed plan that states the buggy behavior plainly may be easy to reject from prose (a ceiling). The model that draws the chart may find the flaw itself and mark it, so the eval measures chart plus reader together, which is what pstack's SC1 claims. Readers: a fixed fresh model told "approve or send back" is cheap but isn't the person pstack writes for; human readers through RentAHuman fit better but run into its five-bounty-a-day limit. The primary uses a model reader and says so; a human stage runs only if the model reading shows a gain.
 
@@ -273,7 +277,7 @@ Every arm gets TLC and Java from a read-only tools volume, as #358 did, so the c
 
 **Size and cost.** 60 units, one session per cell. #358's blind probe cost $9.59 a session on Opus, so paid is about $1,500, about $2,300 all-in.
 
-**Pilot.** At most $200 on 8 units on Opus: N clean-finds at least 2 of 8, else FLOOR and stop. **Judge.** None. **One look.** At 30 of 60 units with a +5 futility bound.
+**Pilot.** At most $200 on 8 units on Opus: N's kept checks catch the real bug under the primary rule on at least 2 of 8, else FLOOR and stop. Clean fixes are reported beside it and don't gate. **Judge.** None. **One look.** At 30 of 60 units with a +5 futility bound.
 
 ### Dropped
 
@@ -304,4 +308,4 @@ Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, whic
 
 Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
 
-gstack is Garry Tan's own project. pstack is Lauren Tan's work (MIT), published in cursor/plugins; we checked the public YC company directory and found no tie between Garry Tan or Y Combinator and Lauren Tan or Cursor.
+gstack is Garry Tan's own project. pstack is Lauren Tan's work (MIT), published in cursor/plugins; our disclosure list records a check of the public YC company directory and public profiles on 2026-11-09 that found no tie between Garry Tan or Y Combinator and Lauren Tan or Cursor (Anysphere).
