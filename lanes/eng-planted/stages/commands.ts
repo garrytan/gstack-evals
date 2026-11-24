@@ -8,12 +8,15 @@
 // calls, eng-build's review launcher with both skill arms at the restore pin, and eng-build's build launcher with each
 // cell's mounts; the dry run and the tests pass stub launchers on a temporary ledger.
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { EbError } from "../../eng-build/errors.ts";
+import { armName } from "../../eng-build/build-stage.ts";
 import { buildLauncher, reviewLauncher } from "../../eng-build/launch.ts";
 import { underLease, type Launcher, type Paid, type ReviewSession } from "../../eng-build/pipeline.ts";
+import { addSpend } from "../../eng-build/spend.ts";
 import { claudePin } from "../../eng-build/session-image.ts";
 import { MeterError, MODELS, openMeter, type ModelKey } from "../../product-value/meter.ts";
 import { LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
@@ -23,14 +26,14 @@ import { EpError, fail, notBuilt } from "../errors.ts";
 import { FROZEN, SIZE } from "../frozen.ts";
 import type { Command, PlantedGrader, ReviewArm } from "../types.ts";
 import { armCheckoutProblems, EB_ARM, plainArmProblems, plantedArmSpec, SKILL_ARMS, skillPin } from "./arms.ts";
-import { judgeAll, ROLE_MODEL, type JudgeCall, type JudgeRole } from "../readings/judge.ts";
-import { JUDGE_MODELS } from "../readings/local.ts";
+import { judgeAll, loadPrompts, NAMED_PROMPT, NAMED_PROMPT_R1, ROLE_EFFORT, ROLE_MODEL, type JudgeCall, type JudgeRole } from "../readings/judge.ts";
 import type { AuthorCall } from "./author.ts";
-import { ebSession, type MountTable, type PlantedSession } from "./build.ts";
-import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, type AllIn, type Kind } from "./ledger.ts";
-import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
+import { buildKey, ebSession, type MountTable, type PlantedSession } from "./build.ts";
+import { allInProjection, checkAllIn, ITEMS, itemOf, ItemGate, runSteps, settleThrown, type AllIn, type Kind } from "./ledger.ts";
+import { ALLOWANCE_USD, AUTHOR_MAX_TOKENS, AUTHOR_MODELS, CARBON_MAX_TOKENS, EP_PROGRAM, EP_RUN, EP_SKILL, JUDGE_MAX_TOKENS, readStep, type AuthorRole } from "./local.ts";
 import { PIN_COMMAND } from "./pin.ts";
-import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, drawFile, gateArms, hintedTodo, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type UnitSource } from "./pipeline.ts";
+import { driverCells, owedOnRefusal, setAsideRefusedGaps, stagePlan } from "./rerun-log.ts";
+import { authorStep, batchDraw, buildCells, buildsStage, bundleInput, comparisonPlanned, comparisonUnits, gateArms, goldBundles, hintedTodo, poolOrder, reviewsStage, runRecords, smokeStage, unitFolders, type AuthorStep, type BundleRef, type UnitSource } from "./pipeline.ts";
 import { bundleSet } from "../readings/judge.ts";
 
 export { CASES as DRY_CASES } from "./cases.ts";
@@ -92,7 +95,11 @@ async function paidStage<B, T>(p: PlantedPaid, launch: Launcher<B>, body: (backe
 // Seams: the real launchers.
 
 /** A model call by role through the meter, with what it cost. */
-export type Metered<R extends string> = (role: R, prompt: string) => Promise<{ text: string; costUsd: number }>;
+export type Metered<R extends string> = (role: R, prompt: string, attempt?: number) => Promise<{ text: string; costUsd: number }>;
+
+/** The outcome driver's run directory for every build stage of a run. The ledger binds a run to the directory of its first
+ * driver lease, so the authoring, comparison and stock builds share one (dated pre-run fix, 2026-11-17). */
+export const buildDriver = (run: string): string => join(run, "builds", "driver");
 
 /** The meter route each authoring role calls; null where the product-value meter has no route yet. */
 export const AUTHOR_ROUTES: Readonly<Record<AuthorRole, ModelKey | null>> = { writer: "sol", audit: "opus", hint: "sol", hintAudit: "opus", raterCarbon: "carbon", raterOpus: "opus" };
@@ -113,57 +120,81 @@ export const authorRouteProblems = (routes: Readonly<Record<AuthorRole, ModelKey
 const CARBON_FIX = "add a carbon ModelKey (google/gemini-4-carbon on OpenRouter, pinned to Google) to lanes/product-value/meter.ts, its price row to src/runner/pricing/prices.ts, and its route here";
 
 /** A meter launcher for one set of role routes: it refuses before any lease opens when a role it will call has no
- * route, and counts a call whose cost the meter could not read at the call allowance, so the gate never undercounts. */
-export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[] }): Launcher<Metered<R>> {
+ * route. A call costs what its meter holds, spent plus unknown; an answered call whose cost the meter could not read
+ * counts at the call allowance, so the gate never undercounts, and a refusal the proxy answered before it reserved
+ * anything costs nothing. A call that billed and then failed (a non-200 answer, no text, a provider drift stop, a stream
+ * that ended with an error event) throws
+ * with that cost on its error (spend.ts), which the gated callers settle. A role routed to Carbon asks for
+ * CARBON_MAX_TOKENS; every other role asks for maxTokens. effort is one setting for every role, or one per role. fetch
+ * and env reach the meter for the keyless tests. */
+export function meterLauncher<R extends string>(o: { out: string; cacheDir: string; maxTokens: number; effort: string | null | Readonly<Record<R, string | null>>; label: string; models: Readonly<Record<R, string>>; routes: Readonly<Record<R, ModelKey | null>>; roles: readonly R[]; fetch?: typeof fetch; env?: Record<string, string | undefined> }): Launcher<Metered<R>> {
   return async (p) => {
     const problems = routeProblems(o.models, o.routes, o.roles);
     if (problems.length) return fail("E_EP_NOT_BUILT", "the " + o.label + " routes are not all built, so no lease opened:\n" + problems.join("\n") + "\n" + CARBON_FIX);
-    const meter = await openMeter({ item: p.item, runId: EP_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: o.maxTokens, amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger });
-    const call: Metered<R> = async (role, prompt) => {
+    const capOf = (role: R) => (o.routes[role] === "carbon" ? CARBON_MAX_TOKENS : o.maxTokens);
+    const meter = await openMeter({ item: p.item, runId: EP_RUN, out: o.out, cacheDir: o.cacheDir, maxOutputTokens: Math.max(...o.roles.map(capOf)), amountMicros: Math.round(p.capUsd * 1_000_000), record: p.record, ledger: p.ledger, ...(o.fetch ? { fetch: o.fetch } : {}), ...(o.env ? { env: o.env } : {}) });
+    const call: Metered<R> = async (role, prompt, attempt) => {
       if (!o.roles.includes(role)) return fail("E_USAGE", "this launch did not check the route for " + role);
-      const r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: o.maxTokens, effort: o.effort, label: o.label + ":" + role });
-      if (r.status !== 200 || r.text === null) return fail("E_USAGE", "the " + o.label + " " + role + " call ended " + r.status + (r.problem ? " (" + r.problem + ")" : "") + "; rerun the step, which reuses the meter's cached replies");
-      return { text: r.text, costUsd: r.cached ? 0 : r.micros === null ? ALLOWANCE_USD.call : r.micros / 1_000_000 };
+      let r: Awaited<ReturnType<typeof meter.call>>;
+      try {
+        r = await meter.call({ model: o.routes[role]!, prompt, maxTokens: capOf(role), effort: typeof o.effort === "string" || o.effort === null ? o.effort : o.effort[role], label: o.label + ":" + role, ...(attempt ? { attempt } : {}) });
+      } catch (e) {
+        throw e instanceof MeterError && (e.code === "E_PV_PROVIDER_DRIFT" || e.code === "E_PV_STREAM_ERROR") ? addSpend(e, ALLOWANCE_USD.call) : e;
+      }
+      const costUsd = r.cached ? 0 : r.micros === null ? (r.status === 200 ? ALLOWANCE_USD.call : 0) : (r.micros + (r.unknown_micros ?? 0)) / 1_000_000;
+      if (r.status !== 200 || r.text === null) throw addSpend(new EpError("E_USAGE", "the " + o.label + " " + role + " call ended " + r.status + (r.problem ? " (" + r.problem + ")" : "") + "; rerun the step, which reuses the meter's cached replies"), costUsd);
+      return { text: r.text, costUsd };
     };
     return { lease_id: meter.leaseId, backend: call, close: async () => void (await meter.close()) };
   };
 }
 
-/** A judge call that waits for the judge item's gate and settles its cost there. */
+/** A judge call that waits for the judge item's gate and settles its cost there, under the role and the prompt's digest,
+ * so a resume that repeats a cached call counts one cell. A call that spent and threw settles as a failed line. An empty
+ * reply is a failed call too: it settles as a failed line and is asked once more as attempt 2, a fresh call the meter
+ * caches apart; a second empty reply is returned empty, and the judge records it as the bundle's error. */
 export function gatedJudge(gate: ItemGate, call: Metered<JudgeRole>): JudgeCall {
   return async (role, prompt) => {
-    await gate.acquire("call");
-    let r: { text: string; costUsd: number };
-    try {
-      r = await call(role, prompt);
-    } catch (e) {
-      gate.abort();
-      throw e;
-    }
-    gate.settle("call", r.costUsd, role);
-    return r.text;
+    const cell = role + ":" + createHash("sha256").update(prompt).digest("hex").slice(0, 16);
+    const ask = async (attempt?: number) => {
+      await gate.acquire("call");
+      let r: { text: string; costUsd: number };
+      try {
+        r = await call(role, prompt, attempt);
+      } catch (e) {
+        throw settleThrown(gate, "call", e, cell);
+      }
+      gate.settle("call", r.costUsd, cell, !r.text.trim());
+      return r.text;
+    };
+    const first = await ask();
+    return first.trim() ? first : ask(2);
   };
 }
 
 export interface Seams {
   author(o: { out: string; cacheDir: string }): Launcher<AuthorCall>;
-  /** The judged secondary's calls (readings/judge.ts): GPT-6 Astra and the two gold labellers, at JUDGE_MODELS.effort. */
+  /** The judged secondary's calls (readings/judge.ts): GPT-6 Astra and the two gold labellers, each at its ROLE_EFFORT. */
   judge(o: { out: string; cacheDir: string; roles: JudgeRole[] }): Launcher<Metered<JudgeRole>>;
   /** pin is null when no skill arm runs (the pilot). */
   review(o: { out: string; arms: ReviewArm[]; pin: DigestPin | null; policy?: string; log: (l: string) => void }): Launcher<ReviewSession>;
-  build(o: { out: string; src: UnitSource; units: string; repos: string; ids: string[]; reviewed: boolean; planned: number; a: Args }): Launcher<PlantedSession>;
+  /** driver is the outcome driver's run directory, one for every build stage of the run (buildDriver); cells are the keys
+   * of the cells the stage may open, which the driver's planned sessions and reruns count (rerun-log.ts stagePlan). */
+  build(o: { out: string; driver: string; src: UnitSource; units: string; repos: string; ids: string[]; reviewed: boolean; cells: string[]; a: Args }): Launcher<PlantedSession>;
   grader(o: { work: string; log: (l: string) => void }): Promise<PlantedGrader>;
 }
 
 export const REAL: Seams = {
   author: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "ep-author", models: AUTHOR_MODELS, routes: AUTHOR_ROUTES, roles: Object.keys(AUTHOR_MODELS) as AuthorRole[] }),
-  judge: (o) => meterLauncher({ out: o.out, cacheDir: o.cacheDir, maxTokens: JUDGE_MAX_TOKENS, effort: JUDGE_MODELS.effort, label: "ep-judge", models: ROLE_MODEL, routes: JUDGE_ROUTES, roles: o.roles }),
+  judge: (o) => meterLauncher({ ...o, maxTokens: JUDGE_MAX_TOKENS, effort: ROLE_EFFORT, label: "ep-judge", models: ROLE_MODEL, routes: JUDGE_ROUTES }),
   review: (o) => reviewLauncher({ arms: o.arms.map((a) => EB_ARM[a]), reviewer: "opus", out: o.out, env: process.env, log: o.log, ...(o.pin ? { pins: { precut: o.pin, engphase: o.pin } } : {}), runId: EP_RUN, ...(o.policy ? { policy: o.policy } : {}) }),
   build: (o) => {
     const table: MountTable = new Map();
     const mountOf = (cell: string) => table.get(cell) ?? fail("E_USAGE", "cell " + cell + " has no mounts filed; only ebSession starts a planted build");
+    const arm = o.reviewed ? "plain" : "none";
+    const plan = stagePlan(o.driver, EP_RUN, armName(arm), o.cells);
     const inner = buildLauncher({
-      arm: o.reviewed ? "plain" : "none",
+      arm,
       units: new Map(o.ids.map((id) => [id, { dir: o.src.dir(id) }])),
       repos: o.repos,
       plans: o.out,
@@ -173,16 +204,18 @@ export const REAL: Seams = {
       envelopeHost: need(o.a, "--envelope-host"),
       sidecar: need(o.a, "--sidecar"),
       forbidden: [o.units, join(homedir(), ".capy", "drive")],
-      planned: Math.max(1, o.planned),
+      planned: plan.planned,
       planFor: (cell) => mountOf(cell).plan,
       reviewFor: (cell) => mountOf(cell).review,
       runId: EP_RUN,
       skill: EP_SKILL,
+      serve: { dir: o.driver, unheld_ok: true, reruns: plan.reruns },
+      stripBase: true,
       ...(o.a.flags.has("--harbor") ? { harbor: o.a.flags.get("--harbor")! } : {}),
     });
     return async (p) => {
       const h = await inner(p);
-      return { ...h, backend: ebSession(h.backend, table) };
+      return { ...h, backend: owedOnRefusal(ebSession(h.backend, table), o.driver, EP_RUN, join(o.out, "sessions")) };
     };
   },
   grader: async (o) => plantedGrader({ work: o.work }),
@@ -225,7 +258,7 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     if (!["calls", "hinted", "draw", "none"].includes(step)) fail("E_USAGE", "--step is calls, hinted, draw or none");
     const src = source(a);
     const log = logTo(io);
-    const o = { run, src, batch: batch as 1 | 2, step, chunk: a.flags.has("--chunk") ? whole(a, "--chunk", 1) : undefined, parallel: whole(a, "--parallel", 1), log };
+    const o = { run, src, batch: batch as 1 | 2, step, chunk: a.flags.has("--chunk") ? whole(a, "--chunk", 1) : undefined, first: a.flags.get("--first")?.split(","), parallel: whole(a, "--parallel", 1), log };
     if (step === "draw") {
       io.out((await authorStep(o)).line);
       return 0;
@@ -238,8 +271,10 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     }
     const grader = await seams.grader({ work: need(a, "--work"), log });
     const d = step === "none" ? batchDraw(run, o.batch) : null;
-    const ids = step === "hinted" ? hintedTodo(run, drawFile(run, src).order) : d ? [...d.calibration, ...d.comparison, ...d.reserve] : [];
-    io.out((await paidStage(p, seams.build({ out: join(run, "builds", "authoring", "rig"), src, units: need(a, "--units"), repos: need(a, "--repos"), ids, reviewed: false, planned: ids.length, a }), (session) => authorStep({ ...o, session, grader, gate }))).line);
+    const ids = step === "hinted" ? hintedTodo(run, poolOrder(run, src)) : d ? [...d.calibration, ...d.comparison, ...d.reserve] : [];
+    const opened = driverCells(buildDriver(run), EP_RUN);
+    const cells = ids.map((id) => buildKey(id, step === "hinted" ? "hinted" : "none", null, 1));
+    io.out((await paidStage(p, seams.build({ out: join(run, "builds", "authoring", "rig"), driver: buildDriver(run), src, units: need(a, "--units"), repos: need(a, "--repos"), ids, reviewed: false, cells, a }), (session) => authorStep({ ...o, session, grader, gate, earlier: (cell) => opened.get(cell)?.opens ?? 0 }))).line);
     return 0;
   };
 
@@ -282,7 +317,8 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     const planned = phase === "stock" || !readStep(run, "exposure-gate") ? undefined : comparisonPlanned(phase === "comparison" ? comparisonUnits(run).units.length : SIZE.units, gateArms(run));
     const gate = itemGate(p, run, planned);
     const grader = await seams.grader({ work: need(a, "--work"), log });
-    const done = await paidStage(p, seams.build({ out: join(run, "builds", phase === "stock" ? "stock" : "comparison", "rig"), src, units: need(a, "--units"), repos: need(a, "--repos"), ids: [...new Set(cells.map((c) => c.unit))], reviewed: true, planned: cells.length, a }), (session) => buildsStage({ run, src, gate, session, grader, phase, parallel: whole(a, "--parallel", 1), log }));
+    const opened = driverCells(buildDriver(run), EP_RUN);
+    const done = await paidStage(p, seams.build({ out: join(run, "builds", phase === "stock" ? "stock" : "comparison", "rig"), driver: buildDriver(run), src, units: need(a, "--units"), repos: need(a, "--repos"), ids: [...new Set(cells.map((c) => c.unit))], reviewed: true, cells: cells.map((c) => buildKey(c.unit, c.arm, c.reviewer, c.rep)), a }), (session) => buildsStage({ run, src, gate, session, grader, phase, parallel: whole(a, "--parallel", 1), log, earlier: (cell) => opened.get(cell)?.opens ?? 0 }));
     io.out("builds " + phase + ": " + done.length + " of " + cells.length + " cells recorded, $" + done.reduce((s, b) => s + b.costUsd, 0).toFixed(2));
     return 0;
   };
@@ -320,6 +356,14 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     return 0;
   };
 
+  const owed: Command["run"] = (a, io) => {
+    const run = runDir(a);
+    const rows = setAsideRefusedGaps(run, buildDriver(run), EP_RUN);
+    for (const r of rows) io.out("owed " + r.cell + ": recorded " + r.outcome + " as a gap, but the driver opened it " + r.opens + " time" + (r.opens === 1 ? "" : "s") + (r.refusals.length ? " and refused " + r.refusals.map((x) => x.at + " " + x.code + " " + x.status + " (" + x.detail + "; trial " + x.trial + ")").join(", ") : ", and its retry never reached the driver") + "; set aside " + r.moved.join(", "));
+    io.out("owed: " + rows.length + " cell" + (rows.length === 1 ? "" : "s") + " set aside; the step's next run gives each its one retry");
+    return 0;
+  };
+
   const records: Command["run"] = (a, io) => {
     const run = runDir(a);
     const r = runRecords(run, source(a));
@@ -332,16 +376,26 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     const run = runDir(a);
     const role = need(a, "--role") as JudgeRole;
     if (!(role in ROLE_MODEL)) fail("E_USAGE", "--role is " + Object.keys(ROLE_MODEL).join(", "));
+    const revision = a.flags.get("--revision") ?? "0";
+    if (revision !== "0" && revision !== "1") fail("E_USAGE", "--revision is 0 or 1: section 5 allows one rubric revision");
     const r = runRecords(run, source(a));
-    const picked = a.flags.has("--bundles") ? (JSON.parse(readFileSync(a.flags.get("--bundles")!, "utf8")) as ReturnType<typeof bundleSet>) : bundleSet(r.units.filter((u) => u.set === "comparison"), r.reviews);
+    const picked = a.flags.has("--bundles") ? (JSON.parse(readFileSync(a.flags.get("--bundles")!, "utf8")) as BundleRef[]) : bundleSet(r.units.filter((u) => u.set === "comparison"), r.reviews);
     const inputs = picked.map((b) => bundleInput(run, b));
     const p = plantedPaid("judge", a, run);
     const gate = itemGate(p, run);
-    const results = await paidStage(p, seams.judge({ out: join(run, "judge", "meter"), cacheDir: need(a, "--cache"), roles: [role] }), (call) => judgeAll(inputs, gatedJudge(gate, call), role));
-    const out = join(run, "judge", role + ".json");
+    const results = await paidStage(p, seams.judge({ out: join(run, "judge", "meter"), cacheDir: need(a, "--cache"), roles: [role] }), (call) => judgeAll(inputs, gatedJudge(gate, call), role, loadPrompts(revision === "1" ? NAMED_PROMPT_R1 : NAMED_PROMPT)));
+    const out = join(run, "judge", role + (revision === "1" ? "-r1" : "") + ".json");
     mkdirSync(join(run, "judge"), { recursive: true });
     writeFileSync(out, JSON.stringify(results, null, 1) + "\n");
     io.out("judge " + role + ": " + results.length + " bundles, " + results.filter((x) => x.named).length + " name the planted condition, " + results.filter((x) => x.error).length + " with an error; " + out);
+    return 0;
+  };
+
+  const gold: Command["run"] = (a, io) => {
+    const g = goldBundles(runDir(a), source(a));
+    writeFileSync(need(a, "--out"), JSON.stringify(g.picked, null, 1) + "\n");
+    const n = (f: (b: BundleRef) => boolean) => g.picked.filter(f).length;
+    io.out("gold: " + g.picked.length + " bundles (smoke " + n((b) => b.smoke === true) + ", " + (["standalone", "engphase", "plain", "stock", "plan"] as const).map((s) => s + " " + n((b) => b.source === s && !b.smoke)).join(", ") + "), keyword proxy " + g.proxy.toFixed(2) + (g.short.length ? "; short: " + g.short.join(", ") : ""));
     return 0;
   };
 
@@ -355,12 +409,14 @@ export function stagesCommands(seams: Seams = REAL): Record<string, Command> {
     pin: PIN_COMMAND,
     ledger: { run: ep(ledger), bools: ["--projection"], usage: "[--projection --run <dir> --crew-usd <usd> --hosts-usd <usd>]", summary: "the program and item init lines, or the running all-in projection against the $5,000 stop" },
     preflight: { run: ep(preflight), bools: [], usage: RUN + " --gstack <checkout at the pin> --ledger-record <dir> [--harbor <bin>] [--docker <bin>]", summary: "the no-model preflight on the run host: Docker, Harbor, the pins, the plain arm, the routes, the items, the units and the run dir" },
-    author: { run: ep(author), bools: [], usage: RUN + " --batch 1|2 --step calls|hinted|draw|none [--chunk n] [--parallel n] [--cache <dir> for calls] [" + BUILD + " for hinted and none] " + PAID, summary: "authoring in seeded order: plan, audits, hint and ratings; the hinted builds; the draw; the no-review builds (paid: ep-authoring)" },
+    author: { run: ep(author), bools: [], usage: RUN + " --batch 1|2 --step calls|hinted|draw|none [--chunk n] [--first <unit,...> for calls] [--parallel n] [--cache <dir> for calls] [" + BUILD + " for hinted and none] " + PAID, summary: "authoring in seeded order: plan, audits, hint and ratings; the hinted builds; the draw; the no-review builds (paid: ep-authoring)" },
     smoke: { run: ep(smoke), bools: [], usage: RUN + " --gstack <checkout at the pin> [--parallel n] [--policy <file>] " + PAID, summary: "the exposure smoke: one Opus session per skill arm on each calibration unit (paid: ep-smoke)" },
     reviews: { run: ep(reviews), bools: [], usage: RUN + " --phase pilot|comparison [--gstack <checkout at the pin>] [--parallel n] [--policy <file>] " + PAID, summary: "the pilot's plain reviews or the comparison reviews, with the interim exposure stop (paid: ep-comparison)" },
     builds: { run: ep(builds), bools: [], usage: RUN + " --phase pilot|comparison|stock " + BUILD + " [--parallel n] " + PAID, summary: "the reviewed builds of a phase, or the stock control's (paid: ep-comparison, ep-stock)" },
     records: { run: ep(records), bools: [], usage: RUN + " --out <json>", summary: "every unit, review and build record of the run, in run order, as the readings read them" },
-    judge: { run: ep(judge), bools: [], usage: RUN + " --role judge|gold-opus|gold-gemini [--bundles <json of {unit, source, rep}>] --cache <dir> " + PAID, summary: "the judged secondary's calls over the bundle set, or over the gold set given (paid: ep-judge)" },
+    judge: { run: ep(judge), bools: [], usage: RUN + " --role judge|gold-opus|gold-gemini [--bundles <json of {unit, source, rep, smoke?}>] [--revision 0|1] --cache <dir> " + PAID, summary: "the judged secondary's calls over the bundle set, or over the gold set given; --revision 1 reads section 5's revised call-2 rubric and writes <role>-r1.json (paid: ep-judge)" },
+    gold: { run: ep(gold), bools: [], usage: RUN + " --out <json>", summary: "section 8's gold set over the run, with no model call: the bundles ep judge --bundles reads for the judge check" },
+    owed: { run: ep(owed), bools: [], usage: "--run <dir>", summary: "set aside each build cell recorded as a gap whose retry never opened (refused, or never reaching the driver), read from the driver's log; the step's next run retries it" },
     lost: { run: ep(lost), bools: [], usage: "--run <dir> --unit <id> --reason <text>", summary: "record a comparison unit lost to infrastructure; the next reserve unit in seeded order replaces it" },
   };
 }

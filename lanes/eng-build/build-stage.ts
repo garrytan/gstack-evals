@@ -149,6 +149,42 @@ export function prepareTree(repo: string): string[] {
   return removed;
 }
 
+/**
+ * The strip rule carried into the base commit, for units whose B tracks a stripped name: the one commit is written again
+ * without those paths (its message, author and dates kept), and the old objects are pruned, so a session can't read one
+ * back with git show or from the object store. A base that tracks no stripped name is left as it is. Returns the paths
+ * it took out of the commit; prepareTree then strips the working tree and checks the result. First it refuses a
+ * repository whose objects the prune can't reach or whose history sits elsewhere: one that borrows objects from another
+ * store (objects/info/alternates), keeps a pack (a .keep file), or holds another .git below its root. Then it resets the
+ * index to the base commit, so nothing staged reaches the new commit.
+ */
+export function stripBase(repo: string): string[] {
+  const run = (args: string[], input?: string | Buffer): Buffer => {
+    const r = spawnSync("git", ["-C", repo, ...args], { input, maxBuffer: 256 * 1024 * 1024, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_LITERAL_PATHSPECS: "1" } });
+    if (r.status !== 0) fail("E_USAGE", repo + ": git " + args[0] + " failed while stripping the base commit (" + String(r.stderr).trim() + ")");
+    return r.stdout;
+  };
+  if (existsSync(join(repo, ".git/objects/info/alternates"))) fail("E_USAGE", repo + ": the base repository borrows objects from another store (objects/info/alternates), which the prune can't reach");
+  const packs = join(repo, ".git/objects/pack");
+  const kept = existsSync(packs) ? readdirSync(packs).filter((f) => f.endsWith(".keep")).length : 0;
+  if (kept) fail("E_USAGE", repo + ": the base repository keeps " + kept + " pack(s) with a .keep file, which the prune skips");
+  const nested = (dir: string): boolean => readdirSync(dir, { withFileTypes: true }).some((e) => (e.name === ".git" ? dir !== repo : e.isDirectory() && nested(join(dir, e.name))));
+  if (nested(repo)) fail("E_USAGE", repo + ": the base repository holds another .git below its root, which the strip rule never reaches");
+  run(["read-tree", "HEAD"]);
+  const tracked = String(run(["ls-tree", "-r", "--name-only", "-z", "HEAD"])).split("\0").filter((p) => p && p.split("/").some((s) => STRIP.has(s)));
+  if (!tracked.length) return [];
+  run(["rm", "-r", "-q", "--cached", "--pathspec-from-file=-", "--pathspec-file-nul"], tracked.join("\0"));
+  const tree = String(run(["write-tree"])).trim();
+  const body = run(["cat-file", "commit", "HEAD"]);
+  const eol = body.indexOf(10);
+  if (!body.subarray(0, eol).toString().startsWith("tree ")) fail("E_USAGE", repo + ": the base commit does not start with its tree");
+  const commit = String(run(["hash-object", "-t", "commit", "-w", "--stdin"], Buffer.concat([Buffer.from("tree " + tree), body.subarray(eol)]))).trim();
+  run(["update-ref", "HEAD", commit]);
+  run(["reflog", "expire", "--expire=now", "--all"]);
+  run(["gc", "-q", "--prune=now"]);
+  return tracked.sort();
+}
+
 /** The guards the Lane B agent must still carry, read from its source: bundled skills off, web tools denied, MCP config strict. */
 export function agentGuards(path: string = REAL_AGENT): string[] {
   const src = readFileSync(path, "utf8");

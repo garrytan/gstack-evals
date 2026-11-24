@@ -1,0 +1,61 @@
+reviewer opus, population every admitted unit, primary composite ((avoid + catch) / 2), units 64, repos 52
+MDD: design 0.108 (power.py); each reading also prints its own (2.80 x its bootstrap SD); smallest effect worth acting on 0.10
+smoke standalone on opus: exposed 6 of 6 (gaps 0, counted against the arm), needs 5: through
+smoke engphase on opus: exposed 6 of 6 (gaps 0, counted against the arm), needs 5: through
+arm standalone: no measurable difference (the interval holds zero (p 0.6775)); +0.012 [-0.041, +0.074] p 0.6775, units 64 (worse 13), repos 52, MDD 0.083; measured given an explicit invocation (the restored /plan-eng-review under a forced invocation held by the Stop hook, with the reviewed plan handed to the builder); sessions exposed 189, unexposed 3, gaps 0
+arm standalone decision row (its own test at alpha 0.05): FIX-METHOD, no cut. GStack Minder gets a rewrite brief for the test review and failure-modes sections of the restored skill: the judged secondary is unreported, so the brief goes unsteered. Users are told plainly: no measurable difference on these real bugs at MDD 0.108; the skill's other aims are untested.
+arm standalone public headline (Holm across 2 families, adjusted p 0.6775): no measurable difference; measured given an explicit invocation (the restored /plan-eng-review under a forced invocation held by the Stop hook, with the reviewed plan handed to the builder); sessions exposed 189, unexposed 3, gaps 0
+arm standalone gaps scored 0: +0.012 [-0.041, +0.074] p 0.6775, units 64 (worse 13), repos 52, MDD 0.083; catch transplant drops left out: +0.043 [-0.022, +0.118] p 0.2131, units 47 (worse 8), repos 39, MDD 0.100; limit stops left out: +0.012 [-0.041, +0.074] p 0.6775, units 64 (worse 13), repos 52, MDD 0.083
+arm standalone functional share - plain: -0.002 [-0.017, +0.013] p 0.7614, units 64 (worse 6), repos 52, MDD 0.021; reach - plain: -0.005 [-0.021, 0.000] p 1.0000, units 64 (worse 1), repos 52, MDD 0.017; coverage 1.00 (plain 1.00); exposure 0.98
+arm standalone avoid - plain: +0.040 [-0.013, +0.104] p 0.1885, units 64 (worse 5), repos 52, MDD 0.085; catch - plain: -0.016 [-0.089, +0.057] p 0.7626, units 64 (worse 10), repos 52, MDD 0.104
+arm standalone - stock: +0.068 [-0.003, +0.145] p 0.0539, units 64 (worse 12), repos 52, MDD 0.106; stock line: not distinguished (Not distinguished: no brief.)
+arm standalone - none: +0.055 [-0.026, +0.140] p 0.2015, units 64 (worse 14), repos 52, MDD 0.117
+arm standalone review words 4565 more than plain a unit; length-adjusted: +0.102 at equal words (slope -0.020 per 1,000 words, units 64)
+arm standalone exposed before any block: -0.002 [-0.059, +0.060] units 63, repos 52; exposed only after a block or not at all: +0.085 [-0.036, +0.233] units 19, repos 18
+arm standalone clean check, units outside the pilot: -0.013 [-0.070, +0.050] p 0.6635, units 44 (worse 11), repos 40, MDD 0.085
+standalone R48 Why null?: exposure 0.98; task fit by the admission pilot; power MDD 0.083 against the smallest effect worth acting on, 0.10 (5 points is plausible and beyond this design); plain level 0.395 (whether plain Opus already does it). FIX-METHOD, no CUT-CANDIDATE: ENG-1 and ENG-4 to ENG-7 stay untested.
+arm engphase: no measurable difference (the interval holds zero (p 0.2332)); +0.031 [-0.020, +0.086] p 0.2332, units 64 (worse 12), repos 52, MDD 0.076; measured given an explicit invocation (autoplan's Phase 3 eng phase under a forced opening held by the Stop hook, with the reviewed plan handed to the builder); sessions exposed 190, unexposed 2, gaps 0
+arm engphase decision row (its own test at alpha 0.05): FIX-METHOD, no cut. GStack Minder gets a rewrite brief for the test review and failure-modes sections of autoplan's Phase 3 (as users get it in Claude Code): the judged secondary is unreported, so the brief goes unsteered. Users are told plainly: no measurable difference on these real bugs at MDD 0.108; the skill's other aims are untested.
+arm engphase public headline (Holm across 2 families, adjusted p 0.4664): no measurable difference; measured given an explicit invocation (autoplan's Phase 3 eng phase under a forced opening held by the Stop hook, with the reviewed plan handed to the builder); sessions exposed 190, unexposed 2, gaps 0
+arm engphase gaps scored 0: +0.031 [-0.020, +0.086] p 0.2332, units 64 (worse 12), repos 52, MDD 0.076; catch transplant drops left out: +0.061 [-0.007, +0.138] p 0.0807, units 46 (worse 8), repos 38, MDD 0.104; limit stops left out: +0.031 [-0.020, +0.086] p 0.2332, units 64 (worse 12), repos 52, MDD 0.076
+arm engphase functional share - plain: -0.000 [-0.016, +0.015] p 0.9718, units 64 (worse 4), repos 52, MDD 0.022; reach - plain: -0.005 [-0.017, 0.000] p 1.0000, units 64 (worse 1), repos 52, MDD 0.015; coverage 1.00 (plain 1.00); exposure 0.99
+arm engphase avoid - plain: +0.088 [+0.039, +0.147] p 0.0003, units 64 (worse 1), repos 52, MDD 0.079; catch - plain: -0.026 [-0.106, +0.053] p 0.5811, units 64 (worse 13), repos 52, MDD 0.112
+arm engphase - stock: +0.087 [+0.012, +0.164] p 0.0190, units 64 (worse 8), repos 52, MDD 0.108; stock line: not distinguished (Not distinguished: no brief.)
+arm engphase - none: +0.074 [-0.007, +0.158] p 0.0896, units 64 (worse 10), repos 52, MDD 0.118
+arm engphase review words 4644 more than plain a unit; length-adjusted: +0.226 at equal words (slope -0.042 per 1,000 words, units 64)
+arm engphase exposed before any block: +0.035 [-0.018, +0.090] units 64, repos 52; exposed only after a block or not at all: -0.062 [-0.125, 0.000] units 8, repos 7
+arm engphase clean check, units outside the pilot: +0.003 [-0.054, +0.062] p 0.9176, units 44 (worse 11), repos 40, MDD 0.084
+engphase R48 Why null?: exposure 0.99; task fit by the admission pilot; power MDD 0.076 against the smallest effect worth acting on, 0.10 (5 points is plausible and beyond this design); plain level 0.395 (whether plain Opus already does it). FIX-METHOD, no CUT-CANDIDATE: ENG-1 and ENG-4 to ENG-7 stay untested.
+holm engphase: p 0.2332, adjusted 0.4664, does not reject
+holm standalone: p 0.6775, adjusted 0.6775, does not reject
+secondary standalone - engphase: no measurable difference (MDD 0.080); -0.019 [-0.075, +0.037] p 0.4972, units 64 (worse 20), repos 52, MDD 0.080; No change to autoplan's wrapper.
+secondary standalone - engphase, clean check outside the pilot: -0.016 [-0.069, +0.040] p 0.5798, units 44 (worse 15), repos 40, MDD 0.077
+secondary plain - none: +0.043 [-0.022, +0.111] p 0.2058, units 64 (worse 9), repos 52, MDD 0.095
+judged secondary: not reported as judged (judge check failed: under the one allowed rubric revision kappa 0.373 against 0.60 (sensitivity 0.444, specificity 0.900, stock control 0); under the original rubric kappa 0.743 passed but the stock control credited stock on udbd167e5cbd0 from plan text the plan reading missed, a rubric fault)
+stratum ecosystem go: standalone -0.030 [-0.076, +0.017] units 31, repos 26; engphase +0.032 [-0.038, +0.113] units 31, repos 26
+stratum ecosystem node: standalone -0.015 [-0.154, +0.133] units 11, repos 10; engphase +0.030 [-0.100, +0.136] units 11, repos 10
+stratum ecosystem python: standalone +0.094 [-0.030, +0.244] units 20, repos 14; engphase +0.016 [-0.082, +0.121] units 20, repos 14
+stratum ecosystem rust: standalone 0.000 [0.000, 0.000] units 2, repos 2; engphase +0.167 [+0.167, +0.167] units 2, repos 2
+stratum region 10-29 lines: standalone +0.062 [-0.053, +0.191] units 24, repos 21; engphase +0.053 [-0.023, +0.128] units 24, repos 21
+stratum region 30-99 lines: standalone -0.029 [-0.082, +0.017] units 30, repos 29; engphase +0.046 [-0.035, +0.134] units 30, repos 29
+stratum region 100-300 lines: standalone +0.017 [-0.100, +0.117] units 10, repos 10; engphase -0.067 [-0.150, +0.017] units 10, repos 10
+stratum foreseeable yes-only (both raters yes): standalone +0.005 [-0.060, +0.082] units 28, repos 25; engphase +0.004 [-0.064, +0.075] units 28, repos 25
+stratum foreseeable otherwise: standalone +0.018 [-0.059, +0.105] units 36, repos 31; engphase +0.052 [-0.021, +0.132] units 36, repos 31
+stratum strict window: standalone -0.007 [-0.067, +0.042] units 18, repos 16; engphase +0.021 [-0.086, +0.156] units 18, repos 16
+stratum outside the strict window: standalone +0.020 [-0.051, +0.100] units 46, repos 39; engphase +0.035 [-0.021, +0.090] units 46, repos 39
+stratum stars 10k+: standalone -0.003 [-0.105, +0.111] units 24, repos 19; engphase +0.017 [-0.069, +0.101] units 24, repos 19
+stratum stars 1k-9.9k: standalone +0.014 [-0.063, +0.116] units 29, repos 22; engphase +0.030 [-0.049, +0.123] units 29, repos 22
+stratum stars 300-999: standalone +0.043 [0.000, +0.089] units 11, repos 11; engphase +0.063 [-0.039, +0.152] units 11, repos 11
+stratum pilot units: standalone +0.068 [-0.015, +0.175] units 20, repos 20; engphase +0.092 [+0.017, +0.192] units 20, repos 20
+stratum units outside the pilot: standalone -0.013 [-0.070, +0.050] units 44, repos 40; engphase +0.003 [-0.054, +0.062] units 44, repos 40
+stratum plain pilot vs later builds: 0.303 vs 0.437
+planted cases by failure class: assert 146, crash 7; avoid by class: plain assert 0.519 crash 0.000, standalone assert 0.560 crash 0.000, engphase assert 0.607 crash 0.000
+changed-line coverage: the tool scored 0.00 of trees, not reported (under 0.90)
+measures plain: builds 192 (gaps 0, coverage of planned 1.00), avoid 0.509, catch 0.281 (drops left out 0.349), composite 0.395, functional share 0.943, solved 0.828, reach 0.995, test lines added 201.7, limit stops 0 of 192, read /work/review/ 192 of 192, catch compile rate 0.76 (drops not_a_regular_file 29, own_tests_do_not_compile 17), cost per build $0.51
+measures engphase: builds 192 (gaps 0, coverage of planned 1.00), avoid 0.597, catch 0.255 (drops left out 0.375), composite 0.426, functional share 0.943, solved 0.844, reach 0.990, test lines added 274.3, limit stops 0 of 192, read /work/review/ 192 of 192, catch compile rate 0.67 (drops no_runner_group 5, not_a_regular_file 30, own_tests_do_not_compile 28), cost per build $0.77
+measures standalone: builds 192 (gaps 0, coverage of planned 1.00), avoid 0.549, catch 0.266 (drops left out 0.389), composite 0.408, functional share 0.941, solved 0.818, reach 0.990, test lines added 217.0, limit stops 0 of 192, read /work/review/ 192 of 192, catch compile rate 0.69 (drops not_a_regular_file 30, own_tests_do_not_compile 29), cost per build $0.67
+measures stock: builds 64 (gaps 0, coverage of planned 1.00), avoid 0.460, catch 0.219 (drops left out 0.280), composite 0.340, functional share 0.937, solved 0.828, reach 1.000, test lines added 197.3, limit stops 0 of 64, read /work/review/ 64 of 64, catch compile rate 0.78 (drops not_a_regular_file 10, own_tests_do_not_compile 4), cost per build $0.54
+measures none: builds 64 (gaps 0, coverage of planned 1.00), avoid 0.517, catch 0.188 (drops left out 0.250), composite 0.352, functional share 0.937, solved 0.797, reach 1.000, test lines added 145.5, limit stops 0 of 64, read /work/review/ n/a, catch compile rate 0.75 (drops not_a_regular_file 10, own_tests_do_not_compile 6), cost per build $0.45
+reviews plain: sessions 192 (gaps 0), review words 1363, truncated 0, repo edits discarded 756, Stop hook blocks 0.00, cost per review $0.42
+reviews engphase: sessions 192 (gaps 0), review words 6007, truncated 0, repo edits discarded 1161, Stop hook blocks 0.07, cost per review $1.98, exposed 190, unexposed 2, exposed before any block 183
+reviews standalone: sessions 192 (gaps 0), review words 5928, truncated 0, repo edits discarded 1432, Stop hook blocks 0.16, cost per review $1.96, exposed 189, unexposed 3, exposed before any block 165

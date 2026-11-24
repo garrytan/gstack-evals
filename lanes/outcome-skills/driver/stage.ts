@@ -90,6 +90,11 @@ export interface ServeOptions {
   env?: Record<string, string | undefined>;
   fetch?: (input: string, init: RequestInit) => Promise<Response>;
   requireAdmission?: RequireAdmission;
+  /** Serve an item that also holds this run's leases with no holder: the caller's lane leases its metered model calls
+   * and its reviews on the same item through openLease, and none of those opens a driver session, so sessions.jsonl
+   * still counts every session this driver serves. A lease another run directory holds, and an open lease, are refused
+   * all the same. */
+  unheld_ok?: boolean;
   /** Family SM: sessions whose finalize halt (E_SM_FINALIZE_HALT) the Captain ruled on after reading the proxy journal. Each must name a halt in this run; the launch records the lift and serves the item again. */
   lift_halts?: string[];
   machine?: string;
@@ -463,7 +468,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   const at = new Date(now());
   const plans = o.stages.map((st) => {
     const s = readItem(o.record, st.item);
-    const unheld = s.leases.filter((l) => l.lease.run_id === o.run_id && l.lease.holder?.dir !== dir).map((l) => l.lease);
+    const unheld = s.leases.filter((l) => l.lease.run_id === o.run_id && l.lease.holder?.dir !== dir && !(o.unheld_ok && !l.lease.holder)).map((l) => l.lease);
     if (unheld.length) fail("E_USAGE", "line item " + st.item + " holds run " + o.run_id + "'s leases " + unheld.map((l) => l.lease_id).join(", ") + ", which name no holder, so no run directory's sessions.jsonl counts their sessions and the driver can't serve the item for this run; nothing was opened");
     const stop = capped.get("") ?? capped.get(st.item);
     if (stop) fail("CAP_STOP", (capped.has("") ? "the none stage cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends both skills incomplete" : "stage " + st.item + " cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends its skill incomplete") + "; a cap stop is not retried (plan section 6); nothing was opened");

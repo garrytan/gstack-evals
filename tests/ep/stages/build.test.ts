@@ -6,6 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BUILD_LINE, REVIEW_LINE } from "../../../lanes/eng-build/build-stage.ts";
+import { takeSpend } from "../../../lanes/eng-build/spend.ts";
 import { codeOf, runsOf } from "../../../lanes/eng-planted/stages/cases.ts";
 import { plantedBuildPrompt, readMount, readReview, reviewMount, runPlantedBuild, writeMount, type PlantedSession } from "../../../lanes/eng-planted/stages/build.ts";
 import type { PlantedGrader, PlantedUnit, ReviewRecord, SessionOutcome } from "../../../lanes/eng-planted/types.ts";
@@ -71,15 +72,15 @@ describe("runPlantedBuild", () => {
       try {
         await f();
       } catch (e) {
-        return e as Error & { spentUsd?: number };
+        return e as Error;
       }
       return null;
     };
     const failing: PlantedGrader = { ...grader, grade: async () => { throw new Error("noVerdict"); } };
     const graded = await caught(() => runPlantedBuild({ ...base, grader: failing, review: review("completed"), session: session(["completed"]) }));
-    expect([graded?.message, graded?.spentUsd]).toEqual(["noVerdict", 1]);
+    expect([graded?.message, takeSpend(graded)]).toEqual(["noVerdict", 1]);
     const early = await caught(() => runPlantedBuild({ ...base, review: review("completed"), session: async () => { throw new Error("launch"); } }));
-    expect([early?.message, early?.spentUsd]).toEqual(["launch", undefined]);
+    expect([early?.message, takeSpend(early)]).toEqual(["launch", 0]);
   });
   test("a review that ended in a gap leaves a gap build with no session, empty cases and catch null", async () => {
     const seen: string[] = [];

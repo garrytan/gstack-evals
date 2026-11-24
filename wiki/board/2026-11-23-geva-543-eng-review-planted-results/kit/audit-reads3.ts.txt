@@ -1,0 +1,44 @@
+// GEVA-543: details for the /testbed and dependency-cache tool calls (tool names and path tokens only).
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+const run = process.env.EP_RUN_DIR!;
+const A = join(run, "analysis");
+const ids = new Set(JSON.parse(readFileSync(join(A, "analysis.json"), "utf8")).units.map((u: any) => u.id));
+const TB = /\/testbed[\w./-]*/g;
+const STRIP = /(^|[\/\s"'=:(])(CLAUDE\.md|CLAUDE\.local\.md|AGENTS\.md|\.claude)(?![\w.-])/;
+const CACHE = /\/go\/pkg\/mod|\/usr\/local\/cargo|\/opt\/venv\/lib|node_modules|site-packages|\/root\/\.cache|\/root\/\.cargo/;
+type Rec = Record<string, unknown>;
+const toolUses = (v: unknown, out: Rec[] = []): Rec[] => { if (Array.isArray(v)) for (const x of v) toolUses(x, out); else if (v && typeof v === "object") { const r = v as Rec; if (r.type === "tool_use" && "input" in r) out.push(r); for (const x of Object.values(r)) if (x && typeof x === "object") toolUses(x, out); } return out; };
+const last = (dir: string) => readdirSync(dir).filter((d) => /^a\d+$/.test(d)).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1))).at(-1)!;
+const files: Array<[string, string, string]> = [];
+for (const phase of ["comparison", "stock", "authoring"]) {
+  const root = join(run, "builds", phase, "rig", "sessions");
+  for (const key of readdirSync(root)) {
+    if (!ids.has(key.split("_")[0]) || (phase === "authoring" && !key.includes("_none_"))) continue;
+    const jobs = join(root, key, last(join(root, key)), "jobs");
+    for (const j of readdirSync(jobs)) { try { for (const t of readdirSync(join(jobs, j))) { const f = join(jobs, j, t, "evaluator", "sdk-messages.jsonl"); if (t.startsWith("task__") && existsSync(f)) files.push(["build", key, f]); } } catch {} }
+  }
+}
+const rroot = join(run, "reviews", "comparison", "sessions");
+for (const key of readdirSync(rroot)) if (ids.has(key.split("_")[0])) files.push(["review", key, join(rroot, key, last(join(rroot, key)), "run", "host", "transcript.ndjson")]);
+const tb: string[] = []; const cache = new Map<string, Set<string>>(); let cacheReads = 0; const cacheReadKeys = new Set<string>();
+for (const [kind, key, f] of files) {
+  for (const line of readFileSync(f, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    let rec: unknown; try { rec = JSON.parse(line); } catch { continue; }
+    for (const u of toolUses(rec)) {
+      const inp = JSON.stringify(u.input);
+      const t = inp.match(TB);
+      if (t) tb.push(kind + " " + key + " " + String(u.name) + " " + [...new Set(t)].slice(0, 4).join(" "));
+      if (STRIP.test(inp) && CACHE.test(inp) && !t) {
+        const k = kind + " " + String(u.name);
+        (cache.get(k) ?? cache.set(k, new Set()).get(k)!).add(key);
+        const fp = (u.input as Rec)?.file_path;
+        if (u.name === "Read" && typeof fp === "string" && CACHE.test(fp) && STRIP.test(fp)) { cacheReads++; cacheReadKeys.add(kind + " " + key); }
+      }
+    }
+  }
+}
+console.log("testbed tool calls " + tb.length + ":\n" + tb.join("\n"));
+console.log("cache-and-stripped tool calls by kind and tool: " + [...cache.entries()].map(([k, s]) => k + " " + s.size + " sessions").join(", "));
+console.log("Read calls of a stripped-name file inside a dependency cache: " + cacheReads + " in " + cacheReadKeys.size + " sessions " + [...cacheReadKeys].join("; "));

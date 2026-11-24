@@ -1,0 +1,20 @@
+# Judged lines of ep analyze with the judged secondary switched on, original rubric (analysis/readout-descriptive-r0.txt). The judge check failed: descriptive only.
+judged secondary: plan leaks dropped 1; find rate per source: plain 0.444, engphase 0.492, standalone 0.476, stock 0.016, none 0.000, plan 0.000
+judged words per source: plain 1388, engphase 6040, standalone 5779, stock 391, none 271, plan 271
+judged generic-specific rate (credited quotes a generic list entry matches): plain 0 of 28, engphase 1 of 31, standalone 0 of 30, stock 0 of 1, none 0 of 0, plan 0 of 0
+judged find rate standalone - plain: +0.032 [-0.100, +0.156] p 0.8175, units 63 (worse 5), repos 51, MDD 0.183; length-adjusted +0.371 at equal words; standalone - plan alone: +0.476 [+0.339, +0.613] units 63, repos 51
+judged find rate engphase - plain: +0.048 [-0.094, +0.186] p 0.6357, units 63 (worse 7), repos 51, MDD 0.199; length-adjusted +0.455 at equal words; engphase - plan alone: +0.492 [+0.358, +0.627] units 63, repos 51
+judged section map plain (a lead for the rewrite brief, never a finding): failure modes 1, other 23, test plan 4
+judged section map engphase (a lead for the rewrite brief, never a finding): other 23, test plan 8
+judged section map standalone (a lead for the rewrite brief, never a finding): failure modes 1, other 23, test plan 6
+judged section map stock (a lead for the rewrite brief, never a finding): other 1
+
+# The same, revised call-2 rubric (analysis/readout-descriptive-r1.txt). The judge check failed: descriptive only.
+judged secondary: plan leaks dropped 0; find rate per source: plain 0.266, engphase 0.281, standalone 0.344, stock 0.000, none 0.000, plan 0.000
+judged words per source: plain 1400, engphase 6081, standalone 5785, stock 392, none 272, plan 272
+judged generic-specific rate (credited quotes a generic list entry matches): plain 0 of 17, engphase 1 of 18, standalone 0 of 22, stock 0 of 0, none 0 of 0, plan 0 of 0
+judged find rate standalone - plain: +0.078 [-0.049, +0.209] p 0.3395, units 64 (worse 5), repos 52, MDD 0.183; length-adjusted +0.450 at equal words; standalone - plan alone: +0.344 [+0.215, +0.476] units 64, repos 52
+judged find rate engphase - plain: +0.016 [-0.119, +0.150] p 1.0000, units 64 (worse 8), repos 52, MDD 0.193; length-adjusted +0.353 at equal words; engphase - plan alone: +0.281 [+0.171, +0.400] units 64, repos 52
+judged section map plain (a lead for the rewrite brief, never a finding): other 14, test plan 3
+judged section map engphase (a lead for the rewrite brief, never a finding): other 14, test plan 4
+judged section map standalone (a lead for the rewrite brief, never a finding): failure modes 1, other 17, test plan 4

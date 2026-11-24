@@ -7,7 +7,10 @@
 // E_PV_PROVIDER_DRIFT (section 17, rule 6). An OpenRouter request may also carry a system text, a chat in place of the
 // one prompt, a temperature and a seed (the office-hours founder eval's simulator); a request without them keeps its body
 // and cache key byte for byte. Each result also carries the model the reply names, for a caller that checks it against
-// its pin (the office-hours rewrite eval's wire); the meter itself does not judge it.
+// its pin (the office-hours rewrite eval's wire); the meter itself does not judge it. A model marked stream is called
+// with stream: true, and its reply is added up from the stream's chunks: a stream with no usage chunk or another provider
+// stops as drift too, and one that ends with an error event stops with E_PV_STREAM_ERROR, so it is never read as an
+// empty answer.
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,15 +27,17 @@ import { rigAdmission } from "../../src/rig/admission.ts";
 
 export type ModelKey = "opus" | "astra" | "astra-6.2" | "sol" | "particle" | "gemini" | "carbon";
 
-/** The models the eval calls directly, on the routes the price table lists. OpenRouter rows carry their provider pin in prices.ts. */
-export const MODELS: Readonly<Record<ModelKey, { provider: Provider; id: string; served_by?: RegExp }>> = {
+/** The models the eval calls directly, on the routes the price table lists. OpenRouter rows carry their provider pin in
+ * prices.ts. Gemini 4 Carbon streams (Captain's dated plan change, 2026-11-17): sent whole, its calls were cut at about
+ * 300 seconds with a 504 inside a 200. */
+export const MODELS: Readonly<Record<ModelKey, { provider: Provider; id: string; served_by?: RegExp; stream?: true }>> = {
   opus: { provider: "anthropic", id: "claude-opus-5-5" },
   astra: { provider: "openai", id: "gpt-6-astra" },
   "astra-6.2": { provider: "openai", id: "gpt-6.2-astra" },
   sol: { provider: "openrouter", id: "openai/gpt-6.1-sol", served_by: /^openai$/i },
   particle: { provider: "openrouter", id: "particle-ai/particle-1", served_by: /^particle( ai)?$/i },
   gemini: { provider: "openrouter", id: "google/gemini-4-argon", served_by: /^google/i },
-  carbon: { provider: "openrouter", id: "google/gemini-4-carbon", served_by: /^google/i },
+  carbon: { provider: "openrouter", id: "google/gemini-4-carbon", served_by: /^google/i, stream: true },
 };
 
 const ROUTE: Record<Provider, string> = { anthropic: "/v1/messages", openai: "/v1/responses", openrouter: "/v1/chat/completions" };
@@ -53,6 +58,9 @@ export interface CallRequest {
   effort?: string | null;
   /** A label for the journal's cell (never prompt text). */
   label: string;
+  /** Numbers a repeat of the same request (2 for the second ask); a repeat past the first has its own cache entry, so it
+   * reaches the model instead of replaying the first reply. */
+  attempt?: number;
   /** OpenRouter only: a system text sent as a first system message. */
   system?: string;
   /** OpenRouter only: the chat to send in place of the one user prompt. */
@@ -73,6 +81,8 @@ export interface CallResult {
   text: string | null;
   status: number;
   micros: number | null;
+  /** What the call's meter holds as unknown (a reply with no usage), at its full reservation; 0 on a cache hit. */
+  unknown_micros?: number;
   cached: boolean;
   problem: string | null;
   served_by: string | null;
@@ -81,14 +91,44 @@ export interface CallResult {
 }
 
 /** A request's body. The chat fields are sent only when set, so a request without them keeps its body and cache key. */
-export function requestBody(m: { provider: Provider; id: string }, prompt: string, maxTokens: number, effort: string | null | undefined, chat: ChatFields = {}): Record<string, unknown> {
+export function requestBody(m: { provider: Provider; id: string; stream?: true }, prompt: string, maxTokens: number, effort: string | null | undefined, chat: ChatFields = {}): Record<string, unknown> {
   const { system, temperature, seed } = chat;
   const set = system !== undefined || chat.messages !== undefined || temperature !== undefined || seed !== undefined;
   if (set && m.provider !== "openrouter") throw new MeterError("E_USAGE", "system, messages, temperature and seed are sent only on OpenRouter, not to " + m.provider);
   const messages = [...(system !== undefined ? [{ role: "system", content: system }] : []), ...(chat.messages ?? [{ role: "user", content: prompt }])];
   if (m.provider === "openai") return judgeRequest("openai", m.id, prompt, maxTokens, effort ?? undefined);
   if (m.provider === "anthropic") return { model: m.id, max_tokens: maxTokens, messages, ...(effort ? { output_config: { effort } } : {}) };
-  return { model: m.id, max_tokens: maxTokens, messages, ...(effort ? { reasoning: { effort } } : {}), ...(temperature !== undefined ? { temperature } : {}), ...(seed !== undefined ? { seed } : {}) };
+  return { model: m.id, max_tokens: maxTokens, messages, ...(m.stream ? { stream: true } : {}), ...(effort ? { reasoning: { effort } } : {}), ...(temperature !== undefined ? { temperature } : {}), ...(seed !== undefined ? { seed } : {}) };
+}
+
+/** The reply an OpenRouter chat stream adds up to, in the shape of the same reply sent whole: its content deltas joined
+ * into one message, the id, model, provider and usage its chunks name, and the first error event it carries (an error
+ * field, or a choice that finished with "error"). Keep-alive comments are skipped. A data line that is not JSON, or a
+ * text with no data line, gives null, so a broken stream is never read as an answer. */
+export function assembleStream(text: string): Record<string, any> | null {
+  const reply: Record<string, any> = {};
+  let content = "";
+  let finish: unknown = null;
+  let events = 0;
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    const data = line.slice(5).trim();
+    if (!data || data === "[DONE]") continue;
+    let event: any;
+    try {
+      event = JSON.parse(data);
+    } catch {
+      return null;
+    }
+    events++;
+    const choice = event?.choices?.[0];
+    if (typeof choice?.delta?.content === "string") content += choice.delta.content;
+    if (choice?.finish_reason) finish = choice.finish_reason;
+    for (const k of ["id", "model", "provider"]) if (typeof event?.[k] === "string") reply[k] = event[k];
+    if (event?.usage && typeof event.usage === "object") reply.usage = event.usage;
+    if (reply.error === undefined && (event?.error != null || choice?.finish_reason === "error")) reply.error = event?.error ?? { finish_reason: "error" };
+  }
+  return events ? { ...reply, choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: finish }] } : null;
 }
 
 export const sha256 = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
@@ -99,7 +139,8 @@ export interface MeterOptions {
   runId: string;
   /** Holds journal.ndjson; replies never go here. */
   out: string;
-  /** Holds the reply cache; it carries model output, so it sits on tmpfs for sealed work. */
+  /** Holds the reply cache and the body of any reply with no usage (no-usage-<meter id>.txt); it carries model output,
+   * so it sits on tmpfs for sealed work. */
   cacheDir: string;
   maxOutputTokens: number;
   /** The most the lease reserves, in micros, or a function that gives it, called after this run's stale lease is settled; without it the lease reserves what the item's cap has left. */
@@ -188,17 +229,18 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       const m = MODELS[req.model];
       if (req.maxTokens > o.maxOutputTokens) throw new MeterError("E_USAGE", "a " + req.maxTokens + "-token request is above this meter's output cap of " + o.maxOutputTokens);
       const body = requestBody(m, req.prompt, req.maxTokens, req.effort, req);
-      const file = join(o.cacheDir, cacheKey(req.model, body) + ".json");
+      const attempt = req.attempt ?? 1;
+      const file = join(o.cacheDir, cacheKey(req.model, body) + (attempt > 1 ? ".a" + attempt : "") + ".json");
       if (existsSync(file)) {
         const hit = JSON.parse(readFileSync(file, "utf8")) as CallResult;
         if (m.served_by && (typeof hit.served_by !== "string" || !m.served_by.test(hit.served_by))) throw new MeterError("E_PV_PROVIDER_DRIFT", m.id + "'s cached reply names " + (hit.served_by ?? "no provider") + ", not its pinned provider; stop this model's items and ask the Captain");
-        return { ...hit, cached: true, micros: 0 };
+        return { ...hit, cached: true, micros: 0, unknown_micros: 0 };
       }
       let done = () => {};
       const settled = new Promise<void>((r) => (done = r));
       inflight.add(settled);
       try {
-        return await send(req, m, body, file);
+        return await send(req, m, body, file, attempt);
       } finally {
         inflight.delete(settled);
         done();
@@ -221,8 +263,8 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
     },
   };
 
-  async function send(req: CallRequest, m: (typeof MODELS)[ModelKey], body: Record<string, unknown>, file: string): Promise<CallResult> {
-    const b = p.bind({ cell: { run_id: o.runId, arm: "pv", task: req.label, model: m.id, trial: 1, attempt: 1 }, models: [m.provider + ":" + m.id], allowance_micros: reserved() });
+  async function send(req: CallRequest, m: (typeof MODELS)[ModelKey], body: Record<string, unknown>, file: string, attempt: number): Promise<CallResult> {
+    const b = p.bind({ cell: { run_id: o.runId, arm: "pv", task: req.label, model: m.id, trial: 1, attempt }, models: [m.provider + ":" + m.id], allowance_micros: reserved() });
     let status = 0;
     let text = "";
     try {
@@ -233,24 +275,32 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
       await p.finalize(b.meter_id);
       p.unbind(b.slot);
     }
-    const micros = local.meters(leaseId).get(b.meter_id)?.spent_micros ?? null;
+    const row = local.meters(leaseId).get(b.meter_id);
+    const micros = row?.spent_micros ?? null;
+    const unknown_micros = row?.unknown_micros ?? 0;
     let parsed: any = null;
     try {
       parsed = JSON.parse(text);
     } catch {}
+    const stream = parsed === null && m.stream && status === 200 ? assembleStream(text) : null;
+    const unmetered = micros === null || unknown_micros > 0;
+    if (unmetered || stream?.error) writeFileSync(join(o.cacheDir, (unmetered ? "no-usage-" : "stream-error-") + b.meter_id + ".txt"), text, { mode: 0o600 });
     if (status !== 200) {
       const problem = typeof parsed?.code === "string" ? parsed.code + ": " + (parsed.detail ?? "") : "HTTP " + status;
       tally(null, req.label);
-      return { text: null, status, micros, cached: false, problem, served_by: null };
+      return { text: null, status, micros, unknown_micros, cached: false, problem, served_by: null };
     }
-    const servedBy = m.provider === "openrouter" ? (typeof parsed?.provider === "string" ? parsed.provider : null) : m.provider;
-    const answer = parsed ? judgeAnswer(m.provider, parsed) : "";
-    if (!answer && (!completion(m.provider, parsed) || servedBy === null)) {
+    const reply = stream ?? parsed;
+    const servedBy = m.provider === "openrouter" ? (typeof reply?.provider === "string" ? reply.provider : null) : m.provider;
+    if (stream?.error) throw new MeterError("E_PV_STREAM_ERROR", m.id + " ended its stream with an error event (code " + (stream.error.code ?? "none") + ", type " + (stream.error.metadata?.error_type ?? "none") + "), so it is not read as an answer; its body is kept beside the cache; stop this model's items and ask the Captain");
+    const answer = reply ? judgeAnswer(m.provider, reply) : "";
+    if (!answer && (!completion(m.provider, reply) || servedBy === null)) {
       tally(true, req.label);
-      return { text: null, status, micros, cached: false, problem: parsed ? "the reply carries no answer" + (servedBy === null ? " and names no provider" : "") : "the reply is not JSON", served_by: servedBy, model: null };
+      return { text: null, status, micros, unknown_micros, cached: false, problem: reply ? "the reply carries no answer" + (servedBy === null ? " and names no provider" : "") : "the reply is not JSON", served_by: servedBy, model: null };
     }
     if (m.served_by && (servedBy === null || !m.served_by.test(servedBy))) throw new MeterError("E_PV_PROVIDER_DRIFT", m.id + " was served by " + (servedBy ?? "an unnamed provider") + ", not its pinned provider; stop this model's items and ask the Captain");
-    const result: CallResult = { text: answer, status, micros, cached: false, problem: null, served_by: servedBy, model: typeof parsed?.model === "string" ? parsed.model : null };
+    if (stream && !stream.usage) throw new MeterError("E_PV_PROVIDER_DRIFT", m.id + " streamed no usage chunk, so its provider's terms cannot be checked; its body is kept beside the cache; stop this model's items and ask the Captain");
+    const result: CallResult = { text: answer, status, micros, unknown_micros, cached: false, problem: null, served_by: servedBy, model: typeof reply?.model === "string" ? reply.model : null };
     writeFileSync(file + ".tmp", JSON.stringify(result), { mode: 0o600 });
     renameSync(file + ".tmp", file);
     tally(false, req.label);

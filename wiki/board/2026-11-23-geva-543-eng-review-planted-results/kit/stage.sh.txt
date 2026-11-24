@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# GEVA-543: run one ep stage on the paid host with the run's common flags, logging to ~/ep/logs/<name>.log.
+#   stage.sh <name> <ep subcommand> [flags...]       BUILD=1 adds the build flags; PAID=1 adds the ledger flags.
+# The caller passes the step flags and, for a paid stage, --item and --cap-usd. Grading run logs go to a fresh
+# EP_EVIDENCE folder per invocation. Crew and host figures are projections (prereg section 12 re-projection).
+set -uo pipefail
+[ -e ~/HOST-RETIRED ] && { echo "this host is retired; the GEVA-543 run moved to $(cat ~/HOST-RETIRED)" >&2; exit 2; }
+source ~/ep/env.sh
+set -a; source ~/.keys.env; set +a
+cd ~/work/head
+name=$1; sub=$2; shift 2
+mkdir -p -m 700 ~/ep/logs "$EP_RUN_DIR/evidence"
+export EP_EVIDENCE="$EP_RUN_DIR/evidence/$name"
+[ -e "$EP_EVIDENCE" ] && { echo "evidence folder $EP_EVIDENCE exists; pick a fresh name" >&2; exit 2; }
+mkdir -p -m 700 "$EP_EVIDENCE"
+args=(--run "$EP_RUN_DIR" --units "$EP_UNITS" --repos "$EP_REPOS")
+if [ "${BUILD:-0}" = 1 ]; then
+  GW=$(sg docker -c "docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}'")
+  EH=m-$(tr -d '\n' < /etc/machine-id | sha256sum | cut -c1-16)
+  SC=$(sed -n 's/^SIDECAR_READY control=\([^ ]*\) .*/\1/p' ~/ep/sidecar.log 2>/dev/null | tail -1)
+  if [ -z "$SC" ] || ! pgrep -f "sandbox serve --root" > /dev/null; then
+    setsid -f sg docker -c "bin/gstack-evals real sandbox serve --root $HOME/ep/sidecar --agent-host $GW" > ~/ep/sidecar.log 2>&1 < /dev/null
+    for i in $(seq 1 30); do sleep 1; grep -q SIDECAR_READY ~/ep/sidecar.log && break; done
+    SC=$(sed -n 's/^SIDECAR_READY control=\([^ ]*\) .*/\1/p' ~/ep/sidecar.log | tail -1)
+  fi
+  [ -n "$SC" ] || { echo "the sidecar did not start; see ~/ep/sidecar.log" >&2; exit 2; }
+  args+=(--work "$HOME/ep/work" --host "$GW" --envelope-host "$EH" --sidecar "$SC" --harbor "$GSTACK_EVALS_HARBOR")
+fi
+if [ "${PAID:-0}" = 1 ]; then
+  args+=(--ledger-record "$GSTACK_EVALS_LEDGER_RECORD" --ledger "$GSTACK_EVALS_LEDGER" --crew-usd 600 --hosts-usd 140)
+fi
+{
+  echo "start $(date -u +%FT%TZ) $name: ep $sub $* (head $(git rev-parse --short=12 HEAD))"
+  sg docker -c "$(printf '%q ' bin/gstack-evals ep "$sub" "${args[@]}" "$@")"
+  echo "exit $? $(date -u +%FT%TZ)"
+} >> ~/ep/logs/$name.log 2>&1

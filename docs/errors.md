@@ -222,6 +222,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PV_LEAK_EXPOSED](#e_pv_leak_exposed) | warning | U20 |
 | [E_PV_EMPTY_REPLIES](#e_pv_empty_replies) | 2 | U20 |
 | [E_PV_PROVIDER_DRIFT](#e_pv_provider_drift) | 2 | U20 |
+| [E_PV_STREAM_ERROR](#e_pv_stream_error) | 2 | U20 |
 | [E_PV_SUPPLY_SHORT](#e_pv_supply_short) | 2 | U20 |
 | [E_SM_UNIT](#e_sm_unit) | 2 | U20 |
 | [E_SM_SOURCE](#e_sm_source) | 2 | U20 |
@@ -2035,6 +2036,14 @@ Exit 2. Side effects: Calls already sent on the lease stay on its journal and it
 Product-value eval (section 17, rule 6): a call through OpenRouter was served by a provider other than the one its route pins (OpenAI for GPT-6.1 Sol, the recorded serving provider for particle-1 and Gemini), or the provider's recorded terms changed. That model's items stop for the Captain.
 
 Fix: Stop leasing the model's items, keep the journal line that shows the provider, and send the question to the Captain. Never retry on another provider.
+
+Exit 2. Side effects: Calls already sent on the lease stay on its journal and its spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PV_STREAM_ERROR
+
+Product-value meter: a streamed OpenRouter reply ended with an error event (an error field, or a choice that finished with "error"), such as a 504 timeout after the stream began. The reply is never read as an answer, so that model's items stop for the Captain.
+
+Fix: Keep the stream's body, saved beside the reply cache as no-usage-&lt;meter id>.txt or stream-error-&lt;meter id>.txt, and send the question to the Captain. Never retry on another provider.
 
 Exit 2. Side effects: Calls already sent on the lease stay on its journal and its spend. Retry safe: no. Resumable: no. Owner: U20.
 
