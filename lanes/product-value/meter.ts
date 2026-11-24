@@ -25,7 +25,7 @@ import type { Provider } from "../../src/runner/pricing/prices.ts";
 import { MeteringProxy, reconcileJournal, type RetryBudget } from "../../src/runner/proxy/metering-proxy.ts";
 import { rigAdmission } from "../../src/rig/admission.ts";
 
-export type ModelKey = "opus" | "astra" | "astra-6.2" | "sol" | "particle" | "gemini" | "carbon";
+export type ModelKey = "opus" | "astra" | "astra-6.2" | "sol" | "sol-6.2" | "particle" | "gemini" | "carbon";
 
 /** The models the eval calls directly, on the routes the price table lists. OpenRouter rows carry their provider pin in
  * prices.ts. Gemini 4 Carbon streams (Captain's dated plan change, 2026-11-17): sent whole, its calls were cut at about
@@ -35,6 +35,7 @@ export const MODELS: Readonly<Record<ModelKey, { provider: Provider; id: string;
   astra: { provider: "openai", id: "gpt-6-astra" },
   "astra-6.2": { provider: "openai", id: "gpt-6.2-astra" },
   sol: { provider: "openrouter", id: "openai/gpt-6.1-sol", served_by: /^openai$/i },
+  "sol-6.2": { provider: "openai", id: "gpt-6.2-sol" },
   particle: { provider: "openrouter", id: "particle-ai/particle-1", served_by: /^particle( ai)?$/i },
   gemini: { provider: "openrouter", id: "google/gemini-4-argon", served_by: /^google/i },
   carbon: { provider: "openrouter", id: "google/gemini-4-carbon", served_by: /^google/i, stream: true },
