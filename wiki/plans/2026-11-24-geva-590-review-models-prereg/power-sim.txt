@@ -1,0 +1,102 @@
+# power-sim.txt: part 1 (decision power) then part 2 (MDD search, which imports the calibration helpers printed first)
+
+## part 1: power2.py
+
+import numpy as np
+rng=np.random.default_rng(20261124)
+def logit(p): return np.log(p/(1-p))
+def expit(x): return 1/(1+np.exp(-x))
+COST={'OS':6.5,'OA':11.0,'FS':14.0,'FA':18.5}
+def sim(n,mean,s,sig,beta,gamma,contrast,sims=1500,gap=0.05,look=True,cv=0.5):
+    showed=0; mdd_hits=0; tr=[]
+    for _ in range(sims):
+        L=logit(np.clip(rng.beta(mean*s,(1-mean)*s,n),1e-4,1-1e-4))
+        y={};c={}
+        for k,(pr,vo) in {'OS':(0,0),'OA':(0,1),'FS':(1,0),'FA':(1,1)}.items():
+            p=expit(L+beta*pr+gamma*vo+sig*rng.standard_normal(n))
+            yy=rng.binomial(1,p).astype(float); yy[rng.random(n)<gap]=0.0
+            y[k]=yy; c[k]=COST[k]*rng.lognormal(-cv*cv/2,cv,n)
+        if contrast=='primary': A,B=['OS','OA'],['FS','FA']
+        elif contrast=='voice': A,B=['OS','FS'],['OA','FA']
+        else: A,B=['OS'],['OA']
+        def stats(idx):
+            d=np.mean([y[b][idx] for b in B],0)-np.mean([y[a][idx] for a in A],0)
+            dc=np.mean([c[b][idx] for b in B],0)-np.mean([c[a][idx] for a in A],0)
+            m=len(idx); return d.mean(), d.std(ddof=1)/np.sqrt(m), dc.mean(), dc.std(ddof=1)/np.sqrt(m)
+        def doesnt_pay(idx,z):
+            d=np.mean([y[b][idx] for b in B],0)-np.mean([y[a][idx] for a in A],0)
+            dc=np.mean([c[b][idx] for b in B],0)-np.mean([c[a][idx] for a in A],0)
+            net=25.0*d-dc
+            return net.mean()+z*net.std(ddof=1)/np.sqrt(len(idx)) < 0
+        half=np.arange(n//2); full=np.arange(n)
+        stop = look and doesnt_pay(half,2.576)
+        showed += stop or doesnt_pay(full,1.645)
+        dm,dse,_,_=stats(full); mdd_hits += abs(dm)/dse>2.2414
+    return showed/sims, mdd_hits/sims
+out=[]
+for tag,mean in (('P-like control 75%',0.75),('P+B mix control 60%',0.60)):
+  for contrast in ('primary','voice','pair-OS-OA'):
+    for shift in (0.0,0.35,0.7,1.0,1.4):
+      b=shift if contrast=='primary' else 0; g=shift if contrast!='primary' else 0
+      # true delta
+      L=logit(np.clip(rng.beta(mean*0.6,(1-mean)*0.6,200000),1e-4,1-1e-4)); e=1.5*rng.standard_normal(200000)
+      td=(expit(L+shift+e)-expit(L+e)).mean()
+      pdp,pcm=sim(100,mean,0.6,1.5,b,g,contrast)
+      line=f"{tag} | {contrast} | true gain {100*td:.1f} pts | P(shows doesn't pay) {pdp:.2f} | P(two-sided Holm catches-more) {pcm:.2f}"
+      print(line,flush=True); out.append(line)
+open('power-rows.txt','w').write("Seed 20261124. 100 bug units, one review per cell, beta(0.6) catch chances with a per-arm, per-bug logit wobble of 1.5 (calibrated to Harness Evals' 9.5-point half-width), 5% gaps scored as misses, per-review cost lognormal (cv 0.5) around OS $6.50, OA $11.00, FS $14.00, FA $18.50, the test is on paired net value per unit ($25 x catch gain minus cost gap), shown when its upper bound is below 0, one look at 50 units (one-sided 99.5%) and the final at one-sided 95%. Fable's break-even here is about 30 points, Astra's about 18.\n"+"\n".join(out)+"\n")
+
+## part 2a: calib.py
+
+import numpy as np, json
+rng = np.random.default_rng(7)
+def logit(p): return np.log(p/(1-p))
+def expit(x): return 1/(1+np.exp(-x))
+def units(n, mean, s): return np.clip(rng.beta(mean*s,(1-mean)*s,n),1e-4,1-1e-4)
+def run(n, mean, s, sig, beta, gamma, k, contrast, sims):
+    out=[]; tr=[]
+    for _ in range(sims):
+        L = logit(units(n,mean,s))
+        c={}; t={}
+        for pr in (0,1):
+            for vo in (0,1):
+                lp = L + beta*pr + gamma*vo + sig*rng.standard_normal(n)
+                p = expit(lp); c[(pr,vo)] = rng.binomial(k,p)/k; t[(pr,vo)]=p
+        if contrast=='primary': f=lambda x:(x[(1,0)]+x[(1,1)])/2-(x[(0,0)]+x[(0,1)])/2
+        elif contrast=='voice': f=lambda x:(x[(0,1)]+x[(1,1)])/2-(x[(0,0)]+x[(1,0)])/2
+        elif contrast=='pair': f=lambda x:x[(1,0)]-x[(0,0)]
+        d=f(c); out.append((d.mean(), d.std(ddof=1)/np.sqrt(n))); tr.append(f(t).mean())
+    return np.array(out), float(np.mean(tr))
+# calibrate sigma: two-arm contrast, n=52, k=2, mean .68, target halfwidth ~10 pts (HE any-severity CIs: 11.0, 9.3, 6.3)
+cal={}
+for s in (0.6,1.5):
+  for sig in (0,0.5,1.0,1.5,2.0,2.5,3.0):
+    o,_=run(52,0.68,s,sig,0,0,2,'pair',600); cal[(s,sig)]=round(100*1.96*o[:,1].mean(),1)
+print('calibration hw (pts) n=52 k=2 two-arm:',cal)
+json.dump({str(k):v for k,v in cal.items()}, open('calib.json','w'))
+
+## part 2b: mdd_cal.py
+
+import numpy as np, json
+exec(open('calib.py').read().split('# calibrate')[0])
+Z={0.05:1.96,0.025:2.2414}
+def power(n,mean,s,sig,b,g,k,contrast,alpha,sims):
+    o,t=run(n,mean,s,sig,b,g,k,contrast,sims)
+    return float((np.abs(o[:,0])/o[:,1]>Z[alpha]).mean()), t, float(1.96*o[:,1].mean())
+def mdd(n,mean,s,sig,k,contrast,alpha):
+    lo,hi=0.0,3.0
+    for _ in range(11):
+        m=(lo+hi)/2; b=m if contrast in('primary','pair') else 0; g=m if contrast=='voice' else 0
+        p,_,_=power(n,mean,s,sig,b,g,k,contrast,alpha,400)
+        if p>=0.8: hi=m
+        else: lo=m
+    b=hi if contrast in('primary','pair') else 0; g=hi if contrast=='voice' else 0
+    p,t,hw=power(n,mean,s,sig,b,g,k,contrast,alpha,1200)
+    return round(100*t,1), round(p,2), round(100*hw,1)
+rows=[]
+for tag,mean,s,sig in [('PR calibrated',0.75,0.6,1.5),('PR optimistic',0.75,0.6,0.0),('PR pessimistic',0.75,1.5,1.5),('BIC calibrated',0.45,0.6,1.5),('mixed calibrated',0.60,0.6,1.5)]:
+  for n in (100,150,200,250,300):
+    for k in (1,2):
+      for c in ('primary','voice'):
+        m,p,hw=mdd(n,mean,s,sig,k,c,0.025); rows.append(dict(pool=tag,n=n,k=k,contrast=c,mdd=m,power=p,hw=hw)); print(tag,n,k,c,m,p,hw,flush=True)
+json.dump(rows,open('mdd_cal.json','w'),indent=0)
