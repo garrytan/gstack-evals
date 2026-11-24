@@ -4691,6 +4691,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_RM_PROXY_PREFLIGHT: {
+    exit: 2,
+    meaning: "The review-models eval's keyless proxy preflight failed (src/trial/review/proxy-preflight.ts): the recorded gstack voice request did not pass the metering proxy with its web_search tool removed, a web_search from any other caller was not refused, or a Carbon judge request did not route and settle at Carbon's 2026-12-01 rate. The line names each failed check.",
+    fix: "Read the printed report, fix the proxy's voice removal (removeVoiceWebSearch) or the Carbon row in src/runner/pricing/prices.ts, and run the preflight again before any review spends.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

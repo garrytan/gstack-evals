@@ -17,6 +17,11 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
 - codex.ts: what a Codex arm adds (`--host codex`): the codex-arms file's arm specs and the keyless capture of each arm's
   model input before its first session.
 - cli.ts: the command.
+- proxy-preflight.ts: the review-models eval's keyless proxy preflights (prereg 2026-11-24-geva-590, section 10 items 2
+  and 6): a recorded gstack voice request (recorded/) passes the metering proxy with its web_search tool removed, and a
+  Carbon judge request routes and settles at Carbon's 2026-12-01 rate. `bun src/trial/review/proxy-preflight.ts`.
+- contamination.ts: that eval's search extraction and contamination rule (section 5): every attempted search per review,
+  per-arm counts, and the blind second read's input file. `bun src/trial/review/contamination.ts <input.json> <out>`.
 
 ## Unit repositories
 

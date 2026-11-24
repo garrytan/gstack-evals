@@ -361,7 +361,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const armName = s.arm?.name ?? JUDGE_ARM;
     const cell = s.arm ? (rig.cells?.[s.arm.name]?.[s.model] ?? null) : null;
     const codex = s.host === "claude" ? codexOption(o.policy, cell) : null;
-    const binding = await rig.bind({ cell: { run_id: o.runId, arm: armName, task: s.task.id, model: s.model, trial: s.trial, attempt: s.round }, models: s.arm ? slotModels(o.policy, s.model, codex ? cell : null) : [provider + ":" + s.model], allowance_micros: s.allowance });
+    const binding = await rig.bind({ cell: { run_id: o.runId, arm: armName, task: s.task.id, model: s.model, trial: s.trial, attempt: s.round }, models: s.arm ? slotModels(o.policy, s.model, codex ? cell : null) : [provider + ":" + s.model], allowance_micros: s.allowance, ...(codex ? { voices: [codex.provider + ":" + codex.model] } : {}) });
     const home = s.sandbox.homePath(s.dir);
     const armInstall = s.arm ? rig.arms[s.arm.name]! : null;
     const installed = armInstall?.skill ?? null;
@@ -549,7 +549,7 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
 }
 
 /** The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it, the installs the run built included. */
-export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number; voice?: boolean; gstackConfig?: Readonly<Record<string, Readonly<Record<string, string>>>>; upstream?: string; requestFields?: string[] }): HostRig {
+export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number; voice?: boolean; gstackConfig?: Readonly<Record<string, Readonly<Record<string, string>>>>; upstream?: string; requestFields?: string[]; removeVoiceWebSearch?: boolean }): HostRig {
   const bin = o.env.GSTACK_EVALS_DOCKER_BIN || "docker";
   const state = stateRoot(o.env);
   const pin = checkImagePin({ state, docker: bin });
@@ -571,7 +571,7 @@ export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "
     undo.unshift(() => removeTrialNetwork(network, bin));
     const token = randomBytes(32).toString("hex");
     const providerKeys = Object.fromEntries(PROVIDER_KEYS.flatMap((k) => (o.env[k] ? [[k, o.env[k]!]] : [])));
-    const proxy = startProxyContainer({ image: pin.pin.tag, net: network, dir: join(call.out.path, "proxy"), ledger: call.ledger.path, leaseId: lease.lease_id, managementToken: token, retry: { attempts: 3, elapsed_ms: 300_000 }, providerKeys, docker: bin, ...(o.upstream ? { upstream: o.upstream } : {}), ...(o.requestFields ? { requestFields: o.requestFields } : {}) });
+    const proxy = startProxyContainer({ image: pin.pin.tag, net: network, dir: join(call.out.path, "proxy"), ledger: call.ledger.path, leaseId: lease.lease_id, managementToken: token, retry: { attempts: 3, elapsed_ms: 300_000 }, providerKeys, docker: bin, ...(o.upstream ? { upstream: o.upstream } : {}), ...(o.requestFields ? { requestFields: o.requestFields } : {}), ...(o.removeVoiceWebSearch ? { removeVoiceWebSearch: true } : {}) });
     const control = new ProxyControl(proxy.socket, token);
     return {
       baseUrl: proxy.baseUrl,

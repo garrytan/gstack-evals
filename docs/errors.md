@@ -546,6 +546,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_B2_LOOK](#e_b2_look) | 2 | U20 |
 | [E_B2_SESSIONS](#e_b2_sessions) | 2 | U20 |
 | [E_B2_SCORER](#e_b2_scorer) | 2 | U20 |
+| [E_RM_PROXY_PREFLIGHT](#e_rm_proxy_preflight) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4348,6 +4349,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 B2's scorer seam is not built yet (lanes/test-first/scorer.ts): the Codex rollout reader comes with the B2 scorer branch.
 
 Fix: Merge the B2 scorer branch into the run lane, then build the table again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_PROXY_PREFLIGHT
+
+The review-models eval's keyless proxy preflight failed (src/trial/review/proxy-preflight.ts): the recorded gstack voice request did not pass the metering proxy with its web_search tool removed, a web_search from any other caller was not refused, or a Carbon judge request did not route and settle at Carbon's 2026-12-01 rate. The line names each failed check.
+
+Fix: Read the printed report, fix the proxy's voice removal (removeVoiceWebSearch) or the Carbon row in src/runner/pricing/prices.ts, and run the preflight again before any review spends.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
