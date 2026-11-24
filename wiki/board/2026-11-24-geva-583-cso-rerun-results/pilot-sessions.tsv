@@ -1,0 +1,11 @@
+unit	model	arm	model_id	harness	harness_version	end	attempts	cost_usd	wall_sec	loaded	procedure_ran	completeness	findings_submitted	tooling_errors	host_reads_after_start	helper_scope
+capricorn86__happy-dom-ghsa-834v-8h66-3h79	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.555139	175	true	true	partial	0	2	2	daily/default
+capricorn86__happy-dom-ghsa-834v-8h66-3h79	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.093624	284	true	true	partial	4	0	8	daily/default
+follow-redirects__follow-redirects-ghsa-8r9p-f939-6h3c	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.836726	262	true	true	partial	3	1	0	daily/default
+follow-redirects__follow-redirects-ghsa-8r9p-f939-6h3c	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.113733	498	true	true	partial	3	1	13	daily/default
+getkin__kin-openapi-ghsa-p6wj-qrr4-pgh5	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.664846	197	true	true	partial	2	0	3	daily/default
+getkin__kin-openapi-ghsa-p6wj-qrr4-pgh5	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.173656	394	true	true	partial	3	1	25	daily/default
+patriksimek__vm2-ghsa-x6m4-chr9-cg97	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.688049	177	true	true	partial	1	1	4	daily/default
+patriksimek__vm2-ghsa-x6m4-chr9-cg97	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.098759	287	true	true	partial	3	0	4	daily/default
+qax-os__excelize-ghsa-c85p-xxjj-2r75	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	0.986086	291	true	true	partial	3	1	1	daily/default
+qax-os__excelize-ghsa-c85p-xxjj-2r75	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.048037	202	true	true	partial	2	0	10	daily/default
