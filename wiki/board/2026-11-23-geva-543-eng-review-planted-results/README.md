@@ -147,7 +147,7 @@ Descriptive and unadjusted. Every interval holds zero except eng phase on the 20
 | Pilot units | 20, 20 | +6.8 [-1.5, +17.5] | +9.2 [+1.7, +19.2] |
 | Units outside the pilot | 44, 40 | -1.3 [-7.0, +5.0] | +0.3 [-5.4, +6.2] |
 
-The pilot units carry most of the point estimates, and the 44 units outside the pilot read near zero for both arms. Plain scored lower on the pilot units (30.3 against 43.7 on the rest), so they had more room. The readout's "plain pilot vs later builds" line compares those two unit groups, not two periods, because every build on a pilot unit carries the pilot flag. Within the pilot units, plain's rep 3 (built on the second host) scored 29.7 against 30.6 for reps 1 and 2 (built during the pilot), an unplanned check in checks.txt, so the gap is about the units, not the period or the host.
+The pilot units carry most of the point estimates, and the 44 units outside the pilot read near zero for both arms. Plain scored lower on the pilot units (30.3 against 43.7 on the rest), so they had more room. The readout's "plain pilot vs later builds" line compares those two unit groups, not two periods, because every build on a pilot unit carries the pilot flag. Within the pilot units, plain's rep 3 (built on the second host) scored 29.7 against 30.6 for reps 1 and 2 (built during the pilot), an unplanned check in checks.txt. That fits a gap that comes from the units, but the check compares earlier reps with a later one, so it can't separate a host effect from a period or rep effect.
 
 ### Descriptives
 
