@@ -35,7 +35,7 @@ attachments:
 ## Takeaways
 
 - We learned that the fixes made /cso run, but not find more. At gstack a3ecfd53, /cso's procedure ran in every session (52 of 52 on each model, up from 40 of 52 on Opus before the fixes). Fixed /cso still named fewer real advisories than a plain audit request: Opus 5.5 named 4 of 51 against 12 of 51 (-15.7 points, 95% interval -28.6 to -4.1), and particle-1 named 7 of 52 against 13 of 52 (-11.5 points, -23.1 to -2.0). Both rows are Behind with the procedure running, so the preregistered verdict is CUT-CANDIDATE on both models.
-- You should not expect a security skill that narrows its report to beat a plain "audit this repo" on finding a known flaw. Fixed /cso reported 1.7 findings per Opus session against 14.8 for the plain audit, with about the same share of findings on the flaw. A plain audit that lists more findings names the flaw more often.
+- You should not expect a security skill that narrows its report to beat a plain "audit this repo" on finding a known flaw. Fixed /cso reported 1.7 findings per Opus session against 14.8 for the plain audit, and among the first 10 findings per session, the only ones the judge scored, about the same share landed on the flaw. A plain audit that fills more of those 10 slots names the flaw more often.
 - Against /cso before the fixes, the named rate didn't move: 4 of 52 against 3 of 52 on Opus (+1.9 points, 0 to +6.3) and 7 of 52 against 7 of 52 on particle-1. The fixes raised how much /cso reports (Opus 0.73 to 1.71 findings per session; sessions with no finding fell from 58% to 29%), which is what gstack's maintainer asked us to check.
 
 Call settled: /cso at gstack a3ecfd53 names fewer real advisories than a plain audit request on Opus 5.5 and particle-1 with its procedure running, so it goes to gstack's maintainer as a cut candidate (CUT-CANDIDATE)
@@ -103,7 +103,9 @@ The helper reported its daily scope as partial in 102 of 104 sessions and "not a
 | Phantom citations per session | 10.69 to 7.43 (-3.25; -5.92 to -0.91) | 25.77 to 19.58 (-6.19; -13.38 to +0.28) |
 | Cost per session | $3.90 to $0.77 (-$3.13) | $1.51 to $0.15 (-$1.36) |
 
-Pooled precision barely differs. On Opus, 4 of /cso's 89 findings hit the advisory (4.5%) against 13 of the plain audit's 385 (3.4%), and 14 of 89 (15.7%) were known real flaws against 46 of 385 (11.9%). On particle-1, 7 of 163 (4.3%) against 14 of 343 (4.1%). The plain audit went past 10 findings in 43% of Opus sessions and 56% of particle-1 sessions; /cso never did. Plain particle-1 ended 11 sessions at its allowance and 5 at its turn limit; /cso ended none that way. The strata (part, kind, size, month, ecosystem) are in rerun-analysis.json.
+The preregistration also lists a paired wall-time secondary. The analyzer did not print it, so it is not reported here; each session's wall time is in the wall_sec column of rerun-sessions.tsv and of the parent's stage2-sessions.tsv.
+
+Pooled precision over the scored findings barely differs. Only the first 10 findings in each session are scored, so these counts leave out every finding past the 10th. On Opus, 4 of /cso's 89 scored findings hit the advisory (4.5%) against 13 of the plain audit's 385 scored findings (3.4%), and 14 of 89 (15.7%) were known real flaws against 46 of 385 (11.9%). On particle-1, 7 of 163 scored findings (4.3%) against 14 of 343 (4.1%). The plain audit went past 10 findings in 43% of Opus sessions and 56% of particle-1 sessions; /cso never did. Plain particle-1 ended 11 sessions at its allowance and 5 at its turn limit; /cso ended none that way. The strata (part, kind, size, month, ecosystem) are in rerun-analysis.json.
 
 ## The judge check (R78)
 
@@ -120,7 +122,7 @@ This is a loss, not a null, and it gets the same cycle.
 - **Enough samples and headroom?** Both differences crossed their preregistered Holm bounds.
 - **Does the frontier model do it unaided?** Better than with /cso. Plain Opus names more of these flaws.
 
-The mechanism the data supports: /cso reports a short list, and the share of findings that land on the flaw is about the same as in the plain audit's long list. Fewer findings at the same hit rate means fewer flaws named. The fixes lengthened /cso's list a little and made every session run, but the list is still about a tenth as long.
+The mechanism the data supports: /cso reports a short list, and within the first 10 findings per session, the only ones scored, the share that land on the flaw is about the same as for the plain audit. Fewer scored findings at about the same hit rate means fewer flaws named. Whether the plain audit's findings past the 10th hit at the same rate was not measured. The fixes lengthened /cso's list a little and made every session run, but the list is still about a tenth as long.
 
 Verdict on both models: CUT-CANDIDATE. gstack's maintainer decides whether to cut /cso or change what it reports.
 
