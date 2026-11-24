@@ -41,7 +41,7 @@ links:
 | b, after eval 4 | A blind state-bug hunt step | none yet; would need its own plan | Untested; prior readings floor |
 | c, don't add | pstack's model-first chain (/create-formal-verification-skill, then /statechart) as the way to leave a regression check | none | #358: CUT-CANDIDATE, -37.9 [-50.0, -26.1] against a plain request, -17.2 [-28.7, -4.9] against the same steps in plain words |
 | c, don't add | The "find all the implicit state machines" restructuring prompt | none | #360 and its correction post: no gain on the next real fix on any model, and it broke tests; CUT-CANDIDATE |
-| c, don't add | A setup-time offer to generate a formal verification skill, or routing bug reports to one | none; and CLAUDE.md's bug line (552) should stay as gstack#4707 left it | #358's generated verify skills (left in 89 of 90 sessions) didn't track the fix; #426, cited by gstack#4707, showed that naming a bug-fix skill raised its use (80% against 3%) but fixed no more bugs |
+| c, don't add | A setup-time offer to generate a formal verification skill, or routing bug reports to one | none; and CLAUDE.md's bug line (552) should stay as gstack#4707 left it | #358's generated verify skills (left in 89 of 90 sessions) didn't track the fix; #426, cited by gstack#4707: asking for test-first steps got them followed in 80% of sessions against 3% with gstack alone, and fixed no more bugs (-1.5 points, 95% interval -3.8 to +0.9) |
 
 Since 2026-11-17, gstack main has taken no pstack idea about state machines or formal verification. The two related commits are gstack#4707 (2026-11-22), which removed "a focused failing test first" from CLAUDE.md's bug route on #426's evidence, and gstack#4504 (2026-11-18), a fix to how /ship reads the State Machines specialist's reply. gstack's earlier pstack fold-ins are ideas from interrogate, blast-radius, recall, benchmark-checklist, architect, the principle skills, poteto-mode and its eval playbook, and unslop, plus two ported scripts (NOTICE.md lines 130 to 175). None is about modeling or formal verification.
 
@@ -174,10 +174,16 @@ Each eval below carries items 1, 3, 5 and 6 of the team's eval-loop checklist: t
 
 **Decision it changes (item 1).**
 
-- If the plain-words model check (C) beats the plain review (N) by 10 composite points or more, pooled over models, with its interval above 0, and beats gstack's current review (G): add C's step to plan-eng-review's Diagrams and Failure modes (review-sections.md.tmpl 553 to 561), so autoplan's eng phase carries it too.
-- If pstack (P) beats C by 10 points or more on the models that ran both (Opus and particle-1), paired by unit and model, and P beats N: pstack's text does something plain words don't. Port the idea with credit, the way gstack's NOTICE.md records other pstack ideas. A pooled C that looks weaker only because it includes Sol is not evidence for P.
+The rules for C and P apply in this order, and the first that fires decides:
+
+1. If pstack (P) beats C by 10 points or more on the models that ran both (Opus and particle-1), paired by unit and model, and beats N by 10 or more: pstack's text does something plain words don't. Port the idea with credit, the way gstack's NOTICE.md records other pstack ideas. A pooled C that looks weaker only because it includes Sol is not evidence for P.
+2. If the plain-words model check (C) beats the plain review (N) by 10 composite points or more, pooled over models, with its interval above 0, and beats gstack's current review (G): add C's step to plan-eng-review's Diagrams and Failure modes (review-sections.md.tmpl 553 to 561), so autoplan's eng phase carries it too.
+3. If P beats N by 10 or more but neither rule above fires: no fold-in yet. Replicate P against C on held-out units before any change.
+
+Independently of that order:
+
 - If the plain-words diagram arm (D, gstack's current "ASCII diagram for every new stateful object") reads no gain over N, with its interval below +10: those lines in plan-ceo-review (124, 451) and plan-eng-review (SKILL.md.tmpl 110 to 112, review-sections 553) become cut candidates for the before/after skill eval.
-- If everything reads within 10 of N: no modeling step goes into gstack's plan skills, and the design-time question closes with a registry row.
+- If no arm beats N by 10 or more, whether the others read null or a loss: no modeling step goes into gstack's plan skills, any loss is reported as one, and the design-time question closes with a registry row.
 
 **Attacking the idea before building it.**
 
@@ -229,13 +235,13 @@ Every arm gets TLC and Java from a read-only tools volume, as #358 did, so the c
 
 **Arms.** N, no gstack: "Review this pull request." C, plain words: N plus "model the state machine this diff changes, check it with TLC, and turn each counterexample into a code test." P, pstack: "/statechart model the states this diff changes and the rules they must keep", Opus and particle-1 only. G: gstack /review at main. G0: the same with the State Machines specialist turned off. The same last turn in every arm asks for the checks to keep, as #358's did.
 
-**Score.** #358's rule, code-decided: a kept check catches when it fails 3 of 3 times on the bug-introducing tree and passes 3 of 3 with the fix applied. False alarms (checks that fail on both) are a secondary.
+**Score.** #358's rule, code-decided: a kept check catches when it fails 3 of 3 times on the bug-introducing tree, passes 3 of 3 with the fix applied, and still fails 3 of 3 on the bug-introducing tree with a harmless edit, so a check that only notices any change doesn't count. False alarms (checks that fail on both) are a secondary.
 
 **Size and cost.** 48 units, 2 sessions per cell. Per-model MDD about 18 to 20 points at a 20% base rate, pooled about 11 to 12 (rough; simulate before freezing). Paid about $1,500, about $2,300 all-in.
 
-**Pilot.** At most $150 on 8 units: plain N catches at least 1 in 10 (else FLOOR, stop); the specialist fires in G on the units where its detector says true; at least 48 units build in the sandbox.
+**Pilot.** At most $150 on 8 units, every arm: plain N catches at least 1 in 10 (else FLOOR, stop); C and P run TLC, and P reads its skill file by any tool; the specialist fires in G on the units where its detector says true and stays off in G0; at least 48 units build in the sandbox.
 
-**Judge.** None. **One look.** At 24 of 48 units: stop C and P if their pooled minus-N upper bounds sit below +5.
+**Judge.** None. **One look.** At 24 of 48 units: stop C's remaining cells if both its minus-N and minus-G upper bounds sit below +5, and P's if both its minus-N and minus-C upper bounds do; G and G0 always finish, since the specialist decision rides on them.
 
 ### Eval 3 (rank 3): does an owner decide better with a checked statechart?
 
@@ -244,8 +250,8 @@ Every arm gets TLC and Java from a read-only tools volume, as #358 did, so the c
 **Decision it changes.** Garry approves plain-language plans before builds. The model-reader result only admits a human stage; it ships nothing by itself.
 
 - If P beats N by 10 points of balanced accuracy with the model reader: run a human-reader pilot on P and N. Add a checked statechart, rendered through /diagram, to plan-ceo-review's Diagrams list (review-sections.md.tmpl 448 to 454) for plans with stateful objects only if P's chart also beats N with human readers.
-- If only C beats N: the gain comes from a plain-words rule check, not a chart. Fold the rule-check summary into the plan text, and ship no chart.
-- If D reads no better than N: the ASCII state diagram isn't helping owners decide, which adds to eval 1's reading on those lines.
+- If only C beats N with the model reader: run the human pilot on C and N instead. A gain there would add a plain-words rule-check summary to the plan text, and no chart.
+- If D reads no better than N with the model reader: that is a model-reader null for the ASCII state diagram. It adds to eval 1's reading on those lines and says nothing yet about human owners.
 
 **Attack.** A flawed plan that states the buggy behavior plainly may be easy to reject from prose (a ceiling). The model that draws the chart may find the flaw itself and mark it, so the eval measures chart plus reader together, which is what pstack's SC1 claims. Readers: a fixed fresh model told "approve or send back" is cheap but isn't the person pstack writes for; human readers through RentAHuman fit better but run into its five-bounty-a-day limit. The primary uses a model reader and says so; a human stage runs only if the model reading shows a gain.
 
@@ -267,7 +273,7 @@ Every arm gets TLC and Java from a read-only tools volume, as #358 did, so the c
 
 **Decision it changes.** gstack has no blind bug-hunting step for stateful code. If P or C beats N by 10 points or more, plan a hunt step with /autoplan; otherwise close CF1 and finish #358's cut for this chain.
 
-**Attack.** Every reading we have floors. #360's plain bug-hunt clean-fixed 1 of 30 at folder scope and 1 of 26 at file scope, and #358's blind probe caught 0 of 8. Two exploration runs on the same three repositories found 5 verified state-shaped bugs with pstack's chain, and 5 state-shaped (15 in all) with a plain bug-hunt, one run each. A floor reading changes nothing, so this eval runs only if eval 1 shows modeling helps, and only past its pilot.
+**Attack.** Every reading we have floors. #360's plain bug-hunt clean-fixed 1 of 15 sessions at folder scope and 1 of 13 at file scope (the state machines prompt fixed none in either), and #358's blind probe caught 0 of 8. Two exploration runs on the same three repositories found 5 verified state-shaped bugs with pstack's chain, and 5 state-shaped (15 in all) with a plain bug-hunt, one run each. A floor reading changes nothing, so this eval runs only if eval 1 shows modeling helps, and only past its pilot.
 
 **Units.** #358's 30 state-shaped SWE-bench-Live units plus 30 more of the same kind, at file scope, no bug report.
 
@@ -277,7 +283,7 @@ Every arm gets TLC and Java from a read-only tools volume, as #358 did, so the c
 
 **Size and cost.** 60 units, one session per cell. #358's blind probe cost $9.59 a session on Opus, so paid is about $1,500, about $2,300 all-in.
 
-**Pilot.** At most $200 on 8 units on Opus: N's kept checks catch the real bug under the primary rule on at least 2 of 8, else FLOOR and stop. Clean fixes are reported beside it and don't gate. **Judge.** None. **One look.** At 30 of 60 units with a +5 futility bound.
+**Pilot.** At most $200 on 8 units, one session per arm on each model: N's kept checks catch the real bug under the primary rule on at least 2 of 8 on Opus, else FLOOR and stop; P reads its skill file by any tool and runs a checker, C runs one, and G's sessions have gstack loaded, each in at least 7 of 8 sessions, else that arm is fixed or left out. Clean fixes are reported beside it and don't gate. **Judge.** None. **One look.** At 30 of 60 units with a +5 futility bound.
 
 ### Dropped
 
@@ -292,7 +298,7 @@ The other candidate, "ask for a code test that fails before the fix and passes a
 
 **Group b, after a named eval.** Listed in the table at the top; each row names the eval and the file.
 
-**Group c, don't add.** pstack's model-first chain for regression checks (#358, CUT-CANDIDATE); the implicit state machines restructuring prompt (#360 and its correction, CUT-CANDIDATE); a setup-time offer of a formal verification skill or routing bug reports to one (#358's generated skills didn't track the fix, and #426 showed that naming a bug-fix skill buys use, not fixes).
+**Group c, don't add.** pstack's model-first chain for regression checks (#358, CUT-CANDIDATE); the implicit state machines restructuring prompt (#360 and its correction, CUT-CANDIDATE); a setup-time offer of a formal verification skill or routing bug reports to one (#358's generated skills didn't track the fix, and #426 showed that asking for test-first steps gets them followed but fixes no more bugs).
 
 ## 6. Limits
 
