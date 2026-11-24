@@ -42,7 +42,7 @@ Call settled: /cso at gstack a3ecfd53 names fewer real advisories than a plain a
 
 ## What works
 
-The fixes did what they were written to do. Every new /cso session loaded the skill, started the helper's daily run, read from that run and finished it: 104 of 104, read by the fixed exposure detector. 81 of the 104 also sent findings to the helper with a submit call. Before the fixes, a symlink refusal in the start helper stopped 12 of 52 Opus sessions. None stopped this time. No session hit a wall, turn or allowance limit, and none ended in a safety stop.
+The fixes did what they were written to do. Every new /cso session loaded the skill, started the helper's daily run, read from that run and finished it: 104 of 104, read by the fixed exposure detector. 81 of the 104 also called the helper's submit step, 69 of them with at least one finding. Before the fixes, a symlink refusal in the start helper stopped 12 of 52 Opus sessions. None stopped this time. No session hit a wall, turn or allowance limit, and none ended in a safety stop.
 
 /cso is also much cheaper per session. Opus with /cso cost $0.77 a session against $3.90 for the plain audit, and particle-1 $0.15 against $1.51. That saving comes from doing less, so it doesn't help when the goal is finding the flaw.
 
