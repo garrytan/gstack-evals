@@ -86,6 +86,17 @@
 //   spend plus this call's worst case fits its allowance) answers 429 E_H2H_RESERVATION_BOUND with retry-after, so the
 //   client retries it once a call settles. It is journaled as a refusal line with reservation_bound true and counted in
 //   Meter.reservation_bound, never in allowance_stops. Off by default, every allowance refusal stays as it was.
+// - A cell voice's web search (the review-models eval, prereg 2026-11-24-geva-590 sections 3 and 10 item 2): gstack calls
+//   its Codex voice with web_search "cached", and the hosted-tool rule refuses any request carrying a hosted tool. With
+//   ProxyOptions.removeVoiceWebSearch, a request from a slot's voice has its web_search tools removed
+//   (removeWebSearchTools in prices.ts) before any other check reads its tools, and goes on. A request is the voice's when
+//   it names a provider:model id the slot's bind lists in voices: the runner binds a cell's voice there (run-host.ts),
+//   and the slot's models hold the session's own model and that voice only, so on a slot the model a request names tells
+//   the voice from the main session. The proxy cannot tell gstack's Codex call from any other Codex call on the voice's
+//   model in that session; each one is the voice's. Each removal writes a tool_removed line (request_id, meter_id, cell,
+//   provider, route, model and each removed tool's path and type), the call's reserve, request and refusal lines carry
+//   the same request_id, and Meter.web_search_removed counts the tools removed. Every other hosted tool, a web_search from
+//   any other model or slot, and every request on a proxy without the option keep today's refusal.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dlopen, FFIType } from "bun:ffi";
@@ -95,7 +106,7 @@ import { zstdDecompressSync } from "node:zlib";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
 import { countedInputTokens, countPlan } from "../pricing/input-count.ts";
-import { chatPrice, maskMarkers, openRouterBilledMicros, openRouterRouting, PriceError, priceRequest, quoteClientValue, refuseRequestShape, reservationMicros, sseUsage, UNQUOTED, usageCost, type MeteredProvider, type RequestPrice } from "../pricing/prices.ts";
+import { chatPrice, maskMarkers, openRouterBilledMicros, openRouterRouting, PriceError, priceRequest, quoteClientValue, refuseRequestShape, removeWebSearchTools, reservationMicros, sseUsage, UNQUOTED, usageCost, type MeteredProvider, type RequestPrice } from "../pricing/prices.ts";
 import { findLeaks } from "./sanitize.ts";
 
 export const UPSTREAM: Record<MeteredProvider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", openrouter: "https://openrouter.ai/api", typesafe: "https://api.typesafe.ai" };
@@ -229,6 +240,8 @@ export interface ProxyOptions {
   firstRequestFields?: string[];
   /** Copy these top-level fields of every paid request, as the client sent them (null for a field it left out), into its request line in the journal as fields. Off by default; the Codex hooks eval turns it on for reasoning, to read every request's effort. */
   requestFields?: string[];
+  /** Remove the hosted web_search tool from the requests of each slot's voices (BindRequest.voices) instead of refusing them, journaled per request as a tool_removed line. Off by default; the review-models eval turns it on for its gstack cells. */
+  removeVoiceWebSearch?: boolean;
   /** Answer an allowance refusal that only in-flight reservations cause with a retryable 429 E_H2H_RESERVATION_BOUND, counted in Meter.reservation_bound and not in allowance_stops. Off by default; the head-to-head turns it on for its stages. */
   reservationBoundRetry?: boolean;
   sleep?: (ms: number) => Promise<void>;
@@ -256,6 +269,8 @@ export interface BindRequest {
   deciders?: string[];
   /** The forbidden_markers entry that is this slot's planted canary; a DR_ALLOWANCE_STOP proxy needs it whenever forbidden_markers is set. */
   canary?: string;
+  /** The provider:model ids among models that are this slot's cross-family voice; with ProxyOptions.removeVoiceWebSearch their requests lose a web_search tool instead of being refused. */
+  voices?: string[];
 }
 
 export interface Binding {
@@ -299,6 +314,8 @@ export interface Meter {
   first_request?: Record<string, unknown>;
   /** With ProxyOptions.reservationBoundRetry only: allowance refusals that only the slot's calls still in flight caused, answered as retryable. Absent before the first. */
   reservation_bound?: number;
+  /** With ProxyOptions.removeVoiceWebSearch only: web_search tools removed from the voice's requests. Absent before the first. */
+  web_search_removed?: number;
 }
 
 interface Slot {
@@ -307,6 +324,7 @@ interface Slot {
   models: Set<string>;
   markers: string[];
   deciders: Set<string>;
+  voices: Set<string>;
   canary: string | null;
   allowanceMicros: number;
   /** Spent plus reserved plus unknown, in micro-dollars. */
@@ -335,6 +353,8 @@ interface CallContext {
   sentAt?: number;
   /** The input tokens a free count reserved for this call, and the counted route (provider and route) a short count stops. */
   counted?: { route: string; counter: "anthropic" | "openai"; tokens: number };
+  /** Set when the proxy removed a web_search tool from this request: the id its tool_removed line and the call's later lines carry. */
+  requestId?: string;
 }
 
 const hash = (secret: string) => createHash("sha256").update(secret).digest();
@@ -604,10 +624,11 @@ export class MeteringProxy {
     if (request.forbidden_markers !== undefined && (!Array.isArray(request.forbidden_markers) || request.forbidden_markers.some(m => typeof m !== "string" || !m))) throw new Error("E_USAGE: metering proxy: bind's forbidden_markers must be a list of non-empty strings");
     if (request.deciders !== undefined && (!Array.isArray(request.deciders) || request.deciders.some(m => typeof m !== "string" || !request.models.includes(m)))) throw new Error("E_USAGE: metering proxy: bind's deciders must be a list of ids from its models");
     if (request.canary !== undefined && (typeof request.canary !== "string" || !request.forbidden_markers?.includes(request.canary))) throw new Error("E_USAGE: metering proxy: bind's canary must be one of its forbidden_markers");
+    if (request.voices !== undefined && (!Array.isArray(request.voices) || request.voices.some(m => typeof m !== "string" || !request.models.includes(m)))) throw new Error("E_USAGE: metering proxy: bind's voices must be a list of ids from its models");
     if (this.options.allowanceCode === "DR_ALLOWANCE_STOP" && request.forbidden_markers?.length && request.canary === undefined) throw new Error("E_USAGE: metering proxy: a decision-routing bind with forbidden_markers must name its canary");
     for (const m of request.forbidden_markers ?? []) this.slotMarkers.add(m);
     const binding = { slot: `s_${randomBytes(9).toString("base64url")}`, token: `gse_${randomBytes(32).toString("base64url")}`, meter_id: `m_${randomBytes(12).toString("hex")}` };
-    this.slots.set(binding.slot, { tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), markers: [...(request.forbidden_markers ?? [])], deciders: new Set(request.deciders ?? []), canary: request.canary ?? null, allowanceMicros: request.allowance_micros, committedMicros: 0, inflightMicros: 0, inflightCalls: 0, calls: 0, answers: new Map() });
+    this.slots.set(binding.slot, { tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), markers: [...(request.forbidden_markers ?? [])], deciders: new Set(request.deciders ?? []), voices: new Set(request.voices ?? []), canary: request.canary ?? null, allowanceMicros: request.allowance_micros, committedMicros: 0, inflightMicros: 0, inflightCalls: 0, calls: 0, answers: new Map() });
     this.meters.set(binding.meter_id, newMeter(binding.meter_id));
     return binding;
   }
@@ -711,7 +732,7 @@ export class MeteringProxy {
 
   /** Journals a refusal line as refuse() writes it, with no answer and no count on the meter. */
   private refusalLine(ctx: CallContext, code: ReasonCode, reason: string, extra: Record<string, unknown> = {}): void {
-    this.journal({ kind: "refusal", code, meter_id: ctx.slot.cell.meter_id, provider: ctx.provider, route: ctx.route, model: ctx.model || null, reason, source: ctx.source, ...extra });
+    this.journal({ kind: "refusal", code, meter_id: ctx.slot.cell.meter_id, provider: ctx.provider, route: ctx.route, model: ctx.model || null, reason, source: ctx.source, ...(ctx.requestId ? { request_id: ctx.requestId } : {}), ...extra });
   }
 
   private refuse(ctx: CallContext, code: ReasonCode, status: number, reason: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}): Response {
@@ -844,6 +865,15 @@ export class MeteringProxy {
       ctx.model = ctx.model && quoteClientValue(ctx.model, "model", ctx.marked);
       return this.refuse(ctx, "E_ALLOWANCE", 403, `${provider}:${ctx.model || "(no model)"} is not on this slot's model allowlist`);
     }
+    if (o.removeVoiceWebSearch && slot.voices.has(`${provider}:${ctx.model}`)) {
+      const removed = removeWebSearchTools(body);
+      if (removed.length) {
+        ctx.requestId = `rq_${randomBytes(9).toString("base64url")}`;
+        const m = this.meter(slot);
+        m.web_search_removed = (m.web_search_removed ?? 0) + removed.length;
+        this.journal({ kind: "tool_removed", request_id: ctx.requestId, meter_id: slot.cell.meter_id, cell: slot.cell, provider, route: ctx.route, model: ctx.model, source: ctx.source, removed });
+      }
+    }
     if (o.refuseServerTools) {
       const server = Array.isArray(body.tools) ? body.tools.filter((t: any) => t && typeof t.type === "string" && t.type !== "custom").map((t: any) => quoteClientValue(t.type, "type", ctx.marked)) : [];
       if (server.length) return this.refuse(ctx, "E_PROXY_SERVER_TOOL", 403, `provider-side tools are refused on this lease: ${server.join(", ")}`, { tools: server });
@@ -919,7 +949,7 @@ export class MeteringProxy {
       }
       const idempotencyKey = `${slot.cell.meter_id}:${call}:${attempt}`;
       const reservation = { idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, max_micros: maxMicros };
-      this.journal({ kind: "reserve", ...reservation, provider, route, model: ctx.model, try: attempt, source: ctx.source, ...(counted ? { input_count: counted.line } : {}) });
+      this.journal({ kind: "reserve", ...reservation, provider, route, model: ctx.model, try: attempt, source: ctx.source, ...(counted ? { input_count: counted.line } : {}), ...(ctx.requestId ? { request_id: ctx.requestId } : {}) });
       slot.committedMicros += maxMicros;
       slot.inflightMicros += maxMicros;
       slot.inflightCalls++;
@@ -942,7 +972,7 @@ export class MeteringProxy {
       }
       const rid = held.reservation.reservation_id;
       try {
-        this.journal({ kind: "request", reservation_id: rid, idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_micros: maxMicros, source: ctx.source, ...(sentFields ? { fields: sentFields } : {}) });
+        this.journal({ kind: "request", reservation_id: rid, idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, provider, route, model: ctx.model, try: attempt, max_micros: maxMicros, source: ctx.source, ...(sentFields ? { fields: sentFields } : {}), ...(ctx.requestId ? { request_id: ctx.requestId } : {}) });
       } catch (e) {
         await this.settle(ctx, rid, maxMicros, { kind: "spent", spent_micros: 0, usage: NO_TOKENS }, null, "not sent: the request line could not be journaled");
         throw e;

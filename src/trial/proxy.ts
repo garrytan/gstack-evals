@@ -81,10 +81,10 @@ export interface ProxyHandle {
  * for keyless end-to-end checks only, sends every upstream call to that base URL, with host.docker.internal resolving to
  * the host, so a stub model server on the host answers in place of the providers.
  */
-export function startProxyContainer(opts: { image: string; net: TrialNetwork; dir: string; ledger: string; leaseId: string; managementToken: string; retry: RetryBudget; providerKeys?: Record<string, string>; docker?: string; timeoutMs?: number; upstream?: string; requestFields?: string[] }): ProxyHandle {
+export function startProxyContainer(opts: { image: string; net: TrialNetwork; dir: string; ledger: string; leaseId: string; managementToken: string; retry: RetryBudget; providerKeys?: Record<string, string>; docker?: string; timeoutMs?: number; upstream?: string; requestFields?: string[]; removeVoiceWebSearch?: boolean }): ProxyHandle {
   const bin = opts.docker ?? "docker";
   mkdirSync(opts.dir, { recursive: true });
-  const config: ProxyConfig = { lease_id: opts.leaseId, ledger: opts.ledger, journal: join(opts.dir, "journal.ndjson"), socket: join(opts.dir, "management.sock"), host: opts.net.proxyIp, port: PROXY_PORT, retry: opts.retry, ...(opts.upstream ? { upstream: opts.upstream } : {}), ...(opts.requestFields ? { request_fields: opts.requestFields } : {}) };
+  const config: ProxyConfig = { lease_id: opts.leaseId, ledger: opts.ledger, journal: join(opts.dir, "journal.ndjson"), socket: join(opts.dir, "management.sock"), host: opts.net.proxyIp, port: PROXY_PORT, retry: opts.retry, ...(opts.upstream ? { upstream: opts.upstream } : {}), ...(opts.requestFields ? { request_fields: opts.requestFields } : {}), ...(opts.removeVoiceWebSearch ? { remove_voice_web_search: true } : {}) };
   writeFileSync(join(opts.dir, "config.json"), JSON.stringify(config, null, 2) + "\n");
   rmSync(config.socket, { force: true });
   const env = trialEnv("proxy", { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: "/tmp", LANG: "C.UTF-8", GSTACK_EVALS_PROXY_TOKEN: opts.managementToken, ...opts.providerKeys });

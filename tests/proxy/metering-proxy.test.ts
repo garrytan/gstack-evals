@@ -745,9 +745,9 @@ describe("OpenRouter route", () => {
     expect(t.calls.map(c => c.raw)).toEqual([`{"model":"${ARGON}","messages":[{"role":"user","content":"Hello"}],"max_tokens":1,"provider":${argon},"usage":{"include":true}}`]);
   });
 
-  // Value: protects=a Carbon send reaches the same google-vertex/global endpoint at the same max_price as Argon, image price included; fails_when=the Carbon row drifts from the endpoint read its comment cites, or routes without the image price Argon needed; why_new=GEVA-537's rater and second gold labeller call Carbon through the product-value meter; seam=the Carbon row, openRouterRouting and the proxy's outgoing body; no_claim=OpenRouter's live endpoint list after the cited read
-  test("Carbon's routing carries the same provider, max_price and image price as Argon's, in the proxy's outgoing body too", async () => {
-    const carbon = '{"only":["google-vertex"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":2,"completion":10,"request":0,"image":0.000002}}';
+  // Value: protects=a Carbon send reaches google-vertex at Carbon's 2026-12-01 ceiling ($4 and $20, the image price doubled), since the review-models judge runs across that date; fails_when=the Carbon row drifts from the rate its comment cites, or routes without an image price; why_new=GEVA-537's rater and second gold labeller call Carbon through the product-value meter, and GEVA-590 section 10 item 6 moved the row to the new rate; seam=the Carbon row, openRouterRouting and the proxy's outgoing body; no_claim=OpenRouter's live endpoint list after the cited read
+  test("Carbon's routing carries google-vertex and its 2026-12-01 max_price and image price, in the proxy's outgoing body too", async () => {
+    const carbon = '{"only":["google-vertex"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":4,"completion":20,"request":0,"image":0.000004}}';
     expect(JSON.stringify(openRouterRouting(CHAT_PRICES[`openrouter:${CARBON}`]!))).toBe(carbon);
     const t = setup(() => ok({ prompt_tokens: 32, completion_tokens: 1, cost: 0.00007326 }));
     const a = t.bind({ models: [`openrouter:${CARBON}`] });

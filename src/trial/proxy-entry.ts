@@ -20,6 +20,8 @@ export interface ProxyConfig {
   upstream?: string;
   /** Top-level request fields every request line in the journal records (MeteringProxy's requestFields). */
   request_fields?: string[];
+  /** Remove the hosted web_search tool from each slot's voice requests (MeteringProxy's removeVoiceWebSearch). */
+  remove_voice_web_search?: boolean;
 }
 
 if (import.meta.main) {
@@ -35,6 +37,7 @@ if (import.meta.main) {
     retry: config.retry,
     env: process.env,
     ...(config.request_fields ? { requestFields: config.request_fields } : {}),
+    ...(config.remove_voice_web_search ? { removeVoiceWebSearch: true } : {}),
     ...(config.upstream ? { fetch: (url: string, init: RequestInit) => fetch(config.upstream!.replace(/\/+$/, "") + new URL(url).pathname + new URL(url).search, init) } : {}),
   });
   proxy.start();

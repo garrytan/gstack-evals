@@ -18,6 +18,10 @@
 //   only as a short token of letters, digits and _.-, so an unusual value never reaches the 402 or the journal.
 // - TypeSafe's System One (decision routing, B3) is priced again, for the pinned Jev versions only: input tokens at the row,
 //   output free, and a reservation that bounds every question reading the whole request at one token per byte.
+// - removeWebSearchTools takes the hosted web_search tool alone out of a request's tools lists, wherever the hosted-tool
+//   rule would find it, and names what it took. The metering proxy runs it only on a cell voice's requests, and only when
+//   its run turns that on (the review-models eval, prereg 2026-11-24-geva-590 section 3); every other hosted tool, and
+//   web_search from any other caller, is still refused.
 
 import type { TokenUsage } from "../../types.ts";
 
@@ -82,7 +86,14 @@ export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   // write and an image price of 0.000002, the same as Argon's row. Pinned to google-vertex like Argon; max_price at $2 and
   // $10 leaves out the dearer google-vertex/us, eu and priority endpoints ($2.20 and $3.60 input), and the image price is
   // carried for the reason Argon's comment gives.
-  "google/gemini-4-carbon": { input: 2, output: 10, cache_read: 0.1, cache_write: 0.1875, providers: ["google-vertex"], image: 0.000002 },
+  // Moved to its 2026-12-01 rate on 2026-11-24 for the review-models eval's judge (prereg 2026-11-24-geva-590, sections 10
+  // item 6 and 11), whose run crosses that date. Google's Carbon model page (https://aistudio.google.com/docs/models/gemini-4-carbon,
+  // Pricing, Standard), read 2026-11-24: $2 input, $10 output and $0.10 context caching through 2026-11-30, then $4, $20
+  // and $0.20 from 2026-12-01. The cache write and the image price are doubled from the endpoint read above ($0.375 and
+  // 0.000004), as every rate Google lists doubles. max_price at $4 and $20 keeps google-vertex/global after the change;
+  // until then it also admits the google-vertex endpoints listed at $2.20 and $3.60 input, and every call still settles at
+  // this row, never below what it bills.
+  "google/gemini-4-carbon": { input: 4, output: 20, cache_read: 0.2, cache_write: 0.375, providers: ["google-vertex"], image: 0.000004 },
 };
 
 /**
@@ -161,6 +172,8 @@ export interface RequestPrice extends TokenPrices {
 export const ANTHROPIC_CACHE_WRITE_1H_MULT = 2;
 
 const HOSTED_TOOL = /web_search|web_fetch|file_search|code_interpreter|code_execution|image_generation|computer_use_preview|^mcp$/;
+/** OpenAI's hosted web search tool type, under its current and preview names and dated versions: the one hosted tool removeWebSearchTools takes out. */
+export const WEB_SEARCH_TOOL = /^web_search(?:_preview)?(?:_\d{4}_\d{2}_\d{2})?$/;
 
 const CLIENT_TOKEN = /^[A-Za-z0-9_.-]{1,40}$/;
 const CLIENT_MODEL = /^[A-Za-z0-9_.-]{1,40}(\/[A-Za-z0-9_.-]{1,40}){0,2}(:[A-Za-z0-9_.-]{1,40})?$/;
@@ -263,6 +276,37 @@ export function refuseRequestShape(provider: MeteredProvider, body: Record<strin
   const toolset = tools.find(t => typeof t?.type === "string" && t.type.startsWith("mcp_toolset"));
   if (toolset) throw new PriceError(`the MCP toolset ${quoteClientValue(toolset.type, "type", markers)} has the provider run a remote MCP server's tools, outside the sandbox and the request's bytes`);
   if (provider === "openai" && body.web_search_options !== undefined) throw new PriceError("OpenAI's web_search_options field turns on a web search that runs and bills outside the model's tokens");
+}
+
+/**
+ * Removes every web_search tool (WEB_SEARCH_TOOL) from every tools list in the body, in place, at any depth the hosted-tool
+ * rule reads (a top-level tools list, a Codex additional_tools input item, a namespace's tools), and returns each removal's
+ * JSON path in the body as sent and its type, in body order. Every other tool, and a replayed client tool call's input,
+ * is left as it was, so refuseRequestShape still refuses any other hosted tool.
+ */
+export function removeWebSearchTools(body: Record<string, unknown>): Array<{ path: string; type: string }> {
+  const removed: Array<{ path: string; type: string }> = [];
+  const walk = (value: unknown, key: string, path: string): void => {
+    if (Array.isArray(value)) {
+      const kept: unknown[] = [];
+      value.forEach((v, i) => {
+        const type = (v as { type?: unknown } | null)?.type;
+        if (key === "tools" && typeof type === "string" && WEB_SEARCH_TOOL.test(type)) return void removed.push({ path: `${path}[${i}]`, type });
+        walk(v, key, `${path}[${i}]`);
+        kept.push(v);
+      });
+      if (kept.length !== value.length) value.splice(0, value.length, ...kept);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const v = value as Record<string, unknown>;
+    for (const [k, child] of Object.entries(v)) {
+      if (k === "input" && key === "content" && v.type === "tool_use") continue;
+      walk(child, k, path ? `${path}.${k}` : k);
+    }
+  };
+  walk(body, "", "");
+  return removed;
 }
 
 /** True when a request pulls in stored context its body does not hold: a previous_response_id, a conversation, an item reference, or a stored item or reasoning id. */
