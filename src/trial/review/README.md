@@ -17,6 +17,9 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
 - codex.ts: what a Codex arm adds (`--host codex`): the codex-arms file's arm specs and the keyless capture of each arm's
   model input before its first session.
 - cli.ts: the command.
+- supply/: the review-models eval's unit supply (`gstack-evals rm-supply`, plan 2026-11-24-geva-590): P units from Harness
+  Evals' review-real-bugs suite, B units by SZZ on the skill-pack security frame, gates 1 to 5, the visibility read's
+  requests and reader, and the draw. Its gate records are answer keys and stay outside the repository.
 
 ## Unit repositories
 
