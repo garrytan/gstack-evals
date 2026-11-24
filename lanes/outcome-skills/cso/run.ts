@@ -12,6 +12,7 @@
 // session needs the readout key (section 12): its session.json is one sealed row, and when it ends, halts or fails every
 // other file in its dir (transcripts, Claude Code's session log, Harbor's logs and job dirs) becomes <file>.sealed.
 import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,8 +61,8 @@ export function readRunRecords(dir: string): Record<string, unknown>[] {
 type Rec = Record<string, any>;
 
 /** Builds a unit's session image: CSO_BASE_IMAGE with the session tree (one commit) at /work/repo, pinned by image id. The
- *  session runs by a tag that carries the built id (deviation (e)), so another build of the same unit, which moves the
- *  unit's own tag, can't change the image a running session's task resolves. */
+ *  session runs by a tag that carries the built id (deviation (e)), and the build itself tags a name of its own, so two
+ *  builds of one unit at once never share a tag (the rerun lost three first attempts to a shared one). */
 export function buildCsoImage(unit: UnitRecord, tree: string, base: string = CSO_BASE_IMAGE): SessionImage {
   const head = spawnSync("git", ["-C", tree, "rev-parse", "HEAD"], { encoding: "utf8" });
   if (head.status !== 0) csoFail("E_CSO_SESSION", tree + " is not the unit's session tree: " + head.stderr.trim());
@@ -69,12 +70,13 @@ export function buildCsoImage(unit: UnitRecord, tree: string, base: string = CSO
   try {
     cpSync(tree, join(ctx, "repo"), { recursive: true, verbatimSymlinks: true });
     writeFileSync(join(ctx, "Dockerfile"), "FROM " + base + "\nCOPY repo " + CSO_REPO_DIR + "\nWORKDIR " + CSO_REPO_DIR + "\n");
-    const tag = "gstack-evals-cso-session:" + unit.tree_sha256.slice(0, 16);
-    const b = spawnSync("docker", ["build", "-q", "-t", tag, ctx], { encoding: "utf8", maxBuffer: 16 << 20 });
+    const tag = "gstack-evals-cso-session:" + unit.tree_sha256.slice(0, 16), building = tag + "-build-" + randomBytes(6).toString("hex");
+    const b = spawnSync("docker", ["build", "-q", "-t", building, ctx], { encoding: "utf8", maxBuffer: 16 << 20 });
     if (b.status !== 0) csoFail("E_CSO_SESSION", "docker build of " + unit.unit + "'s session image failed: " + String(b.stderr).trim().slice(-500));
     const id = b.stdout.trim(), pinned = tag + "-" + id.replace(/^sha256:/, "").slice(0, 12);
     const t = spawnSync("docker", ["tag", id, pinned], { encoding: "utf8" });
     if (t.status !== 0) csoFail("E_CSO_SESSION", "docker tag of " + unit.unit + "'s session image failed: " + String(t.stderr).trim().slice(-500));
+    spawnSync("docker", ["rmi", building], { encoding: "utf8" });
     return { image_id: id, tag: pinned, runtime_id: base, volume: "", commits: 1, head: head.stdout.trim(), home: "none", tree_patch_sha256: null, qa_home: null, removed: [] };
   } finally {
     rmSync(ctx, { recursive: true, force: true });

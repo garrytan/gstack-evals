@@ -42,7 +42,7 @@ Call settled: /cso at gstack a3ecfd53 names fewer real advisories than a plain a
 
 ## What works
 
-The fixes did what they were written to do. Every new /cso session loaded the skill, started the helper's daily run and submitted its findings: 104 of 104, read by the fixed exposure detector. Before the fixes, a symlink refusal in the start helper stopped 12 of 52 Opus sessions. None stopped this time. No session hit a wall, turn or allowance limit, and none ended in a safety stop.
+The fixes did what they were written to do. Every new /cso session loaded the skill, started the helper's daily run, read from that run and finished it: 104 of 104, read by the fixed exposure detector. 81 of the 104 also sent findings to the helper with a submit call. Before the fixes, a symlink refusal in the start helper stopped 12 of 52 Opus sessions. None stopped this time. No session hit a wall, turn or allowance limit, and none ended in a safety stop.
 
 /cso is also much cheaper per session. Opus with /cso cost $0.77 a session against $3.90 for the plain audit, and particle-1 $0.15 against $1.51. That saving comes from doing less, so it doesn't help when the goal is finding the flaw.
 
@@ -63,7 +63,7 @@ The plain audit is the parent run's stage 2 arm, reused unchanged (same units, t
 | Opus 5.5 | 51 | 12 (23.5%) | 4 (7.8%) | -15.7 | -28.6 to -4.1 | 9 | 1 | 0.021 | 52 of 52 | Behind | CUT-CANDIDATE |
 | particle-1 | 52 | 13 (25.0%) | 7 (13.5%) | -11.5 | -23.1 to -2.0 | 6 | 0 | 0.028 | 52 of 52 | Behind | CUT-CANDIDATE |
 
-At the gap bounds (the Opus gap scored as a /cso hit, then as a miss) the Opus difference is -15.4 (-28.3 to -5.1) and -17.3 (-30.8 to -6.0), so the gap doesn't change the row. The frozen smallest detectable difference at the observed discordant share (about 0.2) is 19 points at alpha 0.05 and none at 0.025 (power.txt in the preregistration); both differences crossed their Holm bounds anyway.
+At the gap bounds (the plain audit's missing Opus score counted as a miss, then as a hit) the Opus difference is -15.4 (-28.3 to -5.1) and -17.3 (-30.8 to -6.0), so the gap doesn't change the row. The frozen smallest detectable difference at the observed discordant share (about 0.2) is 19 points at alpha 0.05 and none at 0.025 (power.txt in the preregistration); both differences crossed their Holm bounds anyway.
 
 ### Second family: new /cso against /cso before the fixes
 
@@ -81,7 +81,7 @@ This family never decides the verdict. It tells the maintainer the fixes didn't 
 | Opus 5.5 | 52 of 52 | 52 of 52 | 40 of 52 |
 | particle-1 | 52 of 52 | 52 of 52 | 52 of 52 |
 
-The helper reported its daily scope as partial in 102 of 104 sessions and "not assessed" in 2.
+The helper reported its daily scope as partial in 102 of 104 sessions and "not assessed" in 2. The 104 don't depend on the saved helper records the fixed detector can also read: replayed without them, all 104 still read as ran, and in each the read from the run succeeded.
 
 ### Yield
 
@@ -115,7 +115,7 @@ The pilot's judge gate passed too: 10 reports, no refusal, no judge gap, and gol
 
 This is a loss, not a null, and it gets the same cycle.
 
-- **Did the model use the part?** Yes, in every session: loaded, helper run started, findings submitted.
+- **Did the model use the part?** Yes, in every session: loaded, helper run started, read and finished.
 - **Do the tasks fit?** They are the parent's 52 real advisories, where a plain audit names the flaw about a quarter of the time, so there is room both ways.
 - **Enough samples and headroom?** Both differences crossed their preregistered Holm bounds.
 - **Does the frontier model do it unaided?** Better than with /cso. Plain Opus names more of these flaws.
@@ -141,7 +141,7 @@ The open question for a fix is whether /cso can report the long tail of plausibl
 - **Three infra ends and their retry.** Three counted cells (backstage 2cmg on Opus, nuxt xfq5 on Opus, backstage xm5q on particle-1) failed in under a minute, before the agent started, because tagging the session image failed with "No such image". In each case the same unit's other model was building its image in a parallel lane: two builds of one unit share a tag, and one build's cleanup removed the image the other was about to tag. Each got the plan's one whole-session retry, one lane at a time, and all three completed.
 - **A refused attempt that wasn't a session.** The first retry launch passed the driver a planned count of 3 while its records already counted 101 sessions, so the driver refused the first slot, and the finalize guard halted the run because an attempt had started without a summary. Nothing was spent (the lease settled at $0.00 with an empty proxy journal and no model messages). The owner ruled it not a session, and the cell's retry ran on a later launch after its leftover run folder was moved aside.
 - **A guard that didn't hold.** The halt above should have held the next launch until a relaunch named it. It didn't, because the driver stored the session runner's halt under a different event than the one its list of standing halts reads. This PR fixes that: a cso runner halt now holds the next launch until --lift-halt names it (lanes/outcome-skills/driver/stage.ts, tested in tests/outcome-skills/cso-driver.test.ts).
-- **Code changed on this branch.** Before the pilot: the overlay that reads the rerun plan, the rerun's run items, the session-side notes ruled on the parent's results (C-locale id scan, tree digest recheck, a driver stop on a failed finalize, the counted-tree check), the pilot judge gate, the pooled check, and the analysis. After the pilot sessions and before the counted run: the analysis reading the parent's records as stage 2 so the pilot's print check pairs, and the judge's ledger item under the rerun plan (cso2-judge; the pilot's first judging call was refused for want of it, before any spend). During the counted run's retries: the halt fix above. After the counted run: the miss anatomy wiring for the rerun analysis, and a fix so a session's second attempt never keeps helper records its first attempt saved. That last one changes no counted session: all 104 ran on one attempt.
+- **Code changed on this branch.** Before the pilot: the overlay that reads the rerun plan, the rerun's run items, the session-side notes ruled on the parent's results (C-locale id scan, tree digest recheck, a driver stop on a failed finalize, the counted-tree check), the pilot judge gate, the pooled check, and the analysis. After the pilot sessions and before the counted run: the analysis reading the parent's records as stage 2 so the pilot's print check pairs, and the judge's ledger item under the rerun plan (cso2-judge; the pilot's first judging call was refused for want of it, before any spend). During the counted run's retries: the halt fix above. After the counted run: the miss anatomy wiring for the rerun analysis, and a fix so a session's second attempt never keeps helper records its first attempt saved. That last one changes no counted session: all 104 ran on one attempt. After review, and changing no published number: each session image build tags a name of its own, so two builds of one unit can't collide (the tag race fix); the helper record copy reads one bounded stream and checks its setting before the session; and the analysis refuses a judge check under the rerun's 100-gold floor, new sessions from more than one stage or missing a cell, and a session whose helper records were lost (none of the 104 lost them).
 - **The pilot's print check** paired nothing on the primary family with the parent's first stage 0 scores, because that judging left 9 of 10 judge gaps. Run again against the parent's two stage 0 re-judges, it printed real paired values. Pilot pairs never count.
 - **The pilot's first exposure reading.** In pilot session 1 (happy-dom, Opus), the frozen detector read the skill as not loaded while the fixed detector read the procedure as run. The counted run reads exposure with the fixed detector, as the plan says.
 

@@ -331,20 +331,30 @@ async function rerunAnalyzeCmd(argv: string[]): Promise<number> {
     for (const s of existsSync(join(newDir, u)) ? readdirSync(join(newDir, u)) : []) {
       const m = /^cso-(opus|particle)-\d+$/.exec(s);
       if (!m) continue;
+      const summary = join(newDir, u, s, "h2h-summary.json");
+      const lost = existsSync(summary) ? (JSON.parse(readFileSync(summary, "utf8")) as { cso_records?: { error?: string | null } }).cso_records?.error : null;
+      if (lost) csoFail("E_USAGE", u + "/" + s + " lost its helper records (" + lost + "); exposure and yield would read short");
       const recs = readRunRecords(join(newDir, u, s, CSO_RECORDS_DIR)) as { findings?: unknown[] }[];
       const prev = runRecords[u + " " + m[1]] ?? { runs: 0, findings: 0 };
       runRecords[u + " " + m[1]] = { runs: prev.runs + recs.length, findings: prev.findings + recs.reduce((a, r) => a + (Array.isArray(r.findings) ? r.findings.length : 0), 0) };
     }
   const k = f.has("--key") ? readKey(f.need("--key")) : null;
-  const judge = f.has("--print-check") ? { opus: { named: true, validity: true }, particle: { named: true, validity: true }, sol: { named: false, validity: false } } : judgeByModel(readChecks(f.all("--check"), k), p);
+  const checks = f.has("--print-check") ? [] : readChecks(f.all("--check"), k);
+  for (const c of checks) if ((c.detail as { gold_reports?: number }).gold_reports! < p.judge.check_reports_min) csoFail("E_USAGE", "a --check on route " + c.route + " holds " + (c.detail as { gold_reports?: number }).gold_reports + " gold reports, under the rerun's floor of " + p.judge.check_reports_min + "; pass the rerun's pooled check");
+  const judge = f.has("--print-check") ? { opus: { named: true, validity: true }, particle: { named: true, validity: true }, sol: { named: false, validity: false } } : judgeByModel(checks, p);
   if (f.has("--judged") !== f.has("--old-judged")) csoFail("E_USAGE", "--judged and --old-judged go together");
   type JRow = { unit: string; arm: string; model: string; judged: Judged | null };
   const fresh = f.has("--judged") ? new Map(readRows<JRow>(f.need("--judged")).filter((r) => r.arm === "cso").map((r) => [r.unit + " " + r.model, r.judged])) : null;
   const parent = f.has("--old-judged") ? new Map(readRows<JRow>(f.need("--old-judged")).map((r) => [r.unit + " " + r.arm + " " + r.model, r.judged])) : null;
   const miss = fresh && parent ? { fresh: (u: string, m: string) => fresh.get(u + " " + m) ?? null, parent: (u: string, arm: string, m: string) => parent.get(u + " " + arm + " " + m) ?? null, tree: (u: string) => w.tree(u) } : undefined;
+  const freshSessions = readRows<SessionRecord>(f.need("--sessions"));
+  const stages = new Set(freshSessions.filter((s) => s.arm === "cso").map((s) => s.stage));
+  if (stages.size !== 1 || ![...stages].every((s) => s === "rerun" || s === "rerun-pilot")) csoFail("E_USAGE", "--sessions holds new cso sessions from " + ([...stages].join(", ") || "no stage") + "; it takes one of rerun or rerun-pilot");
+  const missing = units.flatMap((u) => (["opus", "particle"] as const).filter((m) => !freshSessions.some((s) => s.arm === "cso" && s.unit === u.unit && s.model === m)).map((m) => u.unit + " " + m));
+  if (missing.length) csoFail("E_USAGE", "--sessions has no new cso session for " + missing.length + " cells of --units, first " + missing[0] + "; a missing cell is a gap and needs its session record");
   const split = (xs: SessionRecord[]) => ({ none: xs.filter((s) => s.arm === "none"), old: xs.filter((s) => s.arm === "cso") });
   const sp = split(old);
-  const a = rerunAnalysis({ units, none: { sessions: sp.none, scores: oldScores }, old: { sessions: sp.old, scores: oldScores }, fresh: { sessions: readRows<SessionRecord>(f.need("--sessions")), scores: readRows<CsoScore>(f.need("--scores")) }, oldProcedure, runRecords, judge, headroom_admitted: true, ...(miss ? { miss } : {}) }, p);
+  const a = rerunAnalysis({ units, none: { sessions: sp.none, scores: oldScores }, old: { sessions: sp.old, scores: oldScores }, fresh: { sessions: freshSessions, scores: readRows<CsoScore>(f.need("--scores")) }, oldProcedure, runRecords, judge, headroom_admitted: true, ...(miss ? { miss } : {}) }, p);
   if (!f.has("--print-check")) {
     console.log(JSON.stringify(a, null, 1));
     return 0;

@@ -106,5 +106,6 @@ export function printCheck(a: ReturnType<typeof rerunAnalysis>): { pass: boolean
     if (y.helper_runs > 0 && typeof y.helper_findings_per_run !== "number") missing.push("yield " + y.model + " helper findings per run");
   }
   for (const e of a.exposure) if (e.new_of === 0) missing.push("exposure " + e.model + ": no new cso session");
-  return { pass: missing.length === 0, missing, out: { ...a, secondaries: { primary: sec("primary"), second: sec("second") } } };
+  const out = { ...a, secondaries: { primary: sec("primary"), second: sec("second") } };
+  return { pass: missing.length === 0, missing, out };
 }

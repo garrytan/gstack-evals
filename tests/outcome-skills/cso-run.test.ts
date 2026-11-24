@@ -299,7 +299,13 @@ test("deviation (e): a session image runs by a tag pinned to its own image id, s
     const img = buildCsoImage(UNIT, tree());
     expect(img.image_id).toBe(id);
     expect(img.tag).toBe("gstack-evals-cso-session:" + "a".repeat(16) + "-" + "0123456789ab");
-    expect(readFileSync(log, "utf8")).toContain("tag " + id + " " + img.tag);
+    const calls = readFileSync(log, "utf8");
+    expect(calls).toContain("tag " + id + " " + img.tag);
+    const building = /^build -q -t (gstack-evals-cso-session:a{16}-build-[0-9a-f]{12}) /m.exec(calls)?.[1];
+    expect(building).toBeDefined();
+    expect(calls).toContain("rmi " + building);
+    buildCsoImage(UNIT, tree());
+    expect(new Set([...readFileSync(log, "utf8").matchAll(/^build -q -t (\S+)/gm)].map((m) => m[1])).size).toBe(2);
   } finally {
     process.env.PATH = old;
   }

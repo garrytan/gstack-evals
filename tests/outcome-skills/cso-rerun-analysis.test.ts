@@ -59,6 +59,15 @@ test("the print check marks what can't pair and fails only on a field that doesn
   expect(none.missing).toContain("exposure particle: no new cso session");
 });
 
+test("the print check fails when a paired secondary prints no number", () => {
+  const pilot = units.slice(0, 2);
+  const a = rerunAnalysis(input(pilot, pilot), p);
+  a.secondaries.primary[0]!.diffs.findings_total = { ...a.secondaries.primary[0]!.diffs.findings_total, delta: null };
+  const c = printCheck(a);
+  expect(c.missing).toEqual(["primary opus findings_total"]);
+  expect(c.pass).toBe(false);
+});
+
 test("the pilot's parent records from stage 0 pair as stage 2", () => {
   const pilot = units.slice(0, 2);
   const i = input(pilot, pilot);

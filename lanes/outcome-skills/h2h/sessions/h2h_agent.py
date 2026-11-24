@@ -48,7 +48,7 @@ WORK = "/tmp/h2h-work"
 HOME = "/root"
 CSO_RECORDS_CAP = 8 << 20
 CSO_RECORDS = ('cd /root/.gstack/security/cso 2>/dev/null || exit 0; set --; for f in */*/report.json; do [ -f "$f" ] && set -- "$@" "$f"; done; [ "$#" -gt 0 ] || exit 0; '
-               f'c={CSO_RECORDS_CAP}; n=$(tar -cf - -- "$@" | wc -c); [ "$n" -le "$c" ] || {{ echo "the tar is $n bytes, over the $c-byte cap" >&2; exit 3; }}; tar -cf - -- "$@"')
+               f'tar -cf - -- "$@" | head -c {CSO_RECORDS_CAP + 1}')
 
 
 class H2hOptions(RealOptions):
@@ -127,6 +127,8 @@ class H2hAgent(RealAgent):
         if o.arm.split(":", 1)[-1].startswith("s-"):
             await self._run_codex(h, task, container, evdir, events, log, context)
             return
+        if o.cso_records not in ("", "save"):
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP cso_records is save or empty, not {o.cso_records!r}")
         model = self._resolved_model_name() or o.upstream_model
         env = {**h["env"], "ANTHROPIC_MODEL": model, **{k: model for k in lb.ALIAS_ENV}}
         host_dir = Path(tempfile.mkdtemp(prefix="h2h-agent-"))
@@ -144,8 +146,6 @@ class H2hAgent(RealAgent):
         summary = await run_session(Turns(cfg, H2hSlots(self, trial, h["limits"], log)))
         summary["events"] = events
         summary["trial"] = trial
-        if o.cso_records not in ("", "save"):
-            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP cso_records is save or empty, not {o.cso_records!r}")
         if o.cso_records == "save":
             summary["cso_records"] = await asyncio.to_thread(self._save_cso_records, container, evdir / "cso-records")
         (evdir / "h2h-summary.json").write_text(json.dumps(summary, indent=1, default=str))
@@ -160,7 +160,7 @@ class H2hAgent(RealAgent):
             if res.returncode != 0:
                 return {"files": [], "error": res.stderr.decode(errors="replace")[-300:]}
             if len(res.stdout) > CSO_RECORDS_CAP:
-                return {"files": [], "error": f"the tar is {len(res.stdout)} bytes, over the {CSO_RECORDS_CAP}-byte cap"}
+                return {"files": [], "error": f"the tar is over the {CSO_RECORDS_CAP}-byte cap"}
             if not res.stdout:
                 return {"files": [], "error": None}
             dest.mkdir(parents=True, exist_ok=True)
