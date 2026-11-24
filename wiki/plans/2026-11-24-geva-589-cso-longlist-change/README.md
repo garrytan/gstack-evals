@@ -1,8 +1,8 @@
 ---
 id: 2026-11-24-geva-589-cso-longlist-change
 kind: plan
-title: "Dated plan change: the last /cso try, with /cso at gstack dfeaed61 (it reports the full list), on the same 52 advisories under the rerun plan's rules"
-summary: "Reruns the /cso arm at gstack dfeaed61 (gstack#4788) under the GEVA-583 rerun plan. Only the pin changes. The first-10 window reads the final message, as frozen."
+title: "Dated plan change: the last /cso try, with /cso set to report the full list and audit until its time is used (gstack ee019d5e), on the same 52 advisories under the rerun plan's rules"
+summary: "Reruns the /cso arm at gstack ee019d5e (after a dfeaed61 pilot) under the GEVA-583 rerun plan. Only the pin changes. The first-10 window reads the final message, as frozen."
 author: GEVA-589
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -14,9 +14,10 @@ links:
   - 2026-11-19-geva-561-cso-advisories-prereg
   - https://github.com/garrytan/gstack/pull/4788
   - https://github.com/garrytan/gstack/tree/dfeaed615e6f63e7834a71df2f89b450660479e6/cso
+  - https://github.com/garrytan/gstack/tree/ee019d5e9a4c9c405b6a8955baf352e4dc10bf3d/cso
   - lanes/outcome-skills/cso/
 attachments:
-  - 8c6d53602de2616c708f49887e36f90542be3806e32a549838f29a64f7e31f0d  longlist.json
+  - 0351fdc182a9d78d16c406f7fd5f7e4aafb47b05a0d20fba5317deb9390957c4  longlist.json
 ---
 
 # Dated plan change: the last /cso try with the full finding list
@@ -24,6 +25,19 @@ attachments:
 ## Status
 
 This is a dated change to [the rerun plan](../2026-11-23-geva-583-cso-rerun-prereg/README.md), written and pushed before any session of this try. Everything that plan froze holds here unless a section below changes it. That plan and its results post stand as published. Under R77 this change rides the results branch, so the try adds one pull request.
+
+## Change 2, 2026-11-24: the pin moves to ee019d5e before any counted session
+
+The first pilot ran at dfeaed61 (this post at 5674e99) and passed its five checks, but /cso still listed few findings: 3, 4 and 3 per Opus session and 7, 7 and 2 per particle-1 session, against the plain audit's 14.8 per Opus session. Opus ended each session in 3 to 4 minutes, with 420 to 540 seconds still on the helper's clock. A loss on that build would not test what Garry approved ("make it report the long list"), so the Captain held the counted run, and gstack's maintainer chose to strengthen the build. No counted session ran at dfeaed61.
+
+The pin is now ee019d5e9a4c9c405b6a8955baf352e4dc10bf3d, on branch cso-keeps-auditing-until-time-runs-out, one commit after dfeaed61. It is not a pull request and has not been through gstack's /ship. It changes only cso/SKILL.md in the files /cso loads: the model judges time only from the latest helper `remainingSeconds` (`inspect` refreshes it) and never estimates it; above 120 seconds it keeps reading unread attacker-reachable files or runs the next selected phase; it finishes below 120 seconds or once every selected phase is covered; list length never decides when to stop; every selected phase runs. There is no numeric target and no new analysis pass. longlist.json pins the new file hash and keeps both pins in pin_history.
+
+What follows from this change:
+
+- **Re-pilot.** The same 3 units and 6 sessions at ee019d5e, with the same five checks, inside cso3-pilot's remaining cap. It starts no session once its own spend plus that session's planned cost would pass $10. The dfeaed61 pilot's records stay as they are, and the results post reports both pilots.
+- **The go for the counted run.** Passing the five checks is not enough. The counted run starts only if the re-pilot's list comes out long, close to the plain audit's 14.8 findings per Opus session. If it's still short, the try stops there and goes to the Captain before cso3-main spends.
+- **Money.** If /cso now uses more of its time, its sessions cost more. The re-pilot re-prices cso3-main, and a projection past the $90 envelope or $180 all-in goes to the Captain before the counted run.
+- Everything else in this post, the scoring source included, stands. Where the text below names dfeaed61 as the arm's pin, read ee019d5e.
 
 ## Plain summary
 

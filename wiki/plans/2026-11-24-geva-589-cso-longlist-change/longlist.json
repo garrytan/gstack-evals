@@ -14,15 +14,15 @@
   "pins": {
     "gstack": {
       "repo": "garrytan/gstack",
-      "sha": "dfeaed615e6f63e7834a71df2f89b450660479e6",
-      "branch": "cso-reports-full-finding-list",
-      "pr": "garrytan/gstack#4788",
+      "sha": "ee019d5e9a4c9c405b6a8955baf352e4dc10bf3d",
+      "branch": "cso-keeps-auditing-until-time-runs-out",
+      "pr": "none: a branch off garrytan/gstack#4788 head dfeaed61, not through /ship",
       "merged": false,
       "version": "1.103.1.0",
       "cso_skill_version": "3.0.0",
       "helper": "gstack-cso 3.0.0 (helper ABI 3)",
       "files_sha256": {
-        "cso/SKILL.md": "7df081d5afa36d48e47d5d0ead64eea20313c484ac1c1a19033e6897c111c8c3",
+        "cso/SKILL.md": "b1635bb2be53baa543b6f6ae7a70ef3fcc5f27ccf14a8fe3b9f650fe1d41b970",
         "cso/sections/audit-phases.md": "ba27bbbda3cf72717fe8210e91959433fe20a8b8bf7aa4f5ececfe525a7478f3",
         "cso/sections/manifest.json": "39e6d84534657be2345cfbf6ed8821393480a208b7e784c655b017aa5b3081ee",
         "lib/cso/cli.ts": "6b0e75cf0541e7f4622d8e9f412ed644902db4dd1c7d2ae2f999a1b33bdb155c",
@@ -31,13 +31,14 @@
         "lib/cso/search-worker.ts": "3baf92ab62b5490dff37207426c11411983f46824a71a867b974cf8e7a0864aa"
       },
       "cso_changes_since_rerun_pin": [
-        "15ed566 and its three review fix commits: no count cap and no proof bar for listing, every other plausible defect listed as a low-confidence hypothesis, every supported finding in the final table likeliest first and never trimmed, a short list no reason to finish early"
+        "15ed566 and its three review fix commits: no count cap and no proof bar for listing, every other plausible defect listed as a low-confidence hypothesis, every supported finding in the final table likeliest first and never trimmed, a short list no reason to finish early",
+        "ee019d5: time is only the latest remainingSeconds (inspect refreshes it); above 120 keep reading unread attacker-reachable files or run the next selected phase; finish below 120 or once every selected phase is covered; list length never decides when to stop"
       ],
       "cso_files_changed_since_rerun_pin": [
         "cso/SKILL.md",
         "cso/sections/audit-phases.md"
       ],
-      "commits_since_rerun_pin": 30
+      "commits_since_rerun_pin": 31
     },
     "old_cso_arm": {
       "sha": "5afef04e31de1cb30c727c7f827bdd729d04713e",
@@ -265,7 +266,11 @@
         }
       },
       "runs": "one session at a time",
-      "admission": "the cap holds one Opus session's $16 allowance on top of what the pilot spends; the pilot script starts no session once spent plus that session's planned cost would pass the $8 spend stop"
+      "admission": "the cap holds one Opus session's $16 allowance on top of what the pilot spends; the pilot script starts no session once spent plus that session's planned cost would pass the $8 spend stop",
+      "repilot": {
+        "spend_stop": 10,
+        "rule": "the re-pilot runs inside cso3-pilot's remaining cap; it starts no session once its own spend plus that session's planned cost would pass $10"
+      }
     },
     "cso3-main": {
       "central": 62,
@@ -319,5 +324,17 @@
     "judging_per_session_usd": 0.15,
     "gold_per_report_usd": 0.3,
     "basis": "the rerun's measured costs at a3ecfd53 (Opus $0.76, particle-1 $0.15, judging and gold $22.60 over 114 sessions) with Opus raised for the longer list; the pilot re-prices"
-  }
+  },
+  "pin_history": [
+    {
+      "sha": "dfeaed615e6f63e7834a71df2f89b450660479e6",
+      "at": "5674e99",
+      "used_for": "the first pilot only (6 sessions, 2026-11-24); not run counted, on GStack Minder's call after the pilot showed 3.3 Opus findings a session"
+    },
+    {
+      "sha": "ee019d5e9a4c9c405b6a8955baf352e4dc10bf3d",
+      "at": "change 2",
+      "used_for": "the re-pilot and, if it passes, the counted run"
+    }
+  ]
 }
