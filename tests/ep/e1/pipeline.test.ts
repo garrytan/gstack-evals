@@ -82,7 +82,7 @@ describe("reviews then builds, scored", () => {
         expect(s.arm).toBe("plain");
         return { outcome: "completed", tree, costUsd: 0.3 };
       },
-      grader: { grade: async () => ({ planted: [{ id: "t1", runs: ["pass", "pass", "fail"] }, { id: "t2", runs: ["fail", "fail", "pass"] }], functional: [] }), catchOf: async () => ({ catch: true, drop: null }) },
+      grader: { grade: async () => ({ planted: [{ id: "t1", runs: ["pass", "pass", "assert"] }, { id: "t2", runs: ["assert", "crash", "pass"] }], functional: [] }), catchOf: async () => ({ catch: true, drop: null }) },
       gate: new ItemGate(e1Item("e1-D-opus")),
     });
     expect(built).toBe(1);
