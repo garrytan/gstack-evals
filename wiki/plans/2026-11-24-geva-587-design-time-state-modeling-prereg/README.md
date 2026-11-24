@@ -179,7 +179,7 @@ On the 6 calibration units, one review and build cell per arm and model: 84 cell
 | D, diagram in plain words | $463 | $46 | a new state diagram in at least 5 of 6 sessions on each model, and the builder opened /work/review/ in at least 5 of 6 | none | the same 6 units and the same supply count |
 | C, model check in plain words | $749 | $74 | TLC ran in at least 5 of 6 sessions on each model, and the builder opened /work/review/ in at least 5 of 6 | none | the same 6 units and the same supply count |
 | P, pstack /statechart | $461 | $46 | statechart's body arrived and TLC or its script ran in at least 5 of 6 sessions on Opus and on particle-1 | none | the same 6 units and the same supply count |
-| G, gstack /plan-eng-review | $815 | $81 | the procedure detector fires in at least 5 of 6 sessions on each model | none | the same 6 units and the same supply count |
+| G, gstack /plan-eng-review | $814 | $81 | the procedure detector fires in at least 5 of 6 sessions on each model | none | the same 6 units and the same supply count |
 
 **The pilot also reads:** limit stops, the 95th-percentile review cost, and refusals per arm and model. If more than 1 of 6 sessions of any arm and model hits a limit, or that arm's 95th-percentile review cost passes half its allowance, every review allowance doubles for every arm before the counted run, through a dated change.
 
@@ -263,7 +263,7 @@ Planning figures, per review and build cell. Opus comes from attempt 3's measure
 | GPT-6.2 Sol | $1.72 | $1.95 | $2.85 | not run | $2.71 |
 | particle-1 | $0.56 | $0.62 | $0.85 | $0.95 | $1.02 |
 
-Counted cells: 64 units x 2 cells per arm and model, 14 arm and model pairs, 1,792 cells: about $2,898. Opus about $1,204, Sol about $1,181, particle-1 about $513.
+Counted cells: 64 units x 2 cells per arm and model, 14 arm and model pairs, 1,792 cells: about $2,898. Opus about $1,204, Sol about $1,181, particle-1 about $512.
 
 | Item | Projection | Cap |
 |---|---|---|
