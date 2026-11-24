@@ -221,7 +221,7 @@ At: half the units, 32 of 64, in seeded order, with every cell of those units sc
 Stop bounds: futility only; C, P and G stop their remaining cells if the pooled 95% upper bounds of both C minus N and P minus N sit below +5 points; N and D always finish; no stop for a gain, so the final tests keep alpha 0.05
 Other looks: none
 
-Cells run interleaved in seeded unit order, so the look has every arm's cells on its 32 units. If the stop fires, the C, P and G Decision rows read on 32 units with their MDDs printed, and the D rows read on all 64.
+Cells run interleaved in seeded unit order, so the look has every arm's cells on its 32 units. The look reads only the two upper bounds above. If the stop fires, C, P and G read "stopped for futility": the rows that take no action fire for them (no modeling step from C, nothing from pstack, no change from G), and their 32-unit estimates and intervals print as description only. No row that claims a gain or a loss, or sends GStack Minder a brief, reads a stopped arm, because the stop chose those 32-unit results and their intervals are not adjusted for it. The D and N rows read on all 64 units as planned. If the stop does not fire, every row reads at 64 units; the futility-only look never rejects, so it adds no false positive to those tests.
 
 ## 9. Order and stops
 
