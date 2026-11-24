@@ -1,0 +1,84 @@
+author-b1-calls.refused-1.log: start 2026-11-17T10:59:43Z author-b1-calls: ep author --batch 1 --step calls --parallel 6 --cache ~/ep/run/author/cache --item ep-authoring --cap-usd <cap> (head 58d348ff3f36)
+author-b1-calls.refused-1.log: exit 2 2026-11-17T10:59:43Z
+author-b1-calls.log: start 2026-11-17T11:39:32Z author-b1-calls: ep author --batch 1 --step calls --parallel 6 --cache ~/ep/run/author/cache --item ep-authoring --cap-usd <cap> (head 58d348ff3f36)
+author-b1-calls.log: exit 2 2026-11-17T11:55:26Z
+author-b1-calls-2.capstop.log: start 2026-11-17T12:10:17Z author-b1-calls-2: ep author --batch 1 --step calls --chunk 16 --parallel 6 --cache ~/ep/run/author/cache --item ep-authoring --cap-usd <cap> (head 58d348ff3f36)
+author-b1-calls-2.capstop.log: exit 2 2026-11-17T12:10:18Z
+author-b1-calls-2.log: start 2026-11-17T12:12:10Z author-b1-calls-2: ep author --batch 1 --step calls --chunk 16 --parallel 6 --cache ~/ep/run/author/cache --item ep-authoring --cap-usd <cap> (head 58d348ff3f36)
+author-b1-calls-2.log: exit 2 2026-11-17T12:20:39Z
+author-b1-calls-3.log: start 2026-11-17T13:08:52Z author-b1-calls-3: ep author --batch 1 --step calls --chunk 36 --parallel 6 --cache ~/ep/run/author/cache --item ep-authoring --cap-usd <cap> (head ded4b15a6d43)
+author-b1-calls-3.log: exit 2 2026-11-17T13:17:42Z
+author-b1-calls-4.log: start 2026-11-17T14:19:56Z author-b1-calls-4: ep author --batch 1 --step calls --first ub0dfd897893e,u7c5d21a984a7,uacec9a65f525,u90ffa54d073c,u8f131f648519,u64618b0c656c --parallel 6 --cache ~/ep/run/author/cache --item ep-autho
+author-b1-calls-4.log: exit 0 2026-11-17T14:30:44Z
+author-b1-hinted.refused-1.log: start 2026-11-17T14:37:28Z author-b1-hinted: ep author --batch 1 --step hinted --parallel 4 --item ep-authoring --cap-usd <cap> (head 6c21421745e6)
+author-b1-hinted.refused-1.log: exit 2 2026-11-17T14:37:29Z
+author-b1-rerate32k.log: start 2026-11-17T15:23:24Z author-b1-rerate32k: ep author --batch 1 --step calls --chunk 37 --parallel 6 --cache ~/ep/run/author/cache --item ep-authoring --cap-usd <cap> (head 218992e185a3)
+author-b1-rerate32k.log: exit 0 2026-11-17T15:35:40Z
+author-b1-hinted.log: start 2026-11-17T15:41:43Z author-b1-hinted: ep author --batch 1 --step hinted --parallel 4 --item ep-authoring --cap-usd <cap> (head 218992e185a3)
+author-b1-hinted.log: exit 2 2026-11-17T15:45:17Z
+author-b1-hinted2.log: start 2026-11-17T18:42:36Z author-b1-hinted2: ep author --batch 1 --step hinted --parallel 4 --item ep-authoring --cap-usd <cap> (head 4c5b44b42089)
+author-b1-hinted2.log: exit 2 2026-11-17T20:44:01Z
+owed.log: start 2026-11-17T21:21:04Z ep owed (head 5c082e6975fb)
+owed.log: exit 0 2026-11-17T21:21:04Z
+owed-622aba6.log: start 2026-11-17T21:42:51Z ep owed (head 622aba6bfb3a)
+owed-622aba6.log: exit 0 2026-11-17T21:42:52Z
+author-b1-hinted3.log: start 2026-11-17T22:18:57Z author-b1-hinted3: ep author --batch 1 --step hinted --parallel 4 --item ep-authoring --cap-usd <cap> (head 0da09f0ecea9)
+author-b1-hinted3.log: exit 2 2026-11-17T23:29:08Z
+author-b1-hinted4.log: start 2026-11-18T00:51:03Z author-b1-hinted4: ep author --batch 1 --step hinted --parallel 4 --item ep-authoring --cap-usd <cap> (head b9605d779c2e)
+author-b1-hinted4.log: exit 0 2026-11-18T03:48:57Z
+author-b1-none1.log: start 2026-11-18T04:24:18Z author-b1-none1: ep author --batch 1 --step none --parallel 4 --item ep-authoring --cap-usd <cap> (head b9605d779c2e)
+author-b1-none1.log: exit 0 2026-11-18T07:21:31Z
+smoke1.log: start 2026-11-18T07:35:22Z smoke1: ep smoke --gstack ~/gstack-pin --parallel 4 --item ep-smoke --cap-usd <cap> (head b9605d779c2e)
+smoke1.log: exit 0 2026-11-18T08:14:40Z
+pilot-reviews1.log: start 2026-11-18T08:34:15Z pilot-reviews1: ep reviews --phase pilot --parallel 4 --item ep-comparison --cap-usd <cap> (head b9605d779c2e)
+pilot-reviews1.log: exit 0 2026-11-18T08:54:05Z
+pilot-builds1.log: start 2026-11-18T09:08:56Z pilot-builds1: ep builds --phase pilot --parallel 4 --item ep-comparison --cap-usd <cap> (head b9605d779c2e)
+pilot-builds1.log: exit 0 2026-11-18T13:38:23Z
+judge-first.log: start 2026-11-18T14:24:06Z judge-first: ep judge --role judge --bundles ~/ep/work/judge-first-bundles.json --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head b9605d779c2e)
+judge-first.log: exit 2 2026-11-18T14:24:06Z
+judge-first2.log: start 2026-11-18T15:06:55Z judge-first2: ep judge --role judge --bundles ~/ep/work/judge-first-bundles.json --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head b9605d779c2e)
+judge-first2.log: exit 0 2026-11-18T15:07:37Z
+author-b2-calls-1.log: start 2026-11-18T15:08:45Z author-b2-calls-1: ep author --batch 2 --step calls --parallel 6 --cache ~/ep/run/author/cache --item ep-authoring --cap-usd <cap> (head b9605d779c2e)
+author-b2-calls-1.log: exit 0 2026-11-18T15:35:06Z
+author-b2-hinted1.log: start 2026-11-18T15:52:54Z author-b2-hinted1: ep author --batch 2 --step hinted --parallel 4 --item ep-authoring --cap-usd <cap> (head b9605d779c2e)
+author-b2-hinted2.log: start 2026-11-18T17:10:36Z author-b2-hinted2: ep author --batch 2 --step hinted --parallel 4 --item ep-authoring --cap-usd <cap> (head b9605d779c2e)
+author-b2-hinted2.log: exit 0 2026-11-19T03:30:52Z
+author-b2-calls-2.log: start 2026-11-19T03:34:49Z author-b2-calls-2: ep author --batch 2 --step calls --parallel 6 --cache ~/ep/run/author/cache --item ep-authoring --cap-usd <cap> (head b9605d779c2e)
+author-b2-calls-2.log: exit 0 2026-11-19T03:39:50Z
+chain-b2-hinted3.log: start 2026-11-19T03:43:37Z author-b2-hinted3: ep author --batch 2 --step hinted --parallel 4 --item ep-authoring --cap-usd <cap> (head b9605d779c2e)
+author-b2-hinted3.log: start 2026-11-19T03:43:37Z author-b2-hinted3: ep author --batch 2 --step hinted --parallel 4 --item ep-authoring --cap-usd <cap> (head b9605d779c2e)
+author-b2-hinted3.log: exit 0 2026-11-19T06:12:39Z
+author-b2-draw1.log: start 2026-11-19T06:17:47Z author-b2-draw1: ep author --batch 2 --step draw (head b9605d779c2e)
+author-b2-draw1.log: exit 0 2026-11-19T06:18:05Z
+chain-b2-none1.log: start 2026-11-19T06:18:15Z author-b2-none1: ep author --batch 2 --step none --parallel 4 --item ep-authoring --cap-usd <cap> (head b9605d779c2e)
+author-b2-none1.log: start 2026-11-19T06:18:15Z author-b2-none1: ep author --batch 2 --step none --parallel 4 --item ep-authoring --cap-usd <cap> (head b9605d779c2e)
+author-b2-none1.log: exit 0 2026-11-19T14:12:49Z
+chain-comparison-reviews1.log: start 2026-11-19T14:16:43Z comparison-reviews1: ep reviews --phase comparison --gstack ~/gstack-pin --parallel 4 --item ep-comparison --cap-usd <cap> (head b9605d779c2e)
+comparison-reviews1.log: start 2026-11-19T14:16:43Z comparison-reviews1: ep reviews --phase comparison --gstack ~/gstack-pin --parallel 4 --item ep-comparison --cap-usd <cap> (head b9605d779c2e)
+comparison-reviews1.log: exit 0 2026-11-20T01:55:26Z
+chain-comparison-builds1.log: start 2026-11-20T01:58:36Z comparison-builds1: ep builds --phase comparison --parallel 4 --item ep-comparison --cap-usd <cap> (head b9605d779c2e)
+comparison-builds1.log: start 2026-11-20T01:58:36Z comparison-builds1: ep builds --phase comparison --parallel 4 --item ep-comparison --cap-usd <cap> (head b9605d779c2e)
+comparison-builds1.log: exit 0 2026-11-22T22:12:50Z
+chain-stock-builds1.log: start 2026-11-22T22:19:43Z stock-builds1: ep builds --phase stock --parallel 4 --item ep-stock --cap-usd <cap> (head b9605d779c2e)
+stock-builds1.log: start 2026-11-22T22:19:43Z stock-builds1: ep builds --phase stock --parallel 4 --item ep-stock --cap-usd <cap> (head b9605d779c2e)
+stock-builds1.log: exit 0 2026-11-23T06:41:21Z
+judge-gold1.log: start 2026-11-23T07:28:01Z judge-gold1: ep judge --role judge --bundles ~/ep/run/checks/gold-bundles.json --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head 36d61a51dee2)
+judge-gold1.log: exit 0 2026-11-23T08:03:28Z
+gold-opus1.log: start 2026-11-23T08:03:29Z gold-opus1: ep judge --role gold-opus --bundles ~/ep/run/checks/gold-bundles.json --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head 36d61a51dee2)
+gold-opus1.log: exit 0 2026-11-23T08:16:54Z
+gold-gemini1.log: start 2026-11-23T08:16:56Z gold-gemini1: ep judge --role gold-gemini --bundles ~/ep/run/checks/gold-bundles.json --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head 36d61a51dee2)
+gold-gemini1.log: exit 0 2026-11-23T14:27:39Z
+judge-main1.log: start 2026-11-23T14:27:41Z judge-main1: ep judge --role judge --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head 36d61a51dee2)
+judge-main1.log: exit 0 2026-11-23T17:26:36Z
+gold-gemini2.log: start 2026-11-23T18:09:44Z gold-gemini2: ep judge --role gold-gemini --bundles ~/ep/run/checks/gold-bundles.json --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head 8ccafc7536ab)
+gold-gemini2.log: exit 0 2026-11-23T19:23:07Z
+judge-gold-r1.log: start 2026-11-23T20:05:26Z judge-gold-r1: ep judge --role judge --bundles ~/ep/run/checks/gold-bundles.json --revision 1 --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head 915685fb960e)
+judge-gold-r1.log: exit 0 2026-11-23T20:09:41Z
+gold-opus-r1.log: start 2026-11-23T20:09:42Z gold-opus-r1: ep judge --role gold-opus --bundles ~/ep/run/checks/gold-bundles.json --revision 1 --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head 915685fb960e)
+gold-opus-r1.log: exit 0 2026-11-23T20:13:14Z
+gold-gemini-r1.log: start 2026-11-23T20:13:16Z gold-gemini-r1: ep judge --role gold-gemini --bundles ~/ep/run/checks/gold-bundles.json --revision 1 --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head 915685fb960e)
+gold-gemini-r1.log: exit 0 2026-11-23T20:31:56Z
+judge-main-r1.log: start 2026-11-23T20:31:58Z judge-main-r1: ep judge --role judge --revision 1 --cache ~/ep/run/judge/cache --item ep-judge --cap-usd <cap> (head 915685fb960e)
+judge-main-r1.log: exit 0 2026-11-23T20:48:43Z
+
+0

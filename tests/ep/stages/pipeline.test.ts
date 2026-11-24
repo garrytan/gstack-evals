@@ -2,7 +2,7 @@
 // The planted-unit stages end to end through the ep commands, keyless: synthetic units, stub sessions, model calls and
 // grader, and every lease on a temporary ledger. It walks section 14's order and reads back what each step left.
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordApproval } from "../../../src/runner/ledger/ledger.ts";
@@ -12,7 +12,7 @@ import { stockMount, STOCK_REVIEW } from "../../../lanes/eng-planted/stages/buil
 import { stagesCommands, type Seams } from "../../../lanes/eng-planted/stages/commands.ts";
 import { ITEMS, stubLauncher } from "../../../lanes/eng-planted/stages/ledger.ts";
 import { EP_RUN, readStep, writeStep } from "../../../lanes/eng-planted/stages/local.ts";
-import { drawFile, unitFolders, type RunRecords } from "../../../lanes/eng-planted/stages/pipeline.ts";
+import { bundleInput, drawFile, reviewKey, unitFolders, type BundleRef, type RunRecords } from "../../../lanes/eng-planted/stages/pipeline.ts";
 import { authorStub, buildStub, graderStub, plantedUnits, reviewStub, unitId, type SeenBuild, type SeenReview } from "./fixture.ts";
 
 const CHECKOUT = process.env.GSTACK_EVALS_RESTORE_CHECKOUT ?? join(homedir(), ".capy", "work", "wt-restore");
@@ -199,6 +199,34 @@ describe("ep stages in section 14's order", () => {
     expect(await t.judge!.run(paid("ep-judge", { "--role": "judge" }), io)).toBe(0);
     const res = json<Array<{ unit: string; source: string; quotes: string[] }>>(join(run(), "judge", "judge.json"));
     expect(new Set(res.map((x) => x.source))).toEqual(new Set(["plain", "standalone", "stock", "none", "plan"]));
+  });
+
+  test("the gold set fills each pool to its quota, and the labellers read the smoke reviews from the smoke mounts", async () => {
+    const file = join(W, "gold.json");
+    expect(await t.gold!.run(args({ "--out": file }), io)).toBe(0);
+    const g = json<BundleRef[]>(file);
+    const pilot = new Set(json<RunRecords>(join(W, "records.json")).units.filter((u) => u.pilot).map((u) => u.id));
+    expect(g.filter((b) => b.smoke)).toHaveLength(haveCheckout ? 2 * SIZE.calibration : 0);
+    expect(g.filter((b) => b.source === "standalone" && !b.smoke)).toHaveLength(10);
+    expect(g.filter((b) => b.source === "plain").every((b) => pilot.has(b.unit) && b.rep! <= SIZE.pilotK)).toBe(true);
+    expect(g.filter((b) => b.source === "plain")).toHaveLength(12);
+    expect([g.filter((b) => b.source === "stock").length, g.filter((b) => b.source === "plan").length]).toEqual([2, 2]);
+    expect(out.at(-1)).toContain("short: " + (haveCheckout ? "" : "smoke 0 of 12, ") + "engphase 0 of 10");
+
+    const unit = json<RunRecords>(join(W, "records.json")).units.find((u) => u.set === "calibration")!.id;
+    const mount = join(run(), "reviews", "smoke", "mounts", reviewKey(unit, "standalone", "opus", 9));
+    mkdirSync(join(mount, "review"), { recursive: true });
+    writeFileSync(join(mount, "files.json"), JSON.stringify(["review.md"]));
+    writeFileSync(join(mount, "plan.md"), "The smoke plan.");
+    writeFileSync(join(mount, "review", "review.md"), "The smoke review.");
+    const smoke: BundleRef = { unit, source: "standalone", rep: 9, smoke: true };
+    expect(bundleInput(run(), smoke).files).toEqual([{ path: "plan.md", text: "The smoke plan." }, { path: "review/review.md", text: "The smoke review." }]);
+    expect(() => bundleInput(run(), { ...smoke, smoke: false })).toThrow();
+    writeFileSync(file, JSON.stringify([...g, smoke]));
+    expect(await t.judge!.run(paid("ep-judge", { "--role": "gold-opus", "--bundles": file }), io)).toBe(0);
+    const res = json<Array<{ unit: string; source: string }>>(join(run(), "judge", "gold-opus.json"));
+    expect(res).toHaveLength(g.length + 1);
+    expect(res.at(-1)).toMatchObject({ unit, source: "standalone" });
   });
 
   test("every lease opened on the run settled, and each item's journal holds its sessions", () => {

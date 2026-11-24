@@ -1,0 +1,83 @@
+// GEVA-543 backstop audit (Captain ruling A, 2026-11-17): tool calls naming /testbed or a stripped name, per counted session.
+import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+const run = process.env.EP_RUN_DIR!;
+const A = join(run, "analysis");
+const units = JSON.parse(readFileSync(join(A, "analysis.json"), "utf8")).units.map((u: any) => u.id);
+const ids = new Set(units);
+const TESTBED = /\/testbed(?![\w.-])/;
+const STRIP = /(^|[\/\s"'=:(])(CLAUDE\.md|CLAUDE\.local\.md|AGENTS\.md|\.claude)(?![\w.-])/;
+const CACHE = /\/go\/pkg\/mod|\/usr\/local\/cargo|\/opt\/venv\/lib|node_modules|site-packages|\/root\/\.cache|\/root\/\.cargo/;
+const ADDS = /^\+\+\+ b\/(?:.*\/)?(CLAUDE\.md|CLAUDE\.local\.md|AGENTS\.md|\.claude\/)/m;
+type Rec = Record<string, unknown>;
+const toolUses = (v: unknown, out: Rec[] = []): Rec[] => {
+  if (Array.isArray(v)) for (const x of v) toolUses(x, out);
+  else if (v && typeof v === "object") {
+    const r = v as Rec;
+    if (r.type === "tool_use" && "input" in r) out.push(r);
+    for (const x of Object.values(r)) if (x && typeof x === "object") toolUses(x, out);
+  }
+  return out;
+};
+const last = (dir: string) => readdirSync(dir).filter((d) => /^a\d+$/.test(d)).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1))).at(-1);
+const evaluator = (att: string) => {
+  const jobs = join(att, "jobs");
+  if (!existsSync(jobs)) return null;
+  for (const j of readdirSync(jobs)) {
+    const jd = join(jobs, j);
+    try { for (const t of readdirSync(jd)) if (t.startsWith("task__") && existsSync(join(jd, t, "evaluator"))) return join(jd, t, "evaluator"); } catch {}
+  }
+  return null;
+};
+const sessions: Array<{ kind: string; key: string; transcript: string | null; patch: string | null }> = [];
+for (const phase of ["comparison", "stock", "authoring"]) {
+  const root = join(run, "builds", phase, "rig", "sessions");
+  for (const key of readdirSync(root)) {
+    const unit = key.split("_")[0];
+    if (!ids.has(unit)) continue;
+    if (phase === "authoring" && !key.includes("_none_")) continue;
+    const a = last(join(root, key));
+    const ev = a ? evaluator(join(root, key, a)) : null;
+    sessions.push({ kind: "build " + phase, key, transcript: ev && existsSync(join(ev, "sdk-messages.jsonl")) ? join(ev, "sdk-messages.jsonl") : null, patch: ev && existsSync(join(ev, "final.patch")) ? join(ev, "final.patch") : null });
+  }
+}
+{
+  const root = join(run, "reviews", "comparison", "sessions");
+  for (const key of readdirSync(root)) {
+    if (!ids.has(key.split("_")[0])) continue;
+    const a = last(join(root, key));
+    const t = a ? join(root, key, a, "run", "host", "transcript.ndjson") : null;
+    sessions.push({ kind: "review", key, transcript: t && existsSync(t) ? t : null, patch: null });
+  }
+}
+const hits: Record<string, string[]> = { testbed: [], strippedTestbed: [], strippedCache: [], strippedElsewhere: [], patchAddsStripped: [], noTranscript: [] };
+const byKind: Record<string, { sessions: number; calls: number }> = {};
+for (const s of sessions) {
+  const k = (byKind[s.kind] ??= { sessions: 0, calls: 0 });
+  k.sessions++;
+  if (!s.transcript) { hits.noTranscript.push(s.kind + " " + s.key); continue; }
+  const flags = new Set<string>();
+  for (const line of readFileSync(s.transcript, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    let rec: unknown;
+    try { rec = JSON.parse(line); } catch { continue; }
+    for (const u of toolUses(rec)) {
+      k.calls++;
+      const inp = JSON.stringify(u.input);
+      const tb = TESTBED.test(inp), st = STRIP.test(inp);
+      if (tb) flags.add("testbed");
+      if (st && tb) flags.add("strippedTestbed");
+      else if (st && CACHE.test(inp)) flags.add("strippedCache");
+      else if (st) flags.add("strippedElsewhere:" + String(u.name));
+    }
+  }
+  for (const f of flags) { const [cat, tool] = f.split(":"); hits[cat].push(s.kind + " " + s.key + (tool ? " (" + tool + ")" : "")); }
+  if (s.patch && ADDS.test(readFileSync(s.patch, "utf8"))) hits.patchAddsStripped.push(s.kind + " " + s.key);
+}
+const L: string[] = [];
+L.push("sessions audited: " + Object.entries(byKind).map(([k, v]) => k + " " + v.sessions + " (tool calls " + v.calls + ")").join(", "));
+for (const [cat, xs] of Object.entries(hits)) L.push(cat + ": " + xs.length + (xs.length ? " [" + [...new Set(xs.map((x) => x.replace(/ \(.*\)$/, "")))].slice(0, 25).join("; ") + (xs.length > 25 ? "; ..." : "") + "]" : ""));
+const tools = hits.strippedElsewhere.map((x) => (/\((.*)\)$/.exec(x) ?? [])[1] ?? "?");
+L.push("strippedElsewhere by tool: " + [...new Set(tools)].map((t) => t + " " + tools.filter((x) => x === t).length).join(", "));
+writeFileSync(join(A, "audit-reads.txt"), L.join("\n") + "\n");
+console.log(L.join("\n"));

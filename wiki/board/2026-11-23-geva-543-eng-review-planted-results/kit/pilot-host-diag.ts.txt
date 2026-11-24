@@ -1,0 +1,13 @@
+// GEVA-543 unplanned descriptive: on the 20 pilot units, plain reps 1-2 (built on P in the pilot) against plain rep 3 (built on P2).
+import { readFileSync } from "node:fs";
+import { unitScore, measureOf } from "~/work/head/lanes/eng-planted/readings/score.ts";
+const f = JSON.parse(readFileSync(process.env.EP_RUN_DIR + "/analysis/analysis.json", "utf8"));
+const m = measureOf("composite");
+const us = f.units.filter((u: any) => u.pilot);
+const rows = us.map((u: any) => {
+  const pb = f.builds.filter((b: any) => b.unit === u.id && b.arm === "plain" && b.reviewer === "opus");
+  return { a: unitScore(pb.filter((b: any) => b.rep <= 2), u, m, "missing"), b: unitScore(pb.filter((b: any) => b.rep === 3), u, m, "missing"), pilotFlags: pb.filter((b: any) => b.pilot).map((b: any) => b.rep).join("") };
+}).filter((r: any) => r.a !== null && r.b !== null);
+const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+const d = rows.map((r: any) => r.b - r.a);
+console.log("pilot units " + us.length + ", paired " + rows.length + "; plain composite reps 1-2 (P) " + mean(rows.map((r: any) => r.a)).toFixed(3) + ", rep 3 (P2) " + mean(rows.map((r: any) => r.b)).toFixed(3) + ", rep 3 minus reps 1-2 " + mean(d).toFixed(3) + " (higher on " + d.filter((x: number) => x > 0).length + ", lower on " + d.filter((x: number) => x < 0).length + "); pilot-flag reps " + [...new Set(rows.map((r: any) => r.pilotFlags))].join(","));

@@ -27,7 +27,7 @@ the ledger. Changes there keep every existing caller's behavior by default, and 
   against.
 - stages/: authoring (plan, two-way audit, hint, foreseeability raters, hinted and no-review builds), the three review
   arms at the restore pin, the stock control, the build stage with the reviewed plan mounted, the ledger items and the
-  all-in projection stop, and the driven launch.
+  all-in projection stop, the rerun log that plans each owed cell's rerun, and the driven launch.
 - readings/: the scores, the pilot's component rule and lines, the content raise, the exposure gate, the start rule,
   the statistics (paired, repository-clustered bootstrap and sign-flip, Holm), the verdicts, the judged secondary and
   its check, and power.py.

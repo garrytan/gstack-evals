@@ -7,7 +7,7 @@
 // reason when the transplant drops or the build's own tests don't compile. Prints nothing.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { catchBuild } from "../../eng-build/catch.ts";
@@ -24,9 +24,10 @@ import { isProtectedPath } from "../../real-outcome/mine/paths.ts";
 import { docker } from "../../real-outcome/task/docker.ts";
 import { BASE_BRANCH } from "../../real-outcome/task/format.ts";
 import * as verify from "../../real-outcome/task/verify.ts";
-import { notBuilt } from "../errors.ts";
+import { EpError, notBuilt } from "../errors.ts";
 import { FROZEN } from "../frozen.ts";
-import type { Ecosystem, PlantedGrader } from "../types.ts";
+import type { ReasonCode } from "../../../src/errors/codes.ts";
+import type { Ecosystem, PlantedGrader, PlantedUnit } from "../types.ts";
 import { unitSpec, type Constructed } from "./build.ts";
 import { bundleHistory, imageHistory, judge, needlesOf, scanImage, scanTexts, treeTexts } from "./checks.ts";
 import { frameLicence, SANDBOX, starStratum, type DropRecord, type MinedFix } from "./local.ts";
@@ -175,29 +176,74 @@ export function treeDiff(unitDir: string, baseTree: string | null, tree: string)
   }
 }
 
-/** The PlantedGrader seam (types.ts). A build's tree is the session's output folder, and its final.patch (the build's diff
- * from B) is what both reads grade, as eng-build's grader does. */
-export function plantedGrader(o: { work: string; runs?: number }): PlantedGrader {
-  const runs = o.runs ?? FROZEN.runs;
-  const patchOf = (tree: string) => readFileSync(join(tree, "final.patch"), "utf8");
+/** One read of a build's tree for plantedGrader: its planted and functional cases (grade) or its catch. */
+export interface GradeRead {
+  read: "grade" | "catch";
+  work: string;
+  runs: number;
+  unit: PlantedUnit;
+  unitDir: string;
+  tree: string;
+}
+
+/** A read in this process. A build's tree is the session's output folder, and its final.patch (the build's diff from B)
+ * is what both reads grade, as eng-build's grader does. */
+export function gradeRead(r: GradeRead): Awaited<ReturnType<PlantedGrader["grade"]>> | Awaited<ReturnType<PlantedGrader["catchOf"]>> {
+  requireSandbox();
+  const patch = readFileSync(join(r.tree, "final.patch"), "utf8");
+  if (r.read === "catch") {
+    const c = catchBuild({ unitDir: r.unitDir, patch, work: r.work, runs: r.runs, crash: true, sandbox: SANDBOX });
+    const drop = c.drops[0]?.cls ?? (c.compiled < c.trees ? "own_tests_do_not_compile" : null);
+    if (drop) return { catch: null, drop };
+    const caught = Object.values(c.catches)[0] ?? null;
+    return { catch: caught, drop: caught === null ? "no_result" : null };
+  }
+  const { eb, task } = readUnit(r.unitDir);
+  const grid = (set: (typeof eb.sets)[number] | undefined, want: string[]) => (set && want.length ? gradeSet({ taskDir: r.unitDir, task, eb, set, label: "build", patch, runs: r.runs, seed: eb.seed + 3000, work: r.work, want, crash: true, sandbox: SANDBOX }) : {});
   return {
-    async grade(unit, unitDir, tree) {
-      requireSandbox();
-      const { eb, task } = readUnit(unitDir);
-      const patch = patchOf(tree);
-      const grid = (set: (typeof eb.sets)[number] | undefined, want: string[]) => (set && want.length ? gradeSet({ taskDir: unitDir, task, eb, set, label: "build", patch, runs, seed: eb.seed + 3000, work: o.work, want, crash: true, sandbox: SANDBOX }) : {});
-      return {
-        planted: caseRuns(grid(eb.sets.find((s) => s.role === "B"), unit.planted), unit.planted),
-        functional: caseRuns(grid(eb.sets[0], unit.functional), unit.functional),
-      };
-    },
-    async catchOf(_unit, unitDir, buildTree) {
-      requireSandbox();
-      const r = catchBuild({ unitDir, patch: patchOf(buildTree), work: o.work, runs, crash: true, sandbox: SANDBOX });
-      const drop = r.drops[0]?.cls ?? (r.compiled < r.trees ? "own_tests_do_not_compile" : null);
-      if (drop) return { catch: null, drop };
-      const c = Object.values(r.catches)[0] ?? null;
-      return { catch: c, drop: c === null ? "no_result" : null };
-    },
+    planted: caseRuns(grid(eb.sets.find((s) => s.role === "B"), r.unit.planted), r.unit.planted),
+    functional: caseRuns(grid(eb.sets[0], r.unit.functional), r.unit.functional),
   };
+}
+
+/** The PlantedGrader seam (types.ts). Each read runs gradeRead in a child process (child, by default this module under
+ * bun), which this process awaits, so the build stage's driver, serving sessions from this process's event loop, keeps
+ * answering while the grading containers run (dated pre-run fix, 2026-11-17). Reads run one at a time, as they did in
+ * this process, so the move changes no grading load. A read's refusal keeps its code. */
+export function plantedGrader(o: { work: string; runs?: number; child?: string[] }): PlantedGrader {
+  const runs = o.runs ?? FROZEN.runs;
+  const child = o.child ?? [process.execPath, import.meta.path];
+  const readInChild = async (r: GradeRead) => {
+    const dir = mkdtempSync(join(tmpdir(), "ep-grade-"));
+    try {
+      writeFileSync(join(dir, "read.json"), JSON.stringify(r));
+      const p = Bun.spawn([...child, join(dir, "read.json"), join(dir, "result.json")], { stdin: "ignore", stdout: "inherit", stderr: "inherit" });
+      const exit = await p.exited;
+      if (!existsSync(join(dir, "result.json"))) throw new EpError("E_INTERNAL", "the grading child for " + r.tree + " exited " + exit + " with no result");
+      const res = JSON.parse(readFileSync(join(dir, "result.json"), "utf8")) as { value?: unknown; error?: { code: ReasonCode | null; message: string } };
+      if (res.error) throw res.error.code ? new EpError(res.error.code, res.error.message) : new Error(res.error.message);
+      return res.value;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  let last: Promise<unknown> = Promise.resolve();
+  const inChild = (r: GradeRead) => {
+    const next = last.then(() => readInChild(r));
+    last = next.catch(() => null);
+    return next;
+  };
+  return {
+    grade: async (unit, unitDir, tree) => (await inChild({ read: "grade", work: o.work, runs, unit, unitDir, tree })) as Awaited<ReturnType<PlantedGrader["grade"]>>,
+    catchOf: async (unit, unitDir, tree) => (await inChild({ read: "catch", work: o.work, runs, unit, unitDir, tree })) as Awaited<ReturnType<PlantedGrader["catchOf"]>>,
+  };
+}
+
+if (import.meta.main) {
+  const [read, result] = process.argv.slice(2) as [string, string];
+  try {
+    writeFileSync(result, JSON.stringify({ value: gradeRead(JSON.parse(readFileSync(read, "utf8")) as GradeRead) }));
+  } catch (e) {
+    writeFileSync(result, JSON.stringify({ error: { code: (e as { code?: ReasonCode }).code ?? null, message: (e as Error).message } }));
+  }
 }

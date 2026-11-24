@@ -1,0 +1,14 @@
+# ep kappa, original rubric (ep kappa --in judge/gold.json; log ~/ep/logs/kappa1.log)
+judge check: 48 gold bundles (plain 12, engphase 16, standalone 16, stock 2, plan 2, none 0), labellers disagree on 10, settled 10
+kappa 0.743 against 0.60, sensitivity 0.850, specificity 0.893, gold prevalence 0.417 (band 0.30 to 0.50), stock bundles credited 0
+judge check passes
+stock control: stock scored on 2 units, plan leaks 1 (dropped from the judged secondary), rubric faults 1, rubric revision 0
+rubric fault: the one frozen rubric revision runs, and the judge check reruns with it
+exit=1
+
+# ep kappa --revision 1, revised call-2 rubric (ep kappa --in judge/gold-r1.json --revision 1; log ~/ep/logs/kappa-r1.log)
+judge check: 48 gold bundles (plain 12, engphase 16, standalone 16, stock 2, plan 2, none 0), labellers disagree on 14, settled 14
+kappa 0.373 against 0.60, sensitivity 0.444, specificity 0.900, gold prevalence 0.375 (band 0.30 to 0.50), stock bundles credited 0
+E_EP_JUDGE_CHECK gstack-evals ep kappa: kappa 0.373 is under 0.60: the judged secondary is not reported as judged; the primary is unaffected
+E_EP_JUDGE_CHECK fix: Report the secondary as unjudged in the results. Do not --resume the judge.
+E_EP_JUDGE_CHECK docs: docs/errors.md#e_ep_judge_check

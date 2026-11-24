@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { allInProjection, ITEMS, ItemGate, planProjection, runGated, type ItemPlan } from "../../../lanes/eng-planted/stages/ledger.ts";
 import { codeOf } from "../../../lanes/eng-planted/stages/cases.ts";
+import { addSpend } from "../../../lanes/eng-build/spend.ts";
 
 const plan: ItemPlan = { item: "ep-stock", row: "fixture", projectionUsd: 100, capUsd: 60, kinds: { build: { planned: 20, usd: 2 } } };
 
@@ -76,10 +77,10 @@ describe("runGated", () => {
     const dir = mkdtempSync(join(tmpdir(), "ep-spent-"));
     const journal = join(dir, "costs", "ep-stock.jsonl");
     const g = new ItemGate(plan, { journal });
-    const e = await codeOf(() => runGated([1], { gate: g, kind: () => "build", key: (c) => "c" + c, run: async () => { throw Object.assign(new Error("noVerdict"), { spentUsd: 5 }); } }));
+    const e = await codeOf(() => runGated([1], { gate: g, kind: () => "build", key: (c) => "c" + c, run: async () => { throw addSpend(new Error("noVerdict"), 5); } }));
     expect(e).toBe("error: noVerdict");
     expect([g.settled(), g.sessions(), g.inFlight()]).toEqual([5, 1, 0]);
-    expect(readFileSync(journal, "utf8").trim().split("\n").map((l) => JSON.parse(l))).toEqual([{ kind: "build", usd: 5, cell: "c1" }]);
+    expect(readFileSync(journal, "utf8").trim().split("\n").map((l) => JSON.parse(l))).toEqual([{ kind: "build", usd: 5, cell: "c1", failed: true }]);
   });
 
   test("a run that throws with nothing spent settles nothing and frees its slot", async () => {

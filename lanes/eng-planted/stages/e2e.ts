@@ -31,7 +31,7 @@ import { startSidecar } from "../../real-outcome/sandbox/sidecar.ts";
 import type { PlantedGrader, PlantedUnit, ReviewArm, ReviewRecord } from "../types.ts";
 import { EB_ARM, plantedOpening, skillPin } from "./arms.ts";
 import { buildKey, ebSession, runPlantedBuild, type MountTable } from "./build.ts";
-import { ITEMS, itemOf, ItemGate } from "./ledger.ts";
+import { ITEMS, itemOf, ItemGate, runGated } from "./ledger.ts";
 import { EP_PROGRAM, EP_RUN, EP_SKILL } from "./local.ts";
 import { reviewKey, runPlantedReviews } from "./pipeline.ts";
 import { dropKeyEnv } from "../../../src/trial/env.ts";
@@ -48,6 +48,22 @@ const AUTHORED = "# Plan\n\nAdd Mul(a, b int) int to the calculator, with tests.
 const REPLY = "Review done: the plan now says how to test Mul.";
 const ARMS: ReviewArm[] = ["plain", "standalone", "engphase"];
 const b64 = (s: string) => Buffer.from(s).toString("base64");
+
+/** One build through its item's gate, the way the stages run every build: the build's cost, or the spend its error
+ * carries, settles on the gate's journal. */
+export async function gatedBuild<T extends { costUsd: number }>(gate: ItemGate, cell: string, build: () => Promise<T>): Promise<T> {
+  let built = null as T | null;
+  await runGated([cell], {
+    gate,
+    kind: () => "build",
+    key: (c) => c,
+    run: async () => {
+      built = await build();
+      return { costUsd: built.costUsd };
+    },
+  });
+  return built!;
+}
 
 /** Runs the driven launch and returns its checks; the dry run reads ok and one line from it. */
 export async function drivenLaunch(o: { harbor?: string; gstack?: string; keep?: boolean; log?: (l: string) => void } = {}): Promise<{ ok: boolean; detail: string; checks: Check[] }> {
@@ -147,10 +163,12 @@ export async function drivenLaunch(o: { harbor?: string; gstack?: string; keep?:
       },
       catchOf: async () => ({ catch: null, drop: "the driven launch grades avoid only; the catch rule is the construct part's" }),
     };
+    const buildGate = new ItemGate(buildItem, { capUsd: 20, planned: { build: 1 } });
     const b = await underLease(bp, async (p) => {
       const h = await inner(p);
       return { ...h, backend: ebSession(h.backend, table) };
-    }, (session) => runPlantedBuild({ unit, unitDir, arm: "standalone", reviewer: "opus", rep: 1, note: "The change adds Mul(a, b int) int, which returns the product of a and b.", mount: { plan: join(mountDir, "plan.md"), review: join(mountDir, "review") }, review: rec("standalone") ?? null, session, grader, log }));
+    }, (session) => gatedBuild(buildGate, buildKey(id, "standalone", "opus", 1), () => runPlantedBuild({ unit, unitDir, arm: "standalone", reviewer: "opus", rep: 1, note: "The change adds Mul(a, b int) int, which returns the product of a and b.", mount: { plan: join(mountDir, "plan.md"), review: join(mountDir, "review") }, review: rec("standalone") ?? null, session, grader, log })));
+    check("the build's session settled on the item gate", buildGate.sessions() === 1 && buildGate.settled() === b.costUsd, buildGate.sessions() + " session settled at $" + buildGate.settled().toFixed(4) + ", the build's cost $" + b.costUsd.toFixed(4));
     const passing = (c: { runs: string[] }[]) => c.filter((x) => x.runs.filter((r) => r === "pass").length >= 2).length;
     check("the build completes and reads the review", b.outcome === "completed" && b.readReview === true && buildRead === "read", "outcome " + b.outcome + ", readReview " + b.readReview + ", the builder's tool result " + (buildRead || "missing"));
     check("the grader scores the built tree", passing(b.planted) === planted.length && passing(b.functional) === b.functional.length, "planted " + passing(b.planted) + " of " + b.planted.length + " pass, functional " + passing(b.functional) + " of " + b.functional.length + ", cell " + buildKey(id, "standalone", "opus", 1));

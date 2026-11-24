@@ -19,20 +19,27 @@
 // "<seed>/<unit>/<arm>/<rep>"); the pilot's plain reviews and builds are the comparison item's first cells and count in
 // the plain cells; the interim exposure stop counts an arm's records in that order, stopping at its first unrecorded
 // cell.
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { prepareReviewTree, runSession, type Attempt } from "../../eng-build/review-stage.ts";
+import { stripBase } from "../../eng-build/build-stage.ts";
+import { prepareReviewTree, type Attempt } from "../../eng-build/review-stage.ts";
+import { addSpend } from "../../eng-build/spend.ts";
 import type { ReviewLeft, ReviewSession, ReviewUnit } from "../../eng-build/pipeline.ts";
 import { erExposure } from "../../eng-review/exposure.ts";
+import { PROJECT_CONFIG } from "../../real-outcome/sandbox/sidecar.ts";
 import type { DigestPin } from "../../../src/trial/review/eng-review.ts";
 import { fail } from "../errors.ts";
 import { FROZEN, SIZE } from "../frozen.ts";
-import type { BuildArm, GradedBuild, PlantedGrader, PlantedUnit, ReviewArm, ReviewRecord, Reviewer, SkillArm } from "../types.ts";
+import type { BuildArm, GradedBuild, PlantedGrader, PlantedUnit, ReviewArm, ReviewRecord, Reviewer, SessionOutcome, SkillArm } from "../types.ts";
 import { DETECTOR, EB_ARM, isSkillArm, plantedOpening, plantedPrompt, plantedStopHook, SKILL_ARMS, type Opening } from "./arms.ts";
 import { authorCalls, BATCH_1, BATCH_2, drawSets, hintedVerdict, mintSeed, replaceLost, seededOrder, supplyLine, unforeseeable, type AuthorCall, type AuthorMaterial, type Authored, type Candidate, type CallsRecord, type Draw, type HintedVerdict, type Want } from "./author.ts";
-import { buildKey, hasReview, isReviewed, readMount, reviewMount, runPlantedBuild, stockMount, writeMount, type PlantedSession } from "./build.ts";
-import { runGated, type ItemGate, type Kind } from "./ledger.ts";
+import { goldSet, type GoldCandidate, type GoldPool } from "../readings/judge.ts";
+import { isGap } from "../readings/score.ts";
+import { buildKey, hasReview, isReviewed, oneRetry, readMount, reviewMount, runPlantedBuild, stockMount, writeMount, type PlantedSession } from "./build.ts";
+import { runGated, settleThrown, type ItemGate, type Kind } from "./ledger.ts";
 import { readStep, requireSteps, writeStep, type Step } from "./local.ts";
 
 const sha = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
@@ -90,6 +97,39 @@ export function drawFile(run: string, src: UnitSource, seed: string = mintSeed()
   return d;
 }
 
+/**
+ * The paths a unit's B still shows the sandbox once the frozen strip has run: stripBase on a scratch copy, then the
+ * sidecar's own check (PROJECT_CONFIG) over every path the base commit tracks, the list it reads when a trial opens. The
+ * strip only takes paths out, so a B that tracks no such path before it is not copied.
+ */
+export function configLeft(base: string): string[] {
+  const refused = (repo: string) => {
+    const r = spawnSync("git", ["-C", repo, "ls-tree", "-r", "--name-only", "-z", "HEAD"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+    if (r.status !== 0) fail("E_USAGE", repo + ": git could not list the base commit (" + r.stderr.trim() + ")");
+    return r.stdout.split("\0").filter((p) => PROJECT_CONFIG.test(p));
+  };
+  if (!refused(base).length) return [];
+  const scratch = mkdtempSync(join(tmpdir(), "ep-config-"));
+  try {
+    const repo = join(scratch, "repo");
+    cpSync(base, repo, { recursive: true });
+    stripBase(repo);
+    return refused(repo);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+/** The seeded order less every unit whose stripped B the sandbox would refuse (dated deviation, 2026-11-17): each leaves
+ * before any outcome, and log names it with the number of paths it still tracks. */
+export function poolOrder(run: string, src: UnitSource, seed?: string, log?: (line: string) => void): Candidate[] {
+  return drawFile(run, src, seed).order.filter((c) => {
+    const left = configLeft(src.base(c.id)).length;
+    if (left) log?.("excluded " + c.id + " before any outcome: its stripped tree still tracks " + left + " project-local Claude Code config path(s), which the sandbox refuses");
+    return !left;
+  });
+}
+
 const authorDir = (run: string, id: string) => join(run, "author", id);
 
 /** Each unit's authoring outcome as the draw reads it; a unit whose calls passed but has no hinted build has none yet. */
@@ -137,16 +177,16 @@ export function drawnUnit(src: UnitSource, run: string, id: string): PlantedUnit
 // ---------------------------------------------------------------------------------------------------------------------
 // Authoring.
 
-/** A model call that waits for its item's gate and settles its cost there. */
+/** A model call that waits for its item's gate and settles its cost there. A call that spent and threw settles as a
+ * failed line (spend.ts). */
 export function gatedCall(gate: ItemGate, call: AuthorCall, unit: string): AuthorCall {
-  return async (role, prompt) => {
+  return async (role, prompt, attempt) => {
     await gate.acquire("call");
     let r: { text: string; costUsd: number };
     try {
-      r = await call(role, prompt);
+      r = await call(role, prompt, attempt);
     } catch (e) {
-      gate.abort();
-      throw e;
+      throw settleThrown(gate, "call", e, unit + ":" + role);
     }
     gate.settle("call", r.costUsd, unit + ":" + role);
     return r;
@@ -169,21 +209,26 @@ export type AuthorStep = "calls" | "hinted" | "draw" | "none";
 
 /**
  * One authoring step for a batch. calls: plan, audits, hint and ratings for the next chunk in seeded order (default:
- * one and a half times the units the draw still needs). hinted: the hinted build for every unit whose calls passed.
+ * one and a half times the units the draw still needs); first names units of that chunk to start ahead of the rest,
+ * and never adds a unit to it. hinted: the hinted build for every unit whose calls passed.
  * draw: the batch's draw from the outcomes so far. none: the no-review build for every drawn unit, then the batch's step
  * record once its draw is filled (or the order ran out at or above the floor).
  */
-export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2; step: AuthorStep; seed?: string; chunk?: number; call?: AuthorCall; session?: PlantedSession; grader?: PlantedGrader; gate?: ItemGate; parallel?: number; log?: (line: string) => void }): Promise<{ draw: Draw; line: string }> {
+export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2; step: AuthorStep; seed?: string; chunk?: number; first?: readonly string[]; call?: AuthorCall; session?: PlantedSession; grader?: PlantedGrader; gate?: ItemGate; parallel?: number; earlier?: (cell: string) => number; log?: (line: string) => void }): Promise<{ draw: Draw; line: string }> {
   const log = o.log ?? (() => {});
   if (o.batch === 2) requireSteps(o.run, "authoring batch 2", ["author-batch1", "exposure-gate", "admission", "start-rule"]);
-  const df = drawFile(o.run, o.src, o.seed);
+  const order = poolOrder(o.run, o.src, o.seed, log);
   const want = wantOf(o.batch);
-  const draw = () => drawSets(df.order, authoredMap(o.run, df.order), want);
+  const draw = () => drawSets(order, authoredMap(o.run, order), want);
   if (o.step === "calls") {
     const gate = o.gate ?? fail("E_USAGE", "the calls step runs under the authoring item's gate");
     const call = o.call ?? fail("E_USAGE", "the calls step needs its model calls");
     const d = draw();
-    const ids = nextToAuthor(o.run, df.order, d, o.chunk ?? Math.max(1, Math.ceil(1.5 * missing(want, d))));
+    const chunk = nextToAuthor(o.run, order, d, o.chunk ?? Math.max(1, Math.ceil(1.5 * missing(want, d))));
+    const lead = o.first ?? [];
+    const outside = lead.filter((id) => !chunk.includes(id));
+    if (outside.length) fail("E_USAGE", "--first orders the chunk and never adds to it: " + outside.join(", ") + " is not among the next " + chunk.length + " units to author");
+    const ids = [...lead, ...chunk.filter((id) => !lead.includes(id))];
     let first: unknown = null;
     let next = 0;
     const worker = async () => {
@@ -207,7 +252,7 @@ export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2
   }
   if (o.step === "hinted") {
     const gate = o.gate ?? fail("E_USAGE", "the hinted step runs under the authoring item's gate");
-    await runAuthoringBuilds({ ...o, gate, arm: "hinted", ids: hintedTodo(o.run, df.order), log });
+    await runAuthoringBuilds({ ...o, gate, arm: "hinted", ids: hintedTodo(o.run, order), log });
   }
   const d = draw();
   writeJson(join(o.run, "draw-batch" + o.batch + ".json"), d);
@@ -222,11 +267,22 @@ export async function authorStep(o: { run: string; src: UnitSource; batch: 1 | 2
   return { draw: d, line };
 }
 
-async function runAuthoringBuilds(o: { run: string; src: UnitSource; arm: "hinted" | "none"; ids: string[]; session?: PlantedSession; grader?: PlantedGrader; gate: ItemGate; parallel?: number; log: (line: string) => void }): Promise<void> {
+async function runAuthoringBuilds(o: { run: string; src: UnitSource; arm: "hinted" | "none"; ids: string[]; session?: PlantedSession; grader?: PlantedGrader; gate: ItemGate; parallel?: number; earlier?: (cell: string) => number; log: (line: string) => void }): Promise<void> {
   const session = o.session ?? fail("E_USAGE", "the " + o.arm + " builds need their session");
   const grader = o.grader ?? fail("E_USAGE", "the " + o.arm + " builds need the grader");
   const cells = join(o.run, "builds", "authoring", "cells");
-  await runGated(o.ids, {
+  const verdict = (id: string, b: GradedBuild) => {
+    const v = hintedVerdict(b.outcome, b.planted);
+    writeJson(join(authorDir(o.run, id), "hinted.json"), { ...v, costUsd: b.costUsd });
+    o.log("hinted " + id + ": " + (v.drop ? "dropped (" + v.drop + ")" : "winnable") + ", passing runs per planted case " + Object.values(v.passes).join(", "));
+  };
+  const saved = o.arm === "hinted" ? o.ids.filter((id) => loadBuild(cells, buildKey(id, "hinted", null, 1)) !== null) : [];
+  for (const id of saved) {
+    if (existsSync(join(authorDir(o.run, id), "hinted.refused-gap.json"))) fail("E_USAGE", "hinted " + id + ": ep owed stopped halfway while setting this cell aside (hinted.refused-gap.json is there and the record is not set aside); run ep owed --run again first");
+    o.log("hinted " + id + ": its record was saved before its verdict, so the verdict comes from that record and no session opens");
+    verdict(id, loadBuild(cells, buildKey(id, "hinted", null, 1))!);
+  }
+  await runGated(o.ids.filter((id) => !saved.includes(id)), {
     gate: o.gate,
     parallel: o.parallel,
     kind: () => "build",
@@ -234,16 +290,12 @@ async function runAuthoringBuilds(o: { run: string; src: UnitSource; arm: "hinte
     run: async (id) => {
       const dir = authorDir(o.run, id);
       const hint = o.arm === "hinted" ? readFileSync(join(dir, "hint.txt"), "utf8").trim() : null;
-      const b = await runPlantedBuild({ unit: drawnUnit(o.src, o.run, id), unitDir: o.src.dir(id), arm: o.arm, reviewer: null, rep: 1, note: o.src.note(id), hint, mount: { plan: join(dir, "plan.md"), review: null }, session, grader, log: o.log });
+      const b = await runPlantedBuild({ unit: drawnUnit(o.src, o.run, id), unitDir: o.src.dir(id), arm: o.arm, reviewer: null, rep: 1, note: o.src.note(id), hint, mount: { plan: join(dir, "plan.md"), review: null }, session, grader, earlier: o.earlier?.(buildKey(id, o.arm, null, 1)), marker: join(cells, buildKey(id, o.arm, null, 1) + ".grade-error"), log: o.log });
       return {
         costUsd: b.costUsd,
         commit: () => {
           saveBuild(cells, b);
-          if (o.arm === "hinted") {
-            const v = hintedVerdict(b.outcome, b.planted);
-            writeJson(join(dir, "hinted.json"), { ...v, costUsd: b.costUsd });
-            o.log("hinted " + id + ": " + (v.drop ? "dropped (" + v.drop + ")" : "winnable") + ", passes " + JSON.stringify(v.passes));
-          }
+          if (o.arm === "hinted") verdict(id, b);
         },
       };
     },
@@ -310,8 +362,11 @@ export function interimStop(arm: SkillArm, ordered: ReadonlyArray<ReviewRecord |
 
 /**
  * Runs review cells through the item's gate. A cell with a record is kept. Each attempt gets a fresh seed folder (B
- * stripped, one commit, and the authored plan); a finished session's mount (reviewMount) is written to mounts/<key>
- * before its record. With interim on, a skill arm's exposure stop is written to stops/<arm>.json and its later cells are
+ * stripped, one commit, and the authored plan). A cell an earlier run started and left with no record goes on from the
+ * attempt after the highest folder it left, and those folders are kept, so the cell still gets one retry in all (dated
+ * pre-run fix, 2026-11-17); a finished session's mount (reviewMount) is written to mounts/<key>
+ * before its record. A throw after any attempt spent (a launcher's cap stop, the mount or the exposure reading failing)
+ * carries every attempt's spend (spend.ts), which runGated settles. With interim on, a skill arm's exposure stop is written to stops/<arm>.json and its later cells are
  * left out, now and on a resume.
  */
 export async function runPlantedReviews(o: { cells: ReviewCell[]; units: Map<string, { unit: PlantedUnit; base: string; plan: string; opening: Opening | null }>; reviewer: Reviewer; out: string; session: ReviewSession; gate: ItemGate; interim: boolean; parallel?: number; log?: (line: string) => void }): Promise<ReviewRecord[]> {
@@ -342,24 +397,37 @@ export async function runPlantedReviews(o: { cells: ReviewCell[]; units: Map<str
       const ru: ReviewUnit = { id: c.unit, repo: u.base, plan: u.plan, opening: c.arm === "engphase" ? u.opening : null };
       const prompt = plantedPrompt(c.arm, u.opening?.text ?? null);
       const base = join(o.out, "sessions", cell);
-      const run = await runSession<ReviewLeft>(cell, async (attempt): Promise<Attempt<ReviewLeft>> => {
-        const dir = join(base, "a" + attempt);
-        rmSync(dir, { recursive: true, force: true });
-        const seed = join(dir, "seed");
-        mkdirSync(seed, { recursive: true });
-        cpSync(u.base, join(seed, "repo"), { recursive: true });
-        prepareReviewTree(join(seed, "repo"));
-        cpSync(u.plan, join(seed, "plan.md"));
-        return o.session({ cell, unit: ru, arm: EB_ARM[c.arm], reviewer: o.reviewer, rep: c.rep, attempt, prompt, seed, dir, hook: (evidence) => plantedStopHook(c.arm, evidence) });
-      }, o.log);
-      const left = run.attempts.at(-1)!.result;
-      const gap = run.outcome === "upstream_gap" || run.outcome === "infra_gap";
-      const cost = run.attempts.reduce((s, a) => s + a.costUsd, 0);
-      const mount = gap ? null : reviewMount(c.arm, left.outputs, readFileSync(u.plan, "utf8"));
-      const exposed = isSkillArm(c.arm) && !gap ? erExposure(DETECTOR[c.arm], { transcript: left.outputs.transcript, stateRoot: left.outputs.stateRoot, coverage: left.outputs.coverage, opening: c.arm === "engphase" && u.opening ? { methodology: u.opening.methodology, readRanges: u.opening.readRanges } : null }).exposed : null;
-      const rec: ReviewRecord = { unit: c.unit, arm: c.arm, reviewer: o.reviewer, rep: c.rep, outcome: run.outcome, exposed, exposedBeforeBlock: exposed === null ? null : exposed && left.blocks === 0, blocks: left.blocks, bundleWords: mount?.words ?? 0, truncated: mount?.truncated ?? false, repoEditsDiscarded: gap ? 0 : left.repoEdits, costUsd: cost };
+      const earlier = Math.max(0, ...(existsSync(base) ? readdirSync(base) : []).map((n) => Number(/^a(\d+)$/.exec(n)?.[1] ?? 0)));
+      if (earlier >= 2) fail("E_EB_CELL_INCOMPLETE", "review cell " + cell + ": earlier runs started attempts up to a" + earlier + " and left no record, so its one retry is spent and nothing opens; bring it to the Captain");
+      let spent = 0;
+      let rec: ReviewRecord;
+      let mount: ReturnType<typeof reviewMount> | null;
+      try {
+        const tries = await oneRetry(async (attempt): Promise<Attempt<ReviewLeft>> => {
+          const dir = join(base, "a" + attempt);
+          const seed = join(dir, "seed");
+          mkdirSync(seed, { recursive: true });
+          cpSync(u.base, join(seed, "repo"), { recursive: true });
+          stripBase(join(seed, "repo"));
+          prepareReviewTree(join(seed, "repo"));
+          cpSync(u.plan, join(seed, "plan.md"));
+          const a = await o.session({ cell, unit: ru, arm: EB_ARM[c.arm], reviewer: o.reviewer, rep: c.rep, attempt, prompt, seed, dir, hook: (evidence) => plantedStopHook(c.arm, evidence) });
+          spent += a.costUsd;
+          return a;
+        }, (a) => a.end === "completed" || a.end === "limit", earlier);
+        const last = tries.at(-1)!;
+        const outcome: SessionOutcome = last.end === "upstream" ? "upstream_gap" : last.end === "infra" ? "infra_gap" : last.end;
+        const gap = outcome === "upstream_gap" || outcome === "infra_gap";
+        if (gap) o.log?.("E_EB_GAP " + cell + ": " + outcome + " after 1 retry; the cell is a recorded gap and its build is not run");
+        const left = last.result;
+        mount = gap ? null : reviewMount(c.arm, left.outputs, readFileSync(u.plan, "utf8"));
+        const exposed = isSkillArm(c.arm) && !gap ? erExposure(DETECTOR[c.arm], { transcript: left.outputs.transcript, stateRoot: left.outputs.stateRoot, coverage: left.outputs.coverage, opening: c.arm === "engphase" && u.opening ? { methodology: u.opening.methodology, readRanges: u.opening.readRanges } : null }).exposed : null;
+        rec = { unit: c.unit, arm: c.arm, reviewer: o.reviewer, rep: c.rep, outcome, exposed, exposedBeforeBlock: exposed === null ? null : exposed && left.blocks === 0, blocks: left.blocks, bundleWords: mount?.words ?? 0, truncated: mount?.truncated ?? false, repoEditsDiscarded: gap ? 0 : left.repoEdits, costUsd: spent };
+      } catch (e) {
+        throw addSpend(e, spent);
+      }
       return {
-        costUsd: cost,
+        costUsd: spent,
         commit: () => {
           if (mount) writeMount(join(o.out, "mounts", cell), mount);
           writeJson(join(records, cell + ".json"), rec);
@@ -483,7 +551,7 @@ export function buildCells(run: string, phase: "pilot" | "comparison" | "stock")
  * Builds on the comparison item (pilot or comparison: one build per recorded review) or the stock item (one stock build
  * per comparison unit). A reviewed cell whose review ended in a gap is recorded as a gap without a session.
  */
-export async function buildsStage(o: StageIo & { phase: "pilot" | "comparison" | "stock"; session: PlantedSession; grader: PlantedGrader }): Promise<GradedBuild[]> {
+export async function buildsStage(o: StageIo & { phase: "pilot" | "comparison" | "stock"; session: PlantedSession; grader: PlantedGrader; earlier?: (cell: string) => number }): Promise<GradedBuild[]> {
   if (o.phase === "pilot") requireSteps(o.run, "the pilot's builds", ["pilot-reviews"]);
   if (o.phase === "comparison") requireSteps(o.run, "the comparison builds", ["comparison-reviews"]);
   if (o.phase === "stock") requireSteps(o.run, "the stock builds", ["author-batch2"]);
@@ -514,7 +582,7 @@ export async function buildsStage(o: StageIo & { phase: "pilot" | "comparison" |
       else if (c.arm === "stock") mount = writeMount(join(o.run, "builds", "stock", "mounts", c.unit), stockMount(readFileSync(plan, "utf8")));
       else mount = { plan, review: null };
       if (hasReview(c.arm) && !existsSync(mount.review!)) fail("E_USAGE", "build cell " + buildKey(c.unit, c.arm, c.reviewer, c.rep) + ": its review mount " + mount.review + " is missing");
-      const b = await runPlantedBuild({ unit: unit(c.unit), unitDir: o.src.dir(c.unit), arm: c.arm, reviewer: c.reviewer, rep: c.rep, note: o.src.note(c.unit), mount, review: isReviewed(c.arm) ? reviewOf(c) : null, session: o.session, grader: o.grader, log: o.log });
+      const b = await runPlantedBuild({ unit: unit(c.unit), unitDir: o.src.dir(c.unit), arm: c.arm, reviewer: c.reviewer, rep: c.rep, note: o.src.note(c.unit), mount, review: isReviewed(c.arm) ? reviewOf(c) : null, session: o.session, grader: o.grader, earlier: o.earlier?.(buildKey(c.unit, c.arm, c.reviewer, c.rep)), marker: join(outDir, buildKey(c.unit, c.arm, c.reviewer, c.rep) + ".grade-error"), log: o.log });
       return { costUsd: b.costUsd, commit: () => void saveBuild(outDir, b) };
     },
   });
@@ -587,15 +655,52 @@ export function runRecords(run: string, src: UnitSource): RunRecords {
   return { units: ids.map((id) => drawnUnit(src, run, id)), lost, smoke, reviews, builds, hintedBuilds, unforeseeable: authored.filter((a) => a.unforeseeable).length, admitted: authored.length, hinted };
 }
 
+/** One bundle the judge or a labeller reads: a review (its rep; smoke for an exposure smoke review), or stock, none or
+ * plan. */
+export interface BundleRef {
+  unit: string;
+  source: ReviewArm | "stock" | "none" | "plan";
+  rep: number | null;
+  smoke?: boolean;
+}
+
 /** The judge's bundle for one unit and source: what that builder saw (a review's mount, the stock mount, or the
  * authored plan alone for none and plan), with the unit's hint. */
-export function bundleInput(run: string, b: { unit: string; source: ReviewArm | "stock" | "none" | "plan"; rep: number | null }): { unit: string; source: ReviewArm | "stock" | "none" | "plan"; files: Array<{ path: string; text: string }>; hint: string } {
+export function bundleInput(run: string, b: BundleRef): { unit: string; source: ReviewArm | "stock" | "none" | "plan"; files: Array<{ path: string; text: string }>; hint: string } {
   const dir = authorDir(run, b.unit);
   const hint = existsSync(join(dir, "hint.txt")) ? readFileSync(join(dir, "hint.txt"), "utf8").trim() : fail("E_USAGE", "unit " + b.unit + " has no hint in " + dir);
   let files: Array<{ path: string; text: string }>;
   if (b.source === "none" || b.source === "plan") files = [{ path: "plan.md", text: readFileSync(join(dir, "plan.md"), "utf8") }];
   else if (b.source === "stock") files = readMount(join(run, "builds", "stock", "mounts", b.unit));
-  else files = readMount(join(run, "reviews", "comparison", "mounts", reviewKey(b.unit, b.source, "opus", b.rep ?? fail("E_USAGE", "a review bundle names its rep"))));
+  else files = readMount(join(run, "reviews", b.smoke ? "smoke" : "comparison", "mounts", reviewKey(b.unit, b.source, "opus", b.rep ?? fail("E_USAGE", "a review bundle names its rep"))));
   return { unit: b.unit, source: b.source, files, hint };
+}
+
+/** Section 8's gold set over the run (readings/judge.ts goldSet): the exposure smoke's skill reviews, each skill arm's
+ * comparison reviews and the pilot's plain reviews, each in run order with gaps left out, then the comparison units'
+ * stock and plan-only bundles in the stock builds' seeded order. */
+export function goldBundles(run: string, src: UnitSource): { picked: BundleRef[]; proxy: number; short: string[] } {
+  const r = runRecords(run, src);
+  const df = readJson<DrawFile>(join(run, "draw.json")) ?? fail("E_USAGE", "no draw in " + run);
+  const pilot = new Set(r.units.filter((u) => u.pilot).map((u) => u.id));
+  const refs = new Map<string, BundleRef>();
+  const candidate = (b: BundleRef): GoldCandidate => {
+    const key = b.rep === null ? b.unit + "_" + b.source : (b.smoke ? "smoke_" : "") + reviewKey(b.unit, b.source as ReviewArm, "opus", b.rep);
+    refs.set(key, b);
+    return { key, unit: b.unit, source: b.source, bundle: bundleInput(run, b) };
+  };
+  const reviewed = (recs: ReviewRecord[], smoke: boolean) => recs.filter((x) => x.reviewer === "opus" && !isGap(x)).map((x) => candidate({ unit: x.unit, source: x.arm, rep: x.rep, ...(smoke ? { smoke } : {}) }));
+  const ids = comparisonUnits(run).units;
+  const order = cellOrder(df.seed, ids, ids.map((unit) => ({ unit, arm: "stock", rep: 1 }))).map((c) => c.unit);
+  const pools: Record<GoldPool, GoldCandidate[]> = {
+    smoke: reviewed(r.smoke, true),
+    standalone: reviewed(r.reviews.filter((x) => x.arm === "standalone"), false),
+    engphase: reviewed(r.reviews.filter((x) => x.arm === "engphase"), false),
+    plain: reviewed(r.reviews.filter((x) => x.arm === "plain" && pilot.has(x.unit) && x.rep <= SIZE.pilotK), false),
+    stock: order.map((unit) => candidate({ unit, source: "stock", rep: null })),
+    plan: order.map((unit) => candidate({ unit, source: "plan", rep: null })),
+  };
+  const g = goldSet(pools);
+  return { picked: g.picked.map((c) => refs.get(c.key)!), proxy: g.proxy, short: g.short };
 }
 

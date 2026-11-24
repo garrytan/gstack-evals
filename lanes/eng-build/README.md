@@ -45,7 +45,11 @@ The lane for the eng-review build read (prereg 2026-11-11-geva-522-eng-review-bu
   as a volume over the build tree and copies each file into it, so the session runs the tests offline. It lists every
   entry in task.json's exclude so real_agent leaves it out of the patch, and restores the tree after the session. The
   layer also rewrites editable Python installs that point at /testbed to point at /work/repo, so a builder imports
-  its own edits. Go and Rust keep their dependencies outside the project, so they need nothing.
+  its own edits. Go and Rust keep their dependencies outside the project, so they need nothing. When the unit image
+  keeps a CLAUDE.md, CLAUDE.local.md, AGENTS.md or .claude anywhere under /testbed, on disk or in its base commit, the
+  layer also deletes /testbed/.git and each of those names under /testbed; every other unit's image stays as it was.
+- spend.ts: the spend an error carries. A session that spent and then threw adds what it spent to the error, so the
+  caller's cost journal still counts it.
 - e2e.ts: the build stage's paid path end to end, keyless. It builds one Go fixture unit and runs it through the build
   launcher, the outcome driver on a temporary ledger, Harbor, real_agent, the sandbox sidecar and Claude Code against a
   stub upstream. Then it grades the built tree. `bun lanes/eng-build/e2e.ts --harbor <harbor bin>` prints one PASS or
