@@ -34,7 +34,8 @@ test("rerun-analyze refuses new sessions from another stage, from two stages, or
     await expect(run(write("mixed.jsonl", [...all("rerun").slice(1), ses("u0", "opus", "rerun-pilot")]), empty)).rejects.toThrow(/^E_USAGE .*one of rerun or rerun-pilot/);
     await expect(run(write("short.jsonl", all("rerun").slice(1)), empty)).rejects.toThrow(/^E_USAGE .*no new cso session for 1 cells of --units, first u0 opus/);
   } finally {
-    process.env.CSO_PLAN = before;
+    if (before === undefined) delete process.env.CSO_PLAN;
+    else process.env.CSO_PLAN = before;
   }
 });
 
@@ -47,7 +48,8 @@ test("rerun-analyze refuses a session whose helper records were lost", async () 
     writeFileSync(join(nd, "u1", "cso-particle-0", "h2h-summary.json"), JSON.stringify({ cso_records: { files: [], error: "the tar is over the 8388608-byte cap" } }));
     await expect(run(write("ok.jsonl", all("rerun")), nd)).rejects.toThrow(/^E_USAGE u1\/cso-particle-0 lost its helper records/);
   } finally {
-    process.env.CSO_PLAN = before;
+    if (before === undefined) delete process.env.CSO_PLAN;
+    else process.env.CSO_PLAN = before;
   }
 });
 
@@ -63,6 +65,7 @@ test("rerun-analyze refuses a judge check under the rerun's 100-gold floor, such
     sealCheck({ schema: "cso-judge-check.v1", check: { route: "fallback-opus-particle", detail: { gold_reports: 85 } } as never, reports: [], formats: [], fill: null }, k, f);
     await expect(run(write("ok2.jsonl", all("rerun")), join(dir, "none"), ["--check", f, "--key", keyFile])).rejects.toThrow(/^E_USAGE .*85 gold reports, under the rerun's floor of 100/);
   } finally {
-    process.env.CSO_PLAN = before;
+    if (before === undefined) delete process.env.CSO_PLAN;
+    else process.env.CSO_PLAN = before;
   }
 });

@@ -48,7 +48,7 @@ WORK = "/tmp/h2h-work"
 HOME = "/root"
 CSO_RECORDS_CAP = 8 << 20
 CSO_RECORDS = ('cd /root/.gstack/security/cso 2>/dev/null || exit 0; set --; for f in */*/report.json; do [ -f "$f" ] && set -- "$@" "$f"; done; [ "$#" -gt 0 ] || exit 0; '
-               f'tar -cf - -- "$@" | head -c {CSO_RECORDS_CAP + 1}')
+               f't=$(mktemp) || exit 4; tar -cf "$t" -- "$@" || {{ rm -f "$t"; exit 4; }}; head -c {CSO_RECORDS_CAP + 1} "$t"; s=$?; rm -f "$t"; exit $s')
 
 
 class H2hOptions(RealOptions):
