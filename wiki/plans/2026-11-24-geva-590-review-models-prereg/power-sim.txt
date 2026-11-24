@@ -1,4 +1,4 @@
-# power-sim.txt: the scripts behind power-rows.txt (numpy 2.5.5). fit_he.py reads the HARN-154 CSV; bounds.py finds the final bound that, with z 2.797 at the look, holds the one-sided error at 5% (it prints final c 1.655 alpha 0.0495); power2.py is part 1 (it prints the rows that power-rows.txt quotes); mdd_refit.py is part 2 and execs calib.py and mdd_cal.py for its helpers.
+# power-sim.txt: the scripts behind power-rows.txt (numpy 2.5.5). fit_he.py reads the HARN-154 CSV; bounds.py finds the final bound that, with z 2.797 at the look, holds the one-sided error at 5% (it prints final c 1.655 alpha 0.0495); frac.py checks that error at the look fractions the counted sizes allow (it prints 0.0495 for 40 of 81, 40 of 80, 49 of 99 and 50 of 100); power2.py is part 1 (it prints the rows that power-rows.txt quotes); mdd_refit.py is part 2 and execs calib.py and mdd_cal.py for its helpers.
 
 ## fit_he.py
 
@@ -39,6 +39,14 @@ z=rng.standard_normal((2000000,2)); z1=z[:,0]; z2=np.sqrt(.5)*z[:,0]+np.sqrt(.5)
 for c in np.arange(1.60,1.75,0.005):
     a=((z1>2.797)|(z2>c)).mean()
     if a<=0.05: print('final c',round(c,3),'alpha',round(a,4)); break
+
+## frac.py
+import numpy as np
+rng=np.random.default_rng(1)
+z=rng.standard_normal((2000000,2))
+for k,n in ((40,81),(40,80),(49,99),(50,100)):
+    r=np.sqrt(k/n); z1=z[:,0]; z2=r*z[:,0]+np.sqrt(1-r*r)*z[:,1]
+    print(k,n,round(k/n,4),round(((z1>2.797)|(z2>1.655)).mean(),4))
 
 ## power2.py
 

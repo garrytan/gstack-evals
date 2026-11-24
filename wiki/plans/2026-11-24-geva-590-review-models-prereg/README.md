@@ -17,7 +17,7 @@ links:
   - src/trial/review/
 attachments:
   - aaac7061ee366ec270e29c6edf67abc90e149ef010defa499cf0cbde26d49692  power-rows.txt
-  - 50de7721b34fbf60898ba46c15130d84650eb1ca22c8724d339e581e94e5e4b4  power-sim.txt
+  - 1e73f9a0b6323aa19bb25c3e4bd2ce122ec24e7695d75c5713de1d435ef13954  power-sim.txt
 ---
 
 # Preregistration: is a review pass better with Opus 5.5 and Sol, or with Fable 5.2 and Astra?
@@ -207,7 +207,7 @@ So this run can settle the per-dollar calls and can't tell a gain of a few point
 ## Interim look
 
 Planned paid spend: $5,819
-At: half the counted bug units, rounded down, in seeded order (50 of 100; 40 at the 80-unit floor), with the decoys run alongside; the look sits at an information fraction of 0.5 whatever the size of the counted set
+At: half the counted bug units, rounded down, in seeded order (50 of 100; 40 at the 80-unit floor), with the decoys run alongside; the look sits at an information fraction of 0.5 for an even counted size and just under it for an odd one (0.494 at 81 units), and frac.py in power-sim.txt shows the bounds' one-sided error stays at 0.0495 across that range
 Stop bounds: futility only, per contrast; a contrast's cells that no other contrast needs stop when its paired net value's upper bound at z 2.797 is below 0; the final test uses z 1.655, so the one-sided error over both looks is 5%; there is no early stop for a gain
 Other looks: none
 
