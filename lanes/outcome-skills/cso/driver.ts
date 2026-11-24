@@ -13,10 +13,10 @@ export const CSO_SKILL = "cso";
 const tag = (arms: string[]) => arms.map((a) => CSO_PREFIX + a);
 /** The session items and the arms each pays for: stages 0 and 1 run none, cso and untold; stage 2 runs none and cso. */
 export const CSO_STAGES: Record<string, string[]> = { "cso-smoke": tag(["none", "cso", "untold"]), "cso-pilot": tag(["none", "cso", "untold"]), "cso-main": tag(["none", "cso"]) };
-/** The rerun's items under CSO_PLAN=rerun: the new cso arm only. */
-export const CSO_RERUN_STAGES: Record<string, string[]> = { "cso2-pilot": tag(["cso"]), "cso2-main": tag(["cso"]) };
-/** The cso session items the driver serves under the plan read: the parent's, plus the rerun's under the overlay. */
-export const csoStages = (p: CsoPrereg = loadCsoPrereg()): Record<string, string[]> => (p.rerun ? { ...CSO_STAGES, ...CSO_RERUN_STAGES } : CSO_STAGES);
+/** The cso session items the driver serves under the plan read: the parent's, plus the overlay's pilot and main items,
+ *  which run the new cso arm only. */
+export const csoStages = (p: CsoPrereg = loadCsoPrereg()): Record<string, string[]> =>
+  p.rerun ? { ...CSO_STAGES, ...Object.fromEntries(Object.keys(p.items).filter((k) => /-(pilot|main)$/.test(k)).map((k) => [k, tag(["cso"])])) } : CSO_STAGES;
 /** The Claude Code models the cso stages serve, as sessions name them to the driver. */
 export const CSO_DRIVER_MODELS: Record<string, CsoModel> = { "claude-opus-5-5": "opus", "particle-ai/particle-1": "particle" };
 
