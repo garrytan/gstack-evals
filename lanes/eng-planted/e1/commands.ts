@@ -412,6 +412,10 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
     mkdirSync(dirname(lookPath(run)), { recursive: true });
     writeFileSync(lookPath(run), JSON.stringify(file, null, 1) + "\n", { flag: "wx" });
     io.out("look on " + l.units.length + " units: C minus N " + fmt(l.CN) + "; P minus N " + fmt(l.PN) + "; C exposed on " + (l.exposedOn.C.join(", ") || "no model") + ", P on " + (l.exposedOn.P.join(", ") || "no model"));
+    for (const arm of ["C", "P"] as E1Arm[]) io.out(arm + " at the look: " + RUNS_ON[arm].map((m) => {
+      const s = armState(cells, arm, m);
+      return m + " exposure " + (s.exposure ?? 0).toFixed(2) + ", gaps " + s.gapShare.toFixed(2);
+    }).join("; "));
     io.out(l.stop ? "STOP: C and P stop their remaining cells for futility; their figures above print as description only" : "CONTINUE: every arm runs its second half");
     return 0;
   };

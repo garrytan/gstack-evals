@@ -109,7 +109,7 @@ export function decide(i: DecideInput): Decision {
     rows.push("C and P were both read and neither gains over N: no modeling step; the design-time modeling question closes with a registry row; eval 4 is dropped");
     eval4 = "dropped";
   } else if (cRead && !pRead) {
-    rows.push("C is read without a gain and P is untested on every model: no modeling step; eval 4 is dropped, because C carries the model check on all three models; P is reported as untested, FIX-METHOD on the instrument");
+    rows.push("C is read without a gain and P is untested on every model: no modeling step; eval 4 is dropped, because C carries the model check on all three models; P is reported as untested, FIX-METHOD on the instrument; C was read on " + RAN_ON.C.filter((m) => isRead(cells, "C", m)).join(", "));
     eval4 = "dropped";
   } else if (pRead && !cRead) {
     rows.push("P is read without a gain and C is untested on every model: no modeling step; the question stays open as FIX-METHOD on C; eval 4 waits for a repaired C run, which the Captain decides");
