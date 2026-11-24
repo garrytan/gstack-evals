@@ -168,7 +168,7 @@ export class ItemGate {
    * the gate reads the sessions already settled from it and appends each one it settles, before the stage writes the
    * session's record, so a resume counts every session that spent.
    */
-  constructor(readonly plan: ItemPlan, readonly o: { capUsd?: number; planned?: Partial<Record<Kind, number>>; journal?: string | null; allIn?: AllIn | null } = {}) {
+  constructor(readonly plan: ItemPlan, readonly o: { capUsd?: number; planned?: Partial<Record<Kind, number>>; journal?: string | null; allIn?: AllIn | null; items?: readonly ItemPlan[] } = {}) {
     this.capUsd = o.capUsd ?? plan.capUsd;
     if (this.capUsd > plan.capUsd) fail("E_USAGE", plan.item + ": cap " + usd(this.capUsd) + " is above the plan's " + usd(plan.capUsd));
     for (const k of Object.keys(o.planned ?? {})) if (!(k in plan.kinds)) fail("E_USAGE", plan.item + " plans no " + k + " sessions");
@@ -223,7 +223,7 @@ export class ItemGate {
   private allIn(): void {
     if (!this.o.allIn) return;
     try {
-      checkAllIn(this.o.allIn);
+      checkAllIn(this.o.allIn, this.o.items);
     } catch (e) {
       if (e instanceof EpError) this.stop(e);
       throw e;
