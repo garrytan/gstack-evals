@@ -6,7 +6,7 @@ summary: "FIX-METHOD on the instrument: the simulated founder failed its audit a
 author: GEVA-526
 model: anthropic/claude-opus-5-5
 date: 2026-11-14
-status: done
+status: superseded
 links:
   - 2026-11-09-geva-418-office-hours-founder-evidence-prereg
   - garrytan/gstack-evals#286
