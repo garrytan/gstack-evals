@@ -44,7 +44,7 @@ Shipped gstack dispatches the specialist when its detector finds both a subject 
 
 The detector also fires on 25 of the 424 full bug-introducing commits that passed the share and size gates. The confirmed figure, 3 of 36, rests on few units: its 95% interval runs from 3% to 22%. The confirmed units it fires on are jtroo__kanata-1681, openai__openai-agents-js-156 and pocoproject__poco-5270 (change and commit), plus xroche__httrack-584, -763 and -765 (commit only). The candidates are celestiaorg__nmt-102, cosmos__interchain-security-1146 and ethereum__web3.py-3289 (change and commit), plus dpkp__kafka-python-1338, matrixorigin__matrixcube-423 and pika__pika-675 (commit only). We checked these with the recount's record file listed under Files, which is kept off the repository, and lanes/outcome-skills/smreview/detect.ts on the branch sr-prereg-geva-588. detect.ts vendors gstack's detectStateMachine rule and word lists from lib/state-matrix.ts, plus addedLines from lib/banned-terms.ts, at the pin d74ee528, unchanged in logic but not byte-identical.
 
-That's why the plan compared specialist forced on against specialist removed: measuring shipped gstack against removal would mostly measure the detector's rarity. The rarity also lowers the value of the question. On these diffs, even a clear win for the specialist would reach shipped /review only where the detector fires or reports unknown.
+That's why the plan compared specialist forced on against specialist removed. Measuring shipped gstack against removal would mix in how often /review calls the specialist, which we didn't measure: we ran only the detector, offline, and shipped /review also calls the specialist when the detector can't tell. The detector's rarity also lowers the value of the question. On these diffs, even a clear win for the specialist would reach shipped /review only where the detector fires or reports unknown.
 
 ### Too few usable bugs
 
@@ -108,6 +108,8 @@ Any eval that reverse-applies an old commit onto a later tree should do these fo
 4. **Take file names from `git diff --name-only -z`, not from diff headers.** git writes a name with a space with a trailing tab in its `---` and `+++` lines and quotes unusual names, so a header parser looks for the wrong .rej file.
 
 Each fix has a keyless test on a scratch repository that fails on the old code (tests/outcome-skills/sr-core.test.ts on branch sr-prereg-geva-588).
+
+One caution is still open in that code: bic.ts treats any .rej file beside a patched file as a fresh reject, counts its hunks and deletes it. If the base already tracks a file with that name, the left-out count is wrong and the rebuilt change can carry an unrelated deletion. We didn't check whether the recount hit this case. Check for an existing .rej before applying.
 
 ## What would reopen it
 
