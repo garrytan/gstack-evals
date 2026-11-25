@@ -1,7 +1,7 @@
 ---
 id: 2026-11-25-geva-592-neon-review-judge-checks
 kind: finding
-title: "Gemini 4 Neon checked three /review judges: R2's recall gain holds against a third model, and two new-blocker judges fail"
+title: "Gemini 4 Neon checked four /review judge checks: R2's matching judge and R1's adjudication judge pass, and two new-blocker judges fail"
 summary: "A third model, not people, checked four /review judge checks. R2 matching and R1 adjudication pass; R2 and stacks round 1 adjudication fail, so their new and false blocker rows are withdrawn."
 author: GEVA-592
 model: anthropic/claude-opus-5-5
@@ -19,11 +19,11 @@ links:
   - docs/all-results.md
 ---
 
-# Gemini 4 Neon checked three /review judges
+# Gemini 4 Neon checked four /review judge checks
 
 ## Takeaways
 
-- **We learned that the judge behind /review's headline gain agrees with a third model.** The judge that decided whether a review found a known blocking bug agreed with Gemini 4 Neon on 39 of 40 items (kappa 0.95, 95% interval 0.85 to 1.0). So R2's blocking recall, 26.2% against 3.6% (+22.6 [+11.0, +33.7]), now reads **judge checked against Gemini 4 Neon, a third model, not against people**. You can cite it that way, but not as checked by people.
+- **We learned that the judge behind /review's headline gain agrees with a third model.** The judge that decided whether a review found a known blocking bug agreed with Gemini 4 Neon on 39 of 40 items (kappa 0.95, 95% interval 0.85 to 1.0). So R2's blocking recall, 26.2% against 3.6% (+22.6 [+11.0, +33.7]), now reads **judge checked against Gemini 4 Neon, a third model, not against people**. Neon checked the judge on a sample. It did not rescore the arms, so this is not a rerun of the comparison. You can cite the number with that label, but not as checked by people.
 - **We learned that two of the judges that called extra findings real bugs do not agree with a third model.** On R2 and on stacks round 1, the judge that ruled whether an unmatched blocking finding was a real defect scored kappa 0.0 and 0.254 against Neon, below the 0.6 bar. Their new-blocker and false-blocker numbers are withdrawn. You should not cite them.
 - **We learned that R1's version of that judge passes, narrowly.** It scored kappa 0.65 (0.39 to 0.85). Its interval reaches well below the bar, so treat R1's new-blocker and false-blocker numbers as weak.
 
@@ -56,7 +56,7 @@ How the fails happened. On the R2 page, Neon called all 40 findings defects, inc
 | same | 49 unmatched blocking findings upheld as defects; new blockers 0.77 against 0.13 per pass per PR, +0.64 [+0.31, +1.02]; false blockers 0.06 against 0.02; the adjudicator table's 43 to 53 new blockers and 0.00 to 0.16 false blockers | withdrawn: the judge failed its check against Gemini 4 Neon, a third model |
 | [R1 blind re-judge](2026-11-01-geva-113-r1-blind-rejudge-results/README.md) | False blockers 2.71 per PR per pass; new blockers 4.32 (121 in all) against 0.18 (5) and 0.32 (9) | judge checked against Gemini 4 Neon, a third model, not against people (kappa 0.65, interval 0.39 to 0.85) |
 | same | Blocking recall 67.2% against 10.3%, +56.9 [+40.5, +72.2], and 67.2% against 13.8% | unchanged: judge checked against model labels only, because Neon did not label R1's matching |
-| [Stacks round 1 review](2026-11-01-geva-89-stacks-round-1-review-results/README.md) | tstack's new blockers 0.78 against 0.25 per pass per PR, and its 0.7656 and 0.7833 rows | withdrawn: the judge failed its check against Gemini 4 Neon, a third model |
+| [Stacks round 1 review](2026-11-01-geva-89-stacks-round-1-review-results/README.md) | tstack's new blockers 0.78 against 0.25 per pass per PR, its 0.7656 and 0.7833 rows, and every other new-blocker row (such as 0.1719 against 0.25); every false-blocker rate, including gstack 0.02 against none 0.00 (+0.02 [0.00, +0.05]) and tstack's 0.0469 and 0.0833 readings | withdrawn: the judge failed its check against Gemini 4 Neon, a third model |
 | same | Blocking recall 9.5% against 7.1%, +2.4 [-6.4, +11.1]; recall at any severity | unchanged: judge checked against model labels only, because Neon did not label stacks matching |
 | same | The judges' impact rating, 26.2% against 23.8%, and its other rows | unchanged: one model's opinion, unchecked |
 
@@ -73,7 +73,7 @@ Neon's calls cost $6.78 in all on OpenRouter (google/gemini-4-neon at $3 in and 
 ## Limits
 
 - Neon is a model, not a person. A judge that passed here may still disagree with people, and a judge that failed may be closer to people than Neon is.
-- Each check is 40 items, so each interval is wide. R1's pass has a lower bound of 0.39.
+- Each check is 40 items, so the intervals are wide. R1's pass has a lower bound of 0.39. R2 adjudication's interval of 0.0 to 0.0 is not a precise result: Neon gave the same answer on every item, so every resample scores kappa 0.
 - Neon checked only the primary judge's labels on these items. The second and third judges were not scored against Neon.
 
 ## Held-out material and replication
