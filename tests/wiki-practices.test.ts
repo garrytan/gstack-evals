@@ -185,12 +185,12 @@ describe("practice 5: the judge check", () => {
   });
 
   test("a missing or model-made label set fails, and people, construction or rule pass", () => {
-    const message = PREREG + ': practice 5: "Labels by:" must start with people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), and name no model; labels a model made, or that two models agreed on, are not a label set (wiki/README.md, Eval plans and results, gives the format)';
+    const message = PREREG + ': practice 5: write one "Labels by:" line that starts with people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), then a comma or the line\'s end, and names no model or lab; labels a model made, settled or agreed on are not a label set (wiki/README.md, Eval plans and results, gives the format)';
     expect(check(prereg(swap("Labels by: people, blind to arm\n", "")))).toEqual([message]);
-    for (const line of ["Labels by:", "Labels by: models", "Labels by: two models agreeing", "Labels by: anthropic/claude-opus-5-5 and google/gemini-4-argon", "Labels by: people, settled by openai/gpt-6-astra", "Labels by: peoples"]) {
+    for (const line of ["Labels by:", "Labels by: models", "Labels by: two models agreeing", "Labels by: anthropic/claude-opus-5-5 and google/gemini-4-argon", "Labels by: people, settled by openai/gpt-6-astra", "Labels by: peoples", "Labels by: people, with Claude Opus 5.5 breaking ties", "Labels by: people relabel claude-opus-5-5 output", "Labels by: people-free, opus labels", "Labels by: rule: two models agree", "Labels by: people\nLabels by: anthropic/claude-opus-5-5"]) {
       expect(check(prereg(swap("Labels by: people, blind to arm", line)))).toEqual([message]);
     }
-    for (const line of ["Labels by: People, two labellers", "Labels by: construction, planted bugs", "Labels by: rule, the hidden tests pass or fail", "- Labels by: people"]) {
+    for (const line of ["Labels by: People, two labellers", "Labels by: construction, planted bugs", "Labels by: rule, the hidden tests pass or fail", "- Labels by: people", "Labels by: people, 2/3 majority, and/or a rubric", "Labels by: people, using [the rubric](./rubric.md)", "Labels by: `people`, two labellers", "Labels by: people, the solution compiles"]) {
       expect(check(prereg(swap("Labels by: people, blind to arm", line)))).toEqual([]);
     }
   });
