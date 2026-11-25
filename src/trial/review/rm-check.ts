@@ -47,7 +47,7 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 export const SDK_CLAUDE = join(REPO, "node_modules", "@anthropic-ai", "claude-agent-sdk-" + process.platform + "-" + process.arch, "claude");
 export const TOY_LINES = 200;
 const SUB_MARK = "RM_CHECK_SUBAGENT";
-const OUTSIDE_TEXT = "No findings.\nRecommendation: Ship as-is because no finding blocks a test, production or data.\nVERDICT: CLEAN";
+export const OUTSIDE_TEXT = "No findings.\nRecommendation: Ship as-is because no finding blocks a test, production or data.\nVERDICT: CLEAN";
 
 export interface Check {
   name: string;
@@ -217,9 +217,9 @@ function sse(events: [string, unknown][]): string {
   return events.map(([n, e]) => "event: " + n + "\ndata: " + JSON.stringify(e) + "\n\n").join("");
 }
 
-type Block = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> };
+export type Block = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> };
 
-function messagesAnswer(body: Record<string, any>, blocks: Block[]): { type: string; body: string } {
+export function messagesAnswer(body: Record<string, any>, blocks: Block[]): { type: string; body: string } {
   const usage = { input_tokens: 100, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
   const stop = blocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn";
   const msg = { id: "msg_rm_" + randomBytes(6).toString("hex"), type: "message", role: "assistant", model: body.model, content: [] as unknown[], stop_reason: null, stop_sequence: null, usage };
@@ -240,7 +240,7 @@ function messagesAnswer(body: Record<string, any>, blocks: Block[]): { type: str
   return { type: "text/event-stream", body: sse(events) };
 }
 
-function responsesAnswer(body: Record<string, any>, text: string): { type: string; body: string } {
+export function responsesAnswer(body: Record<string, any>, text: string): { type: string; body: string } {
   const id = "resp_rm_" + randomBytes(6).toString("hex");
   const usage = { input_tokens: 1000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 30, output_tokens_details: { reasoning_tokens: 10 }, total_tokens: 1030 };
   const item = { type: "message", id: "msg_0", role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] };

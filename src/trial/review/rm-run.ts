@@ -138,7 +138,7 @@ export function missingQuotes(items: readonly RmItem[], docs: ReadonlyMap<string
 
 const quoteArgs = (quotes: readonly RmQuote[]) => quotes.flatMap((q) => ["--words", q.words, "--source", q.source, "--by", q.by]);
 
-const VALUED = ["--approvals", "--path", "--ledger", "--ledger-record", "--branch", "--draw", "--unit-repos", "--out", "--plan", "--upstream", "--date"];
+const VALUED = ["--approvals", "--path", "--ledger", "--ledger-record", "--branch", "--draw", "--unit-repos", "--out", "--plan", "--upstream", "--date", "--commands"];
 const BOOLS = ["--dry-run"];
 
 function parse(argv: readonly string[]): Map<string, string> {
@@ -162,8 +162,13 @@ const HELP = [
   "  pilot-plan --draw <draw.json> --unit-repos <build dir> --out <dir> [--ledger-record <dir>]",
   "      writes <out>/pilot-units.txt (the 5 P, 5 B and the decoy, by id) and <out>/cell-items.json (each arm's pilot item,",
   "      its lease and its per-review allowance, and the retry reserve) from the ledger record.",
-  "  pilot --plan <dir> --unit-repos <build dir> --out <dir> [--upstream <url>] [--ledger <path>] [--ledger-record <dir>] [--date YYYY-MM-DD] [--dry-run]",
-  "      runs review-units on the plan: every pilot unit once in all five cells.",
+  "  pilot --plan <dir> --unit-repos <build dir> --commands <file> --out <dir> [--upstream <url>] [--ledger <path>] [--ledger-record <dir>] [--date YYYY-MM-DD] [--dry-run]",
+  "      runs review-units on the plan: every pilot unit once in all five cells. --commands is JSON mapping each pilot",
+  "      unit's <owner/repo> to {install, test}, the commands its unit image is built and checked with; a unit whose",
+  "      build fails them is refused for every arm.",
+  "  e2e --out <new dir>",
+  "      the pilot path end to end, keyless, with Docker: two toy units, every cell, a temporary ledger, the real proxy and",
+  "      a stub upstream on this host (src/trial/review/rm-e2e.ts). Prints a PASS or FAIL line per check.",
 ].join("\n");
 
 async function items(f: Map<string, string>, io: Io, env: Env): Promise<number> {
@@ -250,12 +255,22 @@ function pilotPlan(f: Map<string, string>, io: Io, env: Env): number {
   return 0;
 }
 
+/** Each pilot repo's install and test command from a commands file, refusing a repo the file leaves out. */
+export function pilotCommands(file: string, ids: readonly string[]): { install: string[]; test: string[] } {
+  const map = JSON.parse(readFileSync(file, "utf8")) as Record<string, { install?: unknown; test?: unknown }>;
+  const repos = [...new Set(ids.map((id) => id.split("#")[0]!))].toSorted();
+  const bad = repos.filter((r) => typeof map?.[r]?.install !== "string" || typeof map[r]!.test !== "string" || !(map[r]!.install as string).trim() || !(map[r]!.test as string).trim());
+  if (bad.length) throw new Error("E_RM_RUN --commands " + file + " gives no install and test command for " + bad.join(", ") + "; every pilot repo needs both");
+  return { install: repos.map((r) => r + "=" + map[r]!.install), test: repos.map((r) => r + "=" + map[r]!.test) };
+}
+
 /** The review-units argv the pilot runs. */
-export function pilotArgv(o: { plan: string; unitRepos: string; out: string; upstream?: string | null; ledger?: string | null; record?: string | null; date?: string | null; dryRun?: boolean }): string[] {
+export function pilotArgv(o: { plan: string; unitRepos: string; commands: string; out: string; upstream?: string | null; ledger?: string | null; record?: string | null; date?: string | null; dryRun?: boolean }): string[] {
   const ids = readFileSync(join(o.plan, "pilot-units.txt"), "utf8").split("\n").filter(Boolean);
+  const cmds = pilotCommands(o.commands, ids);
   return [
     ...rmArgs(),
-    "--unit-repos", o.unitRepos, "--units", ...ids,
+    "--unit-repos", o.unitRepos, "--units", ...ids, "--install", ...cmds.install, "--test", ...cmds.test,
     "--order-seed", String(ORDER_SEED), "--cell-items", join(o.plan, "cell-items.json"),
     "--remove-voice-web-search", "--reader-map", join(REPO, "src", "trial", "review", "reader-maps", RM_READER_MAP),
     "--parallel", String(PILOT_PARALLEL), "--out", o.out,
@@ -274,9 +289,21 @@ export async function main(argv: string[], io: Io = { out: console.log, err: con
     const f = parse(rest);
     if (sub === "items") return await items(f, io, env);
     if (sub === "pilot-plan") return pilotPlan(f, io, env);
+    if (sub === "e2e") {
+      if (!f.has("--out")) throw new Error("E_USAGE rm-run e2e: pass --out <new dir>, outside /tmp and the repository");
+      const { rmE2e } = await import("./rm-e2e.ts");
+      const r = await rmE2e({ out: f.get("--out")!, log: io.out });
+      if (r.skipped) {
+        io.out("SKIP rm-run e2e: " + r.skipped);
+        return 0;
+      }
+      const failed = r.checks.filter((c) => !c.ok).length;
+      io.out(failed ? "rm-run e2e: " + failed + " of " + r.checks.length + " checks failed" : "rm-run e2e: all " + r.checks.length + " checks passed");
+      return failed ? 1 : 0;
+    }
     if (sub === "pilot") {
-      for (const k of ["--plan", "--unit-repos", "--out"]) if (!f.has(k)) throw new Error("E_USAGE rm-run pilot: pass " + k);
-      const args = pilotArgv({ plan: f.get("--plan")!, unitRepos: f.get("--unit-repos")!, out: f.get("--out")!, upstream: f.get("--upstream") ?? null, ledger: f.get("--ledger") ?? null, record: f.get("--ledger-record") ?? null, date: f.get("--date") ?? null, dryRun: f.has("--dry-run") });
+      for (const k of ["--plan", "--unit-repos", "--commands", "--out"]) if (!f.has(k)) throw new Error("E_USAGE rm-run pilot: pass " + k);
+      const args = pilotArgv({ plan: f.get("--plan")!, unitRepos: f.get("--unit-repos")!, commands: f.get("--commands")!, out: f.get("--out")!, upstream: f.get("--upstream") ?? null, ledger: f.get("--ledger") ?? null, record: f.get("--ledger-record") ?? null, date: f.get("--date") ?? null, dryRun: f.has("--dry-run") });
       io.out("review-units " + args.join(" "));
       return await reviewUnits(args, io, env);
     }
