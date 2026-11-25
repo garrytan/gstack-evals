@@ -28,7 +28,7 @@ test("the check reads the named programs from the record, adds the run's spend a
   recordProgram(record, { program: "cso3", cap_micros: 90 * D, skill_cap_micros: 90 * D, skills: ["cso"], credit_rate_micros: D, quotes });
   const o = { programs: ["cso3"], spent_usd: 120, reserve_usd: 18.7, cap_usd: 170 };
   expect(combinedCheck(record, { ...o, next_usd: 31.29 })).toMatchObject({ ok: true });
-  expect(combinedCheck(record, { ...o, next_usd: 31.31 }).line).toStartWith("COMBINED_STOP ");
+  expect(combinedCheck(record, { ...o, next_usd: 31.31 }).line).toStartWith("E_CSO_COMBINED_STOP ");
   const run = (next: string) => main(["--cap", "170", "--programs", "cso3", "--spent", "120", "--reserve", "18.7", "--next", next, "--ledger-record", record]);
   expect(run("31.29")).toBe(0);
   expect(run("31.31")).toBe(10);

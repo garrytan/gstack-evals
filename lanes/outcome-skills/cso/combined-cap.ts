@@ -18,7 +18,7 @@ export function combinedCheck(record: string, o: { programs: string[]; spent_usd
   const r = combinedAdmit([...committed, Math.round(o.spent_usd * D), Math.round(o.reserve_usd * D)], Math.round(o.next_usd * D), Math.round(o.cap_usd * D));
   const usd = (m: number) => "$" + (m / D).toFixed(6);
   const held = o.programs.map((p, i) => p + " " + usd(committed[i]!)).join(" + ") + " + run " + usd(Math.round(o.spent_usd * D)) + " + reserve " + usd(Math.round(o.reserve_usd * D));
-  return { ok: r.ok, line: (r.ok ? "COMBINED: admit " : "COMBINED_STOP ") + held + " + next " + usd(Math.round(o.next_usd * D)) + " = " + usd(r.total_micros) + (r.ok ? " <= $" : " > $") + o.cap_usd.toFixed(2) };
+  return { ok: r.ok, line: (r.ok ? "COMBINED: admit " : "E_CSO_COMBINED_STOP ") + held + " + next " + usd(Math.round(o.next_usd * D)) + " = " + usd(r.total_micros) + (r.ok ? " <= $" : " > $") + o.cap_usd.toFixed(2) };
 }
 
 export function main(argv: string[]): number {
