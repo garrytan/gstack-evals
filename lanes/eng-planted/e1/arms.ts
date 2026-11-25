@@ -7,7 +7,7 @@
 //   /pstack:statechart form the dry run records when the pinned Claude Code does not resolve the bare name); G opens
 //   with the skill command for its host, then attempt 3's forced sentence.
 // - N, D and C are bare, so no gstack, pstack or drive path reaches their container. P is pstack at the pin, as a Claude
-//   Code plugin directory through the stack arms' installer (src/arms/stacks.ts). G is gstack at d74ee528 with the
+//   Code plugin directory through the stack arms' installer (src/arms/stacks.ts). G is gstack at 9a550bca with the
 //   default install on Claude Code and ./setup --host codex on Codex. P does not run on Sol.
 // - G runs with GSTACK_SESSION_KIND=unattended and no Stop hook on every model (section 4, G and the Stop hook).
 // - P's exposure marker is the first body line of statechart's SKILL.md, read from the pinned checkout after its sha256

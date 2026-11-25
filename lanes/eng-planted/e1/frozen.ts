@@ -25,7 +25,7 @@ export const E1_MODEL_ID: Readonly<Record<E1Model, string>> = { opus: "claude-op
 export const E1_HOST: Readonly<Record<E1Model, "claude" | "codex">> = { opus: "claude", sol: "codex", particle: "claude" };
 
 export const PINS = {
-  gstack: { repo: "garrytan/gstack", sha: "d74ee528b6df9ddb945be2103a24544babe76e65", version: "1.103.2.0" },
+  gstack: { repo: "garrytan/gstack", sha: "9a550bca9c25caf7c3ac9d3377249a261910059a", version: "1.103.3.0" },
   pstack: { repo: "cursor/plugins", sha: "ca782ed8b3c2c521cead8e1720d55c3a5dbf2347", harness: "harness/pstack/claude-code" },
   claudeCode: "2.1.314",
   codex: "0.170.0",

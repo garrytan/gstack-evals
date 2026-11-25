@@ -21,6 +21,7 @@ links:
 - The prereg's final review left seven notes that the Captain ruled not blocking and deferred to a dated change before the pilot: "Ruled by the gstack-evals Captain (GSTA-2), 2026-11-24: not blocking under R12; none changes a frozen number or a decision row; deferred to the dated change before the pilot." This is that change. Section 1 settles each note.
 - The start rule now names one fit: eval 1's power.py, fitted on the pilot's N builds, with a review-by-unit term, printed at two ends. The larger MDD governs (section 2).
 - Units authored in this run join the draw's walk after attempt 3's, so later authoring never moves a unit already drawn (section 3).
+- G's gstack pin moves from d74ee528 (1.103.2.0) to 9a550bca (1.103.3.0), so every model role gstack names is the newest generation (section 7).
 - Sections 4 to 6 record how the harness was built where the prereg left a choice: the Sol path, the tools volume, the review bundle, the ledger items and the stage order.
 - No paid call has run and no pilot data exists. This change moves no frozen number, threshold, arm text, model, cap or Decision row.
 
@@ -72,6 +73,13 @@ This change governs where it and the plan differ.
 - **A cell's figure** splits into the build's $0.61 (attempt 3's builds ran $0.45 to $0.77) and the rest for the review. Where that leaves the review under a quarter of the cell (particle-1's N and D), the review keeps a quarter and the build the rest. The first-session rule then replaces both with measured costs. If particle-1's measured builds run near $0.61, its N and D items will re-project past their caps; that stop goes to the Captain, as the rule says.
 - **Stages.** Each item runs per half: reviews, then builds. C and P's second half needs e1/look.json with stop false. The look is written once.
 - **A loss** is reported only when an upper bound is below 0 with 64 or more comparison units.
+
+## 7. G's gstack pin
+
+- The prereg pins G to gstack d74ee528 (1.103.2.0). At that commit, gstack's model policy sends the plan-review role, which /plan-eng-review's outside voice uses, to claude-fable-5-1 and gpt-6-astra, both older generations (docs/model-policy.md and scripts/resolvers/constants.ts at the pin). The Captain's standing rule, from Garry, is that every eval arm that runs gstack uses gstack's newest-generation models.
+- gstack 9a550bca (#4811, 1.103.3.0) resolves every role to claude-opus-5-5, claude-fable-5-2, gpt-6.2-sol or gpt-6.2-astra. No counted unit and no paid call has run, so G moves to it.
+- The move is 15 commits. plan-eng-review's skill tree is byte-identical at both commits (tree 49f7d69c), so G's prompt, its command and the procedure detector are unchanged. setup changes one label line.
+- Cost and caps do not move. In the review container the outside voice either finds no Codex CLI (Claude Code) or stops on the harness check (Codex), and takes gstack's native fallback on the session's own model. The metering proxy serves only the three models under test in either case.
 
 ## What this does not change
 
