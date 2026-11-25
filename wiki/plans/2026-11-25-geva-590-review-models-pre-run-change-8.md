@@ -2,7 +2,7 @@
 id: 2026-11-25-geva-590-review-models-pre-run-change-8
 kind: plan
 title: "Pre-run change 8 to the review-models eval: engineers label the judge check, one on all 100 and a second on 30"
-summary: "Coding labels come from engineers with proof of skill. One engineer labels all 100 judge-check reviews, a second labels a seeded 30-review subset, and splits on the subset go to a third engineer. The rate is not set yet."
+summary: "Engineers with proof of skill label the judge check: one labels all 100 reviews, a second a seeded 30, and a third settles splits on the 30. The rate is not set yet."
 author: GEVA-590
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
