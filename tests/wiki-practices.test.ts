@@ -205,7 +205,8 @@ describe("practice 5: the judge check", () => {
     const P = "wiki/plans/" + id + ".md: practice 5: ";
     const kind = P + 'a model labeller needs one "Label kind: code" line; labels for anything other than code come from people' + H;
     const lab = (by: string) => P + '"Labels by: ' + by + '" needs a judge and scored models from other labs; a Gemini judge is checked with grok-4.7 or kimi-k3.1-pro, and a Gemini model under test goes to the Captain' + H;
-    const note = (by: string) => P + '"Labels by: ' + by + '" needs a "Label notes:" line that names the Gemini judge it checks or the failed gemini-4-neon known-answer anchor run' + H;
+    const note = (by: string) => P + '"Labels by: ' + by + '" needs one "Label fallback:" line, "judge <the Gemini judge\'s model id>" or "anchor-run <run id> failed" for a failed gemini-4-neon known-answer anchor run' + H;
+    const fb = (v: string) => "Label notes: blind to arm\nLabel fallback: " + v;
     const judge = "Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5";
     const run = (j: string, by: string, notes = "Label notes: blind to arm", k = "Label kind: code\n") =>
       check(prereg(PASSING_PREREG.replace(judge, j).replace("Labels by: people\n", by + "\n" + k).replace("Label notes: blind to arm", notes).replace("Labelled outputs: 40", "Labelled outputs: 100"), id));
@@ -221,23 +222,24 @@ describe("practice 5: the judge check", () => {
     expect(run("Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5\nJudge: anthropic/claude-opus-5-5 scores openai/gpt-6.2-sol", "Labels by: gemini-4-neon")).toEqual([]);
     const gem = "Judge: google/gemini-4-carbon scores anthropic/claude-opus-5-5";
     for (const by of ["grok-4.7", "kimi-k3.1-pro"]) {
-      expect(run(gem, "Labels by: " + by, "Label notes: checks the gemini-4-carbon judge")).toEqual([]);
-      expect(run("Judge: openrouter/google/gemini-4-carbon scores anthropic/claude-opus-5-5", "Labels by: " + by, "Label notes: checks the gemini-4-carbon judge")).toEqual([]);
-      expect(run(judge, "Labels by: " + by, "Label notes: gemini-4-neon failed its known-answer anchors in run neon-2026-11-25")).toEqual([]);
+      expect(run(gem, "Labels by: " + by, fb("judge gemini-4-carbon"))).toEqual([]);
+      expect(run("Judge: openrouter/google/gemini-4-carbon scores anthropic/claude-opus-5-5", "Labels by: " + by, fb("judge gemini-4-carbon"))).toEqual([]);
+      expect(run(judge, "Labels by: " + by, fb("anchor-run neon-2026-11-25 failed"))).toEqual([]);
       expect(run(gem, "Labels by: " + by)).toEqual([note(by)]);
       expect(run(judge, "Labels by: " + by)).toEqual([note(by)]);
-      expect(run(judge, "Labels by: " + by, "Label notes: checks the gemini-4-carbon judge")).toEqual([note(by)]);
+      expect(run(judge, "Labels by: " + by, fb("judge gemini-4-carbon"))).toEqual([note(by)]);
+      expect(run(gem, "Labels by: " + by, "Label notes: checks the gemini-4-carbon judge")).toEqual([note(by)]);
     }
-    for (const notes of ["Label notes: the known-answer anchor run is still planned", "Label notes: we did not run any known-answer anchor", "Label notes: gemini-4-neon passed its known-answer anchors in run neon-7", "Label notes: gemini-4-neon did not fail; no known-answer anchors failed in run 7", "Label notes: gemini-4-neon failed its known-answer anchors", "Label notes: a model failed its known-answer anchors in run 7"]) {
-      expect(run(judge, "Labels by: grok-4.7", notes)).toEqual([note("grok-4.7")]);
+    for (const v of ["judge", "judge gemini-4-carbon judge", "anchor-run neon failed", "anchor-run 7", "anchor-run 7 passed", "the gemini-4-carbon judge", "judge gemini-4-carbon\nLabel fallback: anchor-run 7 failed"]) {
+      expect(run(gem, "Labels by: grok-4.7", fb(v))).toEqual([note("grok-4.7")]);
     }
-    expect(run("Judge: google/gemma-4 scores anthropic/claude-opus-5-5", "Labels by: grok-4.7", "Label notes: checks the gemma-4 judge")).toEqual([note("grok-4.7")]);
-    expect(run("Judge: google/gemini-4 scores anthropic/claude-opus-5-5", "Labels by: grok-4.7", "Label notes: gemini-4-neon was not used")).toEqual([note("grok-4.7")]);
-    expect(run("Judge: google/gemini-4-carbon:high scores anthropic/claude-opus-5-5", "Labels by: grok-4.7", "Label notes: checks the gemini-4-carbon judge")).toEqual([]);
-    expect(check(prereg(PASSING_PREREG.replace("Labels by: people\n", "**Labels by:** grok-4.7\n**Label kind:** code\n").replace("Label notes: blind to arm", "**Label notes:** gemini-4-neon failed its known-answer anchors in run neon-2026-11-25").replace("Labelled outputs: 40", "Labelled outputs: 100"), id))).toEqual([]);
-    expect(run("Judge: google/gemini-4-carbon scores x-ai/grok-4.7", "Labels by: grok-4.7", "Label notes: checks the gemini-4-carbon judge")).toEqual([lab("grok-4.7")]);
-    expect(run("Judge: google/gemini-4-carbon scores xai/grok-4.7", "Labels by: grok-4.7", "Label notes: checks the gemini-4-carbon judge")).toEqual([lab("grok-4.7")]);
-    expect(run("Judge: google/gemini-4-carbon scores moonshotai/kimi-k3.1-pro", "Labels by: kimi-k3.1-pro", "Label notes: checks the gemini-4-carbon judge")).toEqual([lab("kimi-k3.1-pro")]);
+    expect(run("Judge: google/gemma-4 scores anthropic/claude-opus-5-5", "Labels by: grok-4.7", fb("judge gemma-4"))).toEqual([note("grok-4.7")]);
+    expect(run("Judge: google/gemini-4-carbon:high scores anthropic/claude-opus-5-5", "Labels by: grok-4.7", fb("judge gemini-4-carbon"))).toEqual([]);
+    expect(run(gem, "Labels by: grok-4.7", fb("Judge Gemini-4-Carbon."))).toEqual([]);
+    expect(check(prereg(PASSING_PREREG.replace("Labels by: people\n", "**Labels by:** grok-4.7\n**Label kind:** code\n**Label fallback:** `anchor-run neon-2026-11-25 failed`\n").replace("Labelled outputs: 40", "Labelled outputs: 100"), id))).toEqual([]);
+    expect(run("Judge: google/gemini-4-carbon scores x-ai/grok-4.7", "Labels by: grok-4.7", fb("judge gemini-4-carbon"))).toEqual([lab("grok-4.7")]);
+    expect(run("Judge: google/gemini-4-carbon scores xai/grok-4.7", "Labels by: grok-4.7", fb("judge gemini-4-carbon"))).toEqual([lab("grok-4.7")]);
+    expect(run("Judge: google/gemini-4-carbon scores moonshotai/kimi-k3.1-pro", "Labels by: kimi-k3.1-pro", fb("judge gemini-4-carbon"))).toEqual([lab("kimi-k3.1-pro")]);
     expect(check(prereg(swap("Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5", "Judge: x-ai/grok-4.7 scores xai/grok-4.6")))).toEqual([
       PREREG + ': practice 5: judge "x-ai/grok-4.7" is from the same model family as "xai/grok-4.6" it scores; use a judge from another lab',
     ]);
