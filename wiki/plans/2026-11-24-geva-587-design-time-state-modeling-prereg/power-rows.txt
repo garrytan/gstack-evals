@@ -1,0 +1,18 @@
+== 64x2
+ranges over p0 0.4 and 0.6, build SD 0.5 and 1.0, unforeseeable share 0 and 0.2:
+64x2    composite  MDD 0.12 to 0.14 (0.122 to 0.137)
+== 64x4
+ranges over p0 0.4 and 0.6, build SD 0.5 and 1.0, unforeseeable share 0 and 0.2:
+64x4    composite  MDD 0.09 to 0.10 (0.087 to 0.098)
+== 64x6
+ranges over p0 0.4 and 0.6, build SD 0.5 and 1.0, unforeseeable share 0 and 0.2:
+64x6    composite  MDD 0.07 to 0.08 (0.073 to 0.082)
+== 48x2
+ranges over p0 0.4 and 0.6, build SD 0.5 and 1.0, unforeseeable share 0 and 0.2:
+48x2    composite  MDD 0.14 to 0.16 (0.145 to 0.157)
+== 48x4
+ranges over p0 0.4 and 0.6, build SD 0.5 and 1.0, unforeseeable share 0 and 0.2:
+48x4    composite  MDD 0.10 to 0.12 (0.103 to 0.116)
+== 48x6
+ranges over p0 0.4 and 0.6, build SD 0.5 and 1.0, unforeseeable share 0 and 0.2:
+48x6    composite  MDD 0.09 to 0.10 (0.086 to 0.098)
