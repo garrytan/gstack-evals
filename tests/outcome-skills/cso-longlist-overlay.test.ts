@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // GEVA-589's dated plan change: the long-list try reads longlist.json under CSO_PLAN=longlist, the rerun's overlay at
-// gstack ee019d5e (change 2; dfeaed61 before it), with its own cso3 items for the ledger, the driver and the judge.
+// gstack a1af71d5 (change 3; ee019d5e and dfeaed61 before it), with its own cso3 items for the ledger, the driver and the judge.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { LONGLIST_ITEMS, LONGLIST_PATH, PREREG_PATH, RERUN_ITEMS, RERUN_PATH, loadCsoPrereg } from "../../lanes/outcome-skills/cso/prereg.ts";
@@ -11,8 +11,8 @@ const parent = loadCsoPrereg(PREREG_PATH, {});
 const rerun = loadCsoPrereg(PREREG_PATH, { CSO_PLAN: "rerun" });
 const longlist = loadCsoPrereg(PREREG_PATH, { CSO_PLAN: "longlist" });
 
-test("CSO_PLAN=longlist pins gstack ee019d5e (change 2) and changes nothing else the rerun overlay sets", () => {
-  expect(longlist.pins.gstack.sha).toBe("ee019d5e9a4c9c405b6a8955baf352e4dc10bf3d");
+test("CSO_PLAN=longlist pins gstack a1af71d5 (change 3) and changes nothing else the rerun overlay sets", () => {
+  expect(longlist.pins.gstack.sha).toBe("a1af71d52d7d4975e8aca40c54f9afa695214980");
   expect(Object.keys(longlist.items).sort()).toEqual([...LONGLIST_ITEMS].sort());
   expect(longlist.judge).toEqual(rerun.judge);
   expect(longlist.scoring).toEqual(parent.scoring);

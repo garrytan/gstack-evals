@@ -1,8 +1,8 @@
 ---
 id: 2026-11-24-geva-589-cso-longlist-change
 kind: plan
-title: "Dated plan change: the last /cso try, with /cso set to report the full list and audit until its time is used (gstack ee019d5e), on the same 52 advisories under the rerun plan's rules"
-summary: "Reruns the /cso arm at gstack ee019d5e (after a dfeaed61 pilot) under the GEVA-583 rerun plan. Only the pin changes. The first-10 window reads the final message, as frozen."
+title: "Dated plan change: the last /cso try, with /cso set to report the full list and its helper refusing to finish early (gstack a1af71d5), on the same 52 advisories under the rerun plan's rules"
+summary: "Reruns the /cso arm at gstack a1af71d5 (after pilots at dfeaed61 and ee019d5e) under the GEVA-583 rerun plan. Only the pin changes. The first-10 window reads the final message, as frozen."
 author: GEVA-589
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -15,9 +15,10 @@ links:
   - https://github.com/garrytan/gstack/pull/4788
   - https://github.com/garrytan/gstack/tree/dfeaed615e6f63e7834a71df2f89b450660479e6/cso
   - https://github.com/garrytan/gstack/tree/ee019d5e9a4c9c405b6a8955baf352e4dc10bf3d/cso
+  - https://github.com/garrytan/gstack/tree/a1af71d52d7d4975e8aca40c54f9afa695214980/lib/cso
   - lanes/outcome-skills/cso/
 attachments:
-  - 0351fdc182a9d78d16c406f7fd5f7e4aafb47b05a0d20fba5317deb9390957c4  longlist.json
+  - 14f7ce584d8fb97719a241c4833d081c36e14ff6277e3440df4ba482c5576c65  longlist.json
 ---
 
 # Dated plan change: the last /cso try with the full finding list
@@ -25,6 +26,20 @@ attachments:
 ## Status
 
 This is a dated change to [the rerun plan](../2026-11-23-geva-583-cso-rerun-prereg/README.md), written and pushed before any session of this try. Everything that plan froze holds here unless a section below changes it. That plan and its results post stand as published. Under R77 this change rides the results branch, so the try adds one pull request.
+
+## Change 3, 2026-11-25: the pin moves to a1af71d5, and the counted run no longer waits on list length
+
+The re-pilot at ee019d5e passed its five checks but still listed few findings: 2, 7 and 5 per Opus session (mean 4.67) and 6, 10 and 2 per particle-1 session (mean 6.0). Opus finished at 221 to 268 seconds with 387 to 444 seconds still on the helper's clock, and said so in its report. The model read the instruction to keep auditing and stopped anyway. Under change 2's go rule the try stopped before cso3-main and went to the Captain. No counted session ran at ee019d5e.
+
+gstack's maintainer chose to make the helper enforce the stop rule instead of asking the model to follow it. The pin is now a1af71d52d7d4975e8aca40c54f9afa695214980, on the same branch, one commit after ee019d5e. It is not a pull request and has not been through gstack's /ship. Of the files /cso loads, only lib/cso/cli.ts changes: the helper's `finish` refuses while more than 120 seconds remain and any selected phase (application-model, attack-surface and the scope's audit domains) still has not_assessed coverage, and its error names those phases and the seconds left. `finish` always works at 120 seconds or less, or once every selected phase is covered, so a session can't get stuck. Rechecks are unchanged, and cso/SKILL.md keeps the ee019d5e text (sha256 b1635bb2). longlist.json pins the new cli.ts hash and adds the pin to pin_history. The arm's install runs gstack's `./setup` at the pin, which rebuilds the helper the session calls.
+
+What follows from this change:
+
+- **Re-pilot.** The same 3 units and 6 sessions at a1af71d5, with the same five checks, inside the $18.31 left on cso3-pilot, with a $10 spend stop on the re-pilot's own spend. Both earlier pilots' records stay as they are, and the results post reports all three.
+- **The go for the counted run.** Change 2's rule that the counted run starts only on a long list is withdrawn. The Captain's ruling (2026-11-25): "Run the counted run at that pin whatever the pilot shows, inside cso3-main's $62 and the $90 envelope. Report the list length beside the verdict." This is the last build. Checks 1, 3, 4 and 5 (the procedure ran, the ranked report is the scored text, the judge's pilot gate, every session scored with the print check) still gate the counted run under R111; check 2 and the list length print beside the verdict and gate nothing.
+- **Judge check.** The rows rest on the judge's named calls, so before any counted number counts, the judge was checked on the 104 check reports (the parent's 92 check reports, 24 of them oracle or stock anchors, and the 12 cso reports from the first two pilots; masked and redacted, with the judge's outputs never shown) against a third model under R126. Gemini 4 Neon failed its known-answer anchors on both of its passes (oracle anchors named 2 and then 1 of 12) and was replaced, as the Captain and FOUN-32 ruled before the run. Grok 4.7, with the frozen pass-2 prompt, anchor gate and kappa bar, passed: kappa 0.954 (95% interval 0.879 to 1.000) on all 104, oracle anchors named 11 of 12, stock anchors left unnamed 12 of 12. The judge itself named 10 of 12 oracle anchors and none of the 12 stock anchors. Every row that rests on this check says: "judge checked against Grok 4.7, a third-party model family, not against people; Gemini 4 Neon failed its known-answer anchors and was replaced". The pooled gold check in section 4 still runs as frozen.
+- **Money.** cso3-main stays at $62 inside the $90 envelope, and a cap stop is reported, never retried.
+- Everything else in this post stands. Where the text below names dfeaed61 or ee019d5e as the arm's pin, read a1af71d5.
 
 ## Change 2, 2026-11-24: the pin moves to ee019d5e before any counted session
 
