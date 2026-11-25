@@ -332,7 +332,7 @@
       "cso3-main"
     ],
     "combined_cap_usd": 170,
-    "combined_check": "before each counted session the run script refuses to start it if cso3 and cso3b committed spend plus that session allowance would pass $170 (lanes/outcome-skills/cso/combined-cap.ts, exit 10 is a cap stop)",
+    "combined_check": "before each counted session the run script refuses to start it if cso3's committed spend in the ledger, plus cso3-main's spend so far with its running sessions' allowances, plus the room still held for counted judging on cso3-judge, plus that session's allowance would pass $170 (lanes/outcome-skills/cso/combined-cap.ts; exit 10 is a cap stop). cso3b's own ledger line is not added, because the driver's lease reserves cso3-main's whole cap when it opens",
     "why": "the ledger records a program's envelope once and never changes it, so cso3 stays at $90 and cso3-main joins a second program; the Captain, 2026-11-25 09:05Z"
   },
   "planning_prices": {
