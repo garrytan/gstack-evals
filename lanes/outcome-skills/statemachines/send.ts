@@ -41,6 +41,7 @@ import { MeteringProxy, reconcileJournal } from "../../../src/runner/proxy/meter
 import { rigAdmission } from "../../../src/rig/admission.ts";
 import { DEFAULT_RETRY } from "../driver/stage.ts";
 import { ITEMS } from "./items.ts";
+import { ITEMS as SR_ITEMS } from "../smreview/items.ts";
 import { assertBlind, judgeFor, LABELLERS, R78_PRICE_BOUND, readJudgeAnswer, readLabelAnswer, type JudgePacket, type LabelPacket } from "./packets.ts";
 import { smFail } from "./unit.ts";
 
@@ -55,6 +56,7 @@ const PROXY_FIELDS = { openai: { service_tier: "default" }, anthropic: { inferen
 const KINDS: Record<string, { packet: string; keys: string[] }> = {
   "sm-labels": { packet: "sm-label-packet.v1", keys: ["sm-label-key.v1"] },
   "sm-judges": { packet: "sm-judge-packet.v1", keys: ["sm-judge-key.v1", "sm-r78-key.v1"] },
+  "sr-labels": { packet: "sm-label-packet.v1", keys: ["sm-label-key.v1"] },
 };
 
 export interface ItemSendOptions {
@@ -209,8 +211,8 @@ function holdItemLock(record: string, item: string): Database {
 
 /** Sends every packet's calls that the out dir has not recorded, on one lease of the item, and settles the lease. */
 export async function sendPackets(o: SendOptions): Promise<SendResult> {
-  if (!ITEMS[o.item] || !KINDS[o.item]) smFail("E_USAGE", "sm packets send pays from sm-labels or sm-judges, not " + JSON.stringify(o.item));
-  const def = ITEMS[o.item]!;
+  const def = ITEMS[o.item] ?? SR_ITEMS[o.item];
+  if (!def || !KINDS[o.item]) smFail("E_USAGE", "sm packets send pays from sm-labels, sm-judges or the review eval's sr-labels, not " + JSON.stringify(o.item));
   const load = () => {
     const packetsDir = resolve(o.packets), out = resolve(o.out);
     if (out === packetsDir || out.startsWith(packetsDir + sep)) smFail("E_USAGE", "--out " + out + " is inside --packets " + packetsDir + "; write the replies beside the packets, never among them");

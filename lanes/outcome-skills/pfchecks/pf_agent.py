@@ -133,6 +133,7 @@ class PfAgent(RealAgent):
             "cli_path": str(wrapper), "cwd": str(host_dir), "repo": repo, "work": WORK, "sh_dir": SH_DIR, "exec_prefix": ["docker", "exec", "-i", "-w", repo, container],
             "out": str(evdir), "model": model, "no_answer": pf["no_answer"], "env": env, "plugin": pf.get("plugin"), "task_text": pf["task_text"], "wrapup_text": pf["wrapup_text"],
             "limits": pf["limits"], "commits": task["commits"], "head": task["base_commit"],
+            **({"gstack_pin": pf["gstack_pin"], "gstack_home": pf.get("gstack_home", [])} if pf.get("gstack_pin") else {}),
         }
         s = Session(cfg, DriverSlots(self, trial, pf["limits"], log))
         summary = await run_session(s)

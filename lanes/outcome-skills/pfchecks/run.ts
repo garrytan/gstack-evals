@@ -15,7 +15,8 @@ import { buildSessionImage, runtimeId, sessionManifest, type SessionImage } from
 import { HARBOR_MODEL } from "../statemachines/run.ts";
 import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
 import { readUnit } from "../statemachines/unit.ts";
-import { ARM_ENV, DISALLOWED_TOOLS, NO_ANSWER, WRAPUP, loadsPlugin, sessionLimits, taskTurn, type Names, type PfArm } from "./arms.ts";
+import { ARM_ENV, DISALLOWED_TOOLS, NO_ANSWER, WRAPUP, loadsPlugin, sessionLimits, taskTurn, type Names, type PfArm, type TurnLimits } from "./arms.ts";
+import type { SrArm } from "../smreview/arms.ts";
 import { readCapture } from "./capture.ts";
 import { readSession, subagentUse } from "./exposure.ts";
 import { containUnit, treeDigest } from "./containment.ts";
@@ -46,10 +47,18 @@ export interface PfRunInput {
    *  fields, or fields that differ from its model's record, is gap E_PF_INFRA_GAP (section 3). Every paid session passes
    *  it; null only for the dry run's own sessions that write the record. */
   effort: Record<string, Record<string, unknown>> | null;
+  /** A State Machines review eval session (lanes/outcome-skills/smreview): its arm, task turn, limits and plugin replace
+   *  the PF arm's; pr is the change under review, built as a review image (two commits, origin/main at the first); home
+   *  and pin are a gstack arm's install (arms/qa-install.sh) and the commit the session check requires there. Absent, a
+   *  PF session runs as before. */
+  review?: { arm: SrArm; text: string; pr: string; limits: { task: TurnLimits; wrapup: TurnLimits }; plugin: boolean; home: string | null; pin: string | null };
 }
 export interface PfRun { record: PfSessionRecord; file: string; image: SessionImage; attempts: Array<{ dir: string; harbor_exit: number; summary: Record<string, any> | null; evaluator: string | null }> }
 
 const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+const armOf = (i: PfRunInput): PfArm | SrArm => i.review?.arm ?? i.session.arm;
+const pluggedOf = (i: PfRunInput): boolean => (i.review ? i.review.plugin : loadsPlugin(i.session.arm));
+const limitsOf = (i: PfRunInput) => i.review?.limits ?? sessionLimits(i.session.arm, i.session.model, i.allowance);
 const sum = (xs: Array<number | null | undefined>) => xs.reduce<number>((a, x) => a + (x ?? 0), 0);
 function find(dir: string, name: string): string | null {
   if (!existsSync(dir)) return null;
@@ -64,8 +73,8 @@ function find(dir: string, name: string): string | null {
 }
 
 /** The compose overlay: the tools volume for every arm, pstack for P and blind, the pinned Claude Code, the tools env. */
-export function composeOverlay(arm: PfArm, image: string, claude: string): { services: { main: { volumes: Array<Record<string, unknown>>; environment: Record<string, string> } }; volumes: Record<string, { external: true }> } {
-  const named = [toolsVolume(), ...(loadsPlugin(arm) ? [pstackVolume()] : [])];
+export function composeOverlay(arm: PfArm, image: string, claude: string, plugin = loadsPlugin(arm)): { services: { main: { volumes: Array<Record<string, unknown>>; environment: Record<string, string> } }; volumes: Record<string, { external: true }> } {
+  const named = [toolsVolume(), ...(plugin ? [pstackVolume()] : [])];
   const volumes = [...named.map((source, n) => ({ type: "volume", source, target: n ? PSTACK_DIR : TOOLS_DIR, read_only: true })), { type: "bind", source: claude, target: "/usr/local/bin/claude", read_only: true }];
   const environment = Object.fromEntries(toolsEnv(image).map((e) => [e.slice(0, e.indexOf("=")), e.slice(e.indexOf("=") + 1)]));
   return { services: { main: { volumes, environment } }, volumes: Object.fromEntries(named.map((v) => [v, { external: true as const }])) };
@@ -115,7 +124,7 @@ export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir:
   writeFileSync(join(task, "environment/Dockerfile"), "FROM " + image.tag + "\n");
   const toml = readFileSync(join(i.unitDir, "harbor/task.toml"), "utf8").replace(/^\s*docker_image\s*=.*\n?/m, "");
   if (!/^\[environment\]$/m.test(toml)) pfFail("E_PF_ARM", "unit " + u.id + "'s harbor/task.toml has no [environment] section");
-  const agentS = sessionBudget(sessionLimits(s.arm, s.model, i.allowance)).agent_s;
+  const agentS = sessionBudget(limitsOf(i)).agent_s;
   let section = "";
   const lines = toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(image.tag)).split("\n").flatMap((l) => {
     const h = l.match(/^\s*\[([^\]]+)\]\s*(#.*)?$/);
@@ -125,13 +134,14 @@ export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir:
   });
   writeFileSync(join(task, "task.toml"), (lines.some((l) => /^\s*\[agent\]\s*(#.*)?$/.test(l)) ? lines : [...lines, "[agent]", "timeout_sec = " + agentS, ""]).join("\n"));
   writeFileSync(join(task, "instruction.md"), "The arm's turn carries the task.\n");
-  const label = u.id + "/" + s.model + "/" + s.arm + "/" + s.index;
+  const label = u.id + "/" + s.model + "/" + armOf(i) + "/" + s.index;
   const taskJson = join(dir, "task.json");
   writeFileSync(taskJson, JSON.stringify({ repo_dir: u.repo_dir, commits: image.commits, base_commit: image.head, kind: "PF" }));
-  const overlay = composeOverlay(s.arm, image.tag, i.claude ?? CLAUDE_BIN);
+  const overlay = composeOverlay(s.arm, image.tag, i.claude ?? CLAUDE_BIN, pluggedOf(i));
   const config = {
-    schema: "pf-config.v1", arm: s.arm, names: i.names, task_text: taskTurn(s.arm, { issue: i.issue ?? readFileSync(join(i.unitDir, "issue.md"), "utf8"), scope: i.scope, names: i.names }), wrapup_text: WRAPUP,
-    limits: sessionLimits(s.arm, s.model, i.allowance), no_answer: NO_ANSWER, plugin: loadsPlugin(s.arm) ? PSTACK_DIR : null, env: { ...CLAUDE_ENV, ...overlay.services.main.environment },
+    schema: "pf-config.v1", arm: armOf(i), names: i.names, task_text: i.review?.text ?? taskTurn(s.arm, { issue: i.issue ?? readFileSync(join(i.unitDir, "issue.md"), "utf8"), scope: i.scope, names: i.names }), wrapup_text: WRAPUP,
+    limits: limitsOf(i), no_answer: NO_ANSWER, plugin: pluggedOf(i) ? PSTACK_DIR : null, env: { ...CLAUDE_ENV, ...overlay.services.main.environment },
+    ...(i.review?.pin ? { gstack_pin: i.review.pin, gstack_home: image.qa_home?.paths ?? [] } : {}),
   };
   const pfConfig = join(dir, "pf-config.json");
   writeFileSync(pfConfig, JSON.stringify(config, null, 1) + "\n");
@@ -147,7 +157,7 @@ export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir:
   env.PYTHONPATH = [import.meta.dir, join(ROOT, "lanes/real-outcome/agent"), join(ROOT, "quick/laneb/runner/agent")].join(":");
   env.PYTHONDONTWRITEBYTECODE = "1";
   const ak: Record<string, string> = {
-    skip_install: "true", task_json: taskJson, pf_config: pfConfig, arm: "pf:" + s.arm, arm_tar: armTar, upstream_model: s.model, control_url: i.control, ledger: "u4", task_label: label, trial_n: "1",
+    skip_install: "true", task_json: taskJson, pf_config: pfConfig, arm: "pf:" + armOf(i), arm_tar: armTar, upstream_model: s.model, control_url: i.control, ledger: "u4", task_label: label, trial_n: "1",
     ...(attempt === 2 ? { rerun: TASK_RERUN } : {}), image_id: image.image_id, manifest, manifest_sha256: manifestSha, repo_dir: u.repo_dir, workdir: u.work_dir, ...(i.probeNode !== undefined ? { probe_node: i.probeNode } : {}),
   };
   const argv = ["run", "-y", "-p", task, "-a", "pf_agent:PfAgent", "-m", model, "--base-url", /^https?:\/\//.test(i.proxy) ? i.proxy : "http://" + i.proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "--extra-docker-compose", compose, "-o", join(dir, "jobs"), "--job-name", (i.jobName ?? "pf-" + sha(label + dir).slice(0, 12)) + "-a" + attempt, "--disable-verification"];
@@ -204,7 +214,7 @@ export const retriesSession = (summary: Record<string, any> | null, record: PfSe
  *  session.json: when its cause lies in what the agent wrote (pf_turns' E_PF_ARM post_turn refusal) it is gap E_PF_ARM with
  *  reason post_turn, and otherwise (E_PF_CAPTURE) gap E_PF_INFRA_GAP. Neither masks a wrap-up turn refused for its
  *  allowance, which stays E_PF_WRAPUP_ALLOWANCE. */
-export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null, exception: string | null = null, base: string | null = null): PfSessionRecord {
+export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null, exception: string | null = null, base: string | null = null, origin: string | null = null): PfSessionRecord {
   const capStop = exception === "LedgerCapStop";
   const s = i.session;
   const slots = (summary?.slots ?? []) as Array<Record<string, any>>;
@@ -230,14 +240,14 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
   const gap = capStop ? null : reason ? "E_PF_ARM" : scriptFailed ? "E_PF_INFRA_GAP" : i.effort && !effortHolds(effort, i.effort[s.model]) ? "E_PF_INFRA_GAP" : ts!.action === "gap" ? ts!.code : ts!.action === "retry_session" ? "E_PF_INFRA_GAP" : !ws ? "E_PF_INFRA_GAP" : ws.action === "gap" ? ws.code : ws.action === "rerun_wrapup" ? "E_PF_INFRA_GAP" : null;
   const q = Object.values((summary?.questions ?? {}) as Record<string, { ask_user_question?: number; prose_questions?: number }>);
   return {
-    schema: "pf-session.v1", unit: s.unit, part: s.part, index: s.index, model: s.model, arm: s.arm, item: s.item, attempt, names: i.names,
+    schema: "pf-session.v1", unit: s.unit, part: s.part, index: s.index, model: s.model, arm: armOf(i), item: s.item, attempt, names: i.names,
     lease_id: ((summary?.events ?? []) as Array<Record<string, any>>).find((e) => e.event === "u4_slot")?.lease_id ?? "",
     task: { end: tEnd, turns: null, wall_ms: Math.round((t?.wall_s ?? 0) * 1000), spent_micros: spent("task") }, wrapup: ends.length ? { ends, turns: null, spent_micros: spent("wrapup") } : null,
-    wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, gap_reason: reason, post_turn: (summary?.post_turn as PfPostTurn | undefined) ?? null, base_commit: base, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
+    wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, gap_reason: reason, post_turn: (summary?.post_turn as PfPostTurn | undefined) ?? null, base_commit: base, ...(origin ? { origin } : {}), capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
     checks: keep.checks && ev ? join(ev, "CHECKS.json") : null, s: hasS ? { repo: bundle, ref: "HEAD" } : null,
     transcript: ev ? join(ev, "sdk-messages.jsonl") : null, claude_session: cs && existsSync(cs) && statSync(cs).size > 0 ? cs : null, effort,
     questions: { ask_user_question: sum(q.map((x) => x.ask_user_question)), prose: sum(q.map((x) => x.prose_questions)) }, cap_stop: capStop, env: { ...ARM_ENV },
-    disallowed_tools: [...DISALLOWED_TOOLS], plugin: loadsPlugin(s.arm) ? PSTACK_DIR : null, tools: toolsVolume(),
+    disallowed_tools: [...DISALLOWED_TOOLS], plugin: pluggedOf(i) ? PSTACK_DIR : null, tools: toolsVolume(),
     in_flight: { reservation_bound: sum(slots.map((x) => x.close?.reservation_bound)), ...(sdk && existsSync(sdk) ? subagentUse(readSession(sdk)) : { subagents: 0, subagent_cap_refused: 0 }) },
   };
 }
@@ -294,9 +304,9 @@ export async function runPfSession(i: PfRunInput): Promise<PfRun> {
   mkdirSync(i.out, { recursive: true });
   const u = readUnit(i.unitDir);
   const before = treeDigest({ runtime_id: runtimeId(u), volume: i.volume });
-  const image = buildSessionImage(u, { volume: i.volume, stage: "first" });
+  const image = i.review ? buildSessionImage(u, { volume: i.volume, stage: "review", prPatch: i.review.pr, ...(i.review.home ? { qaHome: i.review.home } : {}) }) : buildSessionImage(u, { volume: i.volume, stage: "first" });
   containUnit(i.unitDir, u, image, before);
-  const limits = sessionLimits(i.session.arm, i.session.model, i.allowance);
+  const limits = limitsOf(i);
   const timeout = sessionBudget(limits).timer_ms;
   const attempts: PfRun["attempts"] = [];
   let record: PfSessionRecord | null = null;
@@ -310,7 +320,7 @@ export async function runPfSession(i: PfRunInput): Promise<PfRun> {
     const result = ev && existsSync(join(dirname(ev), "result.json")) ? (JSON.parse(readFileSync(join(dirname(ev), "result.json"), "utf8")) as Record<string, any>) : null;
     attempts.push({ dir, harbor_exit: exit, summary, evaluator: ev });
     const exception: string | null = result?.exception_info?.exception_type ?? null;
-    record = pfRecord(i, attempt, summary, ev, exception, image.head);
+    record = pfRecord(i, attempt, summary, ev, exception, image.head, image.origin ?? null);
     if (!(await retryAfter(i, attempt, summary, record, dir, killed ? "Harbor was killed at its timeout" : exception ? "Harbor ended on " + exception : "Harbor exited " + exit, ev))) break;
   }
   const file = join(i.out, "session.json");

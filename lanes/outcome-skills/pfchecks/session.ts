@@ -10,6 +10,7 @@ import { ARM_ENV, DISALLOWED_TOOLS, type Names, type PfArm } from "./arms.ts";
 import type { Capture } from "./capture.ts";
 import { ARMS, MODEL_ITEM, MODELS, OPUS } from "./items.ts";
 import { pfFail } from "./prereg.ts";
+import type { SrArm } from "../smreview/arms.ts";
 
 export { endKind, type EndKind };
 export type PartKind = "admit" | "test" | "blind";
@@ -97,7 +98,7 @@ export function readWrapup(stdout: string): Discard {
  *  2,000,000-file or 8 GiB line, so both are lower bounds); written is null when the step did not time out. */
 export interface PfPostTurn { step: string; timed_out: boolean; failed: string; causes: string[]; after: { phase: string; termination: string } | null; written?: { files: number; bytes: number; stopped: boolean } | null; kill_confirmed?: boolean | null }
 export interface PfSessionRecord {
-  schema: "pf-session.v1"; unit: string; part: number; index: number; model: string; arm: PfArm; item: string; lease_id: string;
+  schema: "pf-session.v1"; unit: string; part: number; index: number; model: string; arm: PfArm | SrArm; item: string; lease_id: string;
   attempt: 1 | 2; names: Names; task: { end: EndKind; turns: number | null; wall_ms: number; spent_micros: number };
   wrapup: { ends: EndKind[]; turns: number | null; spent_micros: number } | null; wrapup_end: EndKind | null; gap: string | null;
   /** Why an E_PF_ARM gap: tree_check (the tree or home check refused before any open), head_mismatch (the S bundle's HEAD
@@ -108,6 +109,8 @@ export interface PfSessionRecord {
   post_turn?: PfPostTurn | null;
   /** The unit's base commit (the session image's head); scoring checks that S's root is this commit. */
   base_commit: string | null;
+  /** A review session's first commit (origin/main): S's root, with base_commit the change under review on top. */
+  origin?: string;
   capture: Capture | null; forced: string[]; discarded: string[]; checks: string | null; s: { repo: string; ref: string } | null; transcript: string | null;
   claude_session: string | null; effort: Record<string, unknown> | null; questions: { ask_user_question: number; prose: number };
   /** The driver refused the task open with 409 CAP_STOP (the agent's LedgerCapStop): the part ends incomplete, with no gap and no retry. */

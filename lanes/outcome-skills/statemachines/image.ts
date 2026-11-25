@@ -42,12 +42,15 @@ git -C "$repo" clean -fdq \${ex[@]+"\${ex[@]}"}
 for m in \${mnts[@]+"\${mnts[@]}"}; do if [ -n "$(ls -A "$m")" ]; then echo "SM_MOUNT_NOT_EMPTY \${m#"$repo"/}" >&2; exit 3; fi; done
 if [ -d /sm-in/home ]; then cp -a --no-preserve=ownership /sm-in/home/. /root/; fi
 if [ -f /sm-in/second ]; then bash /sm-in/followon.sh "$repo" /sm-in >&2; fi
+if [ -f /sm-in/pr.patch ]; then bash /sm-in/review.sh "$repo" /sm-in >&2; fi
 cd "$repo"
 echo "COMMITS $(git rev-list --all --count)"
 echo "HEAD $(git rev-parse HEAD)"
+echo "ORIGIN $(git rev-parse -q --verify refs/remotes/origin/main || echo none)"
 `;
 
-export interface SessionImage { image_id: string; tag: string; runtime_id: string; volume: string; commits: number; head: string; home: "none" | "qa"; tree_patch_sha256: string | null; qa_home: QaHome | null; removed: string[] }
+/** origin: the review stage's base commit (origin/main), null for the other stages. */
+export interface SessionImage { image_id: string; tag: string; runtime_id: string; volume: string; commits: number; head: string; home: "none" | "qa"; tree_patch_sha256: string | null; qa_home: QaHome | null; removed: string[]; origin?: string | null; pr_patch_sha256?: string | null }
 
 /** The session's home, where the image build puts A3's /qa install, and the home paths real_agent's family SM check lists
  *  (real_agent.py SM_CHECK), relative to it. */
@@ -114,11 +117,14 @@ export function runtimeId(u: SmUnit): string {
 }
 
 /** Builds one session's image. treePatch (follow-on only) is the first stage's full-tree patch, "" for S0, applied less what
- *  section 4's strip removes (returned as removed). qaHome (A3 only) is the host dir qa-install.sh filled. */
-export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first" | "followon"; treePatch?: string; qaHome?: string }): SessionImage {
+ *  section 4's strip removes (returned as removed). qaHome (A3, or the review eval's gstack arms) is the host dir
+ *  qa-install.sh filled. prPatch (review only) is the change under review (sh/review.sh): two commits, origin/main at the
+ *  first. */
+export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first" | "followon" | "review"; treePatch?: string; qaHome?: string; prPatch?: string }): SessionImage {
   const runtime = runtimeId(u);
   if ((o.stage === "followon") !== (o.treePatch !== undefined)) return smFail("E_SM_ARM", "a follow-on image takes the first stage's tree patch, and only a follow-on does");
-  if (o.qaHome !== undefined && (o.stage !== "first" || !existsSync(join(o.qaHome, ".claude/skills/gstack")))) return smFail("E_SM_ARM", "A3's home is a first-stage home holding .claude/skills/gstack, not " + o.qaHome);
+  if ((o.stage === "review") !== (o.prPatch !== undefined)) return smFail("E_SM_ARM", "a review image takes the change under review, and only a review image does");
+  if (o.qaHome !== undefined && (o.stage === "followon" || !existsSync(join(o.qaHome, ".claude/skills/gstack")))) return smFail("E_SM_ARM", "A3's home is a first-stage home holding .claude/skills/gstack (or the review eval's arm home, on a review image), not " + o.qaHome);
   const ins = docker(["image", "inspect", "--format", "{{json .Config}}", runtime], { timeoutMs: 30_000 });
   if (ins.status !== 0) return smFail("E_SM_INFRA_GAP", "runtime image " + runtime + " is not on this host: " + ins.stderr.trim().slice(-200));
   const cfg = JSON.parse(ins.stdout) as { Entrypoint: string[] | null; Cmd: string[] | null; WorkingDir: string; User: string };
@@ -130,12 +136,17 @@ export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first"
       writeFileSync(join(inDir, "followon.sh"), readFileSync(join(SH, "followon.sh")));
       writeFileSync(join(inDir, "second"), "");
     }
+    if (o.prPatch !== undefined) {
+      writeFileSync(join(inDir, "pr.patch"), o.prPatch);
+      writeFileSync(join(inDir, "review.sh"), readFileSync(join(SH, "review.sh")));
+    }
     const qa = o.qaHome ? qaHomeCopy(o.qaHome, join(inDir, "home")) : null;
     const r = docker(["run", "--name", name, "--network", "none", "--user", "0:0", "-v", o.volume + ":/sm-src:ro", "-v", inDir + ":/sm-in:ro", "--entrypoint", "", runtime, "bash", "-c", BUILD, "bash", u.repo_dir], { timeoutMs: 1_800_000 });
-    const got = Object.fromEntries(r.stdout.split("\n").filter((l) => /^(COMMITS|HEAD) /.test(l)).map((l) => l.split(" ") as [string, string]));
+    const got = Object.fromEntries(r.stdout.split("\n").filter((l) => /^(COMMITS|HEAD|ORIGIN) /.test(l)).map((l) => l.split(" ") as [string, string]));
     const commits = o.stage === "first" ? 1 : 2;
+    if (o.stage === "review" && !/^[0-9a-f]{40}$/.test(got.ORIGIN ?? "")) return smFail("E_SM_HISTORY", "the review tree for " + u.id + " has no origin/main (exit " + r.status + ": " + r.stderr.trim().slice(-300) + ")");
     if (r.status !== 0 || Number(got.COMMITS) !== commits || !/^[0-9a-f]{40}$/.test(got.HEAD ?? "")) return smFail("E_SM_HISTORY", "the session tree for " + u.id + " has " + (got.COMMITS ?? "no") + " commits, not " + commits + " (exit " + r.status + ": " + r.stderr.trim().slice(-300) + ")");
-    const key = createHash("sha256").update([runtime, o.volume, o.stage, o.treePatch ?? "", qa ? "qa " + qa.sha256 : "none", got.HEAD].join("\0")).digest("hex").slice(0, 24);
+    const key = createHash("sha256").update([runtime, o.volume, o.stage, o.treePatch ?? "", qa ? "qa " + qa.sha256 : "none", got.HEAD, ...(o.prPatch !== undefined ? [o.prPatch] : [])].join("\0")).digest("hex").slice(0, 24);
     const tag = SESSION_REPO + ":" + key;
     const changes = [...(cfg.Entrypoint?.length ? ["ENTRYPOINT " + JSON.stringify(cfg.Entrypoint)] : []), "CMD " + JSON.stringify(cfg.Cmd?.length ? cfg.Cmd : ["/bin/bash"]), "WORKDIR " + (cfg.WorkingDir || "/"), "USER " + (cfg.User || "0")].flatMap((c) => ["--change", c]);
     const c = docker(["commit", ...changes, name, tag], { timeoutMs: 1_800_000 });
@@ -144,7 +155,7 @@ export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first"
     if (!/^sha256:[0-9a-f]{64}$/.test(id)) return smFail("E_SM_INFRA_GAP", "the session image " + tag + " has no id");
     const entry = docker(["image", "inspect", "--format", "{{json .Config.Entrypoint}}", tag], { timeoutMs: 30_000 }).stdout.trim();
     if (JSON.stringify(cfg.Entrypoint?.length ? cfg.Entrypoint : null) !== entry) return smFail("E_SM_INFRA_GAP", "the session image " + tag + " has entrypoint " + entry + ", not the runtime image's");
-    return { image_id: id, tag, runtime_id: runtime, volume: o.volume, commits, head: got.HEAD!, home: o.qaHome ? "qa" : "none", tree_patch_sha256: o.treePatch === undefined ? null : createHash("sha256").update(o.treePatch).digest("hex"), qa_home: qa, removed: strippedPaths(r.stderr) };
+    return { image_id: id, tag, runtime_id: runtime, volume: o.volume, commits, head: got.HEAD!, home: o.qaHome ? "qa" : "none", tree_patch_sha256: o.treePatch === undefined ? null : createHash("sha256").update(o.treePatch).digest("hex"), qa_home: qa, removed: strippedPaths(r.stderr), ...(o.stage === "review" ? { origin: got.ORIGIN!, pr_patch_sha256: createHash("sha256").update(o.prPatch!).digest("hex") } : {}) };
   } finally {
     docker(["rm", "-f", "-v", name], { timeoutMs: 60_000 });
     rmSync(inDir, { recursive: true, force: true });

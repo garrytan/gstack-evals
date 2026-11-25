@@ -24,7 +24,7 @@ export interface OracleRun { tree: "base" | "fixed"; n: number; wall_ms: number;
  *  no base run reached, and whether a base run printed cargo's fail-fast stop line. */
 export interface TargetReading { base: string[][]; fixed: string[][]; not_on_base: string[]; fail_fast_stop: boolean; cargo_stopped_early: boolean }
 export interface SmUnit {
-  schema: "sm-unit.v1"; id: string; source: "live-multilang" | "rebench-r3a4"; revision: string; repo: string; pull_number: string;
+  schema: "sm-unit.v1"; id: string; source: "live-multilang" | "rebench-r3a4" | "swe-rebench-v21"; revision: string; repo: string; pull_number: string;
   created_at: string; month: string; lang: Lang; base_commit: string;
   /** The repository dir and work dir, read from the image at prep (MultiLang images hold the repository at the image's
    *  work dir, mostly /testbed and sometimes /testbed/repo); empty until then. */

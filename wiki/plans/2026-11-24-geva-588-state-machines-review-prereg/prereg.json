@@ -1,0 +1,102 @@
+{
+  "schema": "sr-prereg.v1",
+  "post": "2026-11-24-geva-588-state-machines-review-prereg",
+  "draw_seed": 972684997,
+  "order_seed": 4124146064,
+  "bootstrap_seed": 3364374095,
+  "seed_use": {
+    "draw_seed": "section 3: the one seeded order of the units that pass the BIC gates (ids sorted, then a Fisher-Yates shuffle with seededRandom(draw_seed))",
+    "order_seed": "section 6: each unit's session order within its part (stream order_seed + 0 for the pilot, + 1 for the counted run)",
+    "bootstrap_seed": "section 10: every bootstrap over repositories (10,000 resamples)"
+  },
+  "minted_at": "2026-11-24T23:05:04.440Z",
+  "mint_command": "crypto.getRandomValues(new Uint32Array(3)) in one program, read once as draw_seed, order_seed and bootstrap_seed",
+  "mint_rule": "Minted once from crypto random bytes as unsigned 32-bit integers before any draw, label or session. Never re-minted.",
+  "draw": {
+    "pilot_units": 6,
+    "test_units_max": 40,
+    "test_units_min": 20,
+    "per_repository_cap": 3,
+    "gates_in_order": [
+      "bic (sr-bic.v1 drop null)",
+      "labels",
+      "oracle",
+      "neutral_validation"
+    ],
+    "pending_rule": "a gate with no record stops the walk where it stands"
+  },
+  "bic": {
+    "max_bic_lines": 2000,
+    "min_share": 0.5,
+    "min_in_pr": 0.5,
+    "rebase": "the BIC's text diff with no context lines, stripped paths left out, reverse-applied at the fix base with git apply -R --unidiff-zero --reject; rejected hunks are left out and listed",
+    "stripped": [
+      "CLAUDE.md",
+      "CLAUDE.local.md",
+      "AGENTS.md",
+      ".claude/"
+    ]
+  },
+  "arms": [
+    "N",
+    "C",
+    "P",
+    "G+",
+    "G0"
+  ],
+  "models": [
+    "claude-opus-5-5",
+    "particle-ai/particle-1"
+  ],
+  "sessions_per_cell": {
+    "pilot": 1,
+    "test": 2
+  },
+  "look": {
+    "at": "half the counted units, rounded up, once each has G+ and G0 on both models",
+    "stop_p": 0.003,
+    "final_p": 0.049
+  },
+  "small_pr_lines": 10,
+  "pins": {
+    "gstack": {
+      "repo": "garrytan/gstack",
+      "pin": "d74ee528b6df9ddb945be2103a24544babe76e65",
+      "version": "1.103.2.0",
+      "install": "./setup --host claude --loadout lite",
+      "G+": "e69e29daba22b320b2d9a7cde8e458c57fbb8708",
+      "G0": "6872290cfad0af7eaf0641f8b3fd9598f9fffc55",
+      "tree": {
+        "G+": "51c37ad9055001dfc841153b6241b9114248d4d6",
+        "G0": "1151ad70c169c0da9e5afb2891ae5a0e1c58d470"
+      },
+      "made_by": "lanes/outcome-skills/smreview/gstack_arms.py"
+    },
+    "swe_rebench_v21": {
+      "dataset": "ibragim-bad/SWE-rebench-V2.1",
+      "revision": "26c0145ded93168b0d5d095420155901ad2d5a2f",
+      "tool_commit": "5792b7851d20bb30b60bf5841834cacd6ce07582"
+    },
+    "swe_bench_live_multilang": {
+      "dataset": "SWE-bench-Live/MultiLang",
+      "revision": "eb09c2e5db6e4c5a95e01c903c8fd1d5da33c4f3"
+    },
+    "pstack": {
+      "repo": "cursor/plugins",
+      "commit": "c742dd61706fbacc1b95f1a20b7b988cf096ce6c",
+      "tree": "harness/pstack/claude-code",
+      "tree_sha": "cdbbd4ca5dd2f4ca0eef3294e7b981c0c610d4bb",
+      "plugin_version": "0.15.36"
+    },
+    "claude_code": "2.1.312",
+    "claude_agent_sdk": "0.2.174"
+  },
+  "items_usd": {
+    "sr-labels": 40,
+    "sr-vm": 400,
+    "sr-pilot": 180,
+    "sr-opus": 1750,
+    "sr-particle": 350,
+    "crew_counted": 250
+  }
+}

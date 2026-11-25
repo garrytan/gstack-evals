@@ -153,7 +153,11 @@ class Session:
         self.summary["check"] = got
         if "commits" in cfg and (got["COMMITS"] != [str(cfg["commits"])] or got["HEAD"] != [cfg["head"]]):
             raise RuntimeError(f"E_PF_ARM the session tree has commits {got['COMMITS']} at {got['HEAD']}, not {cfg['commits']} at {cfg['head']}; nothing was opened")
-        bad = ["INSTR " + p for p in got["INSTR"]] + ["HOME " + p for p in got["HOME"]]
+        pin = cfg.get("gstack_pin")
+        if pin and got["GSTACK"] != [pin]:
+            raise RuntimeError(f"E_PF_ARM the session home's gstack is at {got['GSTACK']}, not the arm's pin {pin}; nothing was opened")
+        allowed = [p for p in cfg.get("gstack_home", []) if p not in ("/root/.capy", "/root/.claude/CLAUDE.md")] if pin else []
+        bad = ["INSTR " + p for p in got["INSTR"]] + ["HOME " + p for p in got["HOME"] if p not in allowed]
         if bad:
             raise RuntimeError(f"E_PF_ARM the session tree or home holds files the strip rule removes or a gstack path: {bad[:10]}; nothing was opened")
 

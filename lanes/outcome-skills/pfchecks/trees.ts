@@ -62,9 +62,11 @@ export function withoutFiles(repo: string, commit: string, s: string, files: str
 
 export interface Trees { s: string; base: string; parent: string; fix: string | null; neutral: string; gap: "E_PF_FIX_CONFLICT" | null; conflict: string | null; plan: TransplantPlan }
 
-export function buildTrees(o: { repo: string; ref: string; lang: Lang; testFiles: ReadonlySet<string>; fixPatch: string; neutral: { mode: NeutralMode; files: string[] } }): Trees {
+/** base: the commit S's changes are read from; S's root (the unit's one-commit base) when absent. A review session's base
+ *  is its second commit, the change under review. */
+export function buildTrees(o: { repo: string; ref: string; lang: Lang; testFiles: ReadonlySet<string>; fixPatch: string; neutral: { mode: NeutralMode; files: string[] }; base?: string }): Trees {
   const s = one(o.repo, ["rev-parse", "--verify", o.ref + "^{commit}"]);
-  const base = rootOf(o.repo, s);
+  const base = o.base ?? rootOf(o.repo, s);
   const plan = planTransplant(o.lang, o.testFiles, changesOf(o.repo, base, s), (p) => ({ base: show(o.repo, base, p), diff: git(o.repo, ["diff", "--no-renames", "--no-color", "--no-ext-diff", base, s, "--", p]).stdout }));
   const wt = mkdtempSync(join(tmpdir(), "pf-tree-"));
   git(o.repo, ["worktree", "add", "-q", "--detach", "-f", wt, s]);

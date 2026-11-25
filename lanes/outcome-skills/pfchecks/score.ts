@@ -15,6 +15,7 @@ import type { Row, Score } from "./analysis.ts";
 import { stratumOf } from "./draw.ts";
 import { codeTest, pLoaded, pProcedure, ranChecker, readSession } from "./exposure.ts";
 import type { Arm } from "./items.ts";
+import type { SrArm } from "../smreview/arms.ts";
 import { readManifest, type TFacts } from "./manifest.ts";
 import { fixSourcePatch, unitTestFiles, type NeutralRecord } from "./neutral.ts";
 import { pfFail } from "./prereg.ts";
@@ -26,8 +27,9 @@ import { buildTrees, changesOf, git, show, withoutFiles } from "./trees.ts";
  *  (E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP after its one retry); wrapup_end: how the wrap-up turn ended; forced: the
  *  force-captured paths from the session-end commit; claude_session: Claude Code's own transcript (claude-session.jsonl, by
  *  default beside the transcript), where P's skill body appears; base_commit: the unit's base commit, which S's root must
- *  equal, else the session is gap E_PF_ARM with reason base_mismatch (section 6.8). */
-export interface SessionIn { unit?: string; model?: string; arm?: Arm; gap?: string | null; gap_reason?: string | null; base_commit?: string | null; wrapup_end?: string | null; forced?: string[]; transcript?: string | null; claude_session?: string | null; in_flight?: { reservation_bound: number; subagents: number; subagent_cap_refused: number } }
+ *  equal, else the session is gap E_PF_ARM with reason base_mismatch (section 6.8). A review session (origin set) sits on
+ *  two commits: S's root must be origin, base_commit must be an ancestor of S, and S's changes are read from base_commit. */
+export interface SessionIn { unit?: string; model?: string; arm?: Arm | SrArm; gap?: string | null; gap_reason?: string | null; base_commit?: string | null; origin?: string | null; wrapup_end?: string | null; forced?: string[]; transcript?: string | null; claude_session?: string | null; in_flight?: { reservation_bound: number; subagents: number; subagent_cap_refused: number } }
 
 export interface ScoreIn {
   s: string; ref?: string; unitDir: string; neutral: string; checks: string | null; session: string; transcript?: string | null; claudeSession?: string | null;
@@ -59,9 +61,11 @@ export async function scoreSession(o: ScoreIn) {
   try {
     git(tmp, ["init", "-q", repo]);
     git(repo, ["fetch", "-q", "--no-tags", o.s, "+" + (o.ref ?? "HEAD") + ":refs/pf/s"]);
-    if (git(repo, ["rev-list", "--max-parents=0", "refs/pf/s"]).stdout.trim() !== sess.base_commit) return { ...head, score: null, gap: "E_PF_ARM", gap_reason: "base_mismatch", readings: { no_static: null, no_api_guess: null, compile_rerun: null } };
+    const root = git(repo, ["rev-list", "--max-parents=0", "refs/pf/s"]).stdout.trim();
+    const onBase = sess.origin ? root === sess.origin && git(repo, ["merge-base", "--is-ancestor", sess.base_commit!, "refs/pf/s"], { ok: [0, 1] }).status === 0 : root === sess.base_commit;
+    if (!onBase) return { ...head, score: null, gap: "E_PF_ARM", gap_reason: "base_mismatch", readings: { no_static: null, no_api_guess: null, compile_rerun: null } };
     const testFiles = unitTestFiles(o.unitDir);
-    const trees = buildTrees({ repo, ref: "refs/pf/s", lang: u.lang, testFiles, fixPatch: fixSourcePatch(o.unitDir), neutral: { mode: nrec.mode!, files: nrec.files } });
+    const trees = buildTrees({ repo, ref: "refs/pf/s", lang: u.lang, testFiles, fixPatch: fixSourcePatch(o.unitDir), neutral: { mode: nrec.mode!, files: nrec.files }, ...(sess.origin ? { base: sess.base_commit! } : {}) });
     const tChanges = changesOf(repo, trees.base, trees.parent);
     const tPaths = git(repo, ["ls-tree", "-r", "-z", "--name-only", trees.parent]).stdout.split("\0").filter(Boolean);
     const edited = tChanges.filter((c) => c.status !== "D").map((c) => ({ path: c.path, status: c.status, text: show(repo, trees.parent, c.path) }));
@@ -129,7 +133,7 @@ export function rowOf(c: CatchRecord): Row {
   const overhead = entries.flatMap((e) => e.runs).filter((x) => typeof x.call_ms === "number" && typeof x.rebuild_ms === "number").map((x) => x.call_ms! - x.wall_ms + x.rebuild_ms!).sort((a, b) => a - b);
   const mid = Math.floor(overhead.length / 2);
   return {
-    unit: c.unit, repo: c.repo, model: c.model!, arm: c.arm!, stratum: c.stratum, score: s(c.score), gap: c.gap, no_static: s(c.readings.no_static), no_api_guess: s(c.readings.no_api_guess), compile_rerun: s(c.readings.compile_rerun), loaded: !!ex?.loaded, checker: !!ex?.checker, breaks: sc?.breaks ? sc.breaks.length : null, breaks_unmeasured: !!sc?.breaks_unmeasured,
+    unit: c.unit, repo: c.repo, model: c.model!, arm: c.arm! as Arm, stratum: c.stratum, score: s(c.score), gap: c.gap, no_static: s(c.readings.no_static), no_api_guess: s(c.readings.no_api_guess), compile_rerun: s(c.readings.compile_rerun), loaded: !!ex?.loaded, checker: !!ex?.checker, breaks: sc?.breaks ? sc.breaks.length : null, breaks_unmeasured: !!sc?.breaks_unmeasured,
     entries: entries.length, unreached: entries.filter((e) => e.outcome === "unreached").length, timeout_only: entries.filter((e) => e.runs.some((x) => x.tree === "parent") && e.runs.filter((x) => x.tree === "parent").every((x) => x.timed_out)).length,
     reservation_bound: c.in_flight?.reservation_bound ?? 0, subagents: c.in_flight?.subagents ?? 0, subagent_cap_refused: c.in_flight?.subagent_cap_refused ?? 0,
     ceiling_hit: "ceiling_hit" in c ? !!c.ceiling_hit : false, timeout_s: "timeout_s" in c ? c.timeout_s : null, overhead_ms: overhead.length ? (overhead.length % 2 ? overhead[mid]! : (overhead[mid - 1]! + overhead[mid]!) / 2) : null,

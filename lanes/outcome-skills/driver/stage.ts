@@ -26,6 +26,8 @@ import { loadRegistry, type Registry } from "../arms/registry.ts";
 import { isSmArm, smArm, smLimits, smProvider } from "../statemachines/arms.ts";
 import { ITEMS } from "../statemachines/items.ts";
 import { sessionLimits, type PfArm } from "../pfchecks/arms.ts";
+import { srLimits } from "../smreview/arms.ts";
+import { SR_STAGES } from "../smreview/items.ts";
 import { ALLOWANCE, ITEMS as PF_ITEMS, MODEL_ITEM, MODELS, type Arm } from "../pfchecks/items.ts";
 import { PfError } from "../pfchecks/prereg.ts";
 import { EFFORT_KEYS, reservationBound } from "../pfchecks/session.ts";
@@ -46,7 +48,10 @@ export const PF_STAGES: Record<string, { models: readonly string[]; arms: string
   "pf-admit": { models: MODELS, arms: PF_TOLD },
   ...Object.fromEntries(Object.entries(MODEL_ITEM).map(([model, item]) => [item, { models: [model], arms: PF_TOLD }])),
   "pf-blind": { models: [PF_ITEMS["pf-blind"]!.model!], arms: ["pf:blind"] },
+  ...SR_STAGES,
 };
+/** A PF stage's turn limits: the State Machines review eval's (smreview/arms.ts srLimits) on an SR item, else the PF arm's. */
+const pfTurnLimits = (item: string, arm: string, model: string, allowance: Record<Arm, Record<string, number>>) => (Object.hasOwn(SR_STAGES, item) ? srLimits(model) : sessionLimits(arm.slice(3) as PfArm, model, allowance));
 
 export interface StageSpec {
   item: string;
@@ -313,7 +318,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         for (const model of pf.models) {
           smProvider(reg, model);
           try {
-            sessionLimits(a.slice(3) as PfArm, model, pfAllowance);
+            pfTurnLimits(st.item, a, model, pfAllowance);
           } catch (e) {
             fail("E_USAGE", "PF stage " + st.item + ": " + (e instanceof PfError ? e.message : String(e)));
           }
@@ -480,7 +485,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     if (s.program === null) return fail("E_USAGE", "line item " + st.item + " is in no program; a G stage is admitted by O6's envelope, so its item joins the program with --program at init; nothing was opened");
     const arm = pfStage(st) || h2hStage(st) || csoStage(st) ? null : smStage(st) ? smArm(reg, st.arms![0]!) : reg.arms[st.arm]!;
     const told = [...new Set(Object.values(reg.arms).flatMap((a) => (a.kind === "told" && a.skill ? [a.skill] : [])))];
-    const want = !arm ? [h2hStage(st) ? H2H_SKILL : csoStage(st) ? CSO_SKILL : "pf"] : smStage(st) ? [arm.kind === "told" ? arm.skill! : "sm"] : arm.kind === "told" ? [arm.skill!] : told.length ? told : st.skills ?? [];
+    const want = !arm ? [h2hStage(st) ? H2H_SKILL : csoStage(st) ? CSO_SKILL : Object.hasOwn(SR_STAGES, st.item) ? "sr" : "pf"] : smStage(st) ? [arm.kind === "told" ? arm.skill! : "sm"] : arm.kind === "told" ? [arm.skill!] : told.length ? told : st.skills ?? [];
     if (s.skills.length !== want.length || want.some((k) => !s.skills.includes(k))) fail("E_USAGE", "line item " + st.item + " splits its spend across " + (s.skills.join(", ") || "no skill") + ", but arm " + st.arm + " spends for " + want.join(", ") + "; a stage's item carries its own arm's skills, so the envelope charges the skill that spends; nothing was opened");
     if (s.run_id !== null && s.run_id !== o.run_id) fail("E_ITEM_BOUND", "line item " + st.item + " is bound to run " + s.run_id + ", so run " + o.run_id + " cannot spend from it; nothing was opened");
     if (s.open) fail("E_LEASE_UNSETTLED", "lease " + s.open.lease_id + " on line item " + st.item + " (machine " + s.open.machine_id + ", run " + s.open.run_id + ") is still open; settle it on that machine, then launch the driver again; nothing was opened");
@@ -801,7 +806,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     const phase: "task" | "wrapup" | undefined = meta.phase;
     if (!pf && phase !== undefined) return refusal("E_USAGE", 400, "meta.phase is for PF sessions only; arm " + meta.arm + " opens one slot per session");
     if (pf && phase !== "task" && phase !== "wrapup") return refusal("E_USAGE", 400, "a PF open names meta.phase \"task\" or \"wrapup\", not " + JSON.stringify(phase ?? null));
-    const turns = pf ? sessionLimits((meta.arm as string).slice(3) as PfArm, b.model, pfAllowance) : null;
+    const turns = pf ? pfTurnLimits(stage.item, meta.arm as string, b.model, pfAllowance) : null;
     const limits = turns ? { session_cap_usd: turns[phase!].allowance_usd, wall_limit_sec: turns[phase!].wall_limit_sec } : stage.h2h ? h2hStageLimits(stage.item, o.h2h_allowance_usd) : stage.cso ? csoDriverLimits(b.model, o.cso_allowance_usd) : stage.model === undefined ? reg.arms[stage.arm]!.limits : smLimits(reg, meta.arm, stage.model);
     if (!pf && !stage.cso && stage.model === undefined && b.model !== reg.pins.model) return refusal("E_USAGE", 400, "model " + JSON.stringify(b.model ?? null) + " is not the registry's pinned " + reg.pins.model);
     if (b.cap_usd !== limits.session_cap_usd) return refusal("E_USAGE", 400, "cap_usd " + JSON.stringify(b.cap_usd ?? null) + " is not arm " + (pf ? meta.arm + "'s " + phase + " allowance_usd on " + b.model : stage.arm + "'s session_cap_usd") + " of " + limits.session_cap_usd);

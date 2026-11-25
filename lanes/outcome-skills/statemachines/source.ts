@@ -37,7 +37,7 @@ export interface MlRow {
 }
 
 export interface Candidate {
-  id: string; source: "live-multilang" | "rebench-r3a4"; revision: string; repo: string; pull_number: string; created_at: string; month: string;
+  id: string; source: "live-multilang" | "rebench-r3a4" | "swe-rebench-v21"; revision: string; repo: string; pull_number: string; created_at: string; month: string;
   lang: Lang; docker_image: string; image_digest: string | null; image_error?: string; base_commit: string; f2p: number; p2p: number;
   fix_files: number; fix_source_files: number; test_files: number; tests_share_fix_file: boolean; feature_screen: boolean;
   issue_sha256: string; row_sha256: string;

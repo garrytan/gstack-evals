@@ -546,6 +546,14 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_B2_LOOK](#e_b2_look) | 2 | U20 |
 | [E_B2_SESSIONS](#e_b2_sessions) | 2 | U20 |
 | [E_B2_SCORER](#e_b2_scorer) | 2 | U20 |
+| [E_SR_SOURCE](#e_sr_source) | 2 | U20 |
+| [E_SR_NO_BIC](#e_sr_no_bic) | 2 | U20 |
+| [E_SR_BIC_MERGE](#e_sr_bic_merge) | 2 | U20 |
+| [E_SR_BIC_SHARE](#e_sr_bic_share) | 2 | U20 |
+| [E_SR_BIC_SIZE](#e_sr_bic_size) | 2 | U20 |
+| [E_SR_PR_MISSES_BUG](#e_sr_pr_misses_bug) | 2 | U20 |
+| [E_SR_ARM](#e_sr_arm) | 2 | U20 |
+| [E_SR_INPUT](#e_sr_input) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4350,6 +4358,70 @@ B2's scorer seam is not built yet (lanes/test-first/scorer.ts): the Codex rollou
 Fix: Merge the B2 scorer branch into the run lane, then build the table again.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_SR_SOURCE
+
+The State Machines review eval could not read a pinned source (lanes/outcome-skills/smreview): a SWE-rebench V2.1 parquet file or its tool checkout is missing or is not the pinned file, a pool row is missing from its source or is not the row the pool recorded, a V2.1 row has no test command, log parser or digest-pinned image, or a repository clone lacks a commit.
+
+Fix: Fetch the pinned files again (sr source fetch), point --cache, --export, --v21 and --tool at the pinned copies, and rerun. A pool row that no longer matches its source means the source moved; the pool is frozen in the preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SR_NO_BIC
+
+SZZ found no bug-introducing commit for a fix (lanes/outcome-skills/smreview/bic.ts): git blame at the fix's base gave no non-trivial line, for the lines the fix deletes or the lines beside its insertions, in a non-test source file. The pool row is dropped.
+
+Fix: None: this is the row's result under the frozen gates.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_SR_BIC_MERGE
+
+The commit SZZ blamed for a fix is a merge or a root commit (it has other than one parent), so it has no single diff to review. The pool row is dropped.
+
+Fix: None: this is the row's result under the frozen gates.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_SR_BIC_SHARE
+
+The commit SZZ blamed most carries under half of the blamed lines, so no one commit brought the bug in. The pool row is dropped.
+
+Fix: None: this is the row's result under the frozen gates.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_SR_BIC_SIZE
+
+The bug-introducing commit changes more than 2,000 lines (binary files not counted), past what one review session can read. The pool row is dropped.
+
+Fix: None: this is the row's result under the frozen gates.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_SR_PR_MISSES_BUG
+
+The change under review (the BIC's hunks that reverse-apply plainly at the fix's base, lanes/outcome-skills/smreview/bic.ts) adds under half of the lines SZZ blamed on the BIC, so the bug is not in what the reviewer would see. The pool row is dropped.
+
+Fix: None: this is the row's result under the frozen gates.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_SR_ARM
+
+A State Machines review eval session broke plan sections 4 and 5 before any spend (lanes/outcome-skills/smreview): a model other than Opus 5.5 or particle-1, arm P without both pstack skill commands, or a gstack arm whose home is missing or holds gstack at another commit than the arm's (G+ and G0 each install their own commit on top of the pin).
+
+Fix: Install the arm's home with arms/qa-install.sh at the arm's commit (smreview/gstack_arms.py makes both) and run the session again; the arm texts, commits and limits in smreview/arms.ts are frozen.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SR_INPUT
+
+A State Machines review eval input is not what its step reads (lanes/outcome-skills/smreview): prereg.json is missing, is not sr-prereg.v1 or carries a seed that is not an unsigned 32-bit integer; a seed passed to a plan or draw is not a whole number; BIC records repeat an id; a session names another unit; or a unit has no pr.patch.
+
+Fix: Point the command at the post bundle's prereg.json and the unit dirs sr convert wrote, then run it again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
