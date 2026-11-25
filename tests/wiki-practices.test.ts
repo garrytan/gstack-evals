@@ -39,7 +39,8 @@ Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5
 Labelled outputs: 40
 Kappa at least: 0.6
 Errors read: per arm
-Labels by: people, blind to arm
+Labels by: people
+Label notes: blind to arm
 
 ## Interim look
 
@@ -142,7 +143,7 @@ describe("practice 3: a pilot for every arm", () => {
 });
 
 describe("practice 5: the judge check", () => {
-  const noJudge = swap(/Judge: openai[\s\S]*?Labels by: people, blind to arm\n/, "Judge: none\n").replaceAll("10 pilot outputs hand-labelled; the judge agrees on this arm", "none");
+  const noJudge = swap(/Judge: openai[\s\S]*?Label notes: blind to arm\n/, "Judge: none\n").replaceAll("10 pilot outputs hand-labelled; the judge agrees on this arm", "none");
 
   test("a plan with no model judge passes with Judge: none", () => {
     expect(check(prereg(noJudge))).toEqual([]);
@@ -184,14 +185,26 @@ describe("practice 5: the judge check", () => {
     expect(check(prereg(swap("Labelled outputs: 40", "Labelled outputs: 100"), "2026-12-01-geva-9-hook-prereg"))).toEqual([]);
   });
 
-  test("a missing or model-made label set fails, and people, construction or rule pass", () => {
-    const message = PREREG + ': practice 5: write one "Labels by:" line that starts with people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), then a comma or the line\'s end, and names no model or lab; labels a model made, settled or agreed on are not a label set (wiki/README.md, Eval plans and results, gives the format)';
-    expect(check(prereg(swap("Labels by: people, blind to arm\n", "")))).toEqual([message]);
-    for (const line of ["Labels by:", "Labels by: models", "Labels by: two models agreeing", "Labels by: anthropic/claude-opus-5-5 and google/gemini-4-argon", "Labels by: people, settled by openai/gpt-6-astra", "Labels by: peoples", "Labels by: people, with Claude Opus 5.5 breaking ties", "Labels by: people relabel claude-opus-5-5 output", "Labels by: people-free, opus labels", "Labels by: rule: two models agree", "Labels by: people\nLabels by: anthropic/claude-opus-5-5"]) {
-      expect(check(prereg(swap("Labels by: people, blind to arm", line)))).toEqual([message]);
+  test("a plan dated 2026-11-26 or later needs one Labels by line that says only people, construction or rule", () => {
+    const id = "2026-11-26-geva-9-hook-prereg";
+    const later = (from: string, to: string) => check(prereg(swap(from, to).replace("Labelled outputs: 40", "Labelled outputs: 100"), id));
+    const message = "wiki/plans/" + id + '.md: practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), and put any detail on a "Label notes:" line; labels a model made, settled or agreed on are not a label set (wiki/README.md, Eval plans and results, gives the format)';
+    expect(later("Labels by: people\n", "")).toEqual([message]);
+    for (const line of ["Labels by:", "Labels by: people, blind to arm", "Labels by: people, final ties settled by particle-ai/particle-1", "Labels by: people and rule", "Labels by: peoples", "Labels by: models", "Labels by: people\nLabels by: rule"]) {
+      expect(later("Labels by: people", line)).toEqual([message]);
     }
-    for (const line of ["Labels by: People, two labellers", "Labels by: construction, planted bugs", "Labels by: rule, the hidden tests pass or fail", "- Labels by: people", "Labels by: people, 2/3 majority, and/or a rubric", "Labels by: people, using [the rubric](./rubric.md)", "Labels by: `people`, two labellers", "Labels by: people, the solution compiles"]) {
-      expect(check(prereg(swap("Labels by: people, blind to arm", line)))).toEqual([]);
+    for (const line of ["Labels by: People", "Labels by: construction", "Labels by: rule", "Labels by: people.", "- Labels by: people", "**Labels by:** people", "**Labels by**: `people`"]) {
+      expect(later("Labels by: people", line)).toEqual([]);
+    }
+    expect(later("Label notes: blind to arm", "Label notes: blinded to model identity and arm, 2/3 majority, see [the rubric](./rubric.md)")).toEqual([]);
+  });
+
+  test("a plan dated before 2026-11-26 may leave the Labels by line out, but a line it has follows the same rule", () => {
+    const message = PREREG + ': practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), and put any detail on a "Label notes:" line; labels a model made, settled or agreed on are not a label set (wiki/README.md, Eval plans and results, gives the format)';
+    expect(check(prereg(swap("Labels by: people\n", "")))).toEqual([]);
+    expect(check(prereg(PASSING_PREREG))).toEqual([]);
+    for (const line of ["Labels by: people, settled by a model", "Labels by: two models agreeing", "Labels by: peo_ple", "Labels by: people\nLabels by: rule"]) {
+      expect(check(prereg(swap("Labels by: people", line)))).toEqual([message]);
     }
   });
 
