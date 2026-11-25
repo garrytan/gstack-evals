@@ -1,17 +1,17 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // A planted finished pilot for the rm-post tests: a review-units out dir with 5 cells by 11 units (5 P, 5 B, 1 decoy),
 // session records, Codex rollouts, contract v1 findings and cost.tsv rows, plus the post key, a planted history CSV, a
-// temporary ledger with one item per paid batch and a stub upstream that answers Carbon, Opus and Astra from markers
-// planted in the findings. Nothing here names a real unit or calls a provider. One planted failure per kind:
+// temporary ledger with one item per paid batch, a stub upstream that answers Carbon and the second read from markers
+// planted in the findings, and personFile, which fills a labelling page's downloaded file the way a careful person would
+// from the same markers. Nothing here names a real unit or calls a provider. One planted failure per kind:
 // - OA on P2 never launches its Claude adversarial subagent (an unexposed review);
-// - FS on B1 carries a finding Carbon rules as naming the bug while both labellers say it does not (a judge error);
+// - FS on B1 carries a finding Carbon rules as naming the bug while both people say it does not (a judge error);
 // - FA on P3 ran twice in cells.ndjson, the first ending on an upstream error (a rerun, from the retry reserve);
 // - OS on B2 curls a page that quotes the unit's fix commit (a contaminated search).
 // Also planted: N on P4 runs a WebSearch with no recorded result (a doubtful case the blind second read rules clean),
-// Carbon's first reply on OS P1 is empty (retried once), the labellers disagree on OA P1 until adjudication, and Opus's
-// first label read on FA B3 is cut off at its output cap.
+// Carbon's first reply on OS P1 is empty (retried once), and the two people read OA P1 differently until the second part.
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordApproval } from "../../../src/runner/ledger/ledger.ts";
@@ -123,7 +123,7 @@ export function plant(): Planted {
       costRows.push(COST_COLUMNS.map((c) => cost[c] ?? "100").join("\t"));
       const findings: Record<string, unknown>[] = [];
       if (u.pool !== "decoy") {
-        const tag = arm === "OS" && u.unit === units[0]!.unit ? " EMPTY_ONCE" : arm === "OA" && u.unit === units[0]!.unit ? " DISAGREE" : arm === "FA" && u.unit === units[7]!.unit ? " CUTOFF_ONCE" : "";
+        const tag = arm === "OS" && u.unit === units[0]!.unit ? " EMPTY_ONCE" : arm === "OA" && u.unit === units[0]!.unit ? " DISAGREE" : "";
         const caught = arm === "N" ? i % 2 === 0 : !(arm === "FS" && u.unit === units[5]!.unit);
         findings.push({ severity: "P1", path: "src/retry.ts", line: 11, summary: (caught ? "BUGMARK the loop never stops on a 429." : "Style nit in the retry loop.") + tag, pass: 1, id: "p1-1", evidence: "while (true) has no exit (note " + hex(arm + i, 6) + ")." });
         if (cell.voice) findings.push({ severity: "MEDIUM", path: "src/log.ts", line: 3, summary: "[codex] The log line drops the request id." + (arm === "FS" && u.unit === units[5]!.unit ? " JUDGE_ERROR" : ""), pass: 1, id: "p1-2", evidence: "log(msg) only." });
@@ -162,7 +162,7 @@ export interface Upstream {
   calls: Array<{ provider: string; body: any }>;
 }
 
-/** The stub providers: rulings and labels follow the markers planted in each finding. */
+/** The stub providers: Carbon's rulings follow the markers planted in each finding, and the second read rules clean. */
 export function upstream(): Upstream {
   const calls: Upstream["calls"] = [];
   const seen = new Set<string>();
@@ -173,20 +173,45 @@ export function upstream(): Upstream {
     calls.push({ provider, body });
     const prompt: string = provider === "openai" ? body.input[0].content : body.messages[0].content;
     const numbered = [...prompt.matchAll(/^(\d+)\. \[[^\]]+\][^\n]*\n((?:   [^\n]*\n?)*)/gm)].map((m) => ({ n: Number(m[1]), text: m[2]! }));
-    let text: string;
-    let stop: string | null = null;
+    let text = "";
     if (prompt.includes('"verdict"')) text = block({ verdict: "clean", reason: "the search returned nothing" });
     else if (provider === "openrouter") text = prompt.includes("EMPTY_ONCE") && once("empty " + prompt) ? "" : block({ rulings: numbered.map((x) => ({ finding: x.n, ruling: x.text.includes("BUGMARK") || x.text.includes("JUDGE_ERROR") ? "names" : "doesnt", reason: "planted" })) });
-    else {
-      const adjudication = prompt.includes("Two readers labelled this review and disagreed.");
-      const hit = numbered.filter((x) => x.text.includes("BUGMARK")).map((x) => x.n);
-      const says = adjudication ? true : prompt.includes("DISAGREE") && provider === "openai" ? false : hit.length > 0;
-      text = block({ names_bug: says, findings: says ? (hit.length ? hit : [1]) : [], reason: "planted" });
-      if (provider === "anthropic" && prompt.includes("CUTOFF_ONCE") && once("cut " + prompt)) (text = FENCE + 'json\n{"names_bug": tr'), (stop = "max_tokens");
-    }
-    if (provider === "anthropic") return Response.json({ id: "m", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text }], stop_reason: stop ?? "end_turn", usage: { input_tokens: 900, output_tokens: 60, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+    if (provider === "anthropic") return Response.json({ id: "m", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text }], stop_reason: "end_turn", usage: { input_tokens: 900, output_tokens: 60, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
     if (provider === "openrouter") return Response.json({ id: "g", model: body.model, provider: "Google", choices: [{ message: { role: "assistant", content: text }, finish_reason: "stop" }], usage: { prompt_tokens: 900, completion_tokens: 60 } });
     return Response.json({ id: "r", object: "response", model: body.model, status: "completed", output: [{ type: "message", content: [{ type: "output_text", text }] }], usage: { input_tokens: 900, input_tokens_details: { cached_tokens: 0 }, output_tokens: 60, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 960 } });
   }) as typeof fetch;
   return { fetch: f, calls };
+}
+
+export interface PersonOptions {
+  /** Answer none on every screen whose findings carry this token. */
+  none_on?: string;
+  /** Answer can't tell on every screen whose findings carry this token. */
+  cant_on?: string;
+  minutes?: number;
+  /** Answer every screen the same, as a careless file does. */
+  same?: string;
+}
+
+/** The labels file a page downloads, filled from the planted markers: a finding names the bug when it carries BUGMARK. */
+export function personFile(pkg: string, labeller: string, version: "A" | "B", o: PersonOptions = {}): string {
+  const items = JSON.parse(readFileSync(join(pkg, "items.json"), "utf8"));
+  const labels: Record<string, { choice: string; note: string; at: string }> = {};
+  for (const sid of items.orders[version] as string[]) {
+    const sc = items.screens[sid];
+    const text: string = sc.blocks.find((b: { style?: string }) => b.style === "findings").text;
+    const numbered = [...text.matchAll(/^(\d+)\. \[[^\]]+\][^\n]*\n((?:   [^\n]*\n?)*)/gm)].map((m) => ({ n: Number(m[1]), text: m[2]! }));
+    const hit = numbered.filter((x) => x.text.includes("BUGMARK")).map((x) => x.n);
+    for (const q of sc.questions as Array<{ id: string; findings?: number; finding?: number }>) {
+      let choice: string;
+      if (o.same) choice = o.same;
+      else if (q.id in items.attention) choice = items.attention[q.id];
+      else if (o.none_on && text.includes(o.none_on)) choice = q.findings ? "none" : "doesnt";
+      else if (o.cant_on && text.includes(o.cant_on)) choice = "cant";
+      else if (q.findings) choice = hit.length ? hit.join(",") : "none";
+      else choice = hit.includes(q.finding!) ? "names" : "doesnt";
+      labels[q.id] = { choice, note: "planted reason for " + q.id, at: "2026-11-25T03:00:00Z" };
+    }
+  }
+  return JSON.stringify({ format: items.format, package: items.package, version, labeller, startedAt: "2026-11-25T01:00:00Z", activeSeconds: (o.minutes ?? 240) * 60, screens: {}, labels }, null, 1);
 }

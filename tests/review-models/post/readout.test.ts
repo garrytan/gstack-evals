@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=the pilot readout reads every Pilots-table column per arm from a finished pilot (exposure, the read audit,
-// judge errors against the labels, supply, cost, wall time, pilot spend, reruns against the reserve), then the staged rule
+// judge errors against two people's labels from the desk package, supply, cost, wall time, pilot spend, reruns against the reserve), then the staged rule
 // and the frozen proceed set, and names no unit by anything but its opaque label; fails_when=an unexposed review, a judge
 // error, a rerun or a contaminated search goes uncounted, a step runs out of order, or the Markdown quotes a unit id, PR,
 // fix commit or advisory; why_new=GEVA-590 Pilots table, change 1 items 1 to 3, change 2 sections 2 and 4; seam=rm-post's
-// keyless reads and its three paid batches on a stub upstream behind the real metering proxy and a temporary ledger;
+// keyless reads, its two paid batches and the desk package with planted person files, on a stub upstream behind the real metering proxy and a temporary ledger;
 // no_claim=that real sessions look like these planted ones, which only the pilot shows
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
@@ -14,18 +14,20 @@ import { readContamination, writeContamination } from "../../../src/trial/review
 import { contaminationInputs, main } from "../../../lanes/review-models/post/cli.ts";
 import { loadPilot } from "../../../lanes/review-models/post/pilot.ts";
 import { assertSafe, pilotReadout, renderReadout } from "../../../lanes/review-models/post/readout.ts";
-import { judgeSend, labelSend, secondReadSend, type FinalRow } from "../../../lanes/review-models/post/send.ts";
-import { DRY_ENV, ITEMS, plant, upstream } from "./fixture.ts";
+import { deskPackage, importAdjudication, importFirst, pilotBatch } from "../../../lanes/review-models/post/desk.ts";
+import { judgeSend, secondReadSend } from "../../../lanes/review-models/post/send.ts";
+import type { FinalRow } from "../../../lanes/review-models/score/labels.ts";
+import { DRY_ENV, ITEMS, personFile, plant, upstream } from "./fixture.ts";
 
 describe("rm-post end to end on a planted pilot (keyless)", () => {
-  test("contamination, second read, judge, labels and the readout, with one planted failure per kind", async () => {
+  test("contamination, second read, judge, person labels and the readout, with one planted failure per kind", async () => {
     const s = plant();
     const up = upstream();
     const opts = (item: string, run_id: string) => ({ item, run_id, record: s.record, ledger: s.ledger, env: DRY_ENV, fetch: up.fetch, warn: () => {} });
     const key = JSON.parse(readFileSync(s.keyPath, "utf8"));
     let pilot = loadPilot(s.run, key, s.post);
     expect(pilot.reviews.length).toBe(55);
-    await expect(labelSend(pilot, s.post, opts(ITEMS.labels, "labels-early"))).rejects.toThrow(/E_RM_POST_INPUT no contamination report/);
+    expect(() => pilotBatch(pilot)).toThrow(/E_RM_POST_INPUT no contamination report/);
 
     const report = readContamination(contaminationInputs(pilot), pilot.markers, []);
     const { cases } = writeContamination(join(s.post, "contamination"), report, pilot.markers);
@@ -46,15 +48,26 @@ describe("rm-post end to end on a planted pilot (keyless)", () => {
     expect([again.judged, again.sent]).toEqual([0, 0]);
 
     pilot = loadPilot(s.run, key, s.post);
-    const labels = await labelSend(pilot, s.post, opts(ITEMS.labels, "labels-1"));
-    expect(labels).toMatchObject({ items: 49, disagreements: 1, labelled: 49, unresolved: 0, missing: 0 });
-    expect(labels.sent).toBe(49 * 2 + 2 + 1);
-    const before = up.calls.length;
-    const rerun = await labelSend(loadPilot(s.run, key, s.post), s.post, opts(ITEMS.labels, "labels-1"));
-    expect([rerun.sent, up.calls.length - before]).toEqual([0, 0]);
-    for (const item of Object.values(ITEMS)) expect(readItem(s.record, item).open).toBeNull();
-    const items = JSON.parse(readFileSync(join(s.post, "labels", "items.json"), "utf8"));
-    expect(items.items.every((it: { id: string; prompt: string }) => /^L[0-9a-z]{6,}$/.test(it.id) && !it.prompt.includes("acme/"))).toBe(true);
+    expect(await main(["label-send", "--run", s.run, "--key", s.keyPath, "--post", s.post, "--run-id", "x", "--item", ITEMS.labels])).toBe(2);
+    const waiting = pilotReadout(pilot, null, s.history, s.historySha);
+    expect(waiting.labels_waiting).toBe(true);
+    expect(waiting.arms.every((a) => a.judge.waiting && a.judge.misses.length === 0)).toBe(true);
+    expect(waiting.arms.find((a) => a.arm === "FS")!.pass).toBe(true);
+    expect(waiting.proceed.set).toBe("all");
+    const waitingMd = renderReadout(waiting, pilot);
+    expect(waitingMd.match(/- Judge check: waiting on person labels\./g)).toHaveLength(5);
+    expect(waitingMd).toContain("Carbon judge check: waiting on person labels.");
+
+    const desk = join(s.dir, "desk");
+    const pkg = deskPackage({ reviews: pilotBatch(pilot), batch: "pilot", desk, post: s.post });
+    expect([pkg.labelled, pkg.screens, pkg.key.shape]).toEqual([49, 55, "review"]);
+    expect(pkg.dir).toBe(join(desk, "geva590-review-labels-pilot"));
+    const first = importFirst({ post: s.post, batch: "pilot", reviews: pilotBatch(pilot), files: [{ name: "F1", text: personFile(pkg.dir, "F1", "A") }, { name: "F2", text: personFile(pkg.dir, "F2", "B", { none_on: "DISAGREE" }) }] });
+    expect(first).toMatchObject({ reviews: 49, disagreements: 1, final: false });
+    expect(existsSync(join(s.post, "labels", "final.json"))).toBe(false);
+    const adj = first.adjudication!;
+    const settled = importAdjudication({ post: s.post, batch: "pilot", files: [{ name: "F1", text: personFile(adj, "F1", "A") }, { name: "F2", text: personFile(adj, "F2", "B") }] });
+    expect(settled).toMatchObject({ reviews: 49, disagreements: 1, unresolved: 0, final: true });
 
     pilot = loadPilot(s.run, key, s.post);
     const final: FinalRow[] = JSON.parse(readFileSync(join(s.post, "labels", "final.json"), "utf8"));

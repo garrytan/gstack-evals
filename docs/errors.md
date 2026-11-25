@@ -560,6 +560,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_RM_RESERVE](#e_rm_reserve) | 2 | U20 |
 | [E_RM_POST_INPUT](#e_rm_post_input) | 2 | U20 |
 | [E_RM_POST_SEND](#e_rm_post_send) | 2 | U20 |
+| [E_RM_POST_DESK](#e_rm_post_desk) | 2 | U20 |
+| [E_RM_POST_LABELS](#e_rm_post_labels) | 2 | U20 |
+| [E_RM_POST_RETIRED](#e_rm_post_retired) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4471,11 +4474,35 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_RM_POST_SEND
 
-A review-models labeller or second-read call answered with an HTTP status other than 200 after the metering proxy's own retries, so the batch stopped (lanes/review-models/post/send.ts).
+A review-models second-read call answered with an HTTP status other than 200 after the metering proxy's own retries, so the batch stopped (lanes/review-models/post/send.ts).
 
 Fix: Rerun the same command: every reply so far is kept and every answered request is cached by digest, so it resumes at the call that stopped and pays for nothing twice.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_RM_POST_DESK
+
+A review-models labelling package for the desk failed its privacy and blinding check (lanes/review-models/post/desk.ts): a page, the guide, the first message, the bounty or items.json names a grader, a model or vendor, an arm, gstack, Carbon, earlier answers or the other labeller, or holds a key-shaped string; or python3 could not run the check.
+
+Fix: Read privacy-check.md in the package folder, remove the named words from the package's own text or the item that carries them, and rebuild. Send nothing from a package whose check failed.
+
+Exit 2. Side effects: The package folder is written with a privacy-check.md that says FAILED; nothing is sent and nothing is spent. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_POST_LABELS
+
+A returned person labels file did not import (lanes/review-models/post/desk.ts): it is not a labels file from this package's page, a screen has no valid answer or no reason, it answers a question its page does not hold, both files name the same labeller, or the second part's files are not from the first part's two people.
+
+Fix: Ask the desk for the right file (the one Download my labels saves) or a redo with the printed problems, then import both files again. Nothing was written.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_POST_RETIRED
+
+rm-post label-send is retired: people make the review-models judge-check labels (pre-run changes 5 and 6), so no model labeller call runs.
+
+Fix: Build the labelling package with gstack-evals rm-post desk-package and import the two people's files with rm-post labels-import (lanes/review-models/post/README.md).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

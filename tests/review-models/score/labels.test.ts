@@ -1,70 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import type { Arm } from "../../../lanes/review-models/score/frozen.ts";
-import type { Bug, ReviewFinding } from "../../../lanes/review-models/score/judge.ts";
-import { adjudicated, adjudicationItems, ASTRA_FRAMING, checkRow, kappaCheck, labelItems, labellerRequest, parseLabel, pilotJudgeCheck, readLabel, type CheckRow, type Label } from "../../../lanes/review-models/score/labels.ts";
+import type { ReviewFinding } from "../../../lanes/review-models/score/judge.ts";
+import { ASTRA_FRAMING, checkRow, kappaCheck, labellerRequest, pilotJudgeCheck, type CheckRow } from "../../../lanes/review-models/score/labels.ts";
 import type { Review } from "../../../lanes/review-models/score/score.ts";
 import { seededRandom } from "../../../src/runner/stats/paired.ts";
 
-const bug = (unit: string): Bug => ({ unit, pool: "P", evidence: "Evidence for " + unit, fix_diff: "--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b\n" });
 const finding: ReviewFinding = { id: "f1", source: "voice", severity: "P0", path: "x.ts", line: 1, text: "[codex] GPT-6.2 Astra says a is wrong" };
 const review = (unit: string, arm: Arm, ruling: "names" | "doesnt" | "cant_tell", o: Partial<Review> = {}): Review => ({ unit, arm, pool: "P", cluster: unit, outcome: "ok", contaminated: false, findings: [finding], judged: { rulings: { f1: ruling }, reasons: {}, attempts: 1, failures: [], failed: false }, usd: 5, wall_seconds: 10, ...o });
-const yes: Label = { names_bug: true, findings: [1], reason: "same line" };
-const no: Label = { names_bug: false, findings: [], reason: "other thing" };
 
-describe("label items", () => {
-  test("bug-unit reviews only, under opaque ids in a seeded order, normalised and blind to arm", () => {
-    const reviews = [review("u1", "OS", "names"), review("u1", "FA", "doesnt"), review("u2", "OA", "names"), review("d1", "N", "doesnt", { pool: "decoy" }), review("u3", "OS", "names", { outcome: "gap", findings: [] })];
-    const bugs = new Map(["u1", "u2", "u3"].map((u) => [u, bug(u)]));
-    const a = labelItems(reviews, bugs, 42);
-    expect(a.items).toHaveLength(3);
-    expect(a.key.map((k) => k.unit + k.arm).sort()).toEqual(["u1FA", "u1OS", "u2OA"]);
-    expect(labelItems(reviews, bugs, 42)).toEqual(a);
-    for (const it of a.items) {
-      expect(it.id).toMatch(/^L[0-9a-z]{6,}$/);
-      expect(it.prompt).not.toMatch(/codex|astra|gpt|voice/i);
-      expect(it.prompt).not.toMatch(/\b(?:OS|OA|FS|FA|N)\b/);
-      expect(it.prompt).toContain("1. [blocking] x.ts:1\n   [model] [model] says a is wrong");
-      expect(it.prompt).toContain('"names_bug"');
-    }
-    expect(() => labelItems(reviews, new Map(), 1)).toThrow(/^E_RM_LABELS no bug for unit/);
-  });
-  test("the labellers' requests: Opus on Messages, Astra on Responses at high effort with the read-only framing", () => {
+describe("the second read's requests", () => {
+  test("Opus on Messages, Astra on Responses at high effort with the read-only framing", () => {
     const opus = labellerRequest("opus", "P") as Record<string, any>;
     expect(opus).toEqual({ model: "claude-opus-5-5", messages: [{ role: "user", content: "P" }], max_tokens: 32000 });
     const astra = labellerRequest("astra", "P") as Record<string, any>;
     expect(astra).toEqual({ model: "gpt-6.2-astra", input: [{ role: "user", content: ASTRA_FRAMING + "\n\nP" }], store: false, max_output_tokens: 32000, reasoning: { effort: "high" } });
-  });
-});
-
-describe("label replies", () => {
-  test("names_bug and the findings agree, numbers in range", () => {
-    expect(parseLabel('```json\n{"names_bug": true, "findings": [2], "reason": "r"}\n```', 2)).toEqual({ kind: "ok", value: { names_bug: true, findings: [2], reason: "r" } });
-    expect(parseLabel('{"names_bug": false, "findings": []}', 2)).toEqual({ kind: "ok", value: { names_bug: false, findings: [], reason: "" } });
-    expect(parseLabel('{"names_bug": true, "findings": []}', 2).kind).toBe("malformed");
-    expect(parseLabel('{"names_bug": true, "findings": [3]}', 2).kind).toBe("malformed");
-    expect(parseLabel('{"names_bug": "yes"}', 2).kind).toBe("malformed");
-    expect(parseLabel("", 2).kind).toBe("empty");
-    expect(readLabel("opus", { content: [{ type: "text", text: '{"names_bug": false, "findings": []}' }] }, 1).kind).toBe("ok");
-    expect(readLabel("astra", { output: [{ type: "message", content: [{ type: "output_text", text: '{"names_bug": true, "findings": [1]}' }] }] }, 1).kind).toBe("ok");
-  });
-});
-
-describe("adjudication", () => {
-  test("only disagreements, with both answers as reader A and reader B", () => {
-    const items = [{ id: "a", prompt: "PA" }, { id: "b", prompt: "PB" }];
-    const adj = adjudicationItems(items, new Map([["a", yes], ["b", no]]), new Map([["a", yes], ["b", yes]]), 9);
-    expect(adj.map((i) => i.id)).toEqual(["b"]);
-    expect(adj[0]!.prompt.startsWith("PB\n\nTwo readers labelled this review and disagreed.\nReader A: ")).toBe(true);
-    expect(adj[0]!.prompt).toContain("names the bug (finding 1). Reason: same line");
-    expect(adj[0]!.prompt).toContain("no finding names the bug. Reason: other thing");
-    expect(adj[0]!.prompt).not.toMatch(/opus|astra/i);
-    expect(() => adjudicationItems(items, new Map([["a", yes]]), new Map([["a", yes], ["b", yes]]), 9)).toThrow(/^E_RM_LABELS item b lacks a first read from opus/);
-  });
-  test("the final label", () => {
-    expect(adjudicated([yes, yes])).toBe(true);
-    expect(adjudicated([yes, no], [no, no])).toBe(false);
-    expect(adjudicated([yes, no], [yes, no])).toBe("unresolved");
-    expect(() => adjudicated([yes, no])).toThrow(/^E_RM_LABELS/);
   });
 });
 

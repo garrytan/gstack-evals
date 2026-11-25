@@ -4,8 +4,9 @@
 // and the post dir's judge, label and contamination results it reads, keylessly:
 // - per arm, against the Pilots table: part ran (a gstack cell is exposed, rm-exposure.ts, with every answering model the
 //   cell's own, in at least 9 of 10 bug-unit reviews; N's read audit finds no gstack file and no drive path in any of its
-//   11 sessions), the judge check (every bug-unit review the check takes is labelled, and Carbon makes at most 2 errors,
-//   an unresolved label counting as one), supply (10 bug units built, run and parsed), cost per review and wall time,
+//   11 sessions), the judge check (every bug-unit review the check takes has a person label, and Carbon makes at most 2
+//   errors, an unresolved label counting as one; until the person labels are in, it reads as waiting and fails no arm,
+//   as pre-run change 5 section 2 says), supply (10 bug units built, run and parsed), cost per review and wall time,
 //   pilot spend against the arm's pilot cap, reruns and contamination;
 // - the retry reserve against the rerun rate the pilot measured, projected over the counted reviews of each proceed set
 //   (change 2, section 2);
@@ -17,11 +18,10 @@
 // advisory or CVE id from the key, so the file is safe for the Captain's drive.
 import { unitMatcher } from "../../../src/trial/review/contamination.ts";
 import { ARMS, JUDGE_CHECK, RmError, rmFail, VALUE_PER_CATCH, type Arm } from "../score/frozen.ts";
-import { checkRow, kappaCheck, pilotJudgeCheck, type CheckRow, type KappaCheck } from "../score/labels.ts";
+import { checkRow, kappaCheck, pilotJudgeCheck, type CheckRow, type FinalRow, type KappaCheck } from "../score/labels.ts";
 import { costGap, pilotCatches, proceedSet, readHistory, SET_ARMS, stagedRule, type ProceedSet, type Staged, type Tally } from "../score/staged.ts";
 import type { MeanSe } from "../score/stats.ts";
 import type { Pilot, PilotReview } from "./pilot.ts";
-import type { FinalRow } from "./send.ts";
 
 /** Pilots table: each arm's pilot cap, a tenth of its counted budget. */
 export const PILOT_CAP: Record<Arm, number> = { OS: 120, OA: 224, FS: 310, FA: 414, N: 11 };
@@ -51,7 +51,8 @@ export interface Check {
 export interface ArmReadout {
   arm: Arm;
   part_ran: Check;
-  judge: Check & { labelled: number; taken: number; errors: number; unresolved: number; left_out: string[] };
+  /** waiting: no person labels yet, so the column fails no arm. */
+  judge: Check & { waiting: boolean; labelled: number; taken: number; errors: number; unresolved: number; left_out: string[] };
   supply: Check;
   usd_per_review: number | null;
   costed: number;
@@ -81,6 +82,11 @@ export interface Readout {
   staged: { gap: (MeanSe & { lower: number | null; pairs: number; unpaired: string[] }) | null; history: Tally & { sha256: string }; pilot_p: Tally; pilot_b: Tally; p_share: number; b_share: number; rule: Staged | null };
   proceed: { set: ProceedSet; arms: Arm[]; reason: string };
   kappa: KappaCheck;
+  /** Change 6's second reading: the kappa with every person no that rests on a can't tell read as naming. */
+  kappa_cant_as_yes: number | null;
+  cant_tell_labels: number;
+  /** No person labels yet (final.json absent). */
+  labels_waiting: boolean;
   check_rows: CheckRow[];
   contamination: Pilot["contamination"];
   counted: { p: number; b: number; decoys: number };
@@ -106,7 +112,7 @@ export function partRanMiss(r: PilotReview): string | null {
   return null;
 }
 
-function armReadout(arm: Arm, pilot: Pilot, rows: readonly CheckRow[], final: readonly FinalRow[]): ArmReadout {
+function armReadout(arm: Arm, pilot: Pilot, rows: readonly CheckRow[], waiting: boolean): ArmReadout {
   const all = pilot.reviews.filter((r) => r.arm === arm);
   const bug = all.filter((r) => r.pool !== "decoy");
   const partSet = arm === "N" ? all : bug;
@@ -123,9 +129,10 @@ function armReadout(arm: Arm, pilot: Pilot, rows: readonly CheckRow[], final: re
   const armRows = rows.filter((r) => r.arm === arm);
   const pj = pilotJudgeCheck(rows, arm, taken.length);
   const unresolved = armRows.filter((r) => r.label === "unresolved").length;
-  const missing = final.filter((f) => f.arm === arm && f.label === null).map((f) => taken.find((r) => r.unit === f.unit)!.label + " (" + f.missing + ")");
   const errorLabels = armRows.flatMap((row) => (row.label !== "unresolved" && row.carbon !== row.label) || row.label === "unresolved" ? [taken.find((r) => r.unit === row.unit)!.label + " (" + (row.label === "unresolved" ? "labellers unresolved" : row.carbon ? "Carbon names, labels say no" : "Carbon misses, labels say names") + ")"] : []);
-  const judge = { pass: pj.pass, measured: pj.labels + " of " + taken.length + " labelled, " + pj.errors + " Carbon error" + (pj.errors === 1 ? "" : "s") + ", " + unresolved + " unresolved", misses: [...missing, ...errorLabels], labelled: pj.labels, taken: taken.length, errors: pj.errors, unresolved, left_out };
+  const judge = waiting
+    ? { pass: false, waiting, measured: "waiting on person labels", misses: [], labelled: 0, taken: taken.length, errors: 0, unresolved: 0, left_out }
+    : { pass: pj.pass, waiting, measured: pj.labels + " of " + taken.length + " labelled, " + pj.errors + " Carbon error" + (pj.errors === 1 ? "" : "s") + ", " + unresolved + " unresolved", misses: errorLabels, labelled: pj.labels, taken: taken.length, errors: pj.errors, unresolved, left_out };
   const built = bug.filter((r) => pilot.built.has(r.unit));
   const ran = bug.filter((r) => r.termination !== "not run");
   const parsed = bug.filter((r) => r.parse === "findings");
@@ -149,7 +156,7 @@ function armReadout(arm: Arm, pilot: Pilot, rows: readonly CheckRow[], final: re
     reruns: all.reduce((s, r) => s + r.reruns, 0),
     rerun_usd: all.some((r) => r.rerun_usd === null) ? null : all.reduce((s, r) => s + (r.rerun_usd ?? 0), 0),
     contaminated: all.filter((r) => r.contaminated).length,
-    pass: part_ran.pass && judge.pass && supply.pass,
+    pass: part_ran.pass && (judge.waiting || judge.pass) && supply.pass,
   };
 }
 
@@ -172,13 +179,16 @@ export function reserveReadout(pilot: Pilot, counted: { p: number; b: number; de
   return { pilot_reviews: reviews, reruns, rate, rerun_usd, sets };
 }
 
-/** Every read the readout makes. final is the label step's final.json; historyPath is Harness Evals' per-pass stage 1 CSV. */
-export function pilotReadout(pilot: Pilot, final: readonly FinalRow[], historyPath: string, historySha256?: string): Readout {
+/** Every read the readout makes. final is the person labels' final.json, or null while they are not in; historyPath is
+ *  Harness Evals' per-pass stage 1 CSV. */
+export function pilotReadout(pilot: Pilot, final: readonly FinalRow[] | null, historyPath: string, historySha256?: string): Readout {
   const missingJudge = pilot.reviews.filter((r) => r.pool !== "decoy" && r.outcome === "ok" && r.findings.length && !r.judged);
   if (missingJudge.length) rmFail("E_RM_POST_INPUT", missingJudge.length + " pilot bug-unit reviews with findings have no Carbon result; run rm-post judge-send first");
   const byKey = new Map(pilot.reviews.map((r) => [r.arm + " " + r.unit, r]));
-  const rows = final.filter((f) => f.label !== null).map((f) => checkRow(byKey.get(f.arm + " " + f.unit) ?? rmFail("E_RM_POST_INPUT", "a label names a review the pilot does not hold"), f.label!));
-  const arms = ARMS.map((a) => armReadout(a, pilot, rows, final));
+  const review = (f: FinalRow) => byKey.get(f.arm + " " + f.unit) ?? rmFail("E_RM_POST_INPUT", "a label names a review the pilot does not hold");
+  const rows = (final ?? []).map((f) => checkRow(review(f), f.label));
+  const cantAsYes = (final ?? []).map((f) => checkRow(review(f), f.cant_tell ? true : f.label));
+  const arms = ARMS.map((a) => armReadout(a, pilot, rows, final === null));
   const counted = pilot.key.counted;
   const total = counted.p + counted.b;
   if (!total) rmFail("E_RM_POST_INPUT", "the key's counted set holds no bug units");
@@ -195,7 +205,7 @@ export function pilotReadout(pilot: Pilot, final: readonly FinalRow[], historyPa
   const passed = Object.fromEntries(arms.map((a) => [a.arm, a.pass])) as Record<Arm, boolean>;
   const proceed = proceedSet(passed, rule?.drop_fable ?? false);
   const countedArms = proceed.arms.length ? proceed.arms : [...ARMS];
-  return { arms, reserve: reserveReadout(pilot, counted), staged: { gap, history, pilot_p, pilot_b, p_share, b_share, rule }, proceed, kappa: kappaCheck(rows, countedArms), check_rows: rows, contamination: pilot.contamination, counted };
+  return { arms, reserve: reserveReadout(pilot, counted), staged: { gap, history, pilot_p, pilot_b, p_share, b_share, rule }, proceed, kappa: kappaCheck(rows, countedArms), kappa_cant_as_yes: kappaCheck(cantAsYes, countedArms).kappa, cant_tell_labels: (final ?? []).filter((f) => f.cant_tell).length, labels_waiting: final === null, check_rows: rows, contamination: pilot.contamination, counted };
 }
 
 const usd = (x: number | null) => (x === null ? "unknown" : "$" + x.toFixed(2));
@@ -214,7 +224,7 @@ export function renderReadout(r: Readout, pilot: Pilot): string {
     L.push("## " + a.arm + ": " + (a.pass ? "passes its pilot" : "fails its pilot"), "");
     L.push("| Check | Plan | Pilot | Result |", "|---|---|---|---|");
     L.push("| Part ran | " + (a.arm === "N" ? "the read audit finds no gstack file and no drive path in its sessions" : "exposure in at least " + PART_RAN_MIN + " of 10 bug-unit reviews, " + MODEL_OF[a.arm] + " for the session and every specialist, Codex events on " + VOICE_OF[a.arm]) + " | " + a.part_ran.measured + " | " + yes(a.part_ran.pass) + " |");
-    L.push("| Judge check | every bug-unit review labelled; at most " + JUDGE_CHECK.pilot_errors_max + " Carbon errors | " + a.judge.measured + (a.judge.left_out.length ? "; left out of the check: " + a.judge.left_out.join(", ") : "") + " | " + yes(a.judge.pass) + " |");
+    L.push("| Judge check | every bug-unit review labelled by two people; at most " + JUDGE_CHECK.pilot_errors_max + " Carbon errors | " + a.judge.measured + (a.judge.left_out.length ? "; left out of the check: " + a.judge.left_out.join(", ") : "") + " | " + (a.judge.waiting ? "waiting" : yes(a.judge.pass)) + " |");
     L.push("| Supply | " + PILOT_BUG_UNITS + " units built, run and parsed | " + a.supply.measured + " | " + yes(a.supply.pass) + " |");
     L.push("| Cost per review | central " + usd(CENTRAL[a.arm]) + ", cap " + usd(PER_REVIEW_CAP[a.arm]) + " | " + usd(a.usd_per_review) + " over " + a.costed + " reviews" + (a.unknown_cost ? ", " + a.unknown_cost + " with no settled cost" : "") + " | descriptive |");
     L.push("| Wall time per review | | median " + (a.median_wall_s === null ? "unknown" : a.median_wall_s.toFixed(0) + " s") + ", mean " + (a.mean_wall_s === null ? "unknown" : a.mean_wall_s.toFixed(0) + " s") + " | descriptive |");
@@ -222,9 +232,10 @@ export function renderReadout(r: Readout, pilot: Pilot): string {
     L.push("| Reruns | drawn on the retry reserve | " + a.reruns + (a.reruns ? ", " + usd(a.rerun_usd) : "") + " | descriptive |");
     L.push("| Contaminated reviews | | " + a.contaminated + " of 11 | descriptive |");
     L.push("");
+    if (a.judge.waiting) L.push("- Judge check: waiting on person labels.");
     const misses = [["Part ran", a.part_ran.misses], ["Judge check", a.judge.misses], ["Supply", a.supply.misses]].filter(([, m]) => (m as string[]).length);
     for (const [name, m] of misses) L.push("- " + name + " misses: " + list(m as string[]));
-    if (misses.length) L.push("");
+    if (misses.length || a.judge.waiting) L.push("");
   }
   const rs = r.reserve;
   L.push("## Retry reserve (pre-run change 2, section 2)", "");
@@ -250,10 +261,14 @@ export function renderReadout(r: Readout, pilot: Pilot): string {
   L.push("");
   L.push("## Judge check inputs", "");
   L.push("The pilot's labels go into the gate with the validation batch's (change 1 item 1, change 2 section 2); the gate needs " + JUDGE_CHECK.labels_min + " bug-unit labels, so this pilot-only line is not the gate.", "");
-  L.push("- " + r.kappa.line);
+  if (r.labels_waiting) L.push("- Carbon judge check: waiting on person labels. Carbon's numbers count only once the person labels pass R78 (pre-run change 5), and the counted run waits for them.");
+  else {
+    L.push("- " + r.kappa.line);
+    if (r.cant_tell_labels) L.push("- " + r.cant_tell_labels + " person label" + (r.cant_tell_labels === 1 ? "" : "s") + " rest on can't tell, read as not naming; read as naming (change 6's second reading), kappa is " + (r.kappa_cant_as_yes === null ? "n/a" : r.kappa_cant_as_yes.toFixed(3)) + ".");
+  }
   const pool = (k: "P" | "B") => k + " " + r.kappa.per_pool[k].labels + " labels, " + r.kappa.per_pool[k].errors + " error" + (r.kappa.per_pool[k].errors === 1 ? "" : "s") + ", " + r.kappa.per_pool[k].abstentions + " abstaining, " + r.kappa.per_pool[k].empty_replies + " empty replies";
-  L.push("- Per pool: " + pool("P") + "; " + pool("B") + ".");
-  L.push("- Decoy reviews go to the false-alarm read and are not labelled.");
+  if (!r.labels_waiting) L.push("- Per pool: " + pool("P") + "; " + pool("B") + ".");
+  L.push("- Decoy reviews go to the false-alarm read and are not labelled. The labels are two people's, made through the labelling desk; no model makes one.");
   L.push("");
   L.push("## Contamination (section 5)", "");
   if (!r.contamination.read) L.push("No contamination report was found, so every review reads as clean here.");

@@ -1,0 +1,84 @@
+<!doctype html><html lang="en" translate="no" class="notranslate"><head><meta charset="utf-8"><meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>{{TITLE}}</title><style>
+*{box-sizing:border-box} body{margin:0;font:16px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1d1d1f;background:#f5f5f7}
+header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:8px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{font-size:16px;margin:0 12px 0 0} .tab{border:1px solid #bbb;background:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}
+.tab.on{background:#1d1d1f;color:#fff;border-color:#1d1d1f} .grow{flex:1} button{font:inherit;cursor:pointer}
+.btn{border:1px solid #888;background:#fff;border-radius:6px;padding:6px 12px} .btn.primary{background:#0a66c2;color:#fff;border-color:#0a66c2}
+.btn:disabled{opacity:.4;cursor:default} main{max-width:1500px;margin:0 auto;padding:16px} .guide{max-width:820px;background:#fff;padding:24px 32px;border-radius:10px}
+code{background:#eee;padding:0 4px;border-radius:3px}
+.screen{display:grid;grid-template-columns:minmax(0,3fr) minmax(320px,2fr);gap:16px;align-items:start}
+.blocks,.qs{background:#fff;border-radius:10px;padding:16px 20px} .qs{position:sticky;top:64px;max-height:calc(100vh - 80px);overflow:auto}
+.block{margin:0 0 14px} .block .lab{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#6e6e73;margin-bottom:2px}
+.block .txt{white-space:pre-wrap;word-wrap:break-word;background:#fbfbfd;border:1px solid #ddd;border-radius:6px;padding:8px 12px}
+.block.code .txt{font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;max-height:70vh;overflow:auto;white-space:pre}
+.block.findings .txt{background:#f2f4f8;border-color:#d3d9e3}
+.block.readings .txt{background:#fff8e1;border-color:#f0d98c}
+.q{border-top:1px solid #eee;padding:10px 0} .q:first-child{border-top:0;padding-top:0} .q .prompt{font-weight:600;margin-bottom:6px;white-space:pre-wrap}
+.opts{display:flex;flex-wrap:wrap;gap:6px} .opt{border:1px solid #999;border-radius:6px;padding:6px 12px;background:#fff}
+.opt.on{background:#0a66c2;border-color:#0a66c2;color:#fff} .note{width:100%;margin-top:6px;font:inherit;font-size:14px;padding:6px;border:1px solid #bbb;border-radius:6px}
+.nav{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap} .muted{color:#6e6e73;font-size:14px}
+.start{max-width:520px;margin:40px auto;background:#fff;padding:24px;border-radius:10px} .start input{font:inherit;padding:8px;width:100%;margin:8px 0 12px}
+.done{color:#1a7f37;font-weight:600} .warn{color:#b3261e}
+@media (max-width:900px){.screen{grid-template-columns:1fr}.qs{position:static}}
+</style></head><body>
+<header id="hdr" style="display:none"><h1>{{TITLE}}</h1><button class="tab" id="t-guide" onclick="show('guide')">Instructions</button><button class="tab" id="t-label" onclick="show('label')">Label</button>
+<span class="grow"></span><span class="muted" id="who"></span><span class="warn muted" id="savewarn"></span><button class="btn primary" onclick="download()">Download my labels</button>
+<label class="btn">Load a saved file<input type="file" accept=".json,.txt,application/json,text/plain" style="display:none" onchange="loadFile(event)"></label></header>
+<main><div id="v-start" class="start"><h2>{{TITLE}}</h2><p>Please keep this page in English. Don't use your browser's translate button: it changes the text you are checking.</p>
+<p>Type the labeller code we sent you in the chat, then press Start. If you already started in this browser, your answers come back on their own.</p>
+<input id="code" placeholder="Labeller code" autocomplete="off"><button class="btn primary" onclick="start()">Start</button>
+<p class="muted">Carrying on from another computer? <label class="btn">Load a saved file<input type="file" accept=".json,.txt,application/json,text/plain" style="display:none" onchange="loadFile(event)"></label></p></div>
+<div id="v-guide" class="guide" style="display:none">{{GUIDE}}<p><button class="btn primary" onclick="show('label')">Start labelling &rsaquo;</button></p></div>
+<div id="v-label" style="display:none"></div></main>
+<script type="application/json" id="data">{{DATA}}</script><script>
+const P = JSON.parse(document.getElementById('data').textContent);
+const KEY = 'labels:' + P.package + ':' + P.version;
+let S = load() || null, cur = 0, lastInput = Date.now(), tick = null;
+function load(){ try { return JSON.parse(localStorage.getItem(KEY)); } catch(e){ return null; } }
+function save(){ S.savedAt = new Date().toISOString(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){ document.getElementById('savewarn').textContent = 'Your browser would not save; please press Download my labels often.'; } }
+function el(t, a, kids){ const e = document.createElement(t); if (a) for (const k in a){ if (k === 'text') e.textContent = a[k]; else if (k === 'cls') e.className = a[k]; else if (k.startsWith('on')) e[k] = a[k]; else if (k === 'id') e.id = a[k]; else e.setAttribute(k, a[k]); } (kids||[]).forEach(c => e.appendChild(c)); return e; }
+function done(q){ const L = S.labels[q.id]; return !!(L && L.choice && (!P.note_required || (L.note || '').trim())); }
+function answered(sid){ return P.screens[sid].questions.every(done); }
+function count(){ return P.order.filter(answered).length; }
+function show(tab){ for (const t of ['guide','label']) { document.getElementById('v-'+t).style.display = t === tab ? '' : 'none'; document.getElementById('t-'+t).classList.toggle('on', t === tab); } if (tab === 'label') render(); }
+function start(){ const c = document.getElementById('code').value.trim().toUpperCase(); if (!/^[A-Z0-9-]{2,12}$/.test(c)) { alert('Please type the labeller code we sent you in the chat.'); return; }
+  S = { format: P.format, package: P.package, version: P.version, labeller: c, startedAt: new Date().toISOString(), activeSeconds: 0, screens: {}, labels: {} }; save(); boot(); }
+function boot(){ document.getElementById('v-start').style.display = 'none'; document.getElementById('hdr').style.display = ''; document.getElementById('who').textContent = 'Labeller ' + S.labeller;
+  const first = P.order.findIndex(s => !answered(s)); cur = first < 0 ? 0 : first; show(Object.keys(S.labels).length ? 'label' : 'guide');
+  if (!tick) tick = setInterval(() => { if (document.visibilityState === 'visible' && Date.now() - lastInput < 120000 && document.getElementById('v-label').style.display !== 'none') { const sid = P.order[cur]; S.activeSeconds++; S.screens[sid] = S.screens[sid] || { seconds: 0 }; S.screens[sid].seconds++; if (S.activeSeconds % 15 === 0) save(); } }, 1000); }
+function picked(qid){ const c = (S.labels[qid] || {}).choice || ''; return /^[0-9,]+$/.test(c) ? c.split(',').map(Number) : []; }
+function setChoice(qid, v){ S.labels[qid] = S.labels[qid] || {}; S.labels[qid].choice = v; S.labels[qid].at = new Date().toISOString(); lastInput = Date.now(); save(); render(true); }
+function toggle(qid, n){ const p = picked(qid); const i = p.indexOf(n); if (i < 0) p.push(n); else p.splice(i, 1); p.sort((a, b) => a - b); setChoice(qid, p.join(',')); }
+function status(){ const e = document.getElementById('status'); if (e) e.textContent = 'Screen ' + (cur + 1) + ' of ' + P.order.length + ' · ' + count() + ' done'; const d = document.getElementById('alldone'); if (d) d.style.display = count() === P.order.length ? '' : 'none'; }
+function render(keep){ const sid = P.order[cur], sc = P.screens[sid], box = document.getElementById('v-label'); const top = keep ? window.scrollY : 0; const qsTop = keep && document.querySelector('.qs') ? document.querySelector('.qs').scrollTop : 0; box.innerHTML = '';
+  const blocks = el('div', { cls: 'blocks' }); sc.blocks.forEach(b => blocks.appendChild(el('div', { cls: 'block ' + (b.style || '') }, [el('div', { cls: 'lab', text: b.label }), el('div', { cls: 'txt', text: b.text })])));
+  const qs = el('div', { cls: 'qs' }); qs.appendChild(el('div', { cls: 'muted', id: 'status' }));
+  sc.questions.forEach(q => { const L = S.labels[q.id] || {}; const d = el('div', { cls: 'q' });
+    const o = el('div', { cls: 'opts' });
+    if (q.findings) { d.appendChild(el('div', { cls: 'prompt', text: P.prompt }));
+      const p = picked(q.id); for (let n = 1; n <= q.findings; n++) o.appendChild(el('button', { cls: 'opt' + (p.includes(n) ? ' on' : ''), text: 'Finding ' + n, onclick: () => toggle(q.id, n) }));
+      P.choices.forEach(c => o.appendChild(el('button', { cls: 'opt' + (L.choice === c[0] ? ' on' : ''), text: c[1], onclick: () => setChoice(q.id, c[0]) }))); }
+    else { d.appendChild(el('div', { cls: 'prompt', text: 'Finding ' + q.finding + ': ' + P.prompt }));
+      P.choices.forEach(c => o.appendChild(el('button', { cls: 'opt' + (L.choice === c[0] ? ' on' : ''), text: c[1], onclick: () => setChoice(q.id, c[0]) }))); }
+    d.appendChild(o);
+    const n = el('textarea', { cls: 'note', rows: '2', placeholder: P.note_prompt }); n.value = L.note || ''; n.oninput = () => { S.labels[q.id] = S.labels[q.id] || {}; S.labels[q.id].note = n.value; lastInput = Date.now(); save(); status(); }; d.appendChild(n);
+    qs.appendChild(d); });
+  const nav = el('div', { cls: 'nav' });
+  nav.appendChild(el('button', { cls: 'btn', text: '‹ Back', onclick: () => go(cur - 1) })); if (cur === 0) nav.lastChild.disabled = true;
+  nav.appendChild(el('button', { cls: 'btn primary', text: 'Next ›', onclick: () => go(cur + 1) })); if (cur === P.order.length - 1) nav.lastChild.disabled = true;
+  nav.appendChild(el('button', { cls: 'btn', text: 'Next unanswered', onclick: () => { const i = P.order.findIndex((s, k) => k > cur && !answered(s)); const j = i < 0 ? P.order.findIndex(s => !answered(s)) : i; if (j >= 0) go(j); else alert('Every screen is answered. Press Download my labels and send us the file.'); } }));
+  qs.appendChild(nav);
+  qs.appendChild(el('p', { cls: 'done', id: 'alldone', text: 'All ' + P.order.length + ' screens are answered. Press "Download my labels", rename the file to end in .txt, and upload it.' }));
+  box.appendChild(el('div', { cls: 'screen' }, [blocks, qs])); status(); window.scrollTo(0, top); qs.scrollTop = qsTop; }
+function go(i){ if (i < 0 || i >= P.order.length) return; cur = i; lastInput = Date.now(); render(); }
+function download(){ save(); const name = 'labels-' + S.labeller + '-' + P.version + '.json'; const b = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+function loadFile(ev){ const f = ev.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { const d = JSON.parse(r.result); if (d.format !== P.format || d.package !== P.package || d.version !== P.version) throw new Error('not a file from this page'); S = d; save(); boot(); alert('Loaded. You can carry on where you left off.'); } catch(e) { alert('That file could not be loaded: ' + e.message); } }; r.readAsText(f); }
+document.addEventListener('keydown', e => { lastInput = Date.now(); if (!S || document.getElementById('v-label').style.display === 'none' || /TEXTAREA|INPUT/.test(e.target.tagName)) return;
+  const sc = P.screens[P.order[cur]], q = sc.questions[0];
+  if (sc.questions.length === 1 && q.findings && /^[1-9]$/.test(e.key) && +e.key <= q.findings) toggle(q.id, +e.key);
+  else if (e.key === 'ArrowRight' || e.key === 'Enter') go(cur + 1); else if (e.key === 'ArrowLeft') go(cur - 1); });
+['mousemove','scroll','click','touchstart'].forEach(t => document.addEventListener(t, () => { lastInput = Date.now(); }, { passive: true }));
+if (S) boot();
+</script></body></html>

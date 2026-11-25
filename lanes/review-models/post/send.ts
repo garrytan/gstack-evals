@@ -1,16 +1,13 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The pilot's paid post-run calls (wiki/plans/2026-11-24-geva-590-review-models-prereg, section 4's judge, the Judge
-// check and section 5's second read, with pre-run changes 1 and 2). Each command is one batch: it opens one lease on the
+// check's labels and section 5's second read, with pre-run changes 1 and 2). Each command is one batch: it opens one lease on the
 // ledger item the Captain recorded for it, through the cso lane's metered transport (lanes/outcome-skills/cso/judge/
 // meter.ts, as src/trial/review/supply/visibility.ts uses it), sends what is not yet settled and settles the lease.
 // - judgeSend: one Carbon call per bug-unit review that parsed with findings, built and read by score/judge.ts, whose
 //   judgeReview sends an empty, cut-off, refused or unreadable reply once more as attempt 2 and then rules every finding
 //   can't tell. A reply that is not HTTP 200 stops the batch (E_RM_JUDGE) with nothing ruled.
-// - labelSend: the judge check's labels (score/labels.ts). Every pilot bug-unit review the check takes (parsed, not
-//   contaminated; decoys go to the false-alarm read instead) becomes an item under an opaque id, read by Claude Opus 5.5
-//   and GPT-6.2 Astra fix-aware and blind to arm. Disagreements go to the adjudication round, which both labellers read
-//   with each other's answers as reader A and reader B. An empty, cut-off, refused or unreadable reply is sent once more;
-//   a second such reply leaves that read missing, so the item stays unlabelled and the readout counts it.
+// - The judge check's labels: people make them (pre-run changes 5 and 6), through desk.ts. No batch here asks a model
+//   for a label.
 // - secondReadSend: contamination.ts's blind second-read cases, each to the reader the case names (GPT-6.2 Astra for
 //   Claude Code's searches, Opus 5.5 for the voice's), answering contaminated or clean, with the same one retry.
 // Every reply goes to a jsonl file before the next send, and the meter keeps every answered request by digest, so a
@@ -25,12 +22,8 @@ import { openJudgeMeter, type MeterOptions } from "../../outcome-skills/cso/judg
 import type { Transport } from "../../outcome-skills/cso/judge/client.ts";
 import { LABELLERS, rmFail, type Arm } from "../score/frozen.ts";
 import { CARBON_ROUTE, judgeReview, replyJson, type Parsed } from "../score/judge.ts";
-import { adjudicated, adjudicationItems, labelItems, labellerRequest, parseLabel, type FinalLabel, type Label, type LabelItem, type LabelKey, type Labeller } from "../score/labels.ts";
+import { labellerRequest, type Labeller } from "../score/labels.ts";
 import type { Pilot } from "./pilot.ts";
-
-/** Seeds for the label items' order and opaque ids, and for the reader A and B order in adjudication. */
-export const LABEL_SEED = 20261125;
-export const ADJUDICATION_SEED = 20261126;
 
 export type SendOptions = Omit<MeterOptions, "out" | "item"> & { item: string };
 export interface BatchResult {
@@ -139,77 +132,6 @@ function valueOf<T>(j: Job, r: Reply | undefined): T | null {
   if (!r || r.status !== 200) return null;
   const p = j.read(judgeAnswer(LABELLERS[j.who].provider, r.body));
   return p.kind === "ok" ? (p.value as T) : null;
-}
-
-const WHO: readonly Labeller[] = ["opus", "astra"];
-
-export interface FinalRow extends LabelKey {
-  label: FinalLabel | null;
-  /** Why an item has no label. */
-  missing?: string;
-}
-
-export interface Items {
-  items: LabelItem[];
-  key: LabelKey[];
-  /** Each item's number of findings, which its replies must stay within. */
-  findings: Record<string, number>;
-}
-
-/** The items for the pilot's labels, written once to items.json and read back on a rerun, so ids and order never move. */
-export function pilotItems(pilot: Pilot, dir: string): Items {
-  const file = join(dir, "items.json");
-  if (existsSync(file)) return JSON.parse(readFileSync(file, "utf8"));
-  if (!pilot.contamination.read) rmFail("E_RM_POST_INPUT", "no contamination report in the post dir; run rm-post contamination first, since the check leaves contaminated reviews out");
-  if (pilot.contamination.pending_cases) rmFail("E_RM_POST_INPUT", pilot.contamination.pending_cases + " doubtful search cases still wait on the second read; run rm-post second-read-send first");
-  const { items, key } = labelItems(pilot.reviews, pilot.bugs, LABEL_SEED);
-  const findings = Object.fromEntries(key.map((k) => [k.id, pilot.reviews.find((r) => r.unit === k.unit && r.arm === k.arm)!.findings.length]));
-  const made: Items = { items, key, findings };
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(file, JSON.stringify(made, null, 2) + "\n");
-  return made;
-}
-
-/** Final labels from every reply in the post dir: agreement, the adjudicated label, unresolved, or missing with its reason. */
-export function finalLabels({ items, key, findings }: Items, replies: readonly Reply[]): FinalRow[] {
-  const last = latest(replies);
-  const job = (phase: string, it: LabelItem, who: Labeller): Job => ({ phase, id: it.id, who, body: {}, read: (t) => parseLabel(t, findings[it.id]!) });
-  const read = (phase: string, it: LabelItem, who: Labeller) => valueOf<Label>(job(phase, it, who), last.get(phase + " " + it.id + " " + who));
-  return items.map((it) => {
-    const k = key.find((x) => x.id === it.id)!;
-    const first = WHO.map((w) => read("first", it, w));
-    if (first.some((l) => !l)) return { ...k, label: null, missing: "no readable first read from " + WHO.filter((_, i) => !first[i]).join(" and ") };
-    if (first[0]!.names_bug === first[1]!.names_bug) return { ...k, label: first[0]!.names_bug };
-    const second = WHO.map((w) => read("adjudication", it, w));
-    if (second.some((l) => !l)) return { ...k, label: null, missing: "no readable adjudication read from " + WHO.filter((_, i) => !second[i]).join(" and ") };
-    return { ...k, label: adjudicated([first[0]!, first[1]!], [second[0]!, second[1]!]) };
-  });
-}
-
-/** The judge check's labels for the pilot: first reads, then the adjudication round, then final.json. */
-export async function labelSend(pilot: Pilot, post: string, o: SendOptions): Promise<BatchResult & { items: number; disagreements: number; labelled: number; unresolved: number; missing: number }> {
-  const dir = join(post, "labels");
-  const made = pilotItems(pilot, dir);
-  const { items } = made;
-  const file = join(dir, "replies.jsonl");
-  const n = (it: LabelItem) => made.findings[it.id]!;
-  return batch(dir, o, async (transport) => {
-    const firstJobs = items.flatMap((it) => WHO.map((who): Job => ({ phase: "first", id: it.id, who, body: labellerRequest(who, it.prompt), read: (t) => parseLabel(t, n(it)) })));
-    await sendJobs(firstJobs, file, transport);
-    const last = latest(jsonl<Reply>(file));
-    const firsts = (who: Labeller) => new Map(firstJobs.filter((j) => j.who === who).flatMap((j) => {
-      const v = valueOf<Label>(j, last.get(replyKey(j)));
-      return v ? [[j.id, v] as const] : [];
-    }));
-    const opus = firsts("opus"), astra = firsts("astra");
-    const both = items.filter((it) => opus.has(it.id) && astra.has(it.id));
-    const adj = adjudicationItems(both, opus, astra, ADJUDICATION_SEED);
-    const byId = new Map(items.map((it) => [it.id, it]));
-    await sendJobs(adj.flatMap((it) => WHO.map((who): Job => ({ phase: "adjudication", id: it.id, who, body: labellerRequest(who, it.prompt), read: (t) => parseLabel(t, n(byId.get(it.id)!)) }))), file, transport);
-    const final = finalLabels(made, jsonl<Reply>(file));
-    writeFileSync(join(dir, "final.json"), JSON.stringify(final, null, 2) + "\n");
-    return { items: items.length, disagreements: adj.length, labelled: final.filter((f) => f.label !== null && f.label !== "unresolved").length, unresolved: final.filter((f) => f.label === "unresolved").length, missing: final.filter((f) => f.label === null).length };
-  });
 }
 
 /** The prompt for one blind second-read case: the case's question, the markers and the logged attempt, as data. */

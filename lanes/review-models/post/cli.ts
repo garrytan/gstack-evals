@@ -1,8 +1,10 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals rm-post: the review-models pilot's steps after its review sessions finish, up to the readout the Captain
 // gets before any counted unit (GEVA-590; README.md beside this file lists the order). key, contamination and readout are
-// keyless. judge-send, second-read-send and label-send are paid: each opens one lease on the ledger item the Captain
-// recorded for it and needs the provider keys by name, a rig admission record and the item's cap.
+// keyless. judge-send and second-read-send are paid: each opens one lease on the ledger item the Captain recorded for it
+// and needs the provider keys by name, a rig admission record and the item's cap. desk-package and labels-import are
+// keyless: people make the judge check's labels through the labelling desk (pre-run changes 5 and 6), and label-send,
+// the retired model labeller, refuses.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -15,7 +17,9 @@ import { rmFail } from "../score/frozen.ts";
 import { buildKey, type KeySources } from "./key.ts";
 import { loadPilot, readKey, type Pilot } from "./pilot.ts";
 import { pilotReadout, renderReadout } from "./readout.ts";
-import { judgeSend, labelSend, secondReadSend, type FinalRow, type SendOptions } from "./send.ts";
+import type { FinalRow } from "../score/labels.ts";
+import { deskPackage, finalPath, importAdjudication, importFirst, pilotBatch, SHAPES, type Shape } from "./desk.ts";
+import { judgeSend, secondReadSend, type SendOptions } from "./send.ts";
 
 const HELP = [
   "gstack-evals rm-post <subcommand> [options]: the review-models pilot after its review sessions (GEVA-590).",
@@ -24,14 +28,19 @@ const HELP = [
   "  contamination --run <pilot out dir> --key <key.json> --post <dir> [--journal <proxy journal>]...",
   "  second-read-send --post <dir> --run-id <id> --item <ledger item>                     (paid: Astra and Opus)",
   "  judge-send --run <dir> --key <key.json> --post <dir> --run-id <id> --item <ledger item>  (paid: Gemini 4 Carbon)",
-  "  label-send --run <dir> --key <key.json> --post <dir> --run-id <id> --item <ledger item>  (paid: Opus 5.5 and Astra)",
+  "  desk-package --run <dir> --key <key.json> --post <dir> --desk <labelling root> [--shape review|finding]",
+  "      writes <desk>/geva590-review-labels-pilot/ for the labelling desk; the screen key stays in <post>/labels/people/",
+  "  labels-import --run <dir> --key <key.json> --post <dir> --file <labels file> --file <labels file> [--round first|adjudication]",
+  "      reads both people's downloaded labels files; disagreements get the second part's package, and final.json lands",
+  "      in <post>/labels/ once every review has a label",
+  "  label-send                                                    (retired: people make the labels; it refuses)",
   "  readout --run <dir> --key <key.json> --post <dir> --history <stage1 per-pass csv> --md <file>",
   "",
   "The key, the post dir and the history CSV name fixes and labels: keep them outside the repository. The readout's",
   "Markdown names units by opaque label only.",
 ].join("\n");
 
-const VALUED = ["--draw", "--p", "--b", "--frame", "--sources", "--out", "--run", "--key", "--post", "--journal", "--run-id", "--item", "--history", "--md"];
+const VALUED = ["--draw", "--p", "--b", "--frame", "--sources", "--out", "--run", "--key", "--post", "--journal", "--run-id", "--item", "--history", "--md", "--desk", "--shape", "--file", "--round"];
 
 function flags(argv: readonly string[]): Map<string, string[]> {
   const m = new Map<string, string[]>();
@@ -119,17 +128,31 @@ async function secondReadCmd(f: Map<string, string[]>): Promise<number> {
   return 0;
 }
 
-async function labelCmd(f: Map<string, string[]>): Promise<number> {
-  const r = await labelSend(pilotOf(f), need(f, "--post"), sendOptions(f));
-  console.log("labels: " + r.items + " items, " + r.disagreements + " to adjudication, " + r.labelled + " labelled, " + r.unresolved + " unresolved, " + r.missing + " missing a read; " + settled(r));
-  return r.missing ? 1 : 0;
+function deskCmd(f: Map<string, string[]>): number {
+  const shape = f.get("--shape")?.at(-1);
+  if (shape !== undefined && !SHAPES.includes(shape as Shape)) rmFail("E_RM_POST_INPUT", "--shape is review or finding, not " + JSON.stringify(shape));
+  const post = need(f, "--post");
+  const r = deskPackage({ reviews: pilotBatch(pilotOf(f)), batch: "pilot", desk: need(f, "--desk"), post, shape: shape as Shape | undefined });
+  console.log("desk package: " + r.dir + " (" + r.key.shape + " question), " + r.labelled + " reviews on " + r.screens + " screens with repeats and attention screens, " + r.key.auto_no.length + " with no findings labelled no; privacy check passed");
+  console.log("  hand the folder to the labelling desk; the screen key stays in " + join(post, "labels", "people", "pilot") + " and never goes with it");
+  return 0;
+}
+
+function importCmd(f: Map<string, string[]>): number {
+  const round = f.get("--round")?.at(-1) ?? "first";
+  if (round !== "first" && round !== "adjudication") rmFail("E_RM_POST_INPUT", "--round is first or adjudication, not " + JSON.stringify(round));
+  const files = (f.get("--file") ?? []).map((p) => ({ name: p, text: readFileSync(p, "utf8") }));
+  const post = need(f, "--post");
+  const r = round === "first" ? importFirst({ post, batch: "pilot", files, reviews: pilotBatch(pilotOf(f)) }) : importAdjudication({ post, batch: "pilot", files });
+  console.log("labels-import (" + round + "): " + r.reviews + " reviews, " + r.agreed + " read alike, " + r.disagreements + " read differently" + (r.final ? ", " + r.unresolved + " still unresolved; wrote " + finalPath(post) : "; second part for the same two people written to " + r.adjudication));
+  return 0;
 }
 
 function readoutCmd(f: Map<string, string[]>): number {
   const pilot = pilotOf(f);
   const post = need(f, "--post");
-  const finalFile = join(post, "labels", "final.json");
-  const final: FinalRow[] = existsSync(finalFile) ? JSON.parse(readFileSync(finalFile, "utf8")) : [];
+  const finalFile = finalPath(post);
+  const final: FinalRow[] | null = existsSync(finalFile) ? JSON.parse(readFileSync(finalFile, "utf8")) : null;
   const r = pilotReadout(pilot, final, need(f, "--history"));
   const md = renderReadout(r, pilot);
   write(need(f, "--md"), md);
@@ -150,7 +173,9 @@ export async function main(argv: string[]): Promise<number> {
     if (sub === "contamination") return contaminationCmd(f);
     if (sub === "judge-send") return await judgeCmd(f);
     if (sub === "second-read-send") return await secondReadCmd(f);
-    if (sub === "label-send") return await labelCmd(f);
+    if (sub === "desk-package") return deskCmd(f);
+    if (sub === "labels-import") return importCmd(f);
+    if (sub === "label-send") return rmFail("E_RM_POST_RETIRED", "label-send is retired: two people make the judge-check labels through the labelling desk (pre-run changes 5 and 6); run rm-post desk-package, then rm-post labels-import");
     if (sub === "readout") return readoutCmd(f);
     return rmFail("E_RM_POST_INPUT", "unknown subcommand " + JSON.stringify(sub) + "; gstack-evals rm-post --help lists them");
   } catch (e) {
