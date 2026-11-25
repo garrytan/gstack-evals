@@ -430,7 +430,8 @@ const dollars = (s: string | undefined) => {
 };
 const labOf = (model: string) => {
   const parts = model.toLowerCase().split("/").filter(Boolean);
-  return (parts[0] === "openrouter" && parts.length > 2 ? parts[1] : parts[0]) ?? "";
+  const lab = (parts[0] === "openrouter" && parts.length > 2 ? parts[1] : parts[0]) ?? "";
+  return lab === "xai" ? "x-ai" : lab;
 };
 const blank = (s: string | undefined) => !s || /^(?:-|none|n\/a)$/i.test(s.trim());
 const HOW = " (wiki/README.md, Eval plans and results, gives the format)";
@@ -475,15 +476,22 @@ function checkPrereg(lines: string[], date: string, p: (message: string) => void
     if (!/^per arm\b/i.test(labelled(judge, "Errors read")[0] ?? "")) p('practice 5: "Errors read: per arm" is missing; the judge\'s errors are read per arm, not pooled' + HOW);
     const labelsBy = judge.flatMap((l) => l.match(/^(?:[-*] )?(?:\*\*|__)?Labels by(?:\*\*|__)?:(?:\*\*|__)? *(.*)$/i)?.slice(1) ?? []);
     const by = labelsBy.length === 1 ? labelsBy[0].trim().replace(/^[`*_]+|[`*_]+$/g, "").replace(/\.$/, "").toLowerCase() : "";
-    if ((date >= LABELS_BY_FROM || labelsBy.length) && !/^(?:people|construction|rule|gemini-4-neon|grok-4\.7)$/.test(by))
-      p('practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built), rule (a deterministic rule computes it), or for code labels the third-model labeller gemini-4-neon (grok-4.7 when a judge is a Gemini model), and put any detail on a "Label notes:" line; other labels a model made, settled or agreed on are not a label set' + HOW);
-    const judged = judges.filter((j) => !emptyJudge(j)).flatMap((j) => j.match(/^(\S+\/\S+) scores (.+)$/)?.slice(1) ?? []);
-    const labs = new Set(judged.flatMap((x, i) => (i % 2 ? x.split(",") : [x]).map((m) => labOf(m.trim()))));
-    const judgeLabs = new Set(judged.filter((_, i) => i % 2 === 0).map(labOf));
-    if (by === "gemini-4-neon" && labs.has("google"))
-      p('practice 5: "Labels by: gemini-4-neon" needs a judge and scored models from other labs; a Gemini judge is checked with grok-4.7, and a Gemini model under test goes to the Captain' + HOW);
-    if (by === "grok-4.7" && (!judgeLabs.has("google") || labs.has("x-ai")))
-      p('practice 5: "Labels by: grok-4.7" is only for a Gemini judge, with no xAI judge or scored model; otherwise write gemini-4-neon' + HOW);
+    const labellers: Record<string, string> = { "gemini-4-neon": "google", "grok-4.7": "x-ai", "kimi-k3.1-pro": "moonshotai" };
+    if ((date >= LABELS_BY_FROM || labelsBy.length) && !/^(?:people|construction|rule)$/.test(by) && !Object.hasOwn(labellers, by))
+      p('practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built), rule (a deterministic rule computes it), or for code labels the bare model id of the third-model labeller (gemini-4-neon, or grok-4.7 or kimi-k3.1-pro where wiki/README.md allows), and put any detail on a "Label notes:" line; other labels a model made, settled or agreed on are not a label set' + HOW);
+    if (Object.hasOwn(labellers, by)) {
+      const judged = judges.filter((j) => !emptyJudge(j)).flatMap((j) => j.match(/^(\S+\/\S+) scores (.+)$/)?.slice(1) ?? []);
+      const labs = new Set(judged.flatMap((x, i) => (i % 2 ? x.split(",") : [x]).map((m) => labOf(m.trim()))));
+      const geminiJudges = judged.filter((m, i) => i % 2 === 0 && labOf(m) === "google").map((m) => m.toLowerCase().split("/").pop() ?? "");
+      const kind = labelled(judge, "Label kind");
+      const notes = labelled(judge, "Label notes").join(" ").toLowerCase();
+      if (kind.length !== 1 || !/^code$/i.test(kind[0].replace(/^[`*_]+|[`*_]+$/g, "").replace(/\.$/, "")))
+        p('practice 5: a model labeller needs one "Label kind: code" line; labels for anything other than code come from people' + HOW);
+      if (labs.has(labellers[by]))
+        p('practice 5: "Labels by: ' + by + '" needs a judge and scored models from other labs; a Gemini judge is checked with grok-4.7 or kimi-k3.1-pro, and a Gemini model under test goes to the Captain' + HOW);
+      if (by !== "gemini-4-neon" && !geminiJudges.some((g) => notes.includes(g)) && !/known-answer anchor/.test(notes))
+        p('practice 5: "Labels by: ' + by + '" needs a "Label notes:" line that names the Gemini judge it checks or the failed gemini-4-neon known-answer anchor run' + HOW);
+    }
   }
 
   const pilots = sectionLines(lines, "Pilots");
