@@ -558,6 +558,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_RM_LABELS](#e_rm_labels) | 2 | U20 |
 | [E_RM_RUN](#e_rm_run) | 2 | U20 |
 | [E_RM_RESERVE](#e_rm_reserve) | 2 | U20 |
+| [E_RM_POST_INPUT](#e_rm_post_input) | 2 | U20 |
+| [E_RM_POST_SEND](#e_rm_post_send) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4458,6 +4460,22 @@ A review-models session ended on a provider or infrastructure error, and the ret
 Fix: Take the shortfall to the Captain as a cap ask; never rerun from an arm's own item.
 
 Exit 2. Side effects: The run goes on; the cell's first attempt and its spend are kept in the journal entry's rerun record. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_RM_POST_INPUT
+
+A review-models post-run step refused its input (lanes/review-models/post/): the post key is not rm-post-key.v1 or repeats a unit, a pilot unit has no gate record or advisory, a step ran before the one it needs (contamination before labels, the second read before labels, the judge before the readout), or the readout would name a unit id, PR, fix commit or advisory the key holds.
+
+Fix: Run the rm-post steps in the order README.md lists, from the pilot's own out dir and key; a readout that would name the key's contents is a bug to fix, never a file to write.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_POST_SEND
+
+A review-models labeller or second-read call answered with an HTTP status other than 200 after the metering proxy's own retries, so the batch stopped (lanes/review-models/post/send.ts).
+
+Fix: Rerun the same command: every reply so far is kept and every answered request is cached by digest, so it resumes at the call that stopped and pays for nothing twice.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
