@@ -107,7 +107,8 @@ export interface E1Draw {
   waiting: string | null;
 }
 
-const order = (seed: string, ids: readonly string[]) => [...ids].sort((a, b) => {
+/** The draw's seeded order of unit ids. */
+export const drawOrder = (seed: string, ids: readonly string[]) => [...ids].sort((a, b) => {
   const k = (x: string) => createHash("sha256").update(seed + "/" + x).digest("hex");
   return k(a) < k(b) ? -1 : 1;
 });
@@ -119,7 +120,7 @@ export function e1Draw(seed: string, units: readonly DrawUnit[]): E1Draw {
   const by = new Map(units.map((u) => [u.id, u]));
   const d: E1Draw = { seed, calibration: [], comparison: [], reserve: [], skipped: [], waiting: null };
   const perRepo = new Map<string, number>();
-  const ids = (who: DrawUnit["by"]) => order(seed, units.filter((u) => u.by === who).map((u) => u.id));
+  const ids = (who: DrawUnit["by"]) => drawOrder(seed, units.filter((u) => u.by === who).map((u) => u.id));
   for (const id of [...ids("attempt3"), ...ids("here")]) {
     const u = by.get(id)!;
     if (u.authoring === "dropped") {

@@ -36,9 +36,14 @@ import { e1ReviewLauncher, type E1ReviewSession } from "./launch.ts";
 import { look } from "./look.ts";
 import { cellKey, e1Builds, e1Cells, e1Item, E1_ITEMS, e1Reviews, itemName, reviewRecordPath, buildRecordPath, scoredCells, type CellKey, type E1Build, type E1ReviewRecord, type E1Unit } from "./pipeline.ts";
 import { armState, holm, rng, type Cell } from "./readings.ts";
-import { e1Draw, screenUnit, stateAgreement, SUPPLY_MODELS, type DrawUnit, type E1Draw, type ScreenRecord, type SupplyCall, type SupplyRole } from "./supply.ts";
+import { drawOrder, e1Draw, screenUnit, stateAgreement, SUPPLY_MODELS, type DrawUnit, type E1Draw, type ScreenRecord, type SupplyCall, type SupplyRole } from "./supply.ts";
 import { meterLauncher } from "../stages/commands.ts";
-import { AUTHOR_MAX_TOKENS } from "../stages/local.ts";
+import { AUTHOR_MAX_TOKENS, AUTHOR_MODELS, type AuthorRole } from "../stages/local.ts";
+import { AUTHOR_ROUTES } from "../stages/commands.ts";
+import { authorCalls, hintedVerdict, type AuthorCall } from "../stages/author.ts";
+import { gatedCall } from "../stages/pipeline.ts";
+import { buildKey, runPlantedBuild } from "../stages/build.ts";
+import { armName } from "../../eng-build/build-stage.ts";
 import type { ModelKey } from "../../product-value/meter.ts";
 
 type Args = Parameters<Command["run"]>[0];
@@ -49,6 +54,10 @@ export const E1_PROGRAM = "geva-587-e1";
 export const E1_SKILL = "e1-run";
 /** The all-in pieces that are not ledger items (section 11). */
 export const E1_NOT_ITEMS = { hosts: { capUsd: 200 }, crew: { capUsd: 700 }, reserve: { capUsd: 150 } } as const;
+/** This run's authoring (pool units attempt 3 never finished, and wave 2's): attempt 3's roles, with GPT-6.2 Sol writing
+ * the plan and the hint (prereg section 2, R116). */
+export const WAVE2_AUTHOR_MODELS: Readonly<Record<AuthorRole, string>> = { ...AUTHOR_MODELS, writer: "openai/gpt-6.2-sol", hint: "openai/gpt-6.2-sol" };
+export const WAVE2_AUTHOR_ROUTES: Readonly<Record<AuthorRole, ModelKey | null>> = { ...AUTHOR_ROUTES, writer: "sol-6.2", hint: "sol-6.2" };
 /** The supply screens' meter routes, each at its model's default effort. */
 export const SUPPLY_ROUTES: Readonly<Record<SupplyRole, ModelKey | null>> = { stateAstra: "astra-6.2", stateOpus: "opus", reachCarbon: "carbon", reachOpus: "opus" };
 
@@ -180,7 +189,9 @@ export function e1Units(src: UnitSource, run: string, ids: readonly string[]): M
 
 export interface E1Seams {
   review(o: { out: string; arm: E1Arm; model: E1Model; log: (l: string) => void }): Launcher<E1ReviewSession>;
-  build(o: { out: string; driver: string; src: UnitSource; units: string; repos: string; ids: string[]; cells: string[]; a: Args }): Launcher<PlantedSession>;
+  /** reviewed is false for wave 2's hinted authoring builds (attempt 3's "none" stage), true for eval 1's builds. */
+  build(o: { out: string; driver: string; src: UnitSource; units: string; repos: string; ids: string[]; cells: string[]; a: Args; reviewed?: boolean }): Launcher<PlantedSession>;
+  author(o: { out: string; cacheDir: string }): Launcher<AuthorCall>;
   grader(o: { work: string; log: (l: string) => void }): Promise<PlantedGrader>;
   marker(harness: string): string;
   supply(o: { out: string; cacheDir: string }): Launcher<SupplyCall>;
@@ -191,9 +202,10 @@ export const E1_REAL: E1Seams = {
   build: (o) => {
     const table: MountTable = new Map();
     const mountOf = (cell: string) => table.get(cell) ?? fail("E_USAGE", "cell " + cell + " has no mounts filed; only ebSession starts an e1 build");
-    const plan = stagePlan(o.driver, E1_RUN, "plain", o.cells);
+    const arm = o.reviewed === false ? "none" : "plain";
+    const plan = stagePlan(o.driver, E1_RUN, armName(arm), o.cells);
     const inner = buildLauncher({
-      arm: "plain",
+      arm,
       units: new Map(o.ids.map((id) => [id, { dir: o.src.dir(id) }])),
       repos: o.repos,
       plans: o.out,
@@ -219,6 +231,7 @@ export const E1_REAL: E1Seams = {
   },
   grader: async (o) => plantedGrader({ work: o.work }),
   marker: pMarker,
+  author: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "e1-author", models: WAVE2_AUTHOR_MODELS, routes: WAVE2_AUTHOR_ROUTES, roles: Object.keys(WAVE2_AUTHOR_MODELS) as AuthorRole[], runId: E1_RUN }),
   supply: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "e1-supply", models: SUPPLY_MODELS, routes: SUPPLY_ROUTES, roles: Object.keys(SUPPLY_MODELS) as SupplyRole[], runId: E1_RUN }),
 };
 
@@ -476,6 +489,63 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
     return 0;
   };
 
+  const author: Command["run"] = async (a, io) => {
+    const run = runDir(a);
+    const src = source(a);
+    const step = need(a, "--step");
+    if (step !== "calls" && step !== "hinted") fail("E_USAGE", "--step is calls or hinted");
+    const p = e1Paid(a, run, (item) => item === "e1-supply");
+    const log = logTo(io);
+    const dirOf = (id: string) => join(run, "author", id);
+    const owed = drawOrder(drawSeed(run), drawUnits(run, src).filter((u) => u.by === "here").map((u) => u.id));
+    const limit = a.flags.has("--limit") ? whole(a, "--limit", 1) : undefined;
+    const gate = e1Gate(p, run);
+    if (step === "calls") {
+      const todo = owed.filter((id) => !existsSync(join(dirOf(id), "calls.json"))).slice(0, limit);
+      await paidStage(p, seams.author({ out: join(run, "e1", "author", "meter"), cacheDir: need(a, "--cache") }), async (call) => {
+        for (const id of todo) {
+          const r = await authorCalls(src.material(id), gatedCall(gate, call, id));
+          mkdirSync(dirOf(id), { recursive: true });
+          if (r.plan !== null) writeFileSync(join(dirOf(id), "plan.md"), r.plan + "\n");
+          if (r.hint !== null) writeFileSync(join(dirOf(id), "hint.txt"), r.hint + "\n");
+          writeFileSync(join(dirOf(id), "calls.json"), JSON.stringify({ ...r.record, writer: WAVE2_AUTHOR_MODELS.writer }) + "\n");
+          log("author " + id + ": " + (r.record.drop ? "dropped (" + r.record.drop + ")" : "plan, hint and ratings " + r.record.foresee!.join(", ")) + ", $" + r.record.costUsd.toFixed(2));
+        }
+      });
+      io.out("authoring calls on " + todo.length + " units, " + owed.filter((id) => !existsSync(join(dirOf(id), "calls.json"))).length + " still owed");
+      return 0;
+    }
+    const todo = owed.filter((id) => readJson<{ drop: string | null }>(join(dirOf(id), "calls.json"))?.drop === null && !existsSync(join(dirOf(id), "hinted.json"))).slice(0, limit);
+    const units = new Map(src.units().map((u) => [u.id, u]));
+    const grader = await seams.grader({ work: need(a, "--work"), log });
+    const driver = join(run, "e1", "author", "driver");
+    const opened = driverCells(driver, E1_RUN);
+    const key = (id: string) => buildKey(id, "hinted", null, 1);
+    await paidStage(p, seams.build({ out: join(run, "e1", "author", "rig"), driver, src, units: need(a, "--units"), repos: need(a, "--repos"), ids: todo, cells: todo.map(key), a, reviewed: false }), (session) =>
+      runGated(todo, {
+        gate,
+        parallel: whole(a, "--parallel", 1),
+        kind: () => "build",
+        key,
+        run: async (id) => {
+          const b = await runPlantedBuild({ unit: units.get(id)!, unitDir: src.dir(id), arm: "hinted", reviewer: null, rep: 1, note: src.note(id), hint: readFileSync(join(dirOf(id), "hint.txt"), "utf8").trim(), mount: { plan: join(dirOf(id), "plan.md"), review: null }, session, grader, earlier: opened.get(key(id))?.opens ?? 0, marker: join(dirOf(id), "hinted.grade-error"), log });
+          return {
+            costUsd: b.costUsd,
+            commit: () => {
+              mkdirSync(join(run, "e1", "author", "builds"), { recursive: true });
+              writeFileSync(join(run, "e1", "author", "builds", key(id) + ".json"), JSON.stringify(b) + "\n");
+              const v = hintedVerdict(b.outcome, b.planted);
+              writeFileSync(join(dirOf(id), "hinted.json"), JSON.stringify({ ...v, costUsd: b.costUsd }) + "\n");
+              log("hinted " + id + ": " + (v.drop ? "dropped (" + v.drop + ")" : "winnable"));
+            },
+          };
+        },
+      }),
+    );
+    io.out("hinted builds on " + todo.length + " units");
+    return 0;
+  };
+
   const draw: Command["run"] = (a, io) => {
     const run = runDir(a);
     const d = e1Draw(drawSeed(run), drawUnits(run, source(a)));
@@ -513,6 +583,7 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
     "e1-look": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> [--draws <n>]", summary: "eval 1's one interim look (futility only), written once", run: lookCmd },
     "e1-read": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> [--draws <n>]", summary: "eval 1's readings: arm states, the pooled contrasts, Holm and the Decision rows", run: read },
     "e1-screen": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --cache <dir> --item e1-supply <paid flags> [--limit <n>] [--parallel <n>]", summary: "eval 1's state and reach screens on authored units, in the walk's order, under the supply item", run: screen },
+    "e1-author": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --step calls|hinted --item e1-supply <paid flags> [--cache <dir>] [--work <dir> --host <ip> --envelope-host <id> --sidecar <url>] [--limit <n>] [--parallel <n>]", summary: "this run's authoring at GPT-6.2 Sol, in seeded order, under the supply item: the calls, then the hinted builds", run: author },
     "e1-draw": { bools: [], usage: "--run <dir> --units <dir> --repos <dir>", summary: "eval 1's draw from the screens: calibration, comparison and reserve, each only growing", run: draw },
     "e1-pilot": { bools: [], usage: "--run <dir> --units <dir> --repos <dir>", summary: "eval 1's pilot readout per arm and model", run: pilot },
   };

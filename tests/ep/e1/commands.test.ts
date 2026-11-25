@@ -12,7 +12,7 @@ import { e1Commands, e1StubLauncher, lookPath, type E1Seams, type LookFile } fro
 import { RUNS_ON, type E1Arm } from "../../../lanes/eng-planted/e1/frozen.ts";
 import type { E1ReviewSession } from "../../../lanes/eng-planted/e1/launch.ts";
 import { E1_ITEMS, itemName } from "../../../lanes/eng-planted/e1/pipeline.ts";
-import { codeOf } from "../../../lanes/eng-planted/stages/cases.ts";
+import { codeOf, scriptedCalls } from "../../../lanes/eng-planted/stages/cases.ts";
 import type { PlantedSession } from "../../../lanes/eng-planted/stages/build.ts";
 import type { PlantedUnit } from "../../../lanes/eng-planted/types.ts";
 import type { E1Draw, SupplyRole } from "../../../lanes/eng-planted/e1/supply.ts";
@@ -71,6 +71,7 @@ function fixture() {
       calls.markers.push(h);
       return MARKER;
     },
+    author: () => e1StubLauncher(scriptedCalls({ conditions: [] })),
     supply: () => e1StubLauncher(async (role: SupplyRole, prompt: string) => {
       calls.supply.push(role);
       const odd = /odd-unit/.test(prompt);
@@ -237,5 +238,15 @@ describe("supply", () => {
     expect(dr.out[0]).toContain("the walk waits");
     writeFileSync(join(f.run, "e1", "screen", d.calibration[0] + ".json"), JSON.stringify({ state: { astra: null, opus: null, eligible: false, packet: "" }, reach: null, drop: "state", bothYes: false, costUsd: 0 }));
     expect(await codeOf(() => f.cmds["e1-draw"]!.run(args({ "--run": f.run, "--units": units, "--repos": f.repos }), io().io))).toBe("E_USAGE");
+    expect(await run("e1-author", { "--step": "hinted" })).toBe(0);
+    expect(f.calls.builds).toEqual([]);
+    expect(await run("e1-author", { "--step": "calls" })).toBe(0);
+    const calls = JSON.parse(readFileSync(join(f.run, "author", "s9", "calls.json"), "utf8"));
+    expect([calls.drop, calls.writer]).toEqual([null, "openai/gpt-6.2-sol"]);
+    expect(existsSync(join(f.run, "author", "s8", "plan.md"))).toBe(false);
+    expect(await run("e1-author", { "--step": "hinted" })).toBe(0);
+    expect(f.calls.builds.length === 1 && f.calls.builds[0]!.startsWith("s9")).toBe(true);
+    expect(existsSync(join(f.run, "author", "s9", "hinted.json"))).toBe(true);
+    expect(JSON.parse(readFileSync(join(f.run, "e1", "segments.json"), "utf8")).attempt3).not.toContain("s9");
   });
 });
