@@ -4,25 +4,28 @@
 // and the post dir's judge, label and contamination results it reads, keylessly:
 // - per arm, against the Pilots table: part ran (a gstack cell is exposed, rm-exposure.ts, with every answering model the
 //   cell's own, in at least 9 of 10 bug-unit reviews; N's read audit finds no gstack file and no drive path in any of its
-//   11 sessions), the judge check (every bug-unit review the check takes has a person label, and Carbon makes at most 2
-//   errors, an unresolved label counting as one; until the person labels are in, it reads as waiting and fails no arm,
+//   11 sessions), the judge check (every bug-unit review the check takes has a label, Grok 4.7's or its fallback's under
+//   pre-run change 9, and Carbon makes at most 2 errors; until the labels are in, it reads as waiting and fails no arm,
 //   as pre-run change 5 section 2 says), supply (10 bug units built, run and parsed), cost per review and wall time,
 //   pilot spend against the arm's pilot cap, reruns and contamination;
 // - the retry reserve against the rerun rate the pilot measured, projected over the counted reviews of each proceed set
 //   (change 2, section 2);
 // - the staged rule (score/staged.ts) on the pilot's costs and catches, the drawn counted set's P and B shares and Harness
 //   Evals' per-pass stage 1 CSV, read by path and never committed;
-// - the frozen proceed set the run would take (change 1 item 2), or that it stops.
+// - the frozen proceed set the run would take (change 1 item 2), or that it stops;
+// - the judge check's labels: who labelled each review, per arm the Kimi fallbacks and the can't tells, each review Grok
+//   did not label named with its reason, and, given the validation batch's labels, the R78 gate on both batches (change 9
+//   item 5), every line of it carrying change 9's exact wording.
 // An arm passes its pilot on part ran, the judge check and supply, the plan's three columns. The Markdown names units by
 // their opaque labels only, and renderReadout refuses to return text that names any unit id, cluster, fix commit, PR,
 // advisory or CVE id from the key, so the file is safe for the Captain's drive.
 import { unitMatcher } from "../../../src/trial/review/contamination.ts";
-import { ARMS, JUDGE_CHECK, RmError, rmFail, VALUE_PER_CATCH, type Arm } from "../score/frozen.ts";
+import { ARMS, CHECK_LINE, JUDGE_CHECK, RmError, rmFail, VALUE_PER_CATCH, type Arm } from "../score/frozen.ts";
 import { checkRow, kappaCheck, pilotJudgeCheck, type CheckRow, type FinalRow, type KappaCheck } from "../score/labels.ts";
 import { costGap, pilotCatches, proceedSet, readHistory, SET_ARMS, stagedRule, type ProceedSet, type Staged, type Tally } from "../score/staged.ts";
 import type { MeanSe } from "../score/stats.ts";
-import { kappa } from "../../product-value/stats.ts";
 import type { Pilot, PilotReview } from "./pilot.ts";
+import { labelTally, type LabelTally } from "./send.ts";
 
 /** Pilots table: each arm's pilot cap, a tenth of its counted budget. */
 export const PILOT_CAP: Record<Arm, number> = { OS: 120, OA: 224, FS: 310, FA: 414, N: 11 };
@@ -52,7 +55,7 @@ export interface Check {
 export interface ArmReadout {
   arm: Arm;
   part_ran: Check;
-  /** waiting: no person labels yet, so the column fails no arm. */
+  /** waiting: no labels yet, so the column fails no arm. */
   judge: Check & { waiting: boolean; labelled: number; taken: number; errors: number; unresolved: number; left_out: string[] };
   supply: Check;
   usd_per_review: number | null;
@@ -83,12 +86,16 @@ export interface Readout {
   staged: { gap: (MeanSe & { lower: number | null; pairs: number; unpaired: string[] }) | null; history: Tally & { sha256: string }; pilot_p: Tally; pilot_b: Tally; p_share: number; b_share: number; rule: Staged | null };
   proceed: { set: ProceedSet; arms: Arm[]; reason: string };
   kappa: KappaCheck;
-  /** Change 6's second reading: the kappa with every person no that rests on a can't tell read as naming. */
+  /** Change 6's second reading: the kappa with every no that rests on a can't tell read as naming. */
   kappa_cant_as_yes: number | null;
   cant_tell_labels: number;
-  /** Seat A against seat B on the subset both labelled (R125); null while the labels are not in. */
-  people: PersonAgreement | null;
-  /** No person labels yet (final.json absent). */
+  /** Who labelled the pilot's reviews, per arm; null while the labels are not in. */
+  labels: LabelTally | null;
+  /** Each pilot review Grok's answer does not stand for: opaque label, arm, labeller and why. */
+  fallbacks: string[];
+  /** Change 9 item 5's gate on the pilot's and the validation batch's labels together; null without the validation labels. */
+  gate: (KappaCheck & { cant_as_yes: number | null; fallbacks: string[]; tally: LabelTally }) | null;
+  /** No labels yet (final.json absent). */
   labels_waiting: boolean;
   check_rows: CheckRow[];
   contamination: Pilot["contamination"];
@@ -134,7 +141,7 @@ function armReadout(arm: Arm, pilot: Pilot, rows: readonly CheckRow[], waiting: 
   const unresolved = armRows.filter((r) => r.label === "unresolved").length;
   const errorLabels = armRows.flatMap((row) => (row.label !== "unresolved" && row.carbon !== row.label) || row.label === "unresolved" ? [taken.find((r) => r.unit === row.unit)!.label + " (" + (row.label === "unresolved" ? "labellers unresolved" : row.carbon ? "Carbon names, labels say no" : "Carbon misses, labels say names") + ")"] : []);
   const judge = waiting
-    ? { pass: false, waiting, measured: "waiting on person labels", misses: [], labelled: 0, taken: taken.length, errors: 0, unresolved: 0, left_out }
+    ? { pass: false, waiting, measured: "waiting on labels", misses: [], labelled: 0, taken: taken.length, errors: 0, unresolved: 0, left_out }
     : { pass: pj.pass, waiting, measured: pj.labels + " of " + taken.length + " labelled, " + pj.errors + " Carbon error" + (pj.errors === 1 ? "" : "s") + ", " + unresolved + " unresolved", misses: errorLabels, labelled: pj.labels, taken: taken.length, errors: pj.errors, unresolved, left_out };
   const built = bug.filter((r) => pilot.built.has(r.unit));
   const ran = bug.filter((r) => r.termination !== "not run");
@@ -182,26 +189,20 @@ export function reserveReadout(pilot: Pilot, counted: { p: number; b: number; de
   return { pilot_reviews: reviews, reruns, rate, rerun_usd, sets };
 }
 
-export interface PersonAgreement {
-  reviews: number;
-  agree: number;
-  kappa: number | null;
-}
+/** Each review a final row's labeller is not Grok for, named by its unit's opaque label. */
+const fallbacksOf = (final: readonly FinalRow[], labelOf: (f: FinalRow) => string): string[] =>
+  final.filter((f) => f.fallback).map((f) => labelOf(f) + " " + f.arm + ": " + (f.labeller === "kimi" ? "labelled by Kimi" : "can't tell, labelled by neither model") + " (" + f.fallback + ")");
 
-/** How often seat A and seat B read the subset alike, can't tell counting as not naming, with Cohen's kappa (R125). */
-export function personAgreement(final: readonly FinalRow[] | null): PersonAgreement | null {
-  if (final === null) return null;
-  const pairs = final.flatMap((f) => (f.a_b ? [f.a_b] : []));
-  return { reviews: pairs.length, agree: pairs.filter(([a, b]) => a === b).length, kappa: kappa(pairs) };
-}
-
-/** Every read the readout makes. final is the person labels' final.json, or null while they are not in; historyPath is
- *  Harness Evals' per-pass stage 1 CSV. */
-export function pilotReadout(pilot: Pilot, final: readonly FinalRow[] | null, historyPath: string, historySha256?: string): Readout {
+/** Every read the readout makes. final is the labels' final.json, or null while they are not in; historyPath is Harness
+ *  Evals' per-pass stage 1 CSV; validation is the validation batch with its final-validation.json, for the R78 gate. */
+export function pilotReadout(pilot: Pilot, final: readonly FinalRow[] | null, historyPath: string, historySha256?: string, validation?: { pilot: Pilot; final: readonly FinalRow[] } | null): Readout {
   const missingJudge = pilot.reviews.filter((r) => r.pool !== "decoy" && r.outcome === "ok" && r.findings.length && !r.judged);
   if (missingJudge.length) rmFail("E_RM_POST_INPUT", missingJudge.length + " pilot bug-unit reviews with findings have no Carbon result; run rm-post judge-send first");
-  const byKey = new Map(pilot.reviews.map((r) => [r.arm + " " + r.unit, r]));
-  const review = (f: FinalRow) => byKey.get(f.arm + " " + f.unit) ?? rmFail("E_RM_POST_INPUT", "a label names a review the pilot does not hold");
+  const reviewIn = (p: Pilot) => {
+    const byKey = new Map(p.reviews.map((r) => [r.arm + " " + r.unit, r]));
+    return (f: FinalRow) => byKey.get(f.arm + " " + f.unit) ?? rmFail("E_RM_POST_INPUT", "a label names a review its batch does not hold");
+  };
+  const review = reviewIn(pilot);
   const rows = (final ?? []).map((f) => checkRow(review(f), f.label));
   const cantAsYes = (final ?? []).map((f) => checkRow(review(f), f.cant_tell ? true : f.label));
   const arms = ARMS.map((a) => armReadout(a, pilot, rows, final === null));
@@ -221,7 +222,17 @@ export function pilotReadout(pilot: Pilot, final: readonly FinalRow[] | null, hi
   const passed = Object.fromEntries(arms.map((a) => [a.arm, a.pass])) as Record<Arm, boolean>;
   const proceed = proceedSet(passed, rule?.drop_fable ?? false);
   const countedArms = proceed.arms.length ? proceed.arms : [...ARMS];
-  return { arms, reserve: reserveReadout(pilot, counted), staged: { gap, history, pilot_p, pilot_b, p_share, b_share, rule }, proceed, kappa: kappaCheck(rows, countedArms), kappa_cant_as_yes: kappaCheck(cantAsYes, countedArms).kappa, cant_tell_labels: (final ?? []).filter((f) => f.cant_tell).length, people: personAgreement(final), labels_waiting: final === null, check_rows: rows, contamination: pilot.contamination, counted };
+  let gate: Readout["gate"] = null;
+  if (final && validation) {
+    const vreview = reviewIn(validation.pilot);
+    const missingV = validation.pilot.reviews.filter((r) => r.pool !== "decoy" && r.outcome === "ok" && r.findings.length && !r.judged);
+    if (missingV.length) rmFail("E_RM_POST_INPUT", missingV.length + " validation bug-unit reviews with findings have no Carbon result; run rm-post judge-send --batch validation first");
+    const both = [...final, ...validation.final];
+    const gateRows = [...rows, ...validation.final.map((f) => checkRow(vreview(f), f.label))];
+    const gateYes = [...cantAsYes, ...validation.final.map((f) => checkRow(vreview(f), f.cant_tell ? true : f.label))];
+    gate = { ...kappaCheck(gateRows, countedArms), cant_as_yes: kappaCheck(gateYes, countedArms).kappa, fallbacks: [...fallbacksOf(final, (f) => review(f).label), ...fallbacksOf(validation.final, (f) => vreview(f).label)], tally: labelTally(both) };
+  }
+  return { arms, reserve: reserveReadout(pilot, counted), staged: { gap, history, pilot_p, pilot_b, p_share, b_share, rule }, proceed, kappa: kappaCheck(rows, countedArms), kappa_cant_as_yes: kappaCheck(cantAsYes, countedArms).kappa, cant_tell_labels: (final ?? []).filter((f) => f.cant_tell).length, labels: final ? labelTally(final) : null, fallbacks: final ? fallbacksOf(final, (f) => review(f).label) : [], gate, labels_waiting: final === null, check_rows: rows, contamination: pilot.contamination, counted };
 }
 
 const usd = (x: number | null) => (x === null ? "unknown" : "$" + x.toFixed(2));
@@ -240,7 +251,7 @@ export function renderReadout(r: Readout, pilot: Pilot): string {
     L.push("## " + a.arm + ": " + (a.pass ? "passes its pilot" : "fails its pilot"), "");
     L.push("| Check | Plan | Pilot | Result |", "|---|---|---|---|");
     L.push("| Part ran | " + (a.arm === "N" ? "the read audit finds no gstack file and no drive path in its sessions" : "exposure in at least " + PART_RAN_MIN + " of 10 bug-unit reviews, " + MODEL_OF[a.arm] + " for the session and every specialist, Codex events on " + VOICE_OF[a.arm]) + " | " + a.part_ran.measured + " | " + yes(a.part_ran.pass) + " |");
-    L.push("| Judge check | every bug-unit review labelled by people; at most " + JUDGE_CHECK.pilot_errors_max + " Carbon errors | " + a.judge.measured + (a.judge.left_out.length ? "; left out of the check: " + a.judge.left_out.join(", ") : "") + " | " + (a.judge.waiting ? "waiting" : yes(a.judge.pass)) + " |");
+    L.push("| Judge check | every bug-unit review labelled (Grok 4.7, change 9); at most " + JUDGE_CHECK.pilot_errors_max + " Carbon errors | " + a.judge.measured + (a.judge.left_out.length ? "; left out of the check: " + a.judge.left_out.join(", ") : "") + " | " + (a.judge.waiting ? "waiting" : yes(a.judge.pass)) + " |");
     L.push("| Supply | " + PILOT_BUG_UNITS + " units built, run and parsed | " + a.supply.measured + " | " + yes(a.supply.pass) + " |");
     L.push("| Cost per review | central " + usd(CENTRAL[a.arm]) + ", cap " + usd(PER_REVIEW_CAP[a.arm]) + " | " + usd(a.usd_per_review) + " over " + a.costed + " reviews" + (a.unknown_cost ? ", " + a.unknown_cost + " with no settled cost" : "") + " | descriptive |");
     L.push("| Wall time per review | | median " + (a.median_wall_s === null ? "unknown" : a.median_wall_s.toFixed(0) + " s") + ", mean " + (a.mean_wall_s === null ? "unknown" : a.mean_wall_s.toFixed(0) + " s") + " | descriptive |");
@@ -248,7 +259,7 @@ export function renderReadout(r: Readout, pilot: Pilot): string {
     L.push("| Reruns | drawn on the retry reserve | " + a.reruns + (a.reruns ? ", " + usd(a.rerun_usd) : "") + " | descriptive |");
     L.push("| Contaminated reviews | | " + a.contaminated + " of 11 | descriptive |");
     L.push("");
-    if (a.judge.waiting) L.push("- Judge check: waiting on person labels.");
+    if (a.judge.waiting) L.push("- Judge check: waiting on labels.");
     const misses = [["Part ran", a.part_ran.misses], ["Judge check", a.judge.misses], ["Supply", a.supply.misses]].filter(([, m]) => (m as string[]).length);
     for (const [name, m] of misses) L.push("- " + name + " misses: " + list(m as string[]));
     if (misses.length || a.judge.waiting) L.push("");
@@ -276,16 +287,28 @@ export function renderReadout(r: Readout, pilot: Pilot): string {
   L.push("**" + r.proceed.set + "**: " + r.proceed.reason + "." + (r.proceed.set === "stop" ? " The run stops before any counted spend, and the failure is reported under R111." : " Counted arms: " + r.proceed.arms.join(", ") + "."));
   L.push("");
   L.push("## Judge check inputs", "");
-  L.push("The pilot's labels go into the gate with the validation batch's (change 1 item 1, change 2 section 2); the gate needs " + JUDGE_CHECK.labels_min + " bug-unit labels, so this pilot-only line is not the gate.", "");
-  if (r.labels_waiting) L.push("- Carbon judge check: waiting on person labels. Carbon's numbers count only once the person labels pass R78 (pre-run change 5), and the counted run waits for them.");
+  L.push("The pilot's labels go into the gate with the validation batch's (change 1 item 1, change 2 section 2); the gate needs " + JUDGE_CHECK.labels_min + " bug-unit labels, so the pilot-only line is not the gate.", "");
+  const tallyLines = (t: LabelTally, fallbacks: readonly string[]) => [
+    "- Labels: " + t.reviews + " reviews, " + t.by.grok + " by Grok 4.7, " + t.by.kimi + " by Kimi K3.1 Pro after Grok could not label them, " + t.by.none + " by neither (a review with no findings names nothing; one neither model labelled is can't tell); " + t.cant_tell + " can't tell.",
+    "- Per arm: " + Object.entries(t.per_arm).map(([a, x]) => a + " " + x.reviews + " labels, " + x.kimi + " Kimi fallback" + (x.kimi === 1 ? "" : "s") + ", " + x.cant_tell + " can't tell (" + x.unlabelled + " labelled by neither)").join("; ") + ".",
+    "- Reviews Grok did not label: " + list([...fallbacks]) + ".",
+  ];
+  if (r.labels_waiting) L.push("- Carbon judge check: waiting on labels (rm-post label-send). Carbon's numbers count only once the labels pass R78, and the counted run waits for them.");
   else {
-    L.push("- " + r.kappa.line);
-    if (r.people) L.push("- Person agreement (R125): seat A and seat B read " + r.people.agree + " of " + r.people.reviews + " subset reviews alike, kappa " + (r.people.kappa === null ? "n/a" : r.people.kappa.toFixed(3)) + ". Carbon's kappa above is against the final labels of every labelled review; this one is two engineers on the pilot's subset.");
-    if (r.cant_tell_labels) L.push("- " + r.cant_tell_labels + " person label" + (r.cant_tell_labels === 1 ? "" : "s") + " rest on can't tell, read as not naming; read as naming (change 6's second reading), kappa is " + (r.kappa_cant_as_yes === null ? "n/a" : r.kappa_cant_as_yes.toFixed(3)) + ".");
+    L.push("- " + r.kappa.line + "; " + CHECK_LINE + ".");
+    L.push("- Can't tell read as naming (change 6's second reading): kappa " + (r.kappa_cant_as_yes === null ? "n/a" : r.kappa_cant_as_yes.toFixed(3)) + " over the " + r.cant_tell_labels + " can't tell label" + (r.cant_tell_labels === 1 ? "" : "s") + "; " + CHECK_LINE + ".");
+    L.push(...tallyLines(r.labels!, r.fallbacks));
   }
   const pool = (k: "P" | "B") => k + " " + r.kappa.per_pool[k].labels + " labels, " + r.kappa.per_pool[k].errors + " error" + (r.kappa.per_pool[k].errors === 1 ? "" : "s") + ", " + r.kappa.per_pool[k].abstentions + " abstaining, " + r.kappa.per_pool[k].empty_replies + " empty replies";
   if (!r.labels_waiting) L.push("- Per pool: " + pool("P") + "; " + pool("B") + ".");
-  L.push("- Decoy reviews go to the false-alarm read and are not labelled. The labels are engineers', made through the labelling desk: seat A labels every review, seat B a subset and seat C the subset reviews they read differently; no model makes one.");
+  if (r.gate) {
+    const g = r.gate;
+    L.push("", "### R78 gate (change 9 item 5): pilot and validation", "");
+    L.push("- R78 gate " + (g.pass ? "passes" : "fails") + ": " + g.line + "; " + CHECK_LINE + ".");
+    L.push("- Can't tell read as naming: kappa " + (g.cant_as_yes === null ? "n/a" : g.cant_as_yes.toFixed(3)) + "; " + CHECK_LINE + ".");
+    L.push(...tallyLines(g.tally, g.fallbacks));
+  } else if (!r.labels_waiting) L.push("- R78 gate: waiting on the validation batch's labels (rm-post label-send --batch validation, then readout --validation-run).");
+  L.push("- Decoy reviews go to the false-alarm read and are not labelled. No person labels a review: Grok 4.7 labels each one blind to arm, with Kimi K3.1 Pro only where Grok can't (pre-run change 9).");
   L.push("");
   L.push("## Contamination (section 5)", "");
   if (!r.contamination.read) L.push("No contamination report was found, so every review reads as clean here.");

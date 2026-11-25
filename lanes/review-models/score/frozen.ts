@@ -19,7 +19,15 @@ export type Pool = "P" | "B" | "decoy";
 
 /** Section 4: the judge, as the route names it and as src/runner/pricing/prices.ts keys it, pinned to google-vertex. */
 export const CARBON = { route: "openrouter/google/gemini-4-carbon", model: "google/gemini-4-carbon", pin: "google-vertex" } as const;
-/** The judge check's two labellers (fix-aware, blind to arm), by provider route. */
+/** Pre-run change 9: the judge check's labeller, Grok 4.7 on OpenRouter at default effort, and its fallback for a review
+ *  Grok can't label, Kimi K3.1 Pro; each pinned to one provider in src/runner/pricing/prices.ts. */
+export const GROK = { model: "x-ai/grok-4.7", pin: "amazon-bedrock" } as const;
+export const KIMI = { model: "moonshotai/kimi-k3.1-pro", pin: "deepinfra" } as const;
+/** Change 9: every result line that rests on the judge check says this, word for word. */
+export const CHECK_LINE = "judge checked against Grok 4.7, a fourth model family, not against people; Gemini 4 Neon was not used because the judge is a Gemini model";
+/** Change 9 item 2: the seed of the shuffle that orders the labeller's reviews across arms. */
+export const LABEL_SEED = 1872089902;
+/** The contamination second read's two readers (Opus 5.5 and GPT-6.2 Astra), by provider route. */
 export const LABELLERS = {
   opus: { model: "anthropic/claude-opus-5-5", provider: "anthropic", api: "claude-opus-5-5" },
   astra: { model: "openai/gpt-6.2-astra", provider: "openai", api: "gpt-6.2-astra" },

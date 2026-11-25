@@ -94,6 +94,19 @@ export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   // until then it also admits the google-vertex endpoints listed at $2.20 and $3.60 input, and every call still settles at
   // this row, never below what it bills.
   "google/gemini-4-carbon": { input: 4, output: 20, cache_read: 0.2, cache_write: 0.375, providers: ["google-vertex"], image: 0.000004 },
+  // xAI Grok 4.7, the review-models eval's judge-check labeller (pre-run change 9 to prereg 2026-11-24-geva-590). OpenRouter's
+  // endpoints API (https://openrouter.ai/api/v1/models/x-ai/grok-4.7/endpoints), read 2026-11-25, lists Amazon Bedrock
+  // (amazon-bedrock/global) at $2 input, $6 output and $0.50 cache read, and $4, $12 and $1 for prompts above 200,000
+  // tokens; xAI's own endpoints list the same, and its priority tier twice that. Pinned to amazon-bedrock alone, so a call
+  // never falls back to another endpoint; max_price at the long-prompt $4 and $12 admits only that endpoint's own rates.
+  "x-ai/grok-4.7": { input: 2, output: 6, cache_read: 0.5, providers: ["amazon-bedrock"], long: { above_input_tokens: 200_000, input: 4, output: 12, cache_read: 1 } },
+  // Moonshot Kimi K3.1 Pro, the same check's fallback labeller for a review Grok can't label (change 9 item 3). The same
+  // endpoints API (https://openrouter.ai/api/v1/models/moonshotai/kimi-k3.1-pro/endpoints), read 2026-11-25, lists 34
+  // endpoints; two state a quantisation of fp8 or better: Morph (morph/fp8, about $1.31 to $1.38 input and $8.55 to $9
+  // output across two reads that day) and DeepInfra (deepinfra/bf16, $1.90 input, $9.50 output, $0.19 cache read, with
+  // 99.7% uptime over the day against Morph's 94.5% to 97.7%). Pinned to deepinfra and bf16 alone; the others state
+  // fp4, mxfp4 or no quantisation.
+  "moonshotai/kimi-k3.1-pro": { input: 1.9, output: 9.5, cache_read: 0.19, providers: ["deepinfra"], quantizations: ["bf16"] },
 };
 
 /**

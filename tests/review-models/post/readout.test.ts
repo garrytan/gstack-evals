@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=the pilot readout reads every Pilots-table column per arm from a finished pilot (exposure, the read audit,
-// judge errors against engineers' labels from the desk packages (seat A on every review, seat B on a subset, seat C where they differ), A-vs-B agreement, supply, cost, wall time, pilot spend, reruns against the reserve), then the staged rule
+// judge errors against change 9's labels (Grok 4.7, with Kimi K3.1 Pro where Grok can't), the labeller and fallback counts per arm, supply, cost, wall time, pilot spend, reruns against the reserve), then the staged rule
 // and the frozen proceed set, and names no unit by anything but its opaque label; fails_when=an unexposed review, a judge
-// error, a rerun or a contaminated search goes uncounted, a step runs out of order, the validation batch's labels land on the pilot's, or the Markdown quotes a unit id, PR,
+// error, a rerun or a contaminated search goes uncounted, a step runs out of order, the validation batch's labels land on the pilot's, the R78 gate leaves out a batch, a fallback goes unnamed, a judge-check line lacks change 9's wording, or the Markdown quotes a unit id, PR,
 // fix commit or advisory; why_new=GEVA-590 Pilots table, change 1 items 1 to 3, change 2 sections 2 and 4; seam=rm-post's
-// keyless reads, its two paid batches and the desk package with planted person files, on a stub upstream behind the real metering proxy and a temporary ledger;
+// keyless reads and its three paid batches on a stub upstream behind the real metering proxy and a temporary ledger;
 // no_claim=that real sessions look like these planted ones, which only the pilot shows
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -14,13 +14,13 @@ import { readContamination, writeContamination } from "../../../src/trial/review
 import { contaminationInputs, main } from "../../../lanes/review-models/post/cli.ts";
 import { loadPilot, type PostKey } from "../../../lanes/review-models/post/pilot.ts";
 import { assertSafe, pilotReadout, renderReadout } from "../../../lanes/review-models/post/readout.ts";
-import { deskPackage, importFirst, importThird, pilotBatch, type DeskKey } from "../../../lanes/review-models/post/desk.ts";
-import { judgeSend, secondReadSend } from "../../../lanes/review-models/post/send.ts";
-import type { FinalRow } from "../../../lanes/review-models/score/labels.ts";
-import { DRY_ENV, ITEMS, personFile, plant, upstream } from "./fixture.ts";
+import { finalPath, judgeSend, labelOrder, labelSend, pilotBatch, secondReadSend } from "../../../lanes/review-models/post/send.ts";
+import { CHECK_LINE } from "../../../lanes/review-models/score/frozen.ts";
+import { labelPrompt, type FinalRow } from "../../../lanes/review-models/score/labels.ts";
+import { DRY_ENV, ITEMS, plant, upstream } from "./fixture.ts";
 
 describe("rm-post end to end on a planted pilot (keyless)", () => {
-  test("contamination, second read, judge, person labels and the readout, with one planted failure per kind", async () => {
+  test("contamination, second read, judge, labels and the readout, with one planted failure per kind", async () => {
     const s = plant();
     const up = upstream();
     const opts = (item: string, run_id: string) => ({ item, run_id, record: s.record, ledger: s.ledger, env: DRY_ENV, fetch: up.fetch, warn: () => {} });
@@ -48,29 +48,30 @@ describe("rm-post end to end on a planted pilot (keyless)", () => {
     expect([again.judged, again.sent]).toEqual([0, 0]);
 
     pilot = loadPilot(s.run, key, s.post);
-    expect(await main(["label-send", "--run", s.run, "--key", s.keyPath, "--post", s.post, "--run-id", "x", "--item", ITEMS.labels])).toBe(2);
+    const args = ["--run", s.run, "--key", s.keyPath, "--post", s.post];
+    expect(await main(["desk-package", ...args, "--desk", join(s.dir, "desk")])).toBe(2);
+    expect(await main(["labels-import", ...args, "--file", join(s.dir, "x.txt")])).toBe(2);
     const waiting = pilotReadout(pilot, null, s.history, s.historySha);
     expect(waiting.labels_waiting).toBe(true);
     expect(waiting.arms.every((a) => a.judge.waiting && a.judge.misses.length === 0)).toBe(true);
     expect(waiting.arms.find((a) => a.arm === "FS")!.pass).toBe(true);
     expect(waiting.proceed.set).toBe("all");
     const waitingMd = renderReadout(waiting, pilot);
-    expect(waitingMd.match(/- Judge check: waiting on person labels\./g)).toHaveLength(5);
-    expect(waitingMd).toContain("Carbon judge check: waiting on person labels.");
+    expect(waitingMd.match(/- Judge check: waiting on labels\./g)).toHaveLength(5);
+    expect(waitingMd).toContain("Carbon judge check: waiting on labels (rm-post label-send).");
 
-    const desk = join(s.dir, "desk");
-    const pkg = deskPackage({ reviews: pilotBatch(pilot), batch: "pilot", desk, post: s.post });
-    expect([pkg.labelled, pkg.subset, pkg.screens.A, pkg.screens.B, pkg.key.shape]).toEqual([49, 15, 54, 19, "review"]);
-    expect(pkg.dirs).toEqual({ A: join(desk, "geva590-review-labels-pilot-a"), B: join(desk, "geva590-review-labels-pilot-b") });
-    const oa1 = pkg.key.screens.find((x) => x.kind === "review" && x.arm === "OA" && x.unit === s.key.pilot[0]!.unit)!;
-    const split = pkg.key.subset!.includes(oa1.sid) ? 1 : 0;
-    const first = importFirst({ post: s.post, batch: "pilot", reviews: pilotBatch(pilot), files: [{ name: "A1", text: personFile(pkg.dirs.A, "A1", "A") }, { name: "B1", text: personFile(pkg.dirs.B, "B1", "B", { none_on: "DISAGREE" }) }] });
-    expect(first).toMatchObject({ reviews: 49, subset: 15, agreed: 15 - split, disagreements: split, final: !split });
-    if (split) {
-      expect(existsSync(join(s.post, "labels", "final.json"))).toBe(false);
-      const settled = importThird({ post: s.post, batch: "pilot", file: { name: "C1", text: personFile(first.third!, "C1", "C") } });
-      expect(settled).toMatchObject({ reviews: 49, disagreements: 1, unresolved: 0, final: true });
-    }
+    const order = labelOrder(pilotBatch(pilot).filter((r) => r.findings.length));
+    const refused = order.find((r) => r.arm === "N")!, lost = order.find((r) => r.arm === "OA")!;
+    const plantOn = (r: (typeof order)[number]) => labelPrompt(r.bug, r.findings);
+    const labelFetch = (async (url: any, init?: any) => {
+      const b = JSON.parse(String(init?.body ?? "{}"));
+      const prompt = b.messages?.[0]?.content;
+      if (b.model === "x-ai/grok-4.7" && (prompt === plantOn(refused) || prompt === plantOn(lost))) return Response.json({ id: "g", model: b.model, provider: "Amazon Bedrock", choices: [{ message: { role: "assistant", content: "" }, finish_reason: "content_filter" }], usage: { prompt_tokens: 900, completion_tokens: 0 } });
+      if (b.model === "moonshotai/kimi-k3.1-pro" && prompt === plantOn(lost)) return Response.json({ error: { message: "planted" } }, { status: 400 });
+      return up.fetch(url, init);
+    }) as typeof fetch;
+    const labels = await labelSend(pilotBatch(pilot), s.post, "pilot", { ...opts(ITEMS.labels, "labels-1"), fetch: labelFetch });
+    expect([labels.reviews, labels.by.grok, labels.by.kimi, labels.cant_tell]).toEqual([49, order.length - 2, 1, 1]);
 
     pilot = loadPilot(s.run, key, s.post);
     const final: FinalRow[] = JSON.parse(readFileSync(join(s.post, "labels", "final.json"), "utf8"));
@@ -91,6 +92,9 @@ describe("rm-post end to end on a planted pilot (keyless)", () => {
     expect(r.staged.rule!.drop_fable).toBe(false);
     expect(r.proceed.set).toBe("all");
     expect(r.check_rows.length).toBe(49);
+    expect(r.labels!.per_arm.N).toMatchObject({ kimi: 1, cant_tell: 0 });
+    expect(r.labels!.per_arm.OA).toMatchObject({ kimi: 0, cant_tell: 1, unlabelled: 1 });
+    expect(r.gate).toBeNull();
 
     const md = renderReadout(r, pilot);
     for (const u of s.key.pilot) {
@@ -100,7 +104,15 @@ describe("rm-post end to end on a planted pilot (keyless)", () => {
     }
     expect(md).toContain("## OA: passes its pilot");
     expect(md).toContain("Proceed set: **all**");
-    expect(md).toContain("- Person agreement (R125): seat A and seat B read " + (15 - split) + " of 15 subset reviews alike, kappa ");
+    expect(md).toContain("- " + r.kappa.line + "; " + CHECK_LINE + ".");
+    expect(md).toContain("judge checked against Grok 4.7, a fourth model family, not against people; Gemini 4 Neon was not used because the judge is a Gemini model");
+    expect(md).toContain("- Labels: 49 reviews, " + (order.length - 2) + " by Grok 4.7, 1 by Kimi K3.1 Pro after Grok could not label them");
+    expect(md).toContain("N 10 labels, 1 Kimi fallback, 0 can't tell (0 labelled by neither)");
+    expect(md).toContain("OA 10 labels, 0 Kimi fallbacks, 1 can't tell (1 labelled by neither)");
+    expect(md).toContain(refused.label + " N: labelled by Kimi (Grok: refused)");
+    expect(md).toContain(lost.label + " OA: can't tell, labelled by neither model (Grok: refused; Kimi: harness failure (HTTP 400))");
+    expect(md).toContain("- R78 gate: waiting on the validation batch's labels");
+    expect(md).not.toMatch(/person labels?\.|seat [ABC]|labelling desk|subset reviews/);
     expect(() => assertSafe(md + "\n" + s.key.pilot[6]!.markers.commits[0], pilot)).toThrow(/E_RM_POST_INPUT the readout would name/);
 
     const out = join(s.dir, "readout.md");
@@ -109,36 +121,38 @@ describe("rm-post end to end on a planted pilot (keyless)", () => {
     expect(existsSync(out)).toBe(false);
   }, 120_000);
 
-  test("the validation batch loads from its run dir by --batch and gets its own desk package, screen key and final labels", async () => {
+  test("the validation batch loads by --batch, gets its own labels, and joins the pilot's in the R78 gate", async () => {
     const s = plant();
     const up = upstream();
     const k = JSON.parse(readFileSync(s.keyPath, "utf8")) as PostKey;
     expect(() => loadPilot(s.run, k, s.post, "validation")).toThrow(/E_RM_POST_INPUT the post key has no validation units/);
-    const vkey: PostKey = { ...k, pilot: k.pilot.filter((u) => u.pool === "decoy"), validation: k.pilot.filter((u) => u.pool !== "decoy") };
-    const keyPath = join(s.dir, "key-validation.json");
-    writeFileSync(keyPath, JSON.stringify(vkey));
-    const desk = join(s.dir, "desk");
-    const args = ["--run", s.run, "--key", keyPath, "--post", s.post];
-    expect(await main(["desk-package", ...args, "--desk", desk, "--batch", "later"])).toBe(2);
-    expect(await main(["contamination", ...args, "--batch", "validation"])).toBe(0);
-    await secondReadSend(s.post, { item: ITEMS.second, run_id: "second-v", record: s.record, ledger: s.ledger, env: DRY_ENV, fetch: up.fetch, warn: () => {} });
-    const pilot = loadPilot(s.run, vkey, s.post, "validation");
-    expect(pilot.reviews.map((r) => r.unit).every((u) => vkey.validation!.some((v) => v.unit === u))).toBe(true);
-    expect(await main(["desk-package", ...args, "--desk", desk, "--batch", "validation"])).toBe(0);
-    const dir = join(desk, "geva590-review-labels-validation-a"), dirB = join(desk, "geva590-review-labels-validation-b");
-    for (const d of [dir, dirB]) expect(readFileSync(join(d, "privacy-check.md"), "utf8")).toContain("Result: BLOCKING HITS: 0.");
-    expect(existsSync(join(desk, "geva590-review-labels-pilot-a"))).toBe(false);
-    const key = JSON.parse(readFileSync(join(s.post, "labels", "people", "validation", "key.json"), "utf8")) as DeskKey;
-    expect(key).toMatchObject({ batch: "validation", schema: "rm-desk-key.v2" });
-    expect(key.subset).toHaveLength(15);
-    expect(key.screens.filter((x) => x.kind === "review").map((x) => x.arm + " " + x.unit).sort()).toEqual(pilotBatch(pilot).filter((r) => r.findings.length).map((r) => r.arm + " " + r.unit).sort());
-    const f1 = join(s.dir, "labels-A1-A.txt"), f2 = join(s.dir, "labels-B1-B.txt");
-    writeFileSync(f1, personFile(dir, "A1", "A"));
-    writeFileSync(f2, personFile(dirB, "B1", "B"));
-    expect(await main(["labels-import", ...args, "--batch", "validation", "--file", f1, "--round", "third"])).toBe(2);
-    expect(await main(["labels-import", ...args, "--batch", "validation", "--file", f1, "--file", f2])).toBe(0);
-    expect(JSON.parse(readFileSync(join(s.post, "labels", "final-validation.json"), "utf8"))).toHaveLength(key.screens.filter((x) => x.kind === "review").length + key.auto_no.length);
-    expect(existsSync(join(s.post, "labels", "final.json"))).toBe(false);
+    // The validation batch reuses the pilot's bug units in memory (readKey refuses a key that repeats a unit), so both batches
+    // load from the one planted run.
+    const vkey: PostKey = { ...k, validation: k.pilot.filter((u) => u.pool !== "decoy") };
+    const opts = (item: string, run_id: string) => ({ item, run_id, record: s.record, ledger: s.ledger, env: DRY_ENV, fetch: up.fetch, warn: () => {} });
+    const args = ["--run", s.run, "--key", s.keyPath, "--post", s.post];
+    expect(await main(["label-send", ...args, "--batch", "later", "--run-id", "x", "--item", ITEMS.labels])).toBe(2);
+    const p0 = loadPilot(s.run, vkey, s.post);
+    writeContamination(join(s.post, "contamination"), readContamination(contaminationInputs(p0), p0.markers, []), p0.markers);
+    await secondReadSend(s.post, opts(ITEMS.second, "second-v"));
+    const pilot = loadPilot(s.run, vkey, s.post), vpilot = loadPilot(s.run, vkey, s.post, "validation");
+    expect(vpilot.reviews.map((r) => r.unit).every((u) => vkey.validation!.some((v) => v.unit === u))).toBe(true);
+    await judgeSend(pilot, s.post, opts(ITEMS.judge, "judge-1"));
+    await judgeSend(vpilot, s.post, opts(ITEMS.judge, "judge-1"));
+    const v = await labelSend(pilotBatch(loadPilot(s.run, vkey, s.post, "validation")), s.post, "validation", opts(ITEMS.labels, "labels-1"));
+    expect(existsSync(finalPath(s.post))).toBe(false);
+    const vfinal: FinalRow[] = JSON.parse(readFileSync(finalPath(s.post, "validation"), "utf8"));
+    expect(vfinal).toHaveLength(v.reviews);
+    expect(existsSync(join(s.post, "labels", "validation", "replies.jsonl"))).toBe(true);
+    await labelSend(pilotBatch(loadPilot(s.run, vkey, s.post)), s.post, "pilot", opts(ITEMS.labels, "labels-1"));
+    const final: FinalRow[] = JSON.parse(readFileSync(finalPath(s.post), "utf8"));
+    const r = pilotReadout(loadPilot(s.run, vkey, s.post), final, s.history, s.historySha, { pilot: loadPilot(s.run, vkey, s.post, "validation"), final: vfinal });
+    expect(r.gate).toMatchObject({ labels: final.length + vfinal.length, pass: false });
+    expect(r.gate!.tally.reviews).toBe(final.length + vfinal.length);
+    const md = renderReadout(r, pilot);
+    expect(md).toContain("### R78 gate (change 9 item 5): pilot and validation");
+    expect(md).toContain("- R78 gate fails: Carbon judge check: " + (final.length + vfinal.length) + " labelled reviews, kappa ");
+    expect(md.split("### R78 gate")[1]!.split("\n").filter((l) => l.includes("kappa")).every((l) => l.endsWith(CHECK_LINE + "."))).toBe(true);
     expect(await main(["readout", ...args, "--batch", "validation", "--history", s.history, "--md", join(s.dir, "v.md")])).toBe(2);
   }, 120_000);
 });

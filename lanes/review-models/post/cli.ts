@@ -2,9 +2,9 @@
 // gstack-evals rm-post: the review-models pilot's steps after its review sessions finish, up to the readout the Captain
 // gets before any counted unit (GEVA-590; README.md beside this file lists the order). key, contamination and readout are
 // keyless. judge-send and second-read-send are paid: each opens one lease on the ledger item the Captain recorded for it
-// and needs the provider keys by name, a rig admission record and the item's cap. desk-package and labels-import are
-// keyless: people make the judge check's labels through the labelling desk (pre-run changes 5 and 6), and label-send,
-// the retired model labeller, refuses.
+// and needs the provider keys by name, a rig admission record and the item's cap. label-send is paid too: Grok 4.7 labels
+// the judge check, with Kimi K3.1 Pro as its fallback (pre-run change 9). desk-package and labels-import, the retired
+// person-label path, refuse.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -18,8 +18,7 @@ import { buildKey, type KeySources } from "./key.ts";
 import { BATCHES, loadPilot, readKey, type Batch, type Pilot } from "./pilot.ts";
 import { pilotReadout, renderReadout } from "./readout.ts";
 import type { FinalRow } from "../score/labels.ts";
-import { deskPackage, finalPath, importFirst, importThird, pilotBatch, SHAPES, type Shape } from "./desk.ts";
-import { judgeSend, secondReadSend, type SendOptions } from "./send.ts";
+import { finalPath, judgeSend, labelSend, pilotBatch, secondReadSend, type SendOptions } from "./send.ts";
 
 const HELP = [
   "gstack-evals rm-post <subcommand> [options]: the review-models pilot after its review sessions (GEVA-590).",
@@ -28,23 +27,18 @@ const HELP = [
   "  contamination --run <out dir> --key <key.json> --post <dir> [--batch pilot|validation] [--journal <proxy journal>]...",
   "  second-read-send --post <dir> --run-id <id> --item <ledger item>                     (paid: Astra and Opus)",
   "  judge-send --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --run-id <id> --item <ledger item>  (paid: Gemini 4 Carbon)",
-  "  desk-package --run <dir> --key <key.json> --post <dir> --desk <labelling root> [--batch pilot|validation] [--shape review|finding]",
-  "      writes seat A's and seat B's packages, <desk>/geva590-review-labels-<batch>-a/ and -b/, and the code task; the",
-  "      screen key and seat B's subset stay in <post>/labels/people/",
-  "  labels-import --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --file <seat A's file> --file <seat B's file>",
-  "      reads seat A's and seat B's labels files; subset reviews they read differently go to seat C's package,",
-  "      <desk>/geva590-review-labels-<batch>-c/, and with no disagreement the final labels land in <post>/labels/",
-  "  labels-import --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --file <seat C's file> --round third",
-  "      reads seat C's file; each review it holds takes the majority of three, and the final labels land",
-  "      in <post>/labels/ (final.json for the pilot, final-validation.json for the validation batch)",
-  "  label-send                                                    (retired: people make the labels; it refuses)",
-  "  readout --run <dir> --key <key.json> --post <dir> --history <stage1 per-pass csv> --md <file>",
+  "  label-send --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --run-id <id> --item <ledger item>  (paid: Grok 4.7, Kimi K3.1 Pro)",
+  "      labels every bug-unit review the judge check takes; the labels land in <post>/labels/ (final.json for the",
+  "      pilot, final-validation.json for the validation batch)",
+  "  desk-package, labels-import                                   (retired: no people label; they refuse)",
+  "  readout --run <dir> --key <key.json> --post <dir> --history <stage1 per-pass csv> --md <file> [--validation-run <dir>]",
+  "      with --validation-run and final-validation.json in the post dir, it adds the R78 gate on both batches' labels",
   "",
   "The key, the post dir and the history CSV name fixes and labels: keep them outside the repository. The readout's",
   "Markdown names units by opaque label only.",
 ].join("\n");
 
-const VALUED = ["--draw", "--p", "--b", "--frame", "--sources", "--out", "--run", "--key", "--post", "--journal", "--run-id", "--item", "--history", "--md", "--desk", "--shape", "--file", "--round", "--batch"];
+const VALUED = ["--draw", "--p", "--b", "--frame", "--sources", "--out", "--run", "--key", "--post", "--journal", "--run-id", "--item", "--history", "--md", "--batch", "--validation-run"];
 
 function flags(argv: readonly string[]): Map<string, string[]> {
   const m = new Map<string, string[]>();
@@ -138,26 +132,11 @@ async function secondReadCmd(f: Map<string, string[]>): Promise<number> {
   return 0;
 }
 
-function deskCmd(f: Map<string, string[]>): number {
-  const shape = f.get("--shape")?.at(-1);
-  if (shape !== undefined && !SHAPES.includes(shape as Shape)) rmFail("E_RM_POST_INPUT", "--shape is review or finding, not " + JSON.stringify(shape));
-  const post = need(f, "--post");
+async function labelCmd(f: Map<string, string[]>): Promise<number> {
   const batch = batchOf(f);
-  const r = deskPackage({ reviews: pilotBatch(pilotOf(f)), batch, desk: need(f, "--desk"), post, shape: shape as Shape | undefined });
-  console.log("desk packages (" + r.key.shape + " question, on hold): seat A " + r.dirs.A + ", " + r.labelled + " reviews on " + r.screens.A + " screens; seat B " + r.dirs.B + ", a subset of " + r.subset + " on " + r.screens.B + " screens; " + r.key.auto_no.length + " with no findings labelled no; privacy checks passed");
-  console.log("  code task for every labeller: " + r.code_task + "; the screen key stays in " + join(post, "labels", "people", batch) + " and never goes with the packages");
-  return 0;
-}
-
-function importCmd(f: Map<string, string[]>): number {
-  const round = f.get("--round")?.at(-1) ?? "first";
-  if (round !== "first" && round !== "third") rmFail("E_RM_POST_INPUT", "--round is first or third, not " + JSON.stringify(round));
-  const files = (f.get("--file") ?? []).map((p) => ({ name: p, text: readFileSync(p, "utf8") }));
-  const post = need(f, "--post");
-  const batch = batchOf(f);
-  if (round === "third" && files.length !== 1) rmFail("E_RM_POST_LABELS", "the third round takes exactly one labels file, seat C's, not " + files.length);
-  const r = round === "first" ? importFirst({ post, batch, files, reviews: pilotBatch(pilotOf(f)) }) : importThird({ post, batch, file: files[0]! });
-  console.log("labels-import (" + batch + ", " + round + "): " + r.reviews + " reviews; on the subset of " + r.subset + ", seats A and B read " + r.agreed + " alike and " + r.disagreements + " differently" + (r.final ? "; " + r.unresolved + " unresolved; wrote " + finalPath(post, batch) : "; seat C's package is at " + r.third));
+  const r = await labelSend(pilotBatch(pilotOf(f)), need(f, "--post"), batch, sendOptions(f));
+  const arms = Object.entries(r.per_arm).map(([a, t]) => a + " " + t.reviews + " (" + t.kimi + " Kimi, " + t.cant_tell + " can't tell, " + t.unlabelled + " unlabelled)");
+  console.log("labels (" + batch + "): " + r.reviews + " reviews, " + r.by.grok + " by Grok, " + r.by.kimi + " by Kimi, " + r.by.none + " by neither (no findings or unlabelled), " + r.cant_tell + " can't tell; " + arms.join("; ") + "; wrote " + finalPath(need(f, "--post"), batch) + "; " + settled(r));
   return 0;
 }
 
@@ -167,7 +146,10 @@ function readoutCmd(f: Map<string, string[]>): number {
   const post = need(f, "--post");
   const finalFile = finalPath(post);
   const final: FinalRow[] | null = existsSync(finalFile) ? JSON.parse(readFileSync(finalFile, "utf8")) : null;
-  const r = pilotReadout(pilot, final, need(f, "--history"));
+  const vrun = f.get("--validation-run")?.at(-1);
+  const vfile = finalPath(post, "validation");
+  const validation = vrun && existsSync(vfile) ? { pilot: loadPilot(vrun, readKey(need(f, "--key")), post, "validation"), final: JSON.parse(readFileSync(vfile, "utf8")) as FinalRow[] } : null;
+  const r = pilotReadout(pilot, final, need(f, "--history"), undefined, validation);
   const md = renderReadout(r, pilot);
   write(need(f, "--md"), md);
   write(join(post, "labels", "check-rows.jsonl"), r.check_rows.map((row) => JSON.stringify(row) + "\n").join(""));
@@ -182,14 +164,13 @@ export async function main(argv: string[]): Promise<number> {
     return sub ? 0 : 2;
   }
   try {
+    if (sub === "desk-package" || sub === "labels-import") return rmFail("E_RM_POST_DESK_RETIRED", sub + " is retired: no people label the judge check (pre-run change 9, R126); run rm-post label-send, which has Grok 4.7 label it");
     const f = flags(rest);
     if (sub === "key") return keyCmd(f);
     if (sub === "contamination") return contaminationCmd(f);
     if (sub === "judge-send") return await judgeCmd(f);
     if (sub === "second-read-send") return await secondReadCmd(f);
-    if (sub === "desk-package") return deskCmd(f);
-    if (sub === "labels-import") return importCmd(f);
-    if (sub === "label-send") return rmFail("E_RM_POST_RETIRED", "label-send is retired: engineers make the judge-check labels through the labelling desk (pre-run changes 5 to 7, R125); run rm-post desk-package, then rm-post labels-import");
+    if (sub === "label-send") return await labelCmd(f);
     if (sub === "readout") return readoutCmd(f);
     return rmFail("E_RM_POST_INPUT", "unknown subcommand " + JSON.stringify(sub) + "; gstack-evals rm-post --help lists them");
   } catch (e) {
