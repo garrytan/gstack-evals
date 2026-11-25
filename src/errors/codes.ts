@@ -4781,6 +4781,24 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_RM_POST_INPUT: {
+    exit: 2,
+    meaning: "A review-models post-run step refused its input (lanes/review-models/post/): the post key is not rm-post-key.v1 or repeats a unit, a pilot unit has no gate record or advisory, a step ran before the one it needs (contamination before labels, the second read before labels, the judge before the readout), or the readout would name a unit id, PR, fix commit or advisory the key holds.",
+    fix: "Run the rm-post steps in the order README.md lists, from the pilot's own out dir and key; a readout that would name the key's contents is a bug to fix, never a file to write.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
+  E_RM_POST_SEND: {
+    exit: 2,
+    meaning: "A review-models labeller or second-read call answered with an HTTP status other than 200 after the metering proxy's own retries, so the batch stopped (lanes/review-models/post/send.ts).",
+    fix: "Rerun the same command: every reply so far is kept and every answered request is cached by digest, so it resumes at the call that stopped and pays for nothing twice.",
+    side_effects: PARTIAL,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

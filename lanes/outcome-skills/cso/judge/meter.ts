@@ -34,6 +34,9 @@ const RETRY: RetryBudget = { attempts: 3, elapsed_ms: 900_000 };
  *  it reserves (as statemachines/send.ts does). */
 const PROXY_FIELDS = { openai: { service_tier: "default" }, anthropic: { inference_geo: "global" }, openrouter: { usage: { include: true } } } as const;
 const KEY_ENV = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" } as const;
+/** The output cap the proxy writes into a request that states none. The meter writes it first, so the worst case it
+ *  prices is the one the proxy reserves. */
+const PROXY_MAX_OUTPUT = Math.max(LABELLER_MAX_OUTPUT, JUDGE_MAX_OUTPUT_D);
 
 export interface MeterOptions { run_id: string; out: string; item?: string; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; warn?: (line: string) => void; seal?: Buffer }
 export interface JudgeMeter { lease_id: string; transport: Transport; sent(): number; close(): Promise<{ spent_micros: number; unknown_micros: number }> }
@@ -61,7 +64,7 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
     const open = readItem(record, item).open;
     if (open && open.run_id === o.run_id && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
     lease = openLease(record, local, { item, run_id: o.run_id, warn, requireAdmission: rigAdmission({ proof: "direct" }) });
-    proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "cso-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: Math.max(LABELLER_MAX_OUTPUT, JUDGE_MAX_OUTPUT_D), refuseServerTools: true });
+    proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "cso-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: PROXY_MAX_OUTPUT, refuseServerTools: true });
     proxy.start();
   } catch (e) {
     if (lease.lease_id && !proxy) settleLease(record, local, lease.lease_id, warn);
@@ -72,7 +75,8 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
   const log = join(out, "calls.jsonl");
   let sent = 0, closed = false;
   const transport: Transport = async ({ provider, route, body: asked, attempt = 1 }) => {
-    const body: Record<string, unknown> = { ...asked, ...PROXY_FIELDS[provider as keyof typeof PROXY_FIELDS] };
+    const capless = asked.max_tokens === undefined && asked.max_output_tokens === undefined;
+    const body: Record<string, unknown> = { ...asked, ...PROXY_FIELDS[provider as keyof typeof PROXY_FIELDS], ...(capless ? { [provider === "openai" ? "max_output_tokens" : "max_tokens"]: PROXY_MAX_OUTPUT } : {}) };
     if (closed) csoFail("E_USAGE", "the judge meter is closed");
     const digest = createHash("sha256").update(provider + route + JSON.stringify(body) + (attempt > 1 ? "#attempt" + attempt : "")).digest("hex");
     const kept = join(out, "replies", digest + ".json");
