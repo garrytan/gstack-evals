@@ -21,7 +21,7 @@ attachments:
   - f7599e6649ab6809093d1d203b7790aae083adc5a401fb2c4c7d68d2602ab423  power.py
   - 5a734745f3f29c7087bf900308a166e176aeab0eff2cf4c9304a3354d6db8131  power.txt
   - 357453c330dea1c45387e67ffcd0e22854297bda96e47da3380d6924e10612da  prereg.json
-  - 3d961e5eefee2e056c9ecc5dfe2f9d292ddb7c0fa0f56bca98bedba45c909c61  supply-count.md
+  - 4c09ef58b9e54dac8a85179ec8359ea97125500ce4e2bd25c6aab8d7cd8cd464  supply-count.md
 ---
 
 # Preregistration: does gstack's State Machines review specialist catch real bug-introducing changes?
@@ -54,7 +54,7 @@ The state machines and formal verification research post (GEVA-586) ranked this 
 
 ## Big decisions
 
-1. **Which gstack arms (B1).** G+ forces the specialist on every review and G0 removes it, both as small commits on top of the gstack pin. Shipped gstack (G) is then G+'s cell on units where the detector fires and G0's cell elsewhere, derived per unit at analysis. This is the only way to measure the specialist itself, because the detector fires on 6 of 221 changes (section 8).
+1. **Which gstack arms (B1).** G+ forces the specialist on every review and G0 removes it, both as small commits on top of the gstack pin. Shipped gstack (G) is then G+'s cell on units where the detector fires and G0's cell elsewhere, derived per unit at analysis. This is the only way to measure the specialist itself, because the detector fires on 6 of 222 changes (section 8).
 2. **What the reviewer sees (P).** The bug-introducing commit's hunks, re-based onto the fix's base, so the reviewer sees real code that shipped with the bug and the scored tree is one the oracle already ran on. The construction is part of the result: every unit lists which hunks were kept, every result shows the change's size, and one sensitivity row leaves out changes of 10 lines or fewer (section 2).
 3. **Every arm leaves a test (C1).** Every arm's task turn ends with "If you find a bug, leave a test in the repository that fails because of it." A review that names the bug but leaves no test scores a miss in every arm alike.
 4. **When this becomes a findings post instead of a counted run.** Fewer than 20 counted units, a failing N floor in the pilot, or a pooled G+ minus G0 MDD over 25 points means no counted run (section 13).
@@ -106,7 +106,7 @@ Everything below holds as written. Where it reuses pstack-checks' rules ([its pr
 
 **Primary claim.** On real state-bug-introducing changes, gstack /review with the State Machines specialist forced on (G+) leaves a test that catches the bug more often than the same /review with the specialist removed (G0), pooled over Opus 5.5 and particle-1.
 
-**Why G+ against G0 and not G against G0.** Shipped gstack dispatches the specialist when its detector says true or unknown (review/sections/review-army.md line 56 at the pin). The detector fires on 6 of the 221 changes this pool supplies, so shipped G equals G0 on about 97% of units by construction, and G minus G0 would measure the detector's rarity, not the specialist. G+ against G0 asks what the specialist does when it runs. G against N asks what shipped gstack does.
+**Why G+ against G0 and not G against G0.** Shipped gstack dispatches the specialist when its detector says true or unknown (review/sections/review-army.md line 56 at the pin). The detector fires on 6 of the 222 changes this pool supplies, so shipped G equals G0 on about 97% of units by construction, and G minus G0 would measure the detector's rarity, not the specialist. G+ against G0 asks what the specialist does when it runs. G against N asks what shipped gstack does.
 
 **Construct fit.** A review's value is in the bugs it finds. A test that fails on the bug, passes with the real fix and survives a harmless edit is evidence the reviewer found this bug and not just noticed a change. The rule misses a review that names the bug in prose and leaves no working test; C1's suffix asks every arm for the test, so that cost falls on every arm alike.
 
@@ -122,17 +122,17 @@ Everything below holds as written. Where it reuses pstack-checks' rules ([its pr
 
 **The bug-introducing commit (BIC).** SZZ on a full clone: git blame -w at the fix's base of every non-trivial line the fix deletes from a non-test source file, or, when it deletes none, the lines on each side of its insertions. The BIC is the commit blamed for the most lines, ties to the smaller sha. Gates, in order: a BIC exists and has one parent (E_SR_NO_BIC, E_SR_BIC_MERGE); it carries at least half the blamed lines (E_SR_BIC_SHARE); it changes at most 2,000 lines (E_SR_BIC_SIZE); and the change under review brings back at least half of its blamed lines (E_SR_PR_MISSES_BUG).
 
-**The change under review, plainly.** It is constructed, not a real pull request. We take the BIC's diff with no context lines, drop CLAUDE.md, CLAUDE.local.md, AGENTS.md and .claude/ paths, and reverse-apply it at the fix's base with `git apply -R --unidiff-zero --reject`. Hunks that no longer apply are left out and listed in the unit's bic.json. The session repository has two commits: origin/main is the fix's base with the kept hunks reversed, and HEAD is the fix's base itself. So the reviewer sees the BIC's code as it stood just before the fix, inside a tree the project built and tested. Across the 221 that pass, the median unit keeps 89% of its BIC's hunks (68 keep all, 153 leave some out), the median change is 100 lines (quartiles 44 and 324), and 15 change 10 lines or fewer. Three things follow, and the results state each one:
+**The change under review, plainly.** It is constructed, not a real pull request. We take the BIC's diff with no context lines, drop CLAUDE.md, CLAUDE.local.md, AGENTS.md and .claude/ paths, and reverse-apply it at the fix's base, one file at a time, with `git apply -R --unidiff-zero --reject`. Hunks that no longer apply are left out and listed in the unit's bic.json. A file git refuses whole is handled too: a file the BIC created is reversed as a plain hunk where its lines still stand, and any file still refused is left out and listed with all its hunks (supply-count.md). The session repository has two commits: origin/main is the fix's base with the kept hunks reversed, and HEAD is the fix's base itself. So the reviewer sees the BIC's code as it stood just before the fix, inside a tree the project built and tested. Across the 222 that pass, the median unit keeps 85% of its BIC's hunks (62 keep all, 160 leave some out), the median change is 100.5 lines (quartiles 45.5 and 326), and 15 change 10 lines or fewer. Three things follow, and the results state each one:
 
 - every per-unit row lists the BIC's hunks, the kept ones and the change's added and deleted lines;
 - every contrast prints a no_small_pr row that leaves out changes of 10 changed lines or fewer;
 - a reviewer of the real BIC saw the code around it as it was then; ours sees it as it was later.
 
-**Supply.** 221 of 679 pass the BIC gates, from 195 repositories (supply-count.md). After labels, the oracle and the harmless-edit check, the draw most likely yields about 25 units, so about 19 counted after the pilot, with a range of 14 to 34. That central figure is under this plan's 20-unit floor, and the draw decides (section 13).
+**Supply.** 222 of 679 pass the BIC gates, from 196 repositories (supply-count.md). After labels, the oracle and the harmless-edit check, the draw most likely yields about 25 units, so about 19 counted after the pilot, with a range of 15 to 34. That central figure is under this plan's 20-unit floor, and the draw decides (section 13).
 
 ### 3. Labels and the draw
 
-**Labels.** #358's labels gate, unchanged: a unit passes when both labellers (GPT-6 Astra and Opus 5.5, #358's packet, questions and strict reply reader) answer yes to "defect" and yes to "state-shaped". A reader with no answered reply gets null and the unit fails closed. Labels come from three sources, the first that has a unit wins: the state machines prompt eval's records (28 units), #358's published test units (12 units, 7 also in the first), and this eval's own sr-labels calls for the 185 V2.1 units that have none. The labellers decide which units are in the eval, never a score, so R78's judge check does not apply to them.
+**Labels.** #358's labels gate, unchanged: a unit passes when both labellers (GPT-6 Astra and Opus 5.5, #358's packet, questions and strict reply reader) answer yes to "defect" and yes to "state-shaped". A reader with no answered reply gets null and the unit fails closed. Labels come from three sources, the first that has a unit wins: the state machines prompt eval's records (28 units), #358's published test units (15 units, 7 also in the first), and this eval's own sr-labels calls for the 186 V2.1 units that have none. The labellers decide which units are in the eval, never a score, so R78's judge check does not apply to them.
 
 **Oracle and harmless-edit gates.** #358's, unchanged, run at the fix's base: the fix's fail-to-pass tests fail before the fix and pass with it, stably, and #358's harmless edit (the neutral tree) leaves that true.
 
@@ -190,7 +190,7 @@ Read keylessly from each session's SDK stream and Claude Code's own transcript, 
 
 G+ should show ran in every session and G0 in none. Exposure prints beside every verdict, and the pilot gate reads it (section 13).
 
-**The detector finding, in its own right.** gstack's detector (lib/state-matrix.ts at the pin, vendored unchanged as smreview/detect.ts) dispatches the specialist when the added code lines name a subject (proposal, hold, approval, pending) and an action (accept, approve, reject, release and the like). On this pool it fires on 6 of the 221 changes under review, on 12 of the full BIC diffs of those 221, and on 25 of 424 BIC diffs overall. These are changes their projects later fixed as state bugs, and both labellers called the labelled ones state-shaped. So on real state bugs, shipped gstack's specialist runs about 3 times in 100. This holds whatever the counted run finds.
+**The detector finding, in its own right.** gstack's detector (lib/state-matrix.ts at the pin, vendored unchanged as smreview/detect.ts) dispatches the specialist when the added code lines name a subject (proposal, hold, approval, pending) and an action (accept, approve, reject, release and the like). On this pool it fires on 6 of the 222 changes under review, on 12 of the full BIC diffs of those 222, and on 25 of 424 BIC diffs overall. These are changes their projects later fixed as state bugs, and both labellers called the labelled ones state-shaped. So on real state bugs, shipped gstack's specialist runs about 3 times in 100. This holds whatever the counted run finds.
 
 ### 9. Scoring rules
 
@@ -232,7 +232,7 @@ One line, state-machines-review, with crew use counted. Planning prices per sess
 
 | Item | Cap | What it pays for | Planned at n = 22 | Planned at n = 40 |
 |---|---:|---|---:|---:|
-| sr-labels | $40 | both labellers on the 185 V2.1 units with no labels | $13 | $13 |
+| sr-labels | $40 | both labellers on the 186 V2.1 units with no labels | $13 | $13 |
 | sr-vm | $400 | the oracle and harmless-edit walk, and every session's runner | $236 | $380 |
 | sr-pilot | $180 | 6 units, five arms, both models, one session a cell (60 sessions) | $175 | $175 |
 | sr-opus | $1,750 | the counted run on Opus 5.5, two sessions a cell | $924 | $1,680 |
@@ -269,7 +269,7 @@ The paid plan is above $500, so the run takes one look, and no other. It comes w
 - **Code.** lanes/outcome-skills/smreview/, run as `gstack-evals sr` (pool, bic, labels, draw, plan, session, score, analyze, look, items). Error codes E_SR_* in docs/errors.md.
 - **Pins.** gstack d74ee528 with G+ e69e29da and G0 6872290c; SWE-rebench-V2.1 revision 26c0145d, tool commit 5792b785; SWE-bench-Live MultiLang revision eb09c2e5; pstack cursor/plugins c742dd61 (harness/pstack/claude-code, plugin 0.15.36); Claude Code 2.1.312; claude-agent-sdk 0.2.174. prereg.json holds the full hashes and the code checks them.
 - **Model roles at the gstack pin (checked 2026-11-25 against gstack #4811, 9a550bca).** In G+ and G0, /review gives no role a model of its own: the specialists, the Review Army subagents and the Claude adversarial pass run on the session's model. The one role that would pick its own model is the adversarial step's Codex second-model review, whose fallback at the pin is gpt-6-astra; the session image has no Codex CLI, so that step reports Codex as not installed and never runs. The pin's older defaults elsewhere (gpt-6-astra in /codex, claude-fable-5-1 as an eval judge and as the fable alias) belong to skills these arms never call. So the pin stays at d74ee528, and the pilot's transcripts are searched for any Codex call, reported if one appears.
-- **Dry run, no model called.** A stub session on a real unit (google__starlark-go-599) drives the image, both gstack homes and their commit checks, the exposure reader, the catch and false-alarm scoring, the analysis and the look, and passes 54 of 54 checks. #358's own dry run still passes 68 of 68 on the shared code.
+- **Dry run, no model called.** A stub session on a real unit (google__starlark-go-599) drives the image, both gstack homes and their tree checks, the exposure reader, the catch and false-alarm scoring, the analysis and the look, and passes 54 of 54 checks. #358's own dry run still passes 68 of 68 on the shared code.
 - **Not shown by the dry run, and checked by the pilot.** That /review runs to its end unattended on each real model, that Review Army's subagents run inside the session limits, and what a session costs.
 - **Stops.** A cap stop is INCOMPLETE. A pilot failure under section 13 stops the eval. Any change to an arm, a gate or a rule after merge is a new post.
 
