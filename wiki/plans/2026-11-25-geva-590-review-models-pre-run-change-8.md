@@ -35,7 +35,8 @@ Garry ruled on 2026-11-25 (R125, relayed by the organisation's workflow thread) 
 3. **Seat C** labels only the subset reviews where A and B split, in the follow-up package from change 7, blind to the first answers and to who gave them. The label is the answer at least two of the three gave. A review with no majority, or a can't-tell majority, is unresolved and is read both ways, as change 2 says.
 4. Every review outside the subset takes seat A's label.
 5. Can't tell still counts as not naming the bug, with a second reading that counts it as naming (change 6).
-6. Seat A, seat B and seat C are three different people. None sees graders, models, arms, earlier answers or other labellers.
+6. Each seat's package also holds a few check screens: 3 repeats and 2 attention screens for seat A, 2 and 2 for seat B, and 1 and 1 for seat C. The code task's item is never one of them.
+7. Seat A, seat B and seat C are three different people. None sees graders, models, arms, earlier answers or other labellers.
 
 ## What the readout adds
 
