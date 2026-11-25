@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { seededRandom } from "../../../runner/stats/paired.ts";
 import { buildUnitRepo, historyProblems, type UnitRef, type UnitRepo } from "../unit.ts";
-import { containmentAt, CUTOFF, gate1, passed, treeProblems, type Gate, type Needles } from "./gates.ts";
+import { containmentAt, CUTOFF, gate1, inventory, passed, stripExecutable, treeProblems, type Gate, type Inventory, type Needles } from "./gates.ts";
 import { commitDates, defaultBranch, ensureClone, ensureObjects, gitOut, supplyFail, type CommitDates, type GithubReader } from "./git.ts";
 import { bicShape, blameLines, blameTargets, gate2, nontrivial, parsePatch, pickBic, type BicPick, type BicShape } from "./szz.ts";
 
@@ -64,6 +64,7 @@ export interface BRecord {
   bic_dates: CommitDates | null;
   fix_dates: CommitDates | null;
   disclosure: Record<string, string | null>;
+  instructions?: Inventory;
   gates: { g1?: Gate; g2?: Gate; g4?: Gate };
   error?: string;
 }
@@ -104,7 +105,9 @@ export function checkB(a: FrameAdvisory, position: number, o: { work: string; gi
     if (typeof osv.published === "string") rec.disclosure["the advisory record's publication"] = osv.published;
     rec.gates.g1 = gate1(rec.fix_dates, rec.disclosure);
     if (!passed(rec.gates.g1)) return rec;
-    rec.gates.g4 = containmentAt(clone, pick.bic, bNeedles(rec), join(o.work, "wt", "b-" + a.ghsa));
+    const c = containmentAt(clone, pick.bic, pick.bic + "^", bNeedles(rec), join(o.work, "wt", "b-" + a.ghsa));
+    rec.instructions = c.instructions;
+    rec.gates.g4 = c.g4;
   } catch (e) {
     rec.error = (e as Error).message;
   }
@@ -119,8 +122,11 @@ export function bUnitRef(rec: Pick<BRecord, "repo" | "szz">): UnitRef {
   return { id: rec.repo + "#0@" + bic.slice(0, 12), repo: rec.repo, pr: 0, head: bic, base: bic + "^" };
 }
 
-/** Builds a unit repository with unit.ts from a full clone, then runs its history check and gate 4 on the result. */
-export function buildChecked(o: { unit: UnitRef; source: string; dest: string; needles: Needles }): { repo: UnitRepo; problems: string[] } {
+/** Builds a unit repository with unit.ts from a full clone, takes its instruction inventory, strips executable config,
+ *  then runs the history check and gate 4 on the result. The returned record is what the build writes per unit. */
+export function buildChecked(o: { unit: UnitRef; source: string; dest: string; needles: Needles }): { repo: UnitRepo; instructions: Inventory; problems: string[] } {
   const repo = buildUnitRepo({ unit: o.unit, source: o.source, dest: o.dest, baseBranch: defaultBranch(o.source) });
-  return { repo, problems: [...historyProblems(o.dest, repo), ...treeProblems(o.dest, o.needles)] };
+  const instructions = inventory(o.dest, repo.merge_base);
+  if (!instructions.refuse) stripExecutable(o.dest, instructions);
+  return { repo, instructions, problems: [...(instructions.refuse ? [instructions.refuse] : []), ...historyProblems(o.dest, repo), ...treeProblems(o.dest, o.needles)] };
 }

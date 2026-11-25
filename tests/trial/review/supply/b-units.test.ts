@@ -4,7 +4,7 @@
 // instruction file; why_new=GEVA-590 section 2 and section 10 item 3; seam=bOrder, checkB with a local remote and stubs,
 // bUnitRef, buildChecked; no_claim=real advisory repositories or GitHub
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bOrder, bUnitRef, buildChecked, checkB, DRAW_SEED, seededShuffle } from "../../../../src/trial/review/supply/b-units.ts";
@@ -40,6 +40,27 @@ function history(fixDate: string, extra: Record<string, string> = {}) {
 
 const advisoryOf = (h: ReturnType<typeof history>) => ({ ghsa: "GHSA-test-test-test", repo: "o/app", published: "2026-08-01", advisory_path: "p.json", ecosystem: "npm", fix: { kind: "pull", ref: "12", commit: h.fix, parent: h.parent } });
 
+describe("the unit build under pre-run change 2", () => {
+  test("strips executable config, records hashes and what it stripped, and still passes the history check", () => {
+    const h = history("2026-08-03T00:00:00Z", { ".claude/settings.json": JSON.stringify({ hooks: { Stop: [] }, permissions: { allow: ["Bash"] }, model: "x" }), ".mcp.json": "{}", "AGENTS.md": "a\n" });
+    const dest = join(mkdtempSync(join(tmpdir(), "rms-unit-")), "u");
+    const built = buildChecked({ unit: { id: "o/app#0@" + h.bic.slice(0, 12), repo: "o/app", pr: 0, head: h.bic, base: h.bic + "^" }, source: h.root, dest, needles: { strings: ["GHSA-test-test-test"], fix: h.fix } });
+    expect(built.problems).toEqual([]);
+    expect(Object.keys(built.instructions.files)).toEqual([".claude/settings.json", ".mcp.json", "AGENTS.md"]);
+    expect(built.instructions.strip.map((s) => [s.path, s.action, s.keys])).toEqual([[".claude/settings.json", "keys", ["hooks", "permissions"]], [".mcp.json", "removed", []]]);
+    expect(built.instructions.flags).toMatchObject({ agents_md: true, settings: true, mcp_json: true, claude_md: false });
+    expect(JSON.parse(readFileSync(join(dest, ".claude/settings.json"), "utf8"))).toEqual({ model: "x" });
+    expect(existsSync(join(dest, ".mcp.json"))).toBe(false);
+  }, 60_000);
+
+  test("a settings file that is not JSON refuses the unit", () => {
+    const h = history("2026-08-03T00:00:00Z", { ".claude/settings.local.json": "{ nope" });
+    const dest = join(mkdtempSync(join(tmpdir(), "rms-unit-")), "u");
+    const built = buildChecked({ unit: { id: "o/app#0@" + h.bic.slice(0, 12), repo: "o/app", pr: 0, head: h.bic, base: h.bic + "^" }, source: h.root, dest, needles: { strings: [], fix: h.fix } });
+    expect(built.problems).toEqual([".claude/settings.local.json is not a JSON object, so its executable settings cannot be stripped"]);
+  }, 60_000);
+});
+
 describe("checkB", () => {
   test("SZZ finds the BIC; gates 1, 2 and 4 pass; the unit builds on the BIC's parent with no history past it", () => {
     const h = history("2026-08-03T00:00:00Z");
@@ -58,11 +79,12 @@ describe("checkB", () => {
     const dest = join(mkdtempSync(join(tmpdir(), "rms-unit-")), "u");
     const built = buildChecked({ unit, source: h.root, dest, needles: { strings: [rec.ghsa, ...rec.cves], fix: h.fix } });
     expect(built.problems).toEqual([]);
+    expect(built.instructions.files).toEqual({});
     expect(built.repo.ancestry.count).toBe(2);
     expect(git(dest, "diff", "--name-only", built.repo.base_branch + "...HEAD")).toBe("src/app.ts");
   }, 60_000);
 
-  test("a fix authored before July fails gate 1 and skips gate 4; a tree with CLAUDE.md fails gate 4", () => {
+  test("a fix authored before July fails gate 1 and skips gate 4; a tree with CLAUDE.md passes gate 4 with its flags", () => {
     const early = history("2026-06-20T00:00:00Z");
     const work = mkdtempSync(join(tmpdir(), "rms-b-"));
     const github = () => ({ created_at: "2026-08-02T00:00:00Z", commits: [], comments: {} });
@@ -72,7 +94,8 @@ describe("checkB", () => {
     expect(a.gates.g4).toBeUndefined();
     const instr = history("2026-08-03T00:00:00Z", { "CLAUDE.md": "x\n" });
     const b = checkB(advisoryOf(instr), 0, { work: mkdtempSync(join(tmpdir(), "rms-b-")), github, advisory: () => ({}), url: () => "file://" + instr.root });
-    expect(b.gates.g4).toEqual({ fail: "instruction files: CLAUDE.md" });
+    expect(b.gates.g4).toBe("ok");
+    expect(b.instructions).toMatchObject({ flags: { claude_md: true, root_claude_md: true, settings: false }, changed_by_unit: [], strip: [] });
     const late = history("2026-08-03T00:00:00Z");
     const opened = checkB(advisoryOf(late), 0, { work: mkdtempSync(join(tmpdir(), "rms-b-")), github: () => ({ created_at: "2026-06-01T00:00:00Z", commits: [], comments: {} }), advisory: () => ({}), url: () => "file://" + late.root });
     expect(opened.gates.g1).toEqual({ fail: "the fix PR's opening 2026-06-01T00:00:00Z is before 2026-07-01" });

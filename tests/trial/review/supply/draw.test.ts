@@ -48,6 +48,11 @@ describe("draw", () => {
     expect(Math.max(...perRepo.values())).toBeLessThanOrEqual(3);
     expect(d.capped.length).toBeGreaterThan(0);
     expect(draw(s.p, s.b, s.v, 7).validation).not.toEqual(d.validation);
+    const flags = { claude_md: true, root_claude_md: true, agents_md: false, claude_dir: false, settings: false, mcp_json: false };
+    const first = d.counted[0]!.id;
+    const flagged = s.p.map((r) => (r.id === first ? { ...r, instructions: { files: {}, flags, changed_by_unit: [], strip: [], refuse: null } } : r));
+    expect(draw(flagged, s.b, s.v).counted[0]).toMatchObject({ id: first, flags });
+    expect(d.counted[0]!.flags).toBeNull();
   });
 
   test("refuses with gates pending and below the floor", () => {

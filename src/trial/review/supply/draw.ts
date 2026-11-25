@@ -9,7 +9,7 @@
 // 5. Counted set: every remaining gated P unit in suite rank order, then remaining gated B units in draw order, to 100,
 //    with at most 3 units a repository (gate 5) across the counted set. Below 80 the draw refuses.
 // Every gated decoy is a counted decoy. The draw refuses while any unit's gate result is pending.
-import { passed } from "./gates.ts";
+import { passed, type InstructionFlags } from "./gates.ts";
 import { supplyFail } from "./git.ts";
 import { bUnitRef, DRAW_SEED, seededShuffle, type BRecord } from "./b-units.ts";
 import type { PRecord } from "./p-units.ts";
@@ -22,7 +22,8 @@ export const PILOT_P = 5;
 export const PILOT_B = 5;
 export const VALIDATION = 15;
 
-export interface DrawnUnit { id: string; pool: "P" | "B" | "decoy"; repo: string; rank?: number; position?: number; ghsa?: string }
+/** flags: the instruction file types the unit carries (gates.ts InstructionFlags), for the scorer's descriptive split. */
+export interface DrawnUnit { id: string; pool: "P" | "B" | "decoy"; repo: string; rank?: number; position?: number; ghsa?: string; flags: InstructionFlags | null }
 
 export interface Draw {
   schema: "rm-draw.v1";
@@ -35,8 +36,8 @@ export interface Draw {
   capped: DrawnUnit[];
 }
 
-const pUnit = (r: PRecord): DrawnUnit => (r.decoy ? { id: r.id, pool: "decoy", repo: r.repo } : { id: r.id, pool: "P", repo: r.repo, rank: r.rank! });
-const bUnit = (r: BRecord): DrawnUnit => ({ id: bUnitRef(r).id, pool: "B", repo: r.repo, position: r.position, ghsa: r.ghsa });
+const pUnit = (r: PRecord): DrawnUnit => (r.decoy ? { id: r.id, pool: "decoy", repo: r.repo, flags: r.instructions?.flags ?? null } : { id: r.id, pool: "P", repo: r.repo, rank: r.rank!, flags: r.instructions?.flags ?? null });
+const bUnit = (r: BRecord): DrawnUnit => ({ id: bUnitRef(r).id, pool: "B", repo: r.repo, position: r.position, ghsa: r.ghsa, flags: r.instructions?.flags ?? null });
 
 /** Units whose gate results are not all in: a P record with no error missing gate 1 or 4; a B record with no error
  *  missing gate 1 or 2, or passing both with no gate 4 or no settled visibility read. */

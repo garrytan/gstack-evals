@@ -9,8 +9,8 @@
 // review comment for S1 and S2, the fix PR's opening for S3. When GitHub no longer serves the review comment, the PR's own
 // opening stands in, since no comment on the PR can predate it. A decoy has no fix, so its gate 1 reads its head commit.
 import { join } from "node:path";
-import { containmentAt, gate1, type Gate } from "./gates.ts";
-import { changedPaths, commitDates, ensureClone, ensureObjects, hasCommit, supplyFail, type CommitDates, type GithubReader } from "./git.ts";
+import { containmentAt, gate1, type Gate, type Inventory } from "./gates.ts";
+import { changedPaths, commitDates, ensureClone, ensureObjects, gitOut, hasCommit, supplyFail, type CommitDates, type GithubReader } from "./git.ts";
 
 export const SUITE_NAME = "review-real-bugs";
 
@@ -35,6 +35,7 @@ export interface PRecord extends PUnit {
   fix: { commit: string; pr: number; dates: CommitDates } | null;
   head_dates: CommitDates | null;
   disclosure: Record<string, string | null>;
+  instructions?: Inventory;
   gates: { g1?: Gate; g4?: Gate };
   error?: string;
 }
@@ -79,7 +80,9 @@ export function checkP(u: PUnit, o: { work: string; github: GithubReader; url?: 
       else rec.disclosure["the PR's opening (no readable review comment)"] = facts.created_at;
       rec.gates.g1 = rec.fix ? gate1(rec.fix.dates, rec.disclosure) : { fail: "no commit " + (s3 ? "in fix PR #" + fixPr : "after the head") + " changes a path the blocker names" };
     }
-    rec.gates.g4 = containmentAt(clone, u.head, { strings: [SUITE_NAME, ...u.cases], fix: rec.fix?.commit ?? null }, join(o.work, "wt", "p-" + u.repo.replace("/", "__") + "-" + u.pr));
+    const c = containmentAt(clone, u.head, gitOut(clone, ["merge-base", u.head, u.base], "find the merge-base").trim(), { strings: [SUITE_NAME, ...u.cases], fix: rec.fix?.commit ?? null }, join(o.work, "wt", "p-" + u.repo.replace("/", "__") + "-" + u.pr));
+    rec.instructions = c.instructions;
+    rec.gates.g4 = c.g4;
   } catch (e) {
     rec.error = (e as Error).message;
   }

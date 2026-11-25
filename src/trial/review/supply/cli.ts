@@ -9,7 +9,7 @@ import { CODES, docAnchor, isReasonCode } from "../../../errors/codes.ts";
 import { removeTree } from "../../cleanup.ts";
 import { bNeedles, bOrder, bUnitRef, buildChecked, checkB, rawAdvisory, type BRecord } from "./b-units.ts";
 import { draw, type Draw } from "./draw.ts";
-import { passed } from "./gates.ts";
+import { passed, type InstructionFlags } from "./gates.ts";
 import { NON_SOURCE } from "./szz.ts";
 import { cloneDir, ghPr, gitOut, SupplyError, supplyFail } from "./git.ts";
 import { checkP, readSuite, SUITE_NAME, type PRecord } from "./p-units.ts";
@@ -154,8 +154,15 @@ export function supplyCounts(p: readonly PRecord[], b: readonly BRecord[], vis: 
   const blamed = b.filter((r) => r.szz?.bic), single = blamed.filter((r) => r.shape?.parents === 1);
   const half = single.filter((r) => r.szz!.bic_lines * 2 >= r.szz!.blamed_lines), small = half.filter((r) => r.shape!.lines <= 2000 && r.shape!.source_lines >= 1);
   const g1 = b.filter((r) => passed(r.gates.g1)), g12 = g1.filter((r) => passed(r.gates.g2)), g124 = g12.filter((r) => passed(r.gates.g4));
+  const FLAGS = ["claude_md", "root_claude_md", "agents_md", "claude_dir", "settings", "mcp_json"] as const;
+  const types = (rs: readonly { flags?: InstructionFlags | null }[]) => ({ units: n(rs), ...Object.fromEntries(FLAGS.map((k) => [k, n(rs.filter((r) => r.flags?.[k]))])) });
+  const gated = (rs: readonly (PRecord | BRecord)[]) => {
+    const kept = rs.filter((r) => !r.error && passed(r.gates.g4));
+    return { ...types(kept.map((r) => ({ flags: r.instructions?.flags }))), stripped_settings: n(kept.filter((r) => r.instructions?.strip.some((s) => s.action === "keys"))), unit_diff_changes_one: n(kept.filter((r) => r.instructions?.changed_by_unit.length)) };
+  };
   return {
     schema: "rm-supply-counts.v1",
+    instruction_files_after_gate4: { p_bug_units: gated(bugs), decoys: gated(decoys), b: gated(g12) },
     p: { bug_units: pCount(bugs), never_ran: n(bugs.filter((r) => !r.ran)), decoys: pCount(decoys) },
     b: {
       repositories: n(b),
@@ -163,6 +170,7 @@ export function supplyCounts(p: readonly PRecord[], b: readonly BRecord[], vis: 
       prototype_funnel: { blamed: n(blamed), single_parent: n(single), half_blamed: n(half), at_most_2000_lines: n(small), fix_dated: n(small.filter((r) => passed(r.gates.g1))) },
       gates_in_order: { g1: n(g1), g1_g2: n(g12), g1_g2_g4: n(g124), g1_g2_g4_g3: vis ? n(g124.filter((r) => vis[r.ghsa]?.g3 === "ok")) : null, awaiting_read: vis ? n(g124.filter((r) => !vis[r.ghsa]?.g3)) : n(g124) },
     },
+    draw_instruction_files: d ? types([...d.pilot.p, ...d.pilot.b, d.pilot.decoy, ...d.validation, ...d.counted, ...d.decoys].filter((u, i, all) => all.findIndex((x) => x.id === u.id) === i)) : null,
     draw: d ? { pilot_p: n(d.pilot.p), pilot_b: n(d.pilot.b), pilot_decoy: 1, validation: n(d.validation), counted: n(d.counted), counted_p: n(d.counted.filter((u) => u.pool === "P")), counted_b: n(d.counted.filter((u) => u.pool === "B")), decoys: n(d.decoys), capped: n(d.capped) } : null,
   };
 }
@@ -187,7 +195,7 @@ function buildCmd(f: Map<string, string>): number {
     const unit = pr ? { id: pr.id, repo, pr: pr.pr, head: pr.head, base: pr.base } : bUnitRef(br!);
     const needles = pr ? { strings: [SUITE_NAME, ...pr.cases], fix: pr.fix?.commit ?? null } : bNeedles(br!);
     const built = buildChecked({ unit, source: join(need(f, "--sources"), repo.replace("/", "__")), dest: join(out, unit.id.replace(/[^A-Za-z0-9._-]/g, "_")), needles });
-    return { id: u.id, repo: built.repo, problems: built.problems };
+    return { id: u.id, repo: built.repo, instructions: built.instructions, problems: built.problems };
   });
   write(join(out, "units.json"), rows);
   const bad = rows.filter((r) => r.problems.length);
