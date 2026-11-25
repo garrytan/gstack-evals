@@ -49,5 +49,14 @@
     "tests": [
       "tests/wiki.test.ts"
     ]
+  },
+  "review": {
+    "risk_paths": [
+      "scripts/wiki.ts",
+      "src/errors/**",
+      "scripts/docs-only.ts",
+      ".github/workflows/**",
+      ".gstack/**"
+    ]
   }
 }
