@@ -1,8 +1,8 @@
 ---
 id: 2026-11-25-geva-588-state-machines-review-supply-stop
 kind: finding
-title: "The State Machines review specialist eval stopped on supply before any paid call: the specialist runs on about 3 in 100 real state bugs, and too few usable bugs exist to test it"
-summary: "NO READ on supply. Detector fires on 6 of 222 real state-bug changes. Projected counted run 19, under the floor of 20. Sol untestable at the pin. No paid call ran."
+title: "The State Machines review specialist eval stopped on supply before any paid call: the specialist runs on few real state bugs, and too few usable bugs exist to test it"
+summary: "NO READ on supply. Detector fires on 3 of 36 confirmed state bugs and 6 of 222 candidates. Projected counted run 19, under the floor of 20. Sol untestable at the pin."
 author: GEVA-588
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -18,7 +18,7 @@ links:
 
 # The State Machines review specialist eval stopped on supply
 
-- We learned that gstack's State Machines review specialist almost never runs on real state bugs. The detector that decides whether /review dispatches it fires on 6 of 222 real bug-introducing changes (2.7%). These are changes their projects later fixed as state bugs. You should read shipped /review as running without the specialist on about 97 of 100 real state bugs. A detector that fires more often matters more than anything inside the specialist.
+- We learned that gstack's State Machines review specialist rarely runs on real state bugs. The detector that decides whether /review dispatches it fires on 3 of the 36 bug-introducing changes that two labellers confirmed as state bugs (8%, 95% interval 3% to 22%). Across all 222 candidate changes, 186 of them screened but never labelled, it fires on 6 (2.7%). You should read shipped /review as skipping the specialist on most real state bugs, more than three in four even at the top of that interval. A detector that fires more often matters more than anything inside the specialist.
 - We learned that real, buildable, state-shaped bug-introducing changes are scarce. After a recount, 222 of 679 candidate fixes pass the gates, and the projected counted run is 19 units, under the preregistered floor of 20. So the eval didn't run. The verdict is NO READ on supply. It is not a null result, and no cut follows from it.
 - We learned that GPT-6.2 Sol can't be tested at the gstack pin: gstack gives Codex hosts no specialists at all (scripts/resolvers/review-army.ts line 343 returns an empty string for host codex).
 - We learned that rebuilding a change from git history is easy to get silently wrong. Review caught a bug that dropped parts of changes without a trace. The four fixes below apply to any eval that rebuilds a change with git apply.
@@ -35,15 +35,16 @@ The question was whether gstack /review with the State Machines specialist force
 
 ### The specialist rarely runs
 
-Shipped gstack dispatches the specialist when its detector finds both a subject word (proposal, hold, approval, pending) and an action word (accept, approve, reject, release and the like) in the added code. On this pool:
+Shipped gstack dispatches the specialist when its detector finds both a subject word (proposal, hold, approval, pending) and an action word (accept, approve, reject, release and the like) in the added code. Of the 222 changes that pass the gates, 36 are confirmed state bugs: in earlier evals, both labellers (GPT-6 Astra and Opus 5.5) called each one a defect and state-shaped. The other 186 come from SWE-rebench-V2.1 rows screened for state words and were never labelled, so they are candidates, not confirmed state bugs.
 
-| Diff | Detector fires |
-|---|---:|
-| The change under review, for the 222 that pass the gates | 6 of 222 |
-| The full bug-introducing commit, for those 222 | 12 of 222 |
-| Every bug-introducing commit that passed the share and size gates | 25 of 424 |
+| Diff | Confirmed state bugs | Unlabelled candidates | All |
+|---|---:|---:|---:|
+| The change under review | 3 of 36 | 3 of 186 | 6 of 222 |
+| The full bug-introducing commit | 6 of 36 | 6 of 186 | 12 of 222 |
 
-That's why the plan compared specialist forced on against specialist removed: measuring shipped gstack against removal would mostly measure the detector's rarity. The rarity also lowers the value of the question. Even a clear win for the specialist would change shipped /review on about 3 reviews in 100 until the detector changes.
+The detector also fires on 25 of the 424 full bug-introducing commits that passed the share and size gates. The confirmed figure, 3 of 36, rests on few units: its 95% interval runs from 3% to 22%.
+
+That's why the plan compared specialist forced on against specialist removed: measuring shipped gstack against removal would mostly measure the detector's rarity. The rarity also lowers the value of the question. Even a clear win for the specialist would reach shipped /review on only a small share of state bugs until the detector changes.
 
 ### Too few usable bugs
 
