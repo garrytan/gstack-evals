@@ -23,7 +23,7 @@ links:
 
 ## Takeaways
 
-- **We learned that two more judges agree with a third model.** The Opus 5.5 judge that scored trust-but-verify recall on the Sol and particle-1 arms agreed with Gemini 4 Neon at kappa 0.771 (95% interval 0.60 to 0.915). The GPT-6 Astra judge that graded Opus's lists in eng-review stage 1 agreed at kappa 0.90 (0.75 to 1.0). Their numbers now read **judge checked against Gemini 4 Neon, a third model, not against people**. Neon checked each judge on a sample of 40. It did not rescore any arm.
+- **We learned that two more judges agree with a third model.** The Opus 5.5 judge that scored trust-but-verify recall on the Sol and particle-1 arms agreed with Gemini 4 Neon at kappa 0.771 (95% interval 0.60 to 0.915). The GPT-6 Astra judge that graded Opus's lists in eng-review stage 1 agreed at kappa 0.90 (0.75 to 1.0). Their numbers now read **judge checked against Gemini 4 Neon, a third model, not against people**. Neon checked each judge on a sample of 40, smaller than eng-review's own planned check. It did not rescore any arm.
 - **We learned that a judge check can fail because the checker ran out of room, not because the judge was wrong.** As frozen, the GPT-6.1 Sol judge that scored every Opus arm in trust-but-verify fails, at kappa 0.52 (0.362 to 0.697). Most of the gap came from 9 of its 40 packets where Neon returned no usable answer. After one rerun of those packets with more output room, a step decided after the fact, the judge reads kappa 0.774 (0.634 to 0.896). You should give a checking model the same output room the judge had before you freeze the check.
 - **We learned what one person makes of two label sets in the Jev routing replay.** The labels behind relationship contradictions matched one person on all 40 items (kappa 1.0). The labels behind the recommendation judge scored kappa 0.619 (0.254 to 0.907) on 37 items, short of the 40-item minimum, so that number stays unchecked. One person is one person, so this is a small check.
 
@@ -55,7 +55,7 @@ The plan for each check was written before its first Neon call. Neon got exactly
 
 The frozen fail is the result of record. The completed reading is reported beside it, and the Sol judge's numbers carry both. In the completed reading Neon credits 15 facts the Sol judge did not, and the Sol judge credits 1 Neon did not, so where they differ the Sol judge is the stricter one.
 
-**Eng-review.** 16 of the 40 cells are on real review lists, and most of the rest on anchor lists. On real lists alone kappa is 0.714, with 6 cells the judge marked anticipated. That figure describes the sample and is not a gate. The sample is balanced between the two labels, so its kappa describes a balanced set, not the pool of 403 cells, where Astra marked 78 anticipated.
+**Eng-review.** 16 of the 40 cells are on real review lists, and most of the rest on anchor lists. On real lists alone kappa is 0.714, with 6 cells the judge marked anticipated. That figure describes the sample and is not a gate. The sample is balanced between the two labels, so its kappa describes a balanced set, not the pool of 403 cells, where Astra marked 78 anticipated. This check is the size R126 set, 40 items. It is smaller than the judge check the stage 1 plan froze for itself, 40 cells per class from at least 40 lists with anchor cells capped at a quarter of the weight. So it adds a third model's agreement on a small sample, mostly of anchor cells, and does not stand in for the plan's own check.
 
 ## One person's check of two Jev routing label sets
 
@@ -92,7 +92,7 @@ Day-one's browser checker was not checked against Neon. It already failed two bl
 
 ## Why the verdicts stand
 
-Trust-but-verify's headline verdict on Opus, not distinguished, rests on rows the Sol judge scored, which now carry both readings. A judge check changes how far to trust those rows, not the rows themselves, so the verdict stands with the same caveat. Eng-review's FLOOR rests on Opus A, which passed. The Jev replay's cost and speed figures need no judge and stand.
+Trust-but-verify's headline verdict on Opus, not distinguished, rests on rows the Sol judge scored, which now carry both readings. A judge check changes how far to trust those rows, not the rows themselves, so the verdict stands with the same caveat. Eng-review's FLOOR rests on Opus A, whose judge passed this smaller check. The Jev replay's cost and speed figures need no judge and stand.
 
 Every other row in [the correction](2026-11-25-capy-unchecked-judge-corrections.md) stands as it reads there.
 
