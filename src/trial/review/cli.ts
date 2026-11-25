@@ -544,6 +544,11 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
       if (resume && existsSync(join(root, "unit.json")) && existsSync(tree)) {
         const kept = JSON.parse(readFileSync(join(root, "unit.json"), "utf8")) as { repo: UnitRepo; check: PreparedUnit["check"]; retained: PreparedUnit["retained"] };
         const hp = historyProblems(tree, kept.repo);
+        if (hp.length && prebuilt) {
+          refused.push({ unit: u.id, task, problems: hp });
+          io.err("E_UNIT_REPO " + u.id + ": refused for every arm: " + hp.join("; "));
+          continue;
+        }
         if (hp.length) throw new UnitError("E_UNIT_REPO", hp.map((p) => u.id + ": " + p));
         prepared.push({ unit: u, task, base_branch: kept.repo.base_branch, merge_base: kept.repo.merge_base, tree, tree_sha256: dirTreeSha256(tree), instructions: kept.repo.instructions, retained: kept.retained, check: kept.check, ...(prTexts.has(u.id) ? { pr_text: prTexts.get(u.id)! } : {}) });
         continue;
@@ -552,6 +557,11 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
       const kept = prebuilt?.repos.get(u.id) ?? null;
       const repo = kept ?? buildUnitRepo({ unit: u, source: sources.get(u.repo)!, dest: join(root, "repo"), ...(branches.has(u.repo) ? { baseBranch: branches.get(u.repo)! } : {}) });
       const hp = historyProblems(repo.dir, repo);
+      if (hp.length && kept) {
+        refused.push({ unit: u.id, task, problems: hp });
+        io.err("E_UNIT_REPO " + u.id + ": refused for every arm: " + hp.join("; "));
+        continue;
+      }
       if (hp.length) throw new UnitError("E_UNIT_REPO", hp.map((p) => u.id + ": " + p));
       mkdirSync(root, { recursive: true });
       const built = buildUnitTree({ repo, task, dest: tree, image: pin.pin.tag, test: lens ? null : (tests.get(u.repo) ?? "bun test"), ...(lens ? { install: null } : installs.has(u.repo) ? { install: installs.get(u.repo)! } : {}), scratch: join(out, "units", ".scratch"), retain: join(state, "retained"), docker });
@@ -577,7 +587,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   }
   if (prebuilt) {
     mkdirSync(out, { recursive: true });
-    writeFileSync(refusedFile, JSON.stringify({ schema: "rm-refused.v1", rule: "pre-run change 2, gate 4: a unit whose stripped config breaks its install or test is refused for every arm", units: refused }, null, 2) + "\n");
+    writeFileSync(refusedFile, JSON.stringify({ schema: "rm-refused.v1", rule: "pre-run change 2, gate 4, and the Captain's ruling E (2026-11-25 01:00Z): a stripped unit that fails the history check, or whose install, test or clean-tree check fails, is refused for every arm", units: refused }, null, 2) + "\n");
   }
   if (!prepared.length) {
     io.err("E_UNIT_IMAGE review-units: every unit was refused, so nothing runs");

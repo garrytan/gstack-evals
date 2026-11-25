@@ -15,7 +15,11 @@ import { join } from "node:path";
 import { buildChecked } from "../../../src/trial/review/supply/b-units.ts";
 import type { Draw } from "../../../src/trial/review/supply/draw.ts";
 import { RM_CELLS } from "../../../src/trial/review/rm-cells.ts";
-import { main, ORDER_SEED, pilotArgv, pilotCellItems, pilotCommands, pilotUnits, QUOTES, REVIEW_CAP_USD, rmItems } from "../../../src/trial/review/rm-run.ts";
+import { envelopeStatus } from "../../../src/runner/ledger/envelope.ts";
+import { ledgerStatus, openLease } from "../../../src/runner/ledger/ledger.ts";
+import { LocalLedger } from "../../../src/runner/ledger/local.ts";
+import { LedgerError } from "../../../src/runner/ledger/record.ts";
+import { main, ORDER_SEED, PILOT_ENVELOPE_USD, PILOT_PROGRAM, pilotArgv, pilotCellItems, pilotUnits, QUOTES, REVIEW_CAP_USD, rmItems } from "../../../src/trial/review/rm-run.ts";
 import { armId } from "../../../src/trial/review/run.ts";
 import { historyProblems } from "../../../src/trial/review/unit.ts";
 import { builtDir, loadUnitRepos } from "../../../src/trial/review/unit-repos.ts";
@@ -50,23 +54,29 @@ const approvalsText = () => Object.values(QUOTES).filter((q) => q.in === "approv
 const lines = (text: string, tag: string) => text.split("\n").filter((l) => l.startsWith(tag + " ")).map((l) => l.split(" ")[1]);
 
 describe("rm-run items", () => {
-  test("records every item with words, lists the ones without, holds on a rerun and raises on a path", async () => {
+  test("records the envelope and every item with its words, holds on a rerun and raises on a path", async () => {
     const w = world(approvalsText());
     const first = await w.run("items", "--approvals", w.file);
     expect(first.err).toBe("");
     expect(first.code).toBe(0);
-    expect(lines(first.out, "NO_WORDS").toSorted()).toEqual(["geva590-judge", "geva590-labels", "geva590-probes", "geva590-visibility"]);
-    const withWords = rmItems().filter((i) => i.quotes !== null).map((i) => i.item);
+    expect(first.out).toContain("ENVELOPE geva590-pilot $1034 (each arm's line $414)");
+    const withWords = rmItems().map((i) => i.item);
     expect(lines(first.out, "INIT").toSorted()).toEqual(withWords.toSorted());
-    expect(withWords).toHaveLength(16);
+    expect(withWords).toHaveLength(20);
+    const env = envelopeStatus(join(w.dir, "record"), PILOT_PROGRAM);
+    expect(env.items.toSorted()).toEqual(RM_CELLS.map((c) => "geva590-pilot-" + c.id.toLowerCase()).toSorted());
+    expect(env.program).toMatchObject({ cap_micros: 1034 * 1e6, skill_cap_micros: 414 * 1e6, skills: RM_CELLS.map((c) => armId(c.arm, c.model)) });
+    expect(env.program.quotes).toEqual([{ words: QUOTES.envelope.words, by: "gstack-evals Captain (GEVA-2)", source: QUOTES.envelope.source }]);
+    for (const item of ["geva590-visibility", "geva590-probes", "geva590-judge", "geva590-labels"]) expect(ledgerStatus(join(w.dir, "record"), item)[0]!.approval!.quotes).toEqual([{ words: "Approved by the gstack-evals Captain, 2026-11-25, inside the recorded all-in caps.", by: "gstack-evals Captain (GEVA-2)", source: QUOTES.items.source }]);
     const again = await w.run("items", "--approvals", w.file);
     expect(again.code).toBe(0);
     expect(lines(again.out, "HELD").toSorted()).toEqual(withWords.toSorted());
     expect(lines(again.out, "INIT")).toEqual([]);
     const full = await w.run("items", "--approvals", w.file, "--path", "full");
     expect(full.code).toBe(0);
-    expect(lines(full.out, "RAISE")).toEqual(["geva590-retry"]);
+    expect(lines(full.out, "RAISE").toSorted()).toEqual(["geva590-judge", "geva590-retry"]);
     expect(full.out).toContain("RAISE geva590-retry $987");
+    expect(full.out).toContain("RAISE geva590-judge $100");
     const fable = await w.run("items", "--approvals", w.file, "--path", "fable-leaves");
     expect(lines(fable.out, "RAISE").toSorted()).toEqual(["geva590-validation-n", "geva590-validation-oa", "geva590-validation-os"]);
     expect(fable.out).toContain("RAISE geva590-validation-oa $331.5");
@@ -76,7 +86,8 @@ describe("rm-run items", () => {
     const w = world(approvalsText());
     const r = await w.run("items", "--approvals", w.file, "--dry-run");
     expect(r.code).toBe(0);
-    expect(r.out).toContain("WOULD gstack-evals ledger init --cap 120 --item geva590-pilot-os --admission required --words");
+    expect(r.out).toContain("WOULD gstack-evals ledger envelope --program geva590-pilot --cap 1034 --skill-cap 414 --skills gstack-sol-opus,gstack-astra-opus,gstack-sol-fable,gstack-astra-fable,none-opus --credit-rate 1 --words");
+    expect(r.out).toContain("WOULD gstack-evals ledger init --cap 120 --item geva590-pilot-os --admission required --program geva590-pilot --skills gstack-sol-opus --words");
     expect(existsSync(join(w.dir, "record"))).toBe(false);
   });
 
@@ -87,6 +98,30 @@ describe("rm-run items", () => {
     expect(r.err).toStartWith("E_RM_RUN rm-run items: 1 quote is not in the record verbatim");
     expect(r.err).toContain("If the reserve runs out during the run");
     expect(existsSync(join(w.dir, "record"))).toBe(false);
+  });
+
+  test("the envelope admits the five pilot leases at exactly $1,034 and refuses a cent more", async () => {
+    const w = world(approvalsText());
+    expect((await w.run("items", "--approvals", w.file)).code).toBe(0);
+    const record = join(w.dir, "record");
+    const status = new Map(ledgerStatus(record).map((s) => [s.item, s]));
+    const cells = pilotCellItems((i) => status.get(i)!.left_micros / 1e6).cells;
+    const local = LocalLedger.open(join(w.dir, "run-host.sqlite"));
+    const lease = (item: string, usd: number) => {
+      try {
+        openLease(record, local, { item, run_id: "geva590-pilot-" + item, amount_micros: Math.round(usd * 1e6), requireAdmission: () => null });
+        return "ok";
+      } catch (e) {
+        if (e instanceof LedgerError) return e.code;
+        throw e;
+      }
+    };
+    const [first, ...rest] = Object.values(cells);
+    for (const c of rest) expect(lease(c.item, c.cap_usd)).toBe("ok");
+    expect(lease(first!.item, first!.cap_usd + 0.01)).toBe("ENVELOPE_PROGRAM_STOP");
+    expect(lease(first!.item, first!.cap_usd)).toBe("ok");
+    expect(envelopeStatus(record, PILOT_PROGRAM).total).toMatchObject({ open_micros: 1034 * 1e6, left_micros: 0 });
+    expect(lease("geva590-retry", 1)).toBe("ok");
   });
 });
 
@@ -103,30 +138,31 @@ describe("the pilot plan", () => {
     expect(() => pilotUnits({ ...d, schema: "x" } as unknown as Draw)).toThrow("E_RM_RUN");
   });
 
-  test("pilotCellItems leases each cell's own item at what it has left, with the per-review allowance", () => {
+  test("pilotCellItems leases each cell's own item at its worst case, landing exactly on the envelope", () => {
     const left = new Map<string, number>([["geva590-pilot-os", 120], ["geva590-pilot-oa", 224], ["geva590-pilot-fs", 310], ["geva590-pilot-fa", 414], ["geva590-pilot-n", 11], ["geva590-retry", 295]]);
     const items = pilotCellItems((i) => left.get(i) ?? null);
     expect(Object.keys(items.cells).toSorted()).toEqual(RM_CELLS.map((c) => armId(c.arm, c.model)).toSorted());
-    for (const c of RM_CELLS) expect(items.cells[armId(c.arm, c.model)]).toEqual({ item: "geva590-pilot-" + c.id.toLowerCase(), cap_usd: left.get("geva590-pilot-" + c.id.toLowerCase())!, allowance_usd: REVIEW_CAP_USD[c.id] });
+    const want = { OS: 115.5, OA: 214.5, FS: 297, FA: 396, N: 11 };
+    for (const c of RM_CELLS) expect(items.cells[armId(c.arm, c.model)]).toEqual({ item: "geva590-pilot-" + c.id.toLowerCase(), cap_usd: want[c.id], allowance_usd: REVIEW_CAP_USD[c.id] });
+    expect(REVIEW_CAP_USD.N).toBe(3);
+    expect(Object.values(items.cells).reduce((s, c) => s + c.cap_usd, 0)).toBe(PILOT_ENVELOPE_USD);
     expect(items.retry).toEqual({ item: "geva590-retry", run_id: "geva590-retry", cap_usd: 295 });
     expect(pilotCellItems((i) => (i === "geva590-retry" ? 0 : left.get(i)!)).retry).toBeNull();
-    expect(() => pilotCellItems((i) => (i === "geva590-pilot-fa" ? 395 : left.get(i)!))).toThrow("geva590-pilot-fa has $395.00 left, under 11 reviews at $36");
+    expect(pilotCellItems((i) => (i === "geva590-pilot-fa" ? 100 : left.get(i)!)).cells["gstack-astra-fable"]!.cap_usd).toBe(100);
+    expect(() => pilotCellItems((i) => (i === "geva590-pilot-fa" ? 35 : left.get(i)!))).toThrow("geva590-pilot-fa has $35.00 left, under one session's allowance of $36");
     expect(() => pilotCellItems((i) => (i === "geva590-retry" ? null : left.get(i)!))).toThrow("geva590-retry has no approved cap");
   });
 
-  test("the pilot argv carries the seed, the cell items, the web_search removal and each repo's commands", () => {
+  test("the pilot argv carries the seed, the cell items, the web_search removal, the record and no-op install and test", () => {
     const plan = scratch("rm-plan-");
     const ids = [unitId(1), unitId(2, 0), unitId(3)];
     writeFileSync(join(plan, "pilot-units.txt"), ids.join("\n") + "\n");
-    const commands = join(plan, "commands.json");
-    writeFileSync(commands, JSON.stringify({ "o/r1": { install: "npm ci", test: "npm test" }, "o/r2": { install: "bun install --frozen-lockfile", test: "bun test" } }));
-    expect(() => pilotCommands(commands, ids)).toThrow("E_RM_RUN --commands " + commands + " gives no install and test command for o/r3");
-    writeFileSync(commands, JSON.stringify({ "o/r1": { install: "npm ci", test: "npm test" }, "o/r2": { install: "bun install --frozen-lockfile", test: "bun test" }, "o/r3": { install: "pip install -e .", test: "pytest -q" } }));
-    const argv = pilotArgv({ plan, unitRepos: "/u", commands, out: "/o", upstream: "http://stub", dryRun: true });
+    const argv = pilotArgv({ plan, unitRepos: "/u", out: "/o", record: "/run-host/record", upstream: "http://stub", dryRun: true });
     const after = (flag: string, n = 1) => argv.slice(argv.indexOf(flag) + 1, argv.indexOf(flag) + 1 + n);
     expect(after("--units", 3)).toEqual(ids);
-    expect(after("--install", 3)).toEqual(["o/r1=npm ci", "o/r2=bun install --frozen-lockfile", "o/r3=pip install -e ."]);
-    expect(after("--test", 3)).toEqual(["o/r1=npm test", "o/r2=bun test", "o/r3=pytest -q"]);
+    expect(after("--install", 3)).toEqual(["o/r1=true", "o/r2=true", "o/r3=true"]);
+    expect(after("--test", 3)).toEqual(["o/r1=true", "o/r2=true", "o/r3=true"]);
+    expect(after("--record")).toEqual(["/run-host/record"]);
     expect(after("--order-seed")).toEqual([String(ORDER_SEED)]);
     expect(after("--cell-items")).toEqual([join(plan, "cell-items.json")]);
     expect(after("--parallel")).toEqual(["5"]);
@@ -190,14 +226,13 @@ describe("prebuilt unit repositories", () => {
     const t = toyUnits();
     const plan = scratch("rm-plan-");
     writeFileSync(join(plan, "pilot-units.txt"), t.ids.join("\n") + "\n");
-    writeFileSync(join(plan, "commands.json"), JSON.stringify({ "o/toy": { install: "true", test: "true" } }));
     const left = (i: string) => (i === "geva590-retry" ? 295 : 500);
     writeFileSync(join(plan, "cell-items.json"), JSON.stringify(pilotCellItems(left)));
     const out = join(scratch("rm-out-", join(homedir(), ".cache", "gstack-evals-tests")), "run");
     const env = { PATH: process.env.PATH ?? "", HOME: homedir(), ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", OPENROUTER_API_KEY: "" };
     const o: string[] = [];
     const e: string[] = [];
-    const code = await main(["pilot", "--plan", plan, "--unit-repos", t.build, "--commands", join(plan, "commands.json"), "--out", out, "--upstream", "http://127.0.0.1:9", "--dry-run"], { out: (s) => o.push(s), err: (s) => e.push(s) }, env);
+    const code = await main(["pilot", "--plan", plan, "--unit-repos", t.build, "--ledger-record", join(plan, "record"), "--out", out, "--upstream", "http://127.0.0.1:9", "--dry-run"], { out: (s) => o.push(s), err: (s) => e.push(s) }, env);
     const text = o.join("\n");
     expect(e.join("\n")).toBe("");
     expect(code).toBe(0);

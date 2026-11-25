@@ -16,8 +16,7 @@ import { join, resolve } from "node:path";
 import { ledgerCli } from "../../runner/ledger/cli.ts";
 import { ledgerStatus } from "../../runner/ledger/ledger.ts";
 import { stateRoot } from "../image.ts";
-import { RETRY_RUN_ID, REVIEW_CAP_USD } from "./rm-run.ts";
-import { main as rmRun } from "./rm-run.ts";
+import { main as rmRun, PILOT_CAP_USD, PILOT_ENVELOPE_USD, PILOT_PROGRAM, PILOT_SKILL_CAP_USD, pilotCellItems } from "./rm-run.ts";
 import { blockAfter, messagesAnswer, OUTSIDE_TEXT, responsesAnswer, type Block } from "./rm-check.ts";
 import { RM_CELLS, RM_GSTACK } from "./rm-cells.ts";
 import { armId } from "./run.ts";
@@ -47,7 +46,8 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 /** The toy source and its two units, built and stripped as rm-supply build does, with units.json beside them. */
-function toyUnits(dir: string): { build: string; ids: string[]; stripped: string[] } {
+/** Two runnable units and a third whose built tree is left dirty, so the run must refuse it for every arm. */
+function toyUnits(dir: string): { build: string; ids: string[]; dirty: string; stripped: string[] } {
   const src = join(dir, "source");
   mkdirSync(join(src, "src"), { recursive: true });
   mkdirSync(join(src, ".claude"), { recursive: true });
@@ -68,12 +68,18 @@ function toyUnits(dir: string): { build: string; ids: string[]; stripped: string
   git(src, "add", "-A");
   git(src, "commit", "-q", "-m", "feature");
   const head = git(src, "rev-parse", "HEAD");
+  git(src, "checkout", "-q", "-b", "other", "main");
+  writeFileSync(join(src, "src", "other.ts"), "export const other = 1;\n");
+  git(src, "add", "-A");
+  git(src, "commit", "-q", "-m", "other");
+  const other = git(src, "rev-parse", "HEAD");
   git(src, "checkout", "-q", "main");
   const build = join(dir, "units");
   mkdirSync(build, { recursive: true });
   const refs = [
     { id: "rm-e2e/toy#7@" + head.slice(0, 12), repo: "rm-e2e/toy", pr: 7, head, base: bic },
     { id: "rm-e2e/toy#0@" + bic.slice(0, 12), repo: "rm-e2e/toy", pr: 0, head: bic, base },
+    { id: "rm-e2e/toy#8@" + other.slice(0, 12), repo: "rm-e2e/toy", pr: 8, head: other, base: bic },
   ];
   const stripped: string[] = [];
   const rows = refs.map((unit) => {
@@ -82,7 +88,8 @@ function toyUnits(dir: string): { build: string; ids: string[]; stripped: string
     return { id: unit.id, repo: b.repo, instructions: b.instructions, problems: b.problems };
   });
   writeFileSync(join(build, "units.json"), JSON.stringify(rows, null, 2) + "\n");
-  return { build, ids: refs.map((r) => r.id), stripped };
+  writeFileSync(join(builtDir(build, refs[2]!.id), "stray.txt"), "left behind\n");
+  return { build, ids: refs.slice(0, 2).map((r) => r.id), dirty: refs[2]!.id, stripped };
 }
 
 interface Seen { api: "messages" | "responses" | "other"; model: string; tools: string[]; kind: string; auth: string }
@@ -169,7 +176,7 @@ export async function rmE2e(o: { out: string; log?: (line: string) => void }): P
   ];
 
   const toy = toyUnits(join(out, "toy"));
-  add("units built and stripped", toy.stripped.every((s) => s.includes(".claude/settings.json keys") && s.includes(".mcp.json removed")), toy.stripped.join("; "));
+  add("units built and stripped", toy.stripped.length === 3 && toy.stripped.every((s) => s.includes(".claude/settings.json keys") && s.includes(".mcp.json removed")), toy.stripped.join("; "));
 
   const ledgerDir = join(out, "ledger");
   mkdirSync(ledgerDir, { recursive: true });
@@ -178,23 +185,28 @@ export async function rmE2e(o: { out: string; log?: (line: string) => void }): P
   const blank = Object.fromEntries(Object.keys(process.env).filter((k) => /(^|_)(API_)?KEY$|_TOKEN$|SECRET|PASSWORD/.test(k)).map((k) => [k, ""]));
   const env: Record<string, string | undefined> = { ...process.env, ...blank, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", OPENROUTER_API_KEY: "", GSTACK_EVALS_APPROVALS_BIN: approvals, GSTACK_EVALS_LEDGER_RECORD: join(ledgerDir, "record"), GSTACK_EVALS_LEDGER: join(ledgerDir, "ledger.sqlite") };
   const quiet = { out: (l: string) => log("  " + l), err: (l: string) => log("  " + l) };
-  const capOf = (c: (typeof RM_CELLS)[number]) => Math.ceil(REVIEW_CAP_USD[c.id] * toy.ids.length) + 5;
-  const items = [...RM_CELLS.map((c) => ["e2e-" + c.id.toLowerCase(), capOf(c)] as const), ["e2e-retry", 20] as const];
-  for (const [item, cap] of items) {
-    const code = await ledgerCli(["init", "--cap", String(cap), "--item", item, "--admission", "warn", "--words", "keyless e2e", "--by", "rm-run e2e", "--source", "src/trial/review/rm-e2e.ts"], quiet, env);
-    if (code !== 0) throw new Error("E_RM_RUN rm-run e2e: ledger init " + item + " exited " + code);
-  }
+  const by = ["--words", "keyless e2e", "--by", "rm-run e2e", "--source", "src/trial/review/rm-e2e.ts"];
+  const ledger = async (argv: string[]) => {
+    const code = await ledgerCli(argv, quiet, env);
+    if (code !== 0) throw new Error("E_RM_RUN rm-run e2e: ledger " + argv.slice(0, 5).join(" ") + " exited " + code);
+  };
+  await ledger(["envelope", "--program", PILOT_PROGRAM, "--cap", String(PILOT_ENVELOPE_USD), "--skill-cap", String(PILOT_SKILL_CAP_USD), "--skills", RM_CELLS.map((c) => armId(c.arm, c.model)).join(","), "--credit-rate", "1", ...by]);
+  for (const c of RM_CELLS) await ledger(["init", "--cap", String(PILOT_CAP_USD[c.id]), "--item", "geva590-pilot-" + c.id.toLowerCase(), "--admission", "warn", "--program", PILOT_PROGRAM, "--skills", armId(c.arm, c.model), ...by]);
+  await ledger(["init", "--cap", "20", "--item", "geva590-retry", "--admission", "warn", ...by]);
+  const before = new Map(ledgerStatus(join(ledgerDir, "record")).map((s) => [s.item, s]));
+  const cellItems = pilotCellItems((i) => (before.get(i)?.cap_micros ? before.get(i)!.left_micros / 1e6 : null));
+  const leased = Object.values(cellItems.cells).reduce((s, c) => s + c.cap_usd, 0);
+  add("pilot leases land exactly on the envelope", leased === PILOT_ENVELOPE_USD, Object.values(cellItems.cells).map((c) => c.item + " $" + c.cap_usd).join(", ") + "; $" + leased + " of $" + PILOT_ENVELOPE_USD);
   const plan = join(out, "plan");
   mkdirSync(plan, { recursive: true });
-  writeFileSync(join(plan, "pilot-units.txt"), toy.ids.toSorted().join("\n") + "\n");
-  writeFileSync(join(plan, "commands.json"), JSON.stringify({ "rm-e2e/toy": { install: "true", test: "true" } }) + "\n");
-  writeFileSync(join(plan, "cell-items.json"), JSON.stringify({ schema: "rm-cell-items.v1", cells: Object.fromEntries(RM_CELLS.map((c) => [armId(c.arm, c.model), { item: "e2e-" + c.id.toLowerCase(), cap_usd: capOf(c), allowance_usd: REVIEW_CAP_USD[c.id] }])), retry: { item: "e2e-retry", run_id: RETRY_RUN_ID, cap_usd: 20 } }, null, 2) + "\n");
+  writeFileSync(join(plan, "pilot-units.txt"), [...toy.ids, toy.dirty].toSorted().join("\n") + "\n");
+  writeFileSync(join(plan, "cell-items.json"), JSON.stringify(cellItems, null, 2) + "\n");
 
   const stub = await startStub(steps);
   const run = join(out, "run");
   let code: number;
   try {
-    code = await rmRun(["pilot", "--plan", plan, "--unit-repos", toy.build, "--commands", join(plan, "commands.json"), "--out", run, "--upstream", "http://host.docker.internal:" + stub.port, "--ledger", join(ledgerDir, "ledger.sqlite"), "--ledger-record", join(ledgerDir, "record")], { out: (l) => log("  " + l), err: (l) => log("  " + l) }, env);
+    code = await rmRun(["pilot", "--plan", plan, "--unit-repos", toy.build, "--out", run, "--upstream", "http://host.docker.internal:" + stub.port, "--ledger", join(ledgerDir, "ledger.sqlite"), "--ledger-record", join(ledgerDir, "record")], { out: (l) => log("  " + l), err: (l) => log("  " + l) }, env);
   } finally {
     await stub.close();
   }
@@ -204,6 +216,8 @@ export async function rmE2e(o: { out: string; log?: (line: string) => void }): P
   const want = toy.ids.length * RM_CELLS.length;
   const done = entries.filter((e) => e.record?.termination?.kind === "completed");
   add("every unit in every cell", entries.length === want && done.length === want, entries.length + " entries, " + done.length + " completed of " + want + ": " + [...new Set(entries.map((e) => e.record?.termination?.kind + (e.record?.termination?.code ? " " + e.record.termination.code : "")))].join(", "));
+  const refused = existsSync(join(run, "refused.json")) ? (JSON.parse(readFileSync(join(run, "refused.json"), "utf8")) as { units: { unit: string; problems: string[] }[] }).units : [];
+  add("the dirty unit is refused for every arm and recorded", refused.length === 1 && refused[0]!.unit === toy.dirty && refused[0]!.problems.some((p) => p.includes("the working tree is not clean")) && entries.every((e) => e.cell.unit !== toy.dirty), refused.map((r) => r.unit + ": " + r.problems.join("; ")).join(" | ") || "refused.json lists nothing");
   const order = existsSync(join(run, "order.tsv")) ? readFileSync(join(run, "order.tsv"), "utf8").trim().split("\n").slice(1) : [];
   const unitsInOrder = order.map((l) => l.split("\t")[3]);
   const grouped = unitsInOrder.every((u, i) => i === 0 || u === unitsInOrder[i - 1] || !unitsInOrder.slice(0, i).includes(u));
@@ -226,9 +240,9 @@ export async function rmE2e(o: { out: string; log?: (line: string) => void }): P
   const state = walk(run, () => true).filter((p) => p.includes("/gstack-state/"));
   add("exposure inputs kept", transcripts.length >= want && state.length > 0, transcripts.length + " transcripts, " + state.length + " gstack-state files");
   const status = new Map(ledgerStatus(join(ledgerDir, "record")).map((s) => [s.item, s]));
-  const cellItems = RM_CELLS.map((c) => status.get("e2e-" + c.id.toLowerCase()));
-  add("one lease per cell, settled", cellItems.every((s) => s && s.leases === 1 && !s.open_lease && s.committed_micros > 0), RM_CELLS.map((c, i) => c.id + " leases=" + cellItems[i]?.leases + " open=" + (cellItems[i]?.open_lease ? "yes" : "no") + " committed=" + ((cellItems[i]?.committed_micros ?? 0) / 1e6).toFixed(4)).join("; "));
-  const retry = status.get("e2e-retry");
+  const settled = RM_CELLS.map((c) => status.get("geva590-pilot-" + c.id.toLowerCase()));
+  add("one lease per cell, admitted under the envelope and settled", settled.every((s) => s && s.leases === 1 && !s.open_lease && s.committed_micros > 0), RM_CELLS.map((c, i) => c.id + " leases=" + settled[i]?.leases + " open=" + (settled[i]?.open_lease ? "yes" : "no") + " committed=" + ((settled[i]?.committed_micros ?? 0) / 1e6).toFixed(4)).join("; "));
+  const retry = status.get("geva590-retry");
   add("retry reserve untouched when nothing reruns", entries.every((e) => !e.rerun) && (retry?.committed_micros ?? 0) === 0, "retry leases=" + retry?.leases + " committed=" + ((retry?.committed_micros ?? 0) / 1e6).toFixed(4));
   const auths = [...new Set(stub.seen.map((s) => s.auth.replace(/^Bearer /, "")))];
   add("only the placeholder key reaches the stub", stub.seen.length > 0 && auths.every((a) => a === "stub-not-a-key"), stub.seen.length + " requests; " + auths.length + " distinct credentials" + (auths.every((a) => a === "stub-not-a-key") ? ", all the placeholder" : ", not all the placeholder"));

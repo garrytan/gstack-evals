@@ -22,10 +22,11 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
   red team, its Claude adversarial subagent and both second-model passes on the cell's voice.
 - rm-check.ts: `review-units cell-check`, that eval's keyless rig check: each cell through the run loop with a recording
   driver, then a local Claude Code session per cell against stub APIs, with the real Codex CLI in the voice cells.
-- rm-run.ts: `gstack-evals rm-run`, that eval's pilot path: `items` records each line item with its cap and the recorded
-  words, checked verbatim against the approvals file and the pre-run changes; `pilot-plan` writes the pilot's 11 units and
-  each cell's item, lease and per-review allowance; `pilot` runs review-units on them with the seeded order, one lease per
-  cell, the retry reserve and web_search removal; `e2e` runs that path keylessly with Docker (rm-e2e.ts).
+- rm-run.ts: `gstack-evals rm-run`, that eval's pilot path: `items` records the pilot line's $1,034 envelope and each
+  line item with its cap and the recorded words, checked verbatim against the approvals file and the pre-run changes;
+  `pilot-plan` writes the pilot's 11 units and each cell's item, worst-case lease and per-session allowance; `pilot` runs
+  review-units on them with the seeded order, one lease per cell, the retry reserve, web_search removal and no-op
+  install and test; `e2e` runs that path keylessly with Docker (rm-e2e.ts).
 - cell-rigs.ts: one HostRig per cell (its own ledger item and lease) plus the retry rig, composed into one rig for the
   run loop; attempt 2 of a session binds on the retry rig.
 - unit-repos.ts: `--unit-repos <dir>`, units prebuilt by `rm-supply build`, taken as they stand so stripped config stays

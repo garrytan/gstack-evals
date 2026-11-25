@@ -34,7 +34,8 @@ export const ORDER_SEED = 1795598571;
 /** The Pilots table's supply column: units build, run and parse at 5 at once. */
 export const PILOT_PARALLEL = 5;
 /** Section 11's per-review cap by cell (main reviewer cap plus voice cap): each session's allowance. */
-export const REVIEW_CAP_USD: Readonly<Record<RmCell["id"], number>> = { OS: 10.5, OA: 19.5, FS: 27, FA: 36, N: 1 };
+/** Each cell's per-session allowance: the prereg's per-review cap, with N's raised to $3 (Captain ruling D, 2026-11-25 01:00Z), since one Opus call's worst case is about $1. */
+export const REVIEW_CAP_USD: Readonly<Record<RmCell["id"], number>> = { OS: 10.5, OA: 19.5, FS: 27, FA: 36, N: 3 };
 /** The Pilots table's pilot cap by arm. */
 export const PILOT_CAP_USD: Readonly<Record<RmCell["id"], number>> = { OS: 120, OA: 224, FS: 310, FA: 414, N: 11 };
 /** The per-arm counted budgets the approvals file records. */
@@ -44,6 +45,14 @@ export const RETRY_CAP_USD = { fable_leaves: 295, full: 987 } as const;
 /** Validation reviews per arm: change 2's full path (10) and its Fable-leaves and Sol-only sets (17). */
 export const VALIDATION_UNITS = { full: 10, fable_leaves: 17 } as const;
 export const RETRY_RUN_ID = "geva590-retry";
+/** The pilot line's envelope (Captain, 2026-11-25 01:00Z): the five pilot items' leases admitted together under $1,034. */
+export const PILOT_PROGRAM = "geva590-pilot";
+export const PILOT_ENVELOPE_USD = 1034;
+/** Each skill line is one arm's pilot item, so its ceiling is the largest pilot item cap and never binds tighter than the item. */
+export const PILOT_SKILL_CAP_USD = Math.max(...Object.values(PILOT_CAP_USD));
+export const PILOT_REVIEWS = 11;
+/** The install and test every pilot unit runs (Captain ruling E): no-ops, so the unit image check is the history and clean-tree check. */
+export const NO_OP = "true";
 
 export const APPROVALS_FILE = "approvals/2026-11-24-review-models-eval.md";
 const CHANGE_1 = "wiki/plans/2026-11-24-geva-590-review-models-pre-run-change-1/README.md";
@@ -63,6 +72,7 @@ const captain = (words: string, section: string): RmQuote => ({ words, by: "gsta
 const doc = (words: string, file: string, by: string): RmQuote => ({ words, by, source: file, in: file });
 const CAPS = "2026-11-24, caps (GEVA-590; prereg #450 at 149b608, dated pre-run change 1)";
 const RULINGS = "2026-11-24 23:55Z, Captain rulings for dated change 2";
+const ITEMS_0100 = "2026-11-25 01:00Z, Captain approval of four ledger items and dated change 3 rulings";
 
 export const QUOTES = {
   garry,
@@ -78,18 +88,22 @@ export const QUOTES = {
   counted: captain("Per-arm counted budgets: OS $1,208, OA $2,243, FS $3,105, FA $4,140, N $115.", CAPS),
   fullGated: captain("The full path ($8,067 central, $14,878 cap) is still gated on Garry.", CAPS),
   retry: captain("C1: the caps stay as recorded. The retry reserve after the move is $987 cap on the full path (9.1% of counted spend) and $295 if Fable leaves (8.3%).", RULINGS + ", 2026-11-25 00:10Z"),
+  items: captain("Approved by the gstack-evals Captain, 2026-11-25, inside the recorded all-in caps.", ITEMS_0100),
+  envelope: captain("A pilot-line envelope stop at $1,034 is required on top of the per-arm item caps.", ITEMS_0100),
   retryRule: captain("If the reserve runs out during the run, reruns stop and come to me, never touching an arm's counted budget, and any unit left un-rerun is reported as an infrastructure miss.", RULINGS + ", 2026-11-25 00:10Z"),
 } as const;
 
 export type RmPath = "fable-leaves" | "sol-only" | "full";
 
-/** One line item: its cap now, raises by path, and its quotes; quotes null means the record holds no words for it yet. */
+/** One line item: its cap now, raises by path, and its quotes. */
 export interface RmItem {
   item: string;
   what: string;
   cap_usd: number;
-  quotes: RmQuote[] | null;
+  quotes: RmQuote[];
   raises?: Partial<Record<RmPath, { cap_usd: number; quotes: RmQuote[] }>>;
+  /** The envelope program the item joins at init, with its one skill line (the arm). */
+  program?: { name: string; skill: string };
   /** Leased only after the Captain's go (the validation batch and the counted run). */
   after_go: boolean;
 }
@@ -99,17 +113,16 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Every line item the pilot path needs, then the validation batch and the counted run, created now and leased only after
- * the Captain's go. Each starts at the lowest cap any recorded path gives it and is raised when a path is taken. Items
- * whose cap appears only in the preregistration's money table, with no recorded words, carry quotes null.
+ * the Captain's go. Each starts at the lowest cap any recorded path gives it and is raised when a path is taken.
  */
 export function rmItems(): RmItem[] {
   const items: RmItem[] = [
-    { item: "geva590-visibility", what: "Supply: B visibility reads (section 11)", cap_usd: 60, quotes: null, after_go: false },
-    ...RM_CELLS.map((c): RmItem => ({ item: "geva590-pilot-" + lower(c.id), what: "pilot, arm " + c.id + " (11 reviews at $" + REVIEW_CAP_USD[c.id] + " each)", cap_usd: PILOT_CAP_USD[c.id], quotes: [garry, QUOTES.pilot, QUOTES.pilotTable, QUOTES.pilotUnchanged], after_go: false })),
+    { item: "geva590-visibility", what: "Supply: B visibility reads (section 11)", cap_usd: 60, quotes: [QUOTES.items], after_go: false },
+    ...RM_CELLS.map((c): RmItem => ({ item: "geva590-pilot-" + lower(c.id), what: "pilot, arm " + c.id + " (11 reviews, $" + REVIEW_CAP_USD[c.id] + " per session)", cap_usd: PILOT_CAP_USD[c.id], quotes: [garry, QUOTES.pilot, QUOTES.pilotTable, QUOTES.pilotUnchanged], program: { name: PILOT_PROGRAM, skill: armId(c.arm, c.model) }, after_go: false })),
     { item: "geva590-retry", what: "retry reserve (section 8's one rerun; pilot, validation and counted reruns)", cap_usd: RETRY_CAP_USD.fable_leaves, quotes: [garry, QUOTES.retry, QUOTES.retryRule], raises: { full: { cap_usd: RETRY_CAP_USD.full, quotes: [garry, QUOTES.retry, QUOTES.fullGated] } }, after_go: false },
-    { item: "geva590-probes", what: "Codex model probes (section 11)", cap_usd: 40, quotes: null, after_go: false },
-    { item: "geva590-judge", what: "judge: Carbon on all reviews (section 11; change 1 adds the validation batch's)", cap_usd: 70, quotes: null, after_go: false },
-    { item: "geva590-labels", what: "labels and adjudication (section 11)", cap_usd: 200, quotes: null, after_go: false },
+    { item: "geva590-probes", what: "Codex model probes (section 11)", cap_usd: 40, quotes: [QUOTES.items], after_go: false },
+    { item: "geva590-judge", what: "judge: Carbon on all reviews (section 11; change 1 adds the validation batch's)", cap_usd: 70, quotes: [QUOTES.items], raises: { full: { cap_usd: 100, quotes: [QUOTES.items, QUOTES.fullGated] } }, after_go: false },
+    { item: "geva590-labels", what: "labels and adjudication, with the contamination second read (section 11)", cap_usd: 200, quotes: [QUOTES.items], after_go: false },
     ...RM_CELLS.map((c): RmItem => {
       const full = round2(VALIDATION_UNITS.full * REVIEW_CAP_USD[c.id]);
       const more = round2(VALIDATION_UNITS.fable_leaves * REVIEW_CAP_USD[c.id]);
@@ -126,7 +139,7 @@ export function rmItems(): RmItem[] {
 /** Quotes that a document does not hold verbatim; docs maps "approvals" and each repo path to its text. */
 export function missingQuotes(items: readonly RmItem[], docs: ReadonlyMap<string, string>): string[] {
   const out: string[] = [];
-  const all = items.flatMap((i) => [...(i.quotes ?? []), ...Object.values(i.raises ?? {}).flatMap((r) => r!.quotes)]);
+  const all = items.flatMap((i) => [...i.quotes, ...Object.values(i.raises ?? {}).flatMap((r) => r!.quotes)]);
   for (const q of new Set(all)) {
     const text = docs.get(q.in);
     const flat = (s: string) => s.replace(/\s+/g, " ");
@@ -138,7 +151,7 @@ export function missingQuotes(items: readonly RmItem[], docs: ReadonlyMap<string
 
 const quoteArgs = (quotes: readonly RmQuote[]) => quotes.flatMap((q) => ["--words", q.words, "--source", q.source, "--by", q.by]);
 
-const VALUED = ["--approvals", "--path", "--ledger", "--ledger-record", "--branch", "--draw", "--unit-repos", "--out", "--plan", "--upstream", "--date", "--commands"];
+const VALUED = ["--approvals", "--path", "--ledger", "--ledger-record", "--branch", "--draw", "--unit-repos", "--out", "--plan", "--upstream", "--date"];
 const BOOLS = ["--dry-run"];
 
 function parse(argv: readonly string[]): Map<string, string> {
@@ -155,17 +168,20 @@ function parse(argv: readonly string[]): Map<string, string> {
 const HELP = [
   "gstack-evals rm-run <subcommand>: the review-models eval's pilot path (GEVA-590). Nothing here calls a model.",
   "",
-  "  items --approvals <file> [--path fable-leaves|sol-only|full] [--ledger-record <dir>] [--branch <name>] [--dry-run]",
-  "      records each line item with its cap and recorded words (admission required), after checking every quote is in",
-  "      the approvals file or the pre-run changes verbatim; items with no recorded words are listed, not recorded.",
-  "      --path raises the items that path changes (the validation batch, the retry reserve).",
-  "  pilot-plan --draw <draw.json> --unit-repos <build dir> --out <dir> [--ledger-record <dir>]",
+  "  items --approvals <file> --ledger-record <dir> [--path fable-leaves|sol-only|full] [--branch <name>] [--dry-run]",
+  "      records the pilot line's envelope (" + PILOT_PROGRAM + ", $" + PILOT_ENVELOPE_USD + ") and each line item with its cap and recorded words",
+  "      (admission required; the five pilot items join the envelope, one arm per skill line), after checking every quote",
+  "      is in the approvals file or the pre-run changes verbatim. --path raises the items that path changes (the",
+  "      validation batch, the retry reserve, the judge). The record must sit on the run host's local disk: the ledger",
+  "      refuses a FUSE mount such as the Capy drive.",
+  "  pilot-plan --draw <draw.json> --unit-repos <build dir> --ledger-record <dir> --out <dir>",
   "      writes <out>/pilot-units.txt (the 5 P, 5 B and the decoy, by id) and <out>/cell-items.json (each arm's pilot item,",
-  "      its lease and its per-review allowance, and the retry reserve) from the ledger record.",
-  "  pilot --plan <dir> --unit-repos <build dir> --commands <file> --out <dir> [--upstream <url>] [--ledger <path>] [--ledger-record <dir>] [--date YYYY-MM-DD] [--dry-run]",
-  "      runs review-units on the plan: every pilot unit once in all five cells. --commands is JSON mapping each pilot",
-  "      unit's <owner/repo> to {install, test}, the commands its unit image is built and checked with; a unit whose",
-  "      build fails them is refused for every arm.",
+  "      its lease of min(what is left, 11 sessions at its allowance) and its per-session allowance, and the retry",
+  "      reserve) from the ledger record.",
+  "  pilot --plan <dir> --unit-repos <build dir> --ledger-record <dir> --out <dir> [--upstream <url>] [--ledger <path>] [--date YYYY-MM-DD] [--dry-run]",
+  "      runs review-units on the plan: every pilot unit once in all five cells. Install and test are no-ops for every",
+  "      unit (Captain ruling E); a unit that fails the history and clean-tree check is refused for every arm and",
+  "      listed in <out>/refused.json.",
   "  e2e --out <new dir>",
   "      the pilot path end to end, keyless, with Docker: two toy units, every cell, a temporary ledger, the real proxy and",
   "      a stub upstream on this host (src/trial/review/rm-e2e.ts). Prints a PASS or FAIL line per check.",
@@ -178,7 +194,7 @@ async function items(f: Map<string, string>, io: Io, env: Env): Promise<number> 
   if (path !== null && !["fable-leaves", "sol-only", "full"].includes(path)) throw new Error("E_USAGE rm-run items: --path takes fable-leaves, sol-only or full");
   const all = rmItems();
   const docs = new Map<string, string>([["approvals", readFileSync(approvals, "utf8")]]);
-  for (const file of new Set(all.flatMap((i) => [...(i.quotes ?? []), ...Object.values(i.raises ?? {}).flatMap((r) => r!.quotes)]).map((q) => q.in).filter((x) => x !== "approvals"))) docs.set(file, readFileSync(join(REPO, file), "utf8"));
+  for (const file of new Set(all.flatMap((i) => [...i.quotes, ...Object.values(i.raises ?? {}).flatMap((r) => r!.quotes)]).map((q) => q.in).filter((x) => x !== "approvals"))) docs.set(file, readFileSync(join(REPO, file), "utf8"));
   const missing = missingQuotes(all, docs);
   if (missing.length) {
     io.err("E_RM_RUN rm-run items: " + missing.length + " quote" + (missing.length === 1 ? " is" : "s are") + " not in the record verbatim, so nothing was recorded:\n  " + missing.join("\n  "));
@@ -188,11 +204,11 @@ async function items(f: Map<string, string>, io: Io, env: Env): Promise<number> 
   const status = new Map(existsSync(record) ? ledgerStatus(record).map((s) => [s.item, s]) : []);
   const ledger = (argv: string[]) => ledgerCli([...argv, "--ledger-record", record, ...(f.has("--branch") ? ["--branch", f.get("--branch")!] : [])], io, env);
   let failed = 0;
+  const envelope = ["envelope", "--program", PILOT_PROGRAM, "--cap", String(PILOT_ENVELOPE_USD), "--skill-cap", String(PILOT_SKILL_CAP_USD), "--skills", RM_CELLS.map((c) => armId(c.arm, c.model)).join(","), "--credit-rate", "1", ...quoteArgs([QUOTES.envelope])];
+  if (f.has("--dry-run")) io.out("WOULD gstack-evals ledger " + envelope.map((a) => (/^[\w./$,-]+$/.test(a) ? a : JSON.stringify(a))).join(" "));
+  else if ((await ledger(envelope)) !== 0) return 2;
+  else io.out("ENVELOPE " + PILOT_PROGRAM + " $" + PILOT_ENVELOPE_USD + " (each arm's line $" + PILOT_SKILL_CAP_USD + ")");
   for (const it of all) {
-    if (it.quotes === null) {
-      io.out("NO_WORDS " + it.item + " $" + it.cap_usd + ": " + it.what + "; the approvals file records no cap words for it, so it is not recorded");
-      continue;
-    }
     const raise = path ? it.raises?.[path] : undefined;
     const steps: { action: "init" | "raise"; cap: number; quotes: RmQuote[] }[] = [];
     const have = status.get(it.item)?.cap_micros ?? null;
@@ -200,7 +216,7 @@ async function items(f: Map<string, string>, io: Io, env: Env): Promise<number> 
     if (raise && (have ?? Math.round(it.cap_usd * 1e6)) < Math.round(raise.cap_usd * 1e6)) steps.push({ action: "raise", cap: raise.cap_usd, quotes: raise.quotes });
     if (!steps.length) io.out("HELD " + it.item + " $" + ((have ?? 0) / 1e6).toFixed(2) + (it.after_go ? " (leased only after the Captain's go)" : ""));
     for (const s of steps) {
-      const argv = [s.action, "--cap", String(s.cap), "--item", it.item, ...(s.action === "init" ? ["--admission", "required"] : []), ...quoteArgs(s.quotes)];
+      const argv = [s.action, "--cap", String(s.cap), "--item", it.item, ...(s.action === "init" ? ["--admission", "required", ...(it.program ? ["--program", it.program.name, "--skills", it.program.skill] : [])] : []), ...quoteArgs(s.quotes)];
       if (f.has("--dry-run")) {
         io.out("WOULD gstack-evals ledger " + argv.map((a) => (/^[\w./$,-]+$/.test(a) ? a : JSON.stringify(a))).join(" "));
         continue;
@@ -221,7 +237,8 @@ export function pilotUnits(d: Draw): string[] {
   return ids.toSorted();
 }
 
-/** The cell items for the pilot: each cell's pilot item leased at what it has left, the retry reserve likewise. */
+/** The cell items for the pilot: each cell's pilot item leased at its worst case, min(what it has left, 11 sessions at its
+ *  allowance), which on fresh items is $1,034 in all, the envelope exactly; the retry reserve at what it has left. */
 export function pilotCellItems(left: (item: string) => number | null): CellItems {
   const cells: CellItems["cells"] = {};
   const problems: string[] = [];
@@ -229,8 +246,8 @@ export function pilotCellItems(left: (item: string) => number | null): CellItems
     const item = "geva590-pilot-" + lower(c.id);
     const have = left(item);
     if (have === null) problems.push(item + " has no approved cap in the record; run gstack-evals rm-run items first");
-    else if (have < REVIEW_CAP_USD[c.id] * 11) problems.push(item + " has $" + have.toFixed(2) + " left, under 11 reviews at $" + REVIEW_CAP_USD[c.id]);
-    else cells[armId(c.arm, c.model)] = { item, cap_usd: have, allowance_usd: REVIEW_CAP_USD[c.id] };
+    else if (have < REVIEW_CAP_USD[c.id]) problems.push(item + " has $" + have.toFixed(2) + " left, under one session's allowance of $" + REVIEW_CAP_USD[c.id]);
+    else cells[armId(c.arm, c.model)] = { item, cap_usd: round2(Math.min(have, PILOT_REVIEWS * REVIEW_CAP_USD[c.id])), allowance_usd: REVIEW_CAP_USD[c.id] };
   }
   const retry = left("geva590-retry");
   if (retry === null) problems.push("geva590-retry has no approved cap in the record; run gstack-evals rm-run items first");
@@ -240,6 +257,7 @@ export function pilotCellItems(left: (item: string) => number | null): CellItems
 
 function pilotPlan(f: Map<string, string>, io: Io, env: Env): number {
   const need = (k: string) => f.get(k) ?? (() => { throw new Error("E_USAGE rm-run pilot-plan: pass " + k); })();
+  need("--ledger-record");
   const ids = pilotUnits(JSON.parse(readFileSync(need("--draw"), "utf8")));
   const built = loadUnitRepos(need("--unit-repos"), ids);
   const record = recordPath(f.get("--ledger-record"), env).path;
@@ -255,26 +273,17 @@ function pilotPlan(f: Map<string, string>, io: Io, env: Env): number {
   return 0;
 }
 
-/** Each pilot repo's install and test command from a commands file, refusing a repo the file leaves out. */
-export function pilotCommands(file: string, ids: readonly string[]): { install: string[]; test: string[] } {
-  const map = JSON.parse(readFileSync(file, "utf8")) as Record<string, { install?: unknown; test?: unknown }>;
-  const repos = [...new Set(ids.map((id) => id.split("#")[0]!))].toSorted();
-  const bad = repos.filter((r) => typeof map?.[r]?.install !== "string" || typeof map[r]!.test !== "string" || !(map[r]!.install as string).trim() || !(map[r]!.test as string).trim());
-  if (bad.length) throw new Error("E_RM_RUN --commands " + file + " gives no install and test command for " + bad.join(", ") + "; every pilot repo needs both");
-  return { install: repos.map((r) => r + "=" + map[r]!.install), test: repos.map((r) => r + "=" + map[r]!.test) };
-}
-
-/** The review-units argv the pilot runs. */
-export function pilotArgv(o: { plan: string; unitRepos: string; commands: string; out: string; upstream?: string | null; ledger?: string | null; record?: string | null; date?: string | null; dryRun?: boolean }): string[] {
+/** The review-units argv the pilot runs: install and test are no-ops for every repo (Captain ruling E, 2026-11-25 01:00Z). */
+export function pilotArgv(o: { plan: string; unitRepos: string; out: string; record: string; upstream?: string | null; ledger?: string | null; date?: string | null; dryRun?: boolean }): string[] {
   const ids = readFileSync(join(o.plan, "pilot-units.txt"), "utf8").split("\n").filter(Boolean);
-  const cmds = pilotCommands(o.commands, ids);
+  const repos = [...new Set(ids.map((id) => id.split("#")[0]!))].toSorted();
   return [
     ...rmArgs(),
-    "--unit-repos", o.unitRepos, "--units", ...ids, "--install", ...cmds.install, "--test", ...cmds.test,
+    "--unit-repos", o.unitRepos, "--units", ...ids, "--install", ...repos.map((r) => r + "=" + NO_OP), "--test", ...repos.map((r) => r + "=" + NO_OP),
     "--order-seed", String(ORDER_SEED), "--cell-items", join(o.plan, "cell-items.json"),
     "--remove-voice-web-search", "--reader-map", join(REPO, "src", "trial", "review", "reader-maps", RM_READER_MAP),
-    "--parallel", String(PILOT_PARALLEL), "--out", o.out,
-    ...(o.upstream ? ["--upstream", o.upstream] : []), ...(o.ledger ? ["--ledger", o.ledger] : []), ...(o.record ? ["--record", o.record] : []), ...(o.date ? ["--date", o.date] : []),
+    "--parallel", String(PILOT_PARALLEL), "--out", o.out, "--record", o.record,
+    ...(o.upstream ? ["--upstream", o.upstream] : []), ...(o.ledger ? ["--ledger", o.ledger] : []), ...(o.date ? ["--date", o.date] : []),
     ...(o.dryRun ? ["--dry-run"] : []),
   ];
 }
@@ -302,8 +311,8 @@ export async function main(argv: string[], io: Io = { out: console.log, err: con
       return failed ? 1 : 0;
     }
     if (sub === "pilot") {
-      for (const k of ["--plan", "--unit-repos", "--commands", "--out"]) if (!f.has(k)) throw new Error("E_USAGE rm-run pilot: pass " + k);
-      const args = pilotArgv({ plan: f.get("--plan")!, unitRepos: f.get("--unit-repos")!, commands: f.get("--commands")!, out: f.get("--out")!, upstream: f.get("--upstream") ?? null, ledger: f.get("--ledger") ?? null, record: f.get("--ledger-record") ?? null, date: f.get("--date") ?? null, dryRun: f.has("--dry-run") });
+      for (const k of ["--plan", "--unit-repos", "--ledger-record", "--out"]) if (!f.has(k)) throw new Error("E_USAGE rm-run pilot: pass " + k);
+      const args = pilotArgv({ plan: f.get("--plan")!, unitRepos: f.get("--unit-repos")!, out: f.get("--out")!, record: f.get("--ledger-record")!, upstream: f.get("--upstream") ?? null, ledger: f.get("--ledger") ?? null, date: f.get("--date") ?? null, dryRun: f.has("--dry-run") });
       io.out("review-units " + args.join(" "));
       return await reviewUnits(args, io, env);
     }
