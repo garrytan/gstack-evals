@@ -29,6 +29,14 @@ export const JUDGE_ITEM = "cso-judge";
 /** The ledger item the judge leases: cso2-judge under the rerun plan (GEVA-583 prereg section 9), else cso-judge. */
 export const judgeItem = (p: CsoPrereg): string => (p.rerun ? "cso2-judge" : JUDGE_ITEM);
 const VERTEX = /^(google|google vertex|google-vertex)$/i;
+/** The providers an OpenRouter request is pinned to (provider.only), google-vertex when it names none. */
+const pinnedTo = (body: Record<string, unknown>): string[] => {
+  const only = (body.provider as { only?: unknown } | undefined)?.only;
+  return Array.isArray(only) && only.length ? only.map(String) : ["google-vertex"];
+};
+/** Whether OpenRouter's served provider name ("Google", "Amazon Bedrock", "DeepInfra") is one the request was pinned to. */
+const servedAsPinned = (body: Record<string, unknown>, served: unknown): boolean =>
+  typeof served === "string" && pinnedTo(body).some((p) => (p === "google-vertex" ? VERTEX.test(served) : p === served.trim().toLowerCase().replace(/\s+/g, "-")));
 const RETRY: RetryBudget = { attempts: 3, elapsed_ms: 900_000 };
 /** The fields the metering proxy adds before it prices a request, sent up front so the worst case priced here is the one
  *  it reserves (as statemachines/send.ts does). */
@@ -112,7 +120,7 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
       parsed = JSON.parse(text);
     } catch {}
     appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), event: "reply", digest, meter_id: b.meter_id, status, micros: local.meters(lease.lease_id).get(b.meter_id)?.spent_micros ?? null }) + "\n");
-    if (status === 200 && provider === "openrouter" && !(typeof parsed?.provider === "string" && VERTEX.test(parsed.provider))) csoFail("E_CSO_PROVIDER_DRIFT", model + " was served by " + (parsed?.provider ?? "an unnamed provider") + ", not google-vertex; stop and ask the Captain");
+    if (status === 200 && provider === "openrouter" && !servedAsPinned(body, parsed?.provider)) csoFail("E_CSO_PROVIDER_DRIFT", model + " was served by " + (parsed?.provider ?? "an unnamed provider") + ", not " + pinnedTo(body).join(" or ") + "; stop and ask the Captain");
     if (status === 200 && parsed) writeFileSync(kept, o.seal ? sealRow(parsed, o.seal) : JSON.stringify(parsed));
     return { status, body: parsed };
   };

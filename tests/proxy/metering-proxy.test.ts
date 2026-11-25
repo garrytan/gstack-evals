@@ -694,7 +694,7 @@ describe("OpenRouter route", () => {
     expect(routable("openrouter", `${PARTICLE}:online`)).toBe(false);
     expect(routable("openrouter", "claude-opus-5-5")).toBe(false);
     expect(routable("gemini", "gemini-4-argon")).toBe(false);
-    expect(Object.keys(CHAT_PRICES).filter(id => id.startsWith("openrouter:"))).toEqual([`openrouter:${PARTICLE}`, `openrouter:${DEEPSEEK}`, "openrouter:openai/gpt-6.1-sol", "openrouter:google/gemini-4-argon", "openrouter:google/gemini-4-carbon"]);
+    expect(Object.keys(CHAT_PRICES).filter(id => id.startsWith("openrouter:"))).toEqual([`openrouter:${PARTICLE}`, `openrouter:${DEEPSEEK}`, "openrouter:openai/gpt-6.1-sol", "openrouter:google/gemini-4-argon", "openrouter:google/gemini-4-carbon", "openrouter:x-ai/grok-4.7", "openrouter:moonshotai/kimi-k3.1-pro"]);
   });
 
   // Value: protects=Claude Code's token counts on OpenRouter's Messages route are answered by the proxy, as Lane B's proxy answers them, instead of refused into review-units' degraded share, and still pass the slot's model check; fails_when=a count is refused, sent upstream, reserved or charged, or a model off the slot gets a count; why_new=GST-1019 (GEVA-89: all 106 of particle-1's refusals were token counts); seam=forward's estimate route; no_claim=how Claude Code uses the count
@@ -731,6 +731,8 @@ describe("OpenRouter route", () => {
     [PARTICLE]: '{"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}}',
     [DEEPSEEK]: '{"only":["inference-net"],"allow_fallbacks":false,"quantizations":["fp8"],"data_collection":"deny","max_price":{"prompt":0.08,"completion":0.55,"request":0,"image":0}}',
     [SOL]: '{"only":["openai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":4,"completion":15,"request":0,"image":0}}',
+    "x-ai/grok-4.7": '{"only":["amazon-bedrock"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":4,"completion":12,"request":0,"image":0}}',
+    "moonshotai/kimi-k3.1-pro": '{"only":["deepinfra"],"allow_fallbacks":false,"quantizations":["bf16"],"data_collection":"deny","max_price":{"prompt":1.9,"completion":9.5,"request":0,"image":0}}',
   };
   /** main's openRouterRouting at 5a01538, copied so a row with no image price can be held to it byte for byte. */
   const mainRouting = (price: (typeof CHAT_PRICES)[string]) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), ...(price.quantizations ? { quantizations: price.quantizations } : {}), data_collection: "deny" as const, max_price: { prompt: Math.max(price.input, price.long?.input ?? 0), completion: Math.max(price.output, price.long?.output ?? 0), request: 0, image: 0 } });

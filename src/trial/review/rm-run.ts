@@ -60,7 +60,7 @@ export const APPROVALS_FILE = "approvals/2026-11-24-review-models-eval.md";
 const CHANGE_1 = "wiki/plans/2026-11-24-geva-590-review-models-pre-run-change-1/README.md";
 const CHANGE_2 = "wiki/plans/2026-11-25-geva-590-review-models-pre-run-change-2.md";
 const PREREG = "wiki/plans/2026-11-24-geva-590-review-models-prereg/README.md";
-const CHANGE_6 = "wiki/plans/2026-11-25-geva-590-review-models-pre-run-change-6.md";
+const CHANGE_9 = "wiki/plans/2026-11-25-geva-590-review-models-pre-run-change-9.md";
 
 /** A recorded quote and the document it must appear in verbatim: the approvals file (in the Captain drive) or a repo file. */
 export interface RmQuote {
@@ -92,7 +92,7 @@ export const QUOTES = {
   fullGated: captain("The full path ($8,067 central, $14,878 cap) is still gated on Garry.", CAPS),
   retry: captain("C1: the caps stay as recorded. The retry reserve after the move is $987 cap on the full path (9.1% of counted spend) and $295 if Fable leaves (8.3%).", RULINGS + ", 2026-11-25 00:10Z"),
   items: captain("Approved by the gstack-evals Captain, 2026-11-25, inside the recorded all-in caps.", ITEMS_0100),
-  labels: doc("The labels cap goes to $650.", CHANGE_6, "gstack-evals Captain (GEVA-2)"),
+  labels: doc("The labels item drops from $650 to $80.", CHANGE_9, "gstack-evals Captain (GEVA-2)"),
   envelope: captain("A pilot-line envelope stop at $1,034 is required on top of the per-arm item caps.", ITEMS_0100),
   retryRule: captain("If the reserve runs out during the run, reruns stop and come to me, never touching an arm's counted budget, and any unit left un-rerun is reported as an infrastructure miss.", RULINGS + ", 2026-11-25 00:10Z"),
 } as const;
@@ -126,7 +126,7 @@ export function rmItems(): RmItem[] {
     { item: "geva590-retry", what: "retry reserve (section 8's one rerun; pilot, validation and counted reruns)", cap_usd: RETRY_CAP_USD.fable_leaves, quotes: [garry, QUOTES.retry, QUOTES.retryRule], raises: { full: { cap_usd: RETRY_CAP_USD.full, quotes: [garry, QUOTES.retry, QUOTES.fullGated] } }, after_go: false },
     { item: "geva590-probes", what: "Codex model probes (section 11)", cap_usd: 40, quotes: [QUOTES.items], after_go: false },
     { item: "geva590-judge", what: "judge: Carbon on all reviews (section 11; change 1 adds the validation batch's)", cap_usd: 70, quotes: [QUOTES.items], raises: { full: { cap_usd: 100, quotes: [QUOTES.items, QUOTES.fullGated] } }, after_go: false },
-    { item: "geva590-labels", what: "labels and adjudication by two people, with the contamination second read (section 11; changes 5 and 6)", cap_usd: 650, quotes: [QUOTES.items, QUOTES.labels], after_go: false },
+    { item: "geva590-labels", what: "the judge check's labels by Grok 4.7, with Kimi K3.1 Pro as its fallback, and the contamination second read (section 11; changes 3 and 9)", cap_usd: 80, quotes: [QUOTES.items, QUOTES.labels], after_go: false },
     ...RM_CELLS.map((c): RmItem => {
       const full = round2(VALIDATION_UNITS.full * REVIEW_CAP_USD[c.id]);
       const more = round2(VALIDATION_UNITS.fable_leaves * REVIEW_CAP_USD[c.id]);

@@ -69,8 +69,8 @@ describe("rm-run items", () => {
     expect(env.program.quotes).toEqual([{ words: QUOTES.envelope.words, by: "gstack-evals Captain (GEVA-2)", source: QUOTES.envelope.source }]);
     const itemsWords = { words: "Approved by the gstack-evals Captain, 2026-11-25, inside the recorded all-in caps.", by: "gstack-evals Captain (GEVA-2)", source: QUOTES.items.source };
     const labels = ledgerStatus(join(w.dir, "record"), "geva590-labels")[0]!;
-    expect(labels.approval!.quotes).toEqual([itemsWords, { words: "The labels cap goes to $650.", by: "gstack-evals Captain (GEVA-2)", source: "wiki/plans/2026-11-25-geva-590-review-models-pre-run-change-6.md" }]);
-    expect(rmItems().find((i) => i.item === "geva590-labels")!.cap_usd).toBe(650);
+    expect(labels.approval!.quotes).toEqual([itemsWords, { words: "The labels item drops from $650 to $80.", by: "gstack-evals Captain (GEVA-2)", source: "wiki/plans/2026-11-25-geva-590-review-models-pre-run-change-9.md" }]);
+    expect(rmItems().find((i) => i.item === "geva590-labels")!.cap_usd).toBe(80);
     for (const item of ["geva590-visibility", "geva590-probes", "geva590-judge"]) expect(ledgerStatus(join(w.dir, "record"), item)[0]!.approval!.quotes).toEqual([{ words: "Approved by the gstack-evals Captain, 2026-11-25, inside the recorded all-in caps.", by: "gstack-evals Captain (GEVA-2)", source: QUOTES.items.source }]);
     const again = await w.run("items", "--approvals", w.file);
     expect(again.code).toBe(0);
