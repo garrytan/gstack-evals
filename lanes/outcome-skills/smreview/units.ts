@@ -17,7 +17,7 @@ import { MULTILANG, pinDigest, readRows, toCandidate, type Candidate, type MlRow
 import { addUnitFile, saveUnit, writeUnit, type SmUnit } from "../statemachines/unit.ts";
 import { findBic, type BicRecord } from "./bic.ts";
 import { srFail } from "./errors.ts";
-import { screened, V21, V21_LANG, v21Row, v21Rows, type V21Row } from "./v21.ts";
+import { screened, toolCheckout, V21, V21_LANG, v21Row, v21Rows, type V21Row } from "./v21.ts";
 
 /** The known units: MultiLang rows the pstack-checks eval (#358) scored, and the SWE-rebench leaderboard rows the state
  *  machines prompt eval (#360) scored, frozen by id. */
@@ -41,7 +41,7 @@ export interface Sources { cache: string; export?: string; v21: string; tool: st
 /** A reader of pool rows' dataset rows: each source is read once, and each row is checked against the pool's digest (for
  *  V2.1, the digest of the published row, before the converter's row shape). */
 export function rowReader(s: Sources): (p: PoolRow) => MlRow {
-  let ml: Map<string, MlRow> | null = null, v21: Map<string, V21Row> | null = null;
+  let ml: Map<string, MlRow> | null = null, v21: Map<string, V21Row> | null = null, tool: string | null = null;
   return (p) => {
     let row: MlRow, digest: string;
     if (p.source === "live-multilang") {
@@ -55,7 +55,8 @@ export function rowReader(s: Sources): (p: PoolRow) => MlRow {
       v21 ??= new Map(v21Rows(s.v21).map((x) => [String(x.instance_id), x]));
       const raw = v21.get(p.id) ?? srFail("E_SR_SOURCE", "no V2.1 row " + p.id);
       digest = sha(JSON.stringify(raw));
-      row = v21Row(raw, s.tool);
+      tool ??= toolCheckout(s.tool);
+      row = v21Row(raw, tool);
     }
     if (digest !== p.row_sha256) srFail("E_SR_SOURCE", p.id + ": the row is not the one the pool recorded");
     return row;

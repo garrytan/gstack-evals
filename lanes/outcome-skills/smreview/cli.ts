@@ -10,7 +10,7 @@ import { readUnit } from "../statemachines/unit.ts";
 import { labelsGate, neutralGate, oracleGate, readLabels } from "../pfchecks/draw.ts";
 import { dockerExecutor } from "../pfchecks/runner.ts";
 import { EFFORT_KEYS, effortProblem } from "../pfchecks/session.ts";
-import { analyse, look, type UnitFacts } from "./analysis.ts";
+import { analyse, complete, look, type UnitFacts } from "./analysis.ts";
 import { SR_MODELS, type SrArm } from "./arms.ts";
 import type { BicRecord } from "./bic.ts";
 import { srDraw } from "./draw.ts";
@@ -36,8 +36,8 @@ export const HELP = `Usage: gstack-evals sr <command>
           --home-gplus <dir> --home-g0 <dir> --out <dir> [--volume <tree volume>] [--harbor <bin>] [--claude <bin>]
   score --s <repo> --unit <dir> --neutral <record.json> --checks <CHECKS.json> --session <session.json> --arm <arm> --out <catch.json>
         [--transcript <sdk-messages.jsonl>] [--claude-session <claude-session.jsonl>] [--image <id>] [--volume <name>]
-  analyze --prereg <prereg.json> --bic <bic.jsonl> --out <analysis.json> <catch.json>...
-  look --prereg <prereg.json> --bic <bic.jsonl> --draw <draw.json> <catch.json>...
+  analyze --prereg <prereg.json> --bic <bic.jsonl> --plan <plan.json> --out <analysis.json> <catch.json>...
+  look --prereg <prereg.json> --bic <bic.jsonl> --plan <plan.json> <catch.json>...
   items
 Codes E_SR_* in docs/errors.md.`;
 
@@ -178,12 +178,15 @@ async function run(cmd: string, a: Args): Promise<number> {
     const seeds = readSrPrereg(need(a, "prereg"));
     const ss = catches(a._).map((c) => sessionOf(c, c.arm));
     const fs = facts(bics(need(a, "bic")));
+    const plan = readJson(need(a, "plan")).sessions as SrPlanned[];
+    const order = [...new Set(plan.map((s) => s.unit))];
+    const reps = Math.max(...plan.map((s) => s.rep));
     if (cmd === "look") {
-      const l = look(ss, fs, (readJson(need(a, "draw")) as { test: string[] }).test, seeds.bootstrap_seed, SR_MODELS);
+      const l = look(ss, fs, order, reps, seeds.bootstrap_seed, SR_MODELS);
       console.log(JSON.stringify(l));
       return 0;
     }
-    const an = analyse(ss, fs, seeds.bootstrap_seed, SR_MODELS);
+    const an = analyse(ss, fs, seeds.bootstrap_seed, SR_MODELS, !complete(ss, order, reps, SR_MODELS));
     write(need(a, "out"), an);
     console.log("decision " + an.decision + " units " + an.units + " sessions " + an.sessions);
     return 0;

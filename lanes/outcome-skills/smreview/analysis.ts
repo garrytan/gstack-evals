@@ -12,7 +12,7 @@ import type { SrArm } from "./arms.ts";
 import type { SrExposure } from "./exposure.ts";
 
 export type CellArm = SrArm | "G";
-export interface SrSession { unit: string; repo: string; model: string; arm: SrArm; score: 0 | 1 | null; gap: string | null; exposure: SrExposure | null; false_alarms: number; checks: number }
+export interface SrSession { unit: string; repo: string; model: string; arm: SrArm; score: 0 | 1 | null; gap: string | null; exposure: SrExposure | null; false_alarms: number; checks: number; cap_stop?: boolean }
 export interface UnitFacts { id: string; repo: string; detected: boolean; pr_lines: number }
 export const SMALL_PR = 10;
 export const READINGS = ["primary", "gaps_as_miss", "arm_refusal_as_miss", "no_small_pr", "detector_fires", "detector_silent"] as const;
@@ -24,6 +24,15 @@ export const CONTRASTS: Array<{ a: CellArm; b: CellArm; role: "primary" | "secon
 /** R113's one look at half the counted units (rounded up): the primary contrast stops the run when its bootstrap p is
  *  under 0.003 either way; the final test is then at 0.049. */
 export const LOOK = { stop_p: 0.003, final_p: 0.049 } as const;
+
+/** The gain the Decision section asks of a HELPS before it widens the specialist: 10 points. */
+export const WIDEN_DELTA = 0.1;
+
+/** Whether every planned session of a part has a record: reps sessions for each (unit, model, arm), none a cap stop. */
+export function complete(sessions: readonly SrSession[], units: readonly string[], reps: number, models: readonly string[], arms: readonly SrArm[] = ["N", "C", "P", "G+", "G0"]): boolean {
+  if (sessions.some((s) => s.cap_stop)) return false;
+  return units.every((u) => models.every((m) => arms.every((arm) => sessions.filter((s) => s.unit === u && s.model === m && s.arm === arm).length >= reps)));
+}
 
 /** pstack-checks' verdict rule at level alpha: the interval clear of 0 and the bootstrap p under alpha. */
 export function verdictAt(ci: [number, number] | null, p: number, alpha: number, incomplete: boolean): Verdict {
@@ -74,7 +83,7 @@ export interface SrAnalysis {
   rates: Array<{ model: string; arm: SrArm; k: number; n: number; rate: number | null; ci95: [number, number] }>;
   contrasts: SrContrast[]; exposure: Array<{ model: string; arm: SrArm; sessions: number; army: number; ran: number }>;
   false_alarms: Array<{ model: string; arm: SrArm; sessions: number; checks: number; false_alarms: number }>;
-  decision: "WIDEN" | "CUT" | "NULL" | "INCOMPLETE"; look?: { units: number; p: number; stop: boolean };
+  decision: "WIDEN" | "KEEP" | "CUT" | "NULL" | "INCOMPLETE"; look?: { units: number; p: number; stop: boolean };
 }
 
 export function analyse(sessions: readonly SrSession[], units: readonly UnitFacts[], seed: number, models: readonly string[], incomplete = false): SrAnalysis {
@@ -103,16 +112,19 @@ export function analyse(sessions: readonly SrSession[], units: readonly UnitFact
     contrasts,
     exposure: by((model, arm, ss) => ({ model, arm, sessions: ss.length, army: ss.filter((s) => s.exposure?.army).length, ran: ss.filter((s) => s.exposure?.ran).length })),
     false_alarms: by((model, arm, ss) => ({ model, arm, sessions: ss.length, checks: ss.reduce((a, s) => a + s.checks, 0), false_alarms: ss.reduce((a, s) => a + s.false_alarms, 0) })),
-    decision: primary.verdict === "HELPS" ? "WIDEN" : primary.verdict === "HURTS" ? "CUT" : primary.verdict === "INCOMPLETE" ? "INCOMPLETE" : "NULL",
+    decision: primary.verdict === "HELPS" ? (primary.delta >= WIDEN_DELTA ? "WIDEN" : "KEEP") : primary.verdict === "HURTS" ? "CUT" : primary.verdict === "INCOMPLETE" ? "INCOMPLETE" : "NULL",
   };
 }
 
-/** The one look: the primary contrast on the first half (rounded up) of the counted units, order being the draw's test
- *  list, once each has its G+ and G0 cells on every model. */
-export function look(sessions: readonly SrSession[], units: readonly UnitFacts[], order: readonly string[], seed: number, models: readonly string[]): { units: number; p: number; delta: number; stop: boolean } {
+/** The one look: the primary contrast on the first half (rounded up) of the counted units in plan order, read only once
+ *  every one of those units has all reps of its G+ and G0 sessions on every model. A unit not yet done is never replaced
+ *  by a later one. */
+export function look(sessions: readonly SrSession[], units: readonly UnitFacts[], order: readonly string[], reps: number, seed: number, models: readonly string[]): { units: number; done: number; p: number | null; delta: number | null; stop: boolean } {
   const facts = new Map(units.map((u) => [u.id, u]));
-  const done = order.filter((id) => facts.has(id) && models.every((m) => (["G+", "G0"] as const).every((arm) => sessions.some((s) => s.unit === id && s.model === m && s.arm === arm)))).slice(0, Math.ceil(order.length / 2));
-  const ss = sessions.filter((s) => done.includes(s.unit));
+  const half = order.slice(0, Math.ceil(order.length / 2));
+  const done = half.filter((id) => facts.has(id) && complete(sessions.filter((s) => s.unit === id), [id], reps, models, ["G+", "G0"]));
+  if (done.length < half.length) return { units: half.length, done: done.length, p: null, delta: null, stop: false };
+  const ss = sessions.filter((s) => half.includes(s.unit));
   const bs = bootstrap(pairs(cells(ss, facts, "primary"), "G0", "G+", models), seed);
-  return { units: done.length, p: bs.p, delta: bs.delta, stop: done.length >= Math.ceil(order.length / 2) && bs.p < LOOK.stop_p };
+  return { units: half.length, done: done.length, p: bs.p, delta: bs.delta, stop: bs.p < LOOK.stop_p };
 }

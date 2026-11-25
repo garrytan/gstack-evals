@@ -208,8 +208,8 @@ export async function main(argv: string[]): Promise<number> {
     const an = analyse(ss, facts, 5, SR_MODELS);
     const N = an.rates.filter((x) => x.arm === "N" && x.k === 1).length;
     rule("analysis reads the scored sessions: N caught on both models, every contrast computed, exposure and false alarms per cell", N === 2 && an.contrasts.length === 24 && an.exposure.some((e) => e.arm === "G+" && e.ran === e.sessions) && an.false_alarms.some((f) => f.arm === "C" && f.false_alarms === f.sessions), "decision " + an.decision + ", contrasts " + an.contrasts.length + ", G+ ran " + an.exposure.filter((e) => e.arm === "G+").map((e) => e.ran + "/" + e.sessions).join(",") + ", C false alarms " + an.false_alarms.filter((f) => f.arm === "C").map((f) => f.false_alarms).join(","));
-    const l = look(ss, facts, [u.id], 5, SR_MODELS);
-    rule("the look reads half the counted units, rounded up", l.units === 1 && l.stop === false, JSON.stringify(l));
+    const l = look(ss, facts, [u.id], 1, 5, SR_MODELS);
+    rule("the look reads half the counted units, rounded up, once all their G+ and G0 sessions are in", l.units === 1 && l.done === 1 && l.p !== null && l.stop === false, JSON.stringify(l));
   } catch (e) {
     rule("dry run", false, (e as Error).stack?.slice(0, 900) ?? String(e));
   } finally {

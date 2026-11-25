@@ -20,7 +20,7 @@ links:
 attachments:
   - f7599e6649ab6809093d1d203b7790aae083adc5a401fb2c4c7d68d2602ab423  power.py
   - 5a734745f3f29c7087bf900308a166e176aeab0eff2cf4c9304a3354d6db8131  power.txt
-  - 155fd9ff9a6d9d7f817e272f67924028f8c0e270116debecf7ca7531b8738884  prereg.json
+  - 357453c330dea1c45387e67ffcd0e22854297bda96e47da3380d6924e10612da  prereg.json
   - e9c88ce068102fecc2fc5d51a731ffd6d50c9bfbf408319e1045c2640b292ceb  supply-count.md
 ---
 
@@ -94,7 +94,7 @@ Judge: none
 ## Interim look
 
 Planned paid spend: $2.1k
-At: half the counted units, rounded up, in the draw's order, once each has its G+ and G0 cells on both models
+At: half the counted units, rounded up, in the draw's order, once every one of them has all its planned G+ and G0 sessions on both models
 Stop bounds: bootstrap p under 0.003 for the primary contrast, either direction, at the look; p under 0.049 at the end
 Other looks: none
 
@@ -208,7 +208,7 @@ A cell (unit, model, arm) scores the mean of its scored sessions. G's cell is G+
 | G minus N, C minus G+, P minus G+ | secondary | the same at p < 0.05 |
 | G+, G0, C and P each minus N | descriptive | no verdict |
 
-Each contrast also prints per model, and beside it five readings: gaps scored as misses, arm refusals as misses, no_small_pr, and the units where the detector fires and where it is silent. Each arm's catch rate prints per model with its Wilson interval. A run that stops on a cap is INCOMPLETE and is never retried to change a verdict.
+Each contrast also prints per model, and beside it five readings: gaps scored as misses, arm refusals as misses, no_small_pr, and the units where the detector fires and where it is silent. Each arm's catch rate prints per model with its Wilson interval. A run that stops on a cap, or that lacks any session its plan lists, is INCOMPLETE: it prints no HELPS or HURTS and no decision, and it is never retried to change a verdict.
 
 **Why null? (R48).** A null gets one cycle before its call: did G+ run the specialist (exposure); do the units fit (state-shaped labels, the size and hunk rows); was there power and room (N's and G0's rates against the MDD); and does the frontier model already do it unaided (C and N against G+). The call is KEEP, FIX-METHOD or CUT-CANDIDATE, and a CUT-CANDIDATE goes to the owner in plain words.
 
@@ -262,7 +262,7 @@ The pilot runs the first 6 drawn units, all five arms on both models, one sessio
 
 ### 14. The one look (R113)
 
-The paid plan is above $500, so the run takes one look, and no other. It comes when half the counted units, rounded up, in the draw's order, each have their G+ and G0 cells on both models. The look reads only the primary contrast on those units. If its bootstrap p is under 0.003, in either direction, the counted run stops there and that is its verdict. Otherwise the run finishes, and the final primary test uses p < 0.049. No other arm is read at the look.
+The paid plan is above $500, so the run takes one look, and no other. It comes when half the counted units, rounded up, in the draw's order, each have all their planned G+ and G0 sessions (two a cell) on both models. A unit in that half that is not finished is waited for, never replaced by a later one. The look reads only the primary contrast on those units. If its bootstrap p is under 0.003, in either direction, the counted run stops there and that is its verdict. Otherwise the run finishes, and the final primary test uses p < 0.049. No other arm is read at the look.
 
 ### 15. Build, pins, dry run and stops
 

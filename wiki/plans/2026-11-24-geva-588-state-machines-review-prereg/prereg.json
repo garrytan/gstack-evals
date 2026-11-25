@@ -53,7 +53,7 @@
     "test": 2
   },
   "look": {
-    "at": "half the counted units, rounded up, once each has G+ and G0 on both models",
+    "at": "half the counted units, rounded up, in plan order, once each has all its planned G+ and G0 sessions on both models; an unfinished unit is waited for, never replaced",
     "stop_p": 0.003,
     "final_p": 0.049
   },
