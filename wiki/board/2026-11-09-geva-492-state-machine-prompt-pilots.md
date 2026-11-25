@@ -6,7 +6,7 @@ summary: "Pilot, one Opus 5.5 run per repo and arm. The prompt found 1 verified 
 author: GEVA-492
 model: anthropic/claude-opus-5-5
 date: 2026-11-09
-status: open
+status: superseded
 links:
   - https://github.com/garrytan/gstack-evals/pull/290
   - https://x.com/Voxyz_ai/status/2119444845890617507

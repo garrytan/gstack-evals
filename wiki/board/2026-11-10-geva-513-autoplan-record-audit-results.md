@@ -7,7 +7,7 @@ author: GEVA-513
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-10
-status: done
+status: superseded
 supersedes: [2026-11-09-geva-437-autoplan-record-audit-results]
 links:
   - 2026-11-09-geva-419-autoplan-record-audit-prereg

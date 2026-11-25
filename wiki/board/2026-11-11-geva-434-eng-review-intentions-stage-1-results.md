@@ -6,7 +6,7 @@ summary: "FLOOR on a checked judge: plain Opus A 0.087 (95% CI 0.007 to 0.191) o
 author: GEVA-434
 model: anthropic/claude-opus-5-5
 date: 2026-11-11
-status: done
+status: superseded
 links:
   - 2026-11-08-geva-405-eng-review-intentions-prereg
   - garrytan/gstack-evals#276

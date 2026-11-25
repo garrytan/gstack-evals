@@ -7,7 +7,7 @@ author: GEVA-102
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-01
-status: open
+status: superseded
 links:
   - 2026-10-31-geva-83-planning-r1a-prereg
   - 2026-10-31-geva-82-planning-r1a-ceo-panel
