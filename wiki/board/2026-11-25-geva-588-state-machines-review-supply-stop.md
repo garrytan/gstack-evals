@@ -33,7 +33,7 @@ The question was whether gstack /review with the State Machines specialist force
 
 ## What didn't work
 
-### The specialist rarely runs
+### The detector rarely fires
 
 Shipped gstack dispatches the specialist when its detector finds both a subject word (proposal, hold, approval, pending) and an action word (accept, approve, reject, release and the like) in the added code. Of the 222 changes that pass the gates, 36 are confirmed state bugs: in earlier evals, both labellers (GPT-6 Astra and Opus 5.5) called each one a defect and state-shaped. The other 186 come from SWE-rebench-V2.1 rows screened for state words and were never labelled, so they are candidates, not confirmed state bugs.
 
@@ -55,7 +55,7 @@ The pool had 679 fixes: 41 known state bugs from earlier evals, 67 rows that bot
 | No BIC | 1 | 0 | 8 | 9 |
 | BIC wrote under half the blamed lines | 5 | 18 | 142 | 165 |
 | BIC over 2,000 lines | 7 | 8 | 66 | 81 |
-| Rebuilt change misses the bug | 12 | 21 | 169 | 202 |
+| Rebuilt change adds under half the blamed lines | 12 | 21 | 169 | 202 |
 | Pass | 16 | 20 | 186 | 222 |
 
 After the labels, the oracle (the fix's tests must fail before the fix and pass after it) and a harmless-edit check, the projection was:
@@ -85,7 +85,7 @@ All 679 rows were recounted after the fixes:
 | Figure | First count | Recount |
 |---|---:|---:|
 | Pass the gates | 221 | 222 |
-| Rebuilt change misses the bug | 203 | 202 |
+| Rebuilt change adds under half the blamed lines | 203 | 202 |
 | Repositories among passes | 195 | 196 |
 | Median share of BIC hunks kept | 89% | 85% |
 | Units keeping every hunk | 68 | 62 |
