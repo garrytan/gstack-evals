@@ -1,7 +1,7 @@
 ---
 id: 2026-11-25-geva-588-state-machines-review-supply-stop
 kind: finding
-title: "The State Machines review specialist eval stopped on supply before any paid call: the specialist runs on few real state bugs, and too few usable bugs exist to test it"
+title: "The State Machines review specialist eval stopped on supply before any paid call: the specialist's detector fires on few of the state-bug changes we tested, and too few usable bugs exist to test it"
 summary: "NO READ on supply. Detector fires on 3 of 36 confirmed state bugs and 6 of 222 candidates. Projected counted run 19, under the floor of 20. Sol untestable at the pin."
 author: GEVA-588
 model: anthropic/claude-opus-5-5
@@ -18,8 +18,8 @@ links:
 
 # The State Machines review specialist eval stopped on supply
 
-- We learned that gstack's State Machines review specialist rarely runs on real state bugs. The detector that decides whether /review dispatches it fires on 3 of the 36 bug-introducing changes that two labellers confirmed as state bugs (8%, 95% interval 3% to 22%). Across all 222 candidate changes, 186 of them screened but never labelled, it fires on 6 (2.7%). You should read shipped /review as skipping the specialist on most real state bugs, more than three in four even at the top of that interval. A detector that fires more often matters more than anything inside the specialist.
-- We learned that real, buildable, state-shaped bug-introducing changes are scarce. After a recount, 222 of 679 candidate fixes pass the gates, and the projected counted run is 19 units, under the preregistered floor of 20. So the eval didn't run. The verdict is NO READ on supply. It is not a null result, and no cut follows from it.
+- We learned that the detector gating gstack's State Machines review specialist fires on few of the state-bug changes we tested. Run offline on the rebuilt changes, it fires on 3 of the 36 that two model labellers confirmed as state bugs (8%, 95% interval 3% to 22%), and on 6 of all 222 candidates (2.7%), 186 of them screened but never labelled. Shipped /review also dispatches the specialist when the detector reports unknown, and we never ran live /review, so this is the detector's hit rate on these diffs, not a measured dispatch rate. Still, you should expect a detector that fires more often to matter more than anything inside the specialist.
+- We learned that real, buildable, state-shaped bug-introducing changes are scarce. After a recount, 222 of 679 candidate fixes pass the gates, and the projected counted run is 19 units, under the 20 counted units the preregistration needs. We stopped before the draw on that projection, so the eval didn't run. The verdict is NO READ on supply. It is not a null result, and no cut follows from it.
 - We learned that GPT-6.2 Sol can't be tested at the gstack pin: gstack gives Codex hosts no specialists at all (scripts/resolvers/review-army.ts line 343 returns an empty string for host codex).
 - We learned that rebuilding a change from git history is easy to get silently wrong. Review caught a bug that dropped parts of changes without a trace. The four fixes below apply to any eval that rebuilds a change with git apply.
 
@@ -27,7 +27,7 @@ The question was whether gstack /review with the State Machines specialist force
 
 ## What works
 
-- **The stop rule.** Before any spend, the plan said that a projected counted run under 20 units means a findings post, not a run. The projection is 19, so nothing was leased and no paid model call ran.
+- **Stopping on the projection.** The preregistration needs at least 20 counted units from the actual draw, after 6 pilot units, and says the draw decides. Before freezing, we added a stop: a projected counted run under 20 means a findings post, not a run. The projection is 19 (range 15 to 34), so we stopped before buying labels or running the draw. That's a decision on projected supply, not a preregistered gate firing. Nothing was leased and no paid model call ran.
 - **Review of the supply code.** The final review of the preregistration found the rebuild bug described below before any number was frozen. The fix and a full recount took under an hour, on one 16-vCPU VM that is now destroyed.
 - **The harness.** A keyless dry run on a real unit passes 54 of 54 checks at the final code. It drives the session image, both gstack homes, exposure reading, scoring, the analysis and the one look. That code stays on the branch for reuse.
 
@@ -42,9 +42,9 @@ Shipped gstack dispatches the specialist when its detector finds both a subject 
 | The change under review | 3 of 36 | 3 of 186 | 6 of 222 |
 | The full bug-introducing commit | 6 of 36 | 6 of 186 | 12 of 222 |
 
-The detector also fires on 25 of the 424 full bug-introducing commits that passed the share and size gates. The confirmed figure, 3 of 36, rests on few units: its 95% interval runs from 3% to 22%.
+The detector also fires on 25 of the 424 full bug-introducing commits that passed the share and size gates. The confirmed figure, 3 of 36, rests on few units: its 95% interval runs from 3% to 22%. The confirmed units it fires on are jtroo__kanata-1681, openai__openai-agents-js-156 and pocoproject__poco-5270 (change and commit), plus xroche__httrack-584, -763 and -765 (commit only). The candidates are celestiaorg__nmt-102, cosmos__interchain-security-1146 and ethereum__web3.py-3289 (change and commit), plus dpkp__kafka-python-1338, matrixorigin__matrixcube-423 and pika__pika-675 (commit only). Anyone can check these from the record file listed under Files with lanes/outcome-skills/smreview/detect.ts on the branch, a verbatim copy of gstack's lib/state-matrix.ts at the pin.
 
-That's why the plan compared specialist forced on against specialist removed: measuring shipped gstack against removal would mostly measure the detector's rarity. The rarity also lowers the value of the question. Even a clear win for the specialist would reach shipped /review on only a small share of state bugs until the detector changes.
+That's why the plan compared specialist forced on against specialist removed: measuring shipped gstack against removal would mostly measure the detector's rarity. The rarity also lowers the value of the question. On these diffs, even a clear win for the specialist would reach shipped /review only where the detector fires or reports unknown.
 
 ### Too few usable bugs
 
