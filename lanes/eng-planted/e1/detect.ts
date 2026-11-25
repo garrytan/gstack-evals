@@ -12,8 +12,9 @@
 // - C: a shell call whose command matches #358's frozen checker list (lanes/outcome-skills/pfchecks/exposure.ts CHECKER)
 //   returned TLC's model-checking result: a states-generated line, a completed check, or a violated invariant, property
 //   or deadlock with its behavior trace. A run that ended on a parse, config or setup error has none of these.
-// - P: statechart's SKILL.md body reached the session (its pinned marker line appears in the transcript, as the expanded
-//   command, or a successful read of statechart/SKILL.md by any tool), and C's check holds.
+// - P: statechart's SKILL.md body reached the session (its pinned marker line appears in the transcript or in Claude Code's
+//   own session file, where the expanded command lands, or a successful read of statechart/SKILL.md by any tool), and C's
+//   check holds. The SDK stream never carries the expanded command, so the session file is read too, as #358 read it.
 // - G: attempt 3's precut procedure detector (lanes/eng-review/exposure.ts erExposure "precut"): Scope Challenge, Sections
 //   1 to 4 in order, the coverage diagram and the test-plan file under the session's gstack state root.
 import { readFileSync } from "node:fs";
@@ -69,10 +70,10 @@ export function cExposure(transcript: string): { exposed: boolean; runs: number;
 }
 
 const STATECHART = /(^|\/)statechart\/SKILL\.md$/;
-export function pExposure(transcript: string, marker: string): { exposed: boolean; body: boolean; read: boolean; checked: boolean } {
+export function pExposure(transcript: string, marker: string, claudeSession: string = ""): { exposed: boolean; body: boolean; read: boolean; checked: boolean } {
   if (!marker.trim()) throw new Error("E_USAGE: P's detector needs the pinned statechart SKILL.md marker line");
   const read = ownUses(transcript).some((u) => u.ok && (STATECHART.test(String(u.input.file_path ?? u.input.path ?? "")) || (u.name === "Bash" && /statechart\/SKILL\.md/.test(String(u.input.command ?? "")) && u.result.includes(marker))));
-  const body = transcript.includes(JSON.stringify(marker).slice(1, -1));
+  const body = [transcript, claudeSession].some((t) => t.includes(JSON.stringify(marker).slice(1, -1)));
   const checked = cExposure(transcript).exposed;
   return { exposed: (body || read) && checked, body, read, checked };
 }
@@ -87,6 +88,8 @@ export interface ExposureInput {
   authored: string;
   final: string | null;
   transcript: string;
+  /** Claude Code's own session file, read only for P's body. */
+  claudeSession?: string;
   stateRoot: string | null;
   statechartMarker?: string;
 }
@@ -96,7 +99,7 @@ export function exposure(i: ExposureInput): boolean | null {
   if (i.arm === "N") return null;
   if (i.arm === "D") return dExposure(i.authored, i.final).exposed;
   if (i.arm === "C") return cExposure(i.transcript).exposed;
-  if (i.arm === "P") return pExposure(i.transcript, i.statechartMarker ?? "").exposed;
+  if (i.arm === "P") return pExposure(i.transcript, i.statechartMarker ?? "", i.claudeSession).exposed;
   return gExposure({ transcript: i.transcript, stateRoot: i.stateRoot, coverage: null, opening: null }).exposed;
 }
 

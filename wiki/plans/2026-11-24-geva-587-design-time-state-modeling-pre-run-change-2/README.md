@@ -23,7 +23,8 @@ links:
 - Units authored in this run join the draw's walk after attempt 3's, so later authoring never moves a unit already drawn (section 3).
 - G's gstack pin moves from d74ee528 (1.103.2.0) to 9a550bca (1.103.3.0), so every model role gstack names is the newest generation (section 7).
 - Sections 4 to 6 record how the harness was built where the prereg left a choice: the Sol path, the tools volume, the review bundle, the ledger items and the stage order.
-- No paid call has run and no pilot data exists. This change moves no frozen number, threshold, arm text, model, cap or Decision row.
+- The keyless driven launch found five faults before any paid call, and section 8 fixes them. Two change what an arm is told or how it is read. G on Codex opens with `$plan-eng-review`, the name gstack installs and documents, in place of `$gstack-plan-eng-review`, which Codex did not resolve. P's body check also reads Claude Code's own session file, because the stream the detector read never carries the expanded /statechart.
+- No paid call has run and no pilot data exists. This change moves no frozen number, threshold, model, cap or Decision row. The only arm text it changes is G's Codex command (section 8).
 
 This change governs where it and the plan differ.
 
@@ -81,6 +82,19 @@ This change governs where it and the plan differ.
 - The move is 15 commits. plan-eng-review's skill tree is byte-identical at both commits (tree 49f7d69c), so G's prompt, its command and the procedure detector are unchanged. setup changes one label line.
 - Cost and caps do not move. In the review container the outside voice either finds no Codex CLI (Claude Code) or stops on the harness check (Codex), and takes gstack's native fallback on the session's own model. The metering proxy serves only the three models under test in either case.
 
+## 8. What the driven launch found
+
+The driven launch (lanes/eng-planted/e1/e2e.ts) runs the pilot's own commands (ep e1-reviews, e1-builds and e1-pilot) on one Go fixture unit. It uses the real review launcher on the Docker rig, the real build launcher on Harbor and a stub upstream in place of every model. It found these faults, all fixed before any paid call:
+
+- **Leases on a shared item.** Each stage group opened its lease for the item's whole cap, so the pilot's second pair on e1-pilot hit a cap stop once the first pair had spent anything. The screens, authoring and hinted builds on e1-supply had the same fault. A group's lease now asks for the smaller of --cap-usd and what the item has left, and the ledger still refuses an item that has nothing left.
+- **Sol's transcript.** The launcher passed the contents of Sol's rollout files where codexAsClaude reads paths, so every Sol session failed after it ended. It now passes the paths.
+- **P's install.** The stack installer needs the name of the stack's skill, and P gave none. It now names statechart.
+- **pstack's Gemini seats.** At this pin, setup-pstack's model rule gives three roles (arena runners, the arena cross-judge pool and interrogate reviewers) a Gemini seat, gemini-4-neon-xhigh. The rig's cell map (src/arms/cells.ts) knew only Claude and Grok slugs and refused the arm. A Gemini seat now maps the way a Grok seat does: under Claude Code it runs on the session's model, and the list keeps its length. P's cells keep no second voice, so every pstack role runs on the session's model either way. /statechart names none of those three roles.
+- **G's command on Codex.** `./setup --host codex` installs the skill as gstack-plan-eng-review/SKILL.md, whose name line reads plan-eng-review. gstack's README gives Codex commands as `$<skill>` (`$office-hours`). Codex left `$gstack-plan-eng-review` unresolved, and no skill item reached the request. G on Codex now opens with `$plan-eng-review plan.md`, and the driven launch shows the skill item in the first request. The forced sentence and the common line are unchanged. Claude Code's `/plan-eng-review plan.md` was already right.
+- **P's body check.** Claude Code's stream (host/transcript.ndjson) carries no user prompt and no expanded slash command, so P's marker line never appears there. P would have read unexposed in every session. The launcher now copies Claude Code's own session file to host/claude-session.jsonl, and P's body check reads it beside the transcript, as #358's detector did. The rest of P's rule (a TLC result from a frozen checker command) still reads the transcript.
+
+On the fixed harness the driven launch shows: every pair's review ends completed; D and C read exposed on all three models and N reads null; P's /statechart resolves through the plugin directory on Opus and particle-1, so P keeps /statechart; G's skill reaches the first request on both hosts; Sol's rollouts land in host/codex-sessions and read as Bash calls with results; every mount holds the session's /tmp file; a refusal builds on the plan as left; all 14 builds complete, read the review and grade; and one lease per pair, plus one for the build stage, opens and settles. It leaves no container or network behind. The bundle picks up one file the stub never wrote: probe, one byte, in every Claude Code session and in no Sol session. It stays in, as it will in the counted run, and the read audit lists it.
+
 ## What this does not change
 
-Arms, arm text, models, prompts, limits, the composite, the 10-point line, the +5 futility bound, every Decision row, the item caps and the $4,913 cap total.
+Arms, models, prompts other than G's Codex command, limits, the composite, the 10-point line, the +5 futility bound, every Decision row, the item caps and the $4,913 cap total.

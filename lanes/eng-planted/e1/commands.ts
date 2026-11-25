@@ -142,9 +142,14 @@ export const e1StubLauncher = <B>(backend: B): Launcher<B> => async (p) => {
   }
 };
 
+/** One lease for one stage group. Several groups share an item (the pilot's 14 pairs, the supply item's screens, authoring
+ * and hinted builds), so each lease asks for the smaller of --cap-usd and what the item has left; an item with nothing
+ * left still refuses at the ledger. */
 const paidStage = async <B, T>(p: E1Paid, launch: Launcher<B>, body: (b: B) => Promise<T>): Promise<T> => {
   checkAllIn(p.allIn, E1_ITEMS);
-  return underLease(p, launch, body);
+  const it = readItem(p.record, p.item);
+  const left = Math.max(0, (it.cap_micros ?? 0) - it.committed_micros);
+  return underLease({ ...p, capUsd: Math.min(Math.round(p.capUsd * 1_000_000), left) / 1_000_000 }, launch, body);
 };
 
 export const parseItem = (item: string): { arm: E1Arm; model: E1Model } | null => {

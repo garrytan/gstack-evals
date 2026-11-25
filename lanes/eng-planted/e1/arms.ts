@@ -27,7 +27,7 @@ export const C_LINE = "Write a small TLA+ model of the states this plan adds, wr
 export const P_COMMANDS = ["/statechart", "/pstack:statechart"] as const;
 export type PCommand = (typeof P_COMMANDS)[number];
 export const P_TAIL = "model the states this plan adds and the rules they must keep, then improve the plan.";
-export const G_COMMAND: Readonly<Record<"claude" | "codex", string>> = { claude: "/plan-eng-review plan.md", codex: "$gstack-plan-eng-review plan.md" };
+export const G_COMMAND: Readonly<Record<"claude" | "codex", string>> = { claude: "/plan-eng-review plan.md", codex: "$plan-eng-review plan.md" };
 
 /** The pinned trees section 1 names for P. */
 export const PSTACK_TREES = {

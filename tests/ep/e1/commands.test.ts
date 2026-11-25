@@ -6,9 +6,11 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { recordApproval } from "../../../src/runner/ledger/ledger.ts";
+import { openLease, reconcileLease, recordApproval } from "../../../src/runner/ledger/ledger.ts";
+import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
+import { ledgerPath } from "../../../src/runner/ledger/paths.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
-import { e1Commands, e1StubLauncher, lookPath, type E1Seams, type LookFile } from "../../../lanes/eng-planted/e1/commands.ts";
+import { e1Commands, E1_RUN, e1StubLauncher, lookPath, type E1Seams, type LookFile } from "../../../lanes/eng-planted/e1/commands.ts";
 import { RUNS_ON, type E1Arm } from "../../../lanes/eng-planted/e1/frozen.ts";
 import type { E1ReviewSession } from "../../../lanes/eng-planted/e1/launch.ts";
 import { E1_ITEMS, itemName } from "../../../lanes/eng-planted/e1/pipeline.ts";
@@ -108,6 +110,19 @@ describe("leases", () => {
       expect(readItem(f.record, i.item).leases).toHaveLength(1);
     }
     expect(await codeOf(() => e1StubLauncher("x")({ item: "ep-comparison", capUsd: 1, record: f.record, ledger: join(f.dir, "l.sqlite") }))).toBe("E_USAGE");
+  });
+
+  test("a stage group's lease asks for what its item has left, so the pilot's pairs share e1-pilot", async () => {
+    const f = fixture();
+    const local = openLocalLedger(ledgerPath(join(f.dir, "l.sqlite")));
+    const spent = openLease(f.record, local, { item: "e1-pilot", run_id: E1_RUN, amount_micros: 100_000_000, requireAdmission: () => null });
+    local.close();
+    writeFileSync(join(f.dir, "usage.csv"), "spent,100\n");
+    reconcileLease(f.record, { lease_id: spent.lease_id, spent_micros: 100_000_000, quotes: [{ words: "test", by: "test", source: "test" }], source: join(f.dir, "usage.csv"), now: new Date(Date.now() + 8 * 86_400_000) });
+    expect(await f.cmds["e1-reviews"]!.run(args({ ...f.paid("e1-pilot"), "--phase": "pilot" }), io().io)).toBe(0);
+    const asked = readItem(f.record, "e1-pilot").leases.slice(1).map((l) => l.lease.reserved_micros);
+    expect(asked).toHaveLength(PAIRS.length);
+    expect(asked.every((m) => m === 65_000_000)).toBe(true);
   });
 });
 

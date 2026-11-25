@@ -17,7 +17,7 @@ describe("prompts", () => {
     expect(e1Prompt("P", "opus")).toBe("/statechart model the states this plan adds and the rules they must keep, then improve the plan.\n" + EB_COMMON);
     expect(e1Prompt("P", "particle", "/pstack:statechart").startsWith("/pstack:statechart model the states")).toBe(true);
     expect(e1Prompt("G", "opus")).toBe("/plan-eng-review plan.md\n" + EB_FORCED + "\n" + EB_COMMON);
-    expect(e1Prompt("G", "sol")).toBe("$gstack-plan-eng-review plan.md\n" + EB_FORCED + "\n" + EB_COMMON);
+    expect(e1Prompt("G", "sol")).toBe("$plan-eng-review plan.md\n" + EB_FORCED + "\n" + EB_COMMON);
   });
   test("P does not run on Sol", () => {
     expect(() => e1Prompt("P", "sol")).toThrow(/does not run on sol/);

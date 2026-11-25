@@ -3,6 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { walkRollouts } from "../../scoring/codex-fixtures.ts";
+import { rollouts } from "../../../lanes/eng-planted/e1/launch.ts";
 import { codexAsClaude, cExposure, dExposure, exposure, markedBlocks, pExposure, tlcResult } from "../../../lanes/eng-planted/e1/detect.ts";
 
 const tx = (...lines: object[]) => lines.map((l) => JSON.stringify(l)).join("\n") + "\n";
@@ -63,6 +64,12 @@ describe("P: statechart's body reached the session and TLC ran", () => {
     expect(pExposure(tx(...run), marker).exposed).toBe(false);
     expect(pExposure(tx(...read), marker).exposed).toBe(false);
   });
+  test("the body in Claude Code's own session file counts, since the SDK stream never carries the expanded command", () => {
+    const session = tx({ type: "user", message: { role: "user", content: [{ type: "text", text: "Base directory for this skill: /x\n\n" + marker }] } });
+    expect(pExposure(tx(...run), marker, session)).toMatchObject({ exposed: true, body: true });
+    expect(pExposure(tx(...run), marker, tx({ type: "user", message: { content: "other" } })).exposed).toBe(false);
+    expect(exposure({ arm: "P", authored: "", final: null, transcript: tx(...run), claudeSession: session, stateRoot: null, statechartMarker: marker })).toBe(true);
+  });
   test("an empty marker refuses", () => {
     expect(() => pExposure("", " ")).toThrow("E_USAGE");
   });
@@ -84,5 +91,10 @@ describe("Codex rollouts read as Claude Code stream-json", () => {
     expect(uses.every((u: any) => typeof u.name === "string")).toBe(true);
     expect(uses.some((u: any) => u.name === "Bash" && String(u.input.command).includes("pytest"))).toBe(true);
     expect(texts.length).toBeGreaterThan(0);
+  });
+  test("the launcher's rollout walk hands codexAsClaude file paths", () => {
+    const walked = rollouts(join(import.meta.dir, "../../scoring/fixtures/codex/direct"));
+    expect([...walked].sort()).toEqual([...files].sort());
+    expect(codexAsClaude(walked)).toContain("pytest");
   });
 });

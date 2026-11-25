@@ -68,8 +68,12 @@ export function codexGstackInstall(model: string = E1_POLICY_MODEL.sol): string 
 /** The shell step that copies the session's /tmp files, newer than the start mark, into the work dir. */
 export const TMP_COPY_STEP = 'set -e; d="$PWD/' + TMP_COPY + '"; mkdir -p "$d"; cd /tmp; if [ -e ' + TMP_MARK + ' ]; then find . -xdev -type f -newer ' + TMP_MARK + ' ! -path "./' + TMP_MARK_PREFIX + '*" -print0; else find . -xdev -type f ! -path "./' + TMP_MARK_PREFIX + '*" -print0; fi | tar --null -T - -cf - | tar -C "$d" -xf -';
 
-/** The start mark and, on Sol, the sol-agent link, before the host CLI starts; the /tmp copy after it ends. */
-export function withTmpCapture(inner: AgentDriver, sol: boolean): AgentDriver {
+/** Claude Code's own session file: the SDK stream never carries a slash command's expanded body, and this file does. */
+export const CLAUDE_SESSION = "claude-session.jsonl";
+
+/** The start mark and, on Sol, the sol-agent link, before the host CLI starts; the /tmp copy after it ends and, on Claude
+ * Code, a copy of its own session file to session (home is the container's HOME). */
+export function withTmpCapture(inner: AgentDriver, sol: boolean, keep: { home: string; session: string } | null = null): AgentDriver {
   return {
     ...(inner.env ? { env: inner.env } : {}),
     run: async (session, task, timeoutMs) => {
@@ -79,6 +83,10 @@ export function withTmpCapture(inner: AgentDriver, sol: boolean): AgentDriver {
         return await inner.run(session, task, timeoutMs);
       } finally {
         session.exec(TMP_COPY_STEP, COPY_MS);
+        if (keep && !sol) {
+          const kept = session.exec("cat " + JSON.stringify(keep.home) + "/.claude/projects/*/*.jsonl", COPY_MS);
+          if (kept.exitCode === 0 && kept.stdout) writeFileSync(keep.session, kept.stdout);
+        }
       }
     },
   };
@@ -109,6 +117,8 @@ export interface E1ReviewLeft {
   plan: string | null;
   /** The transcript in Claude Code's shape (a Codex session's rollouts converted). */
   transcript: string;
+  /** Claude Code's own session file (host/claude-session.jsonl), where a slash command's expanded body lands; absent on Codex. */
+  claudeSession?: string;
   stateRoot: string | null;
   written: Written;
   repoEdits: number;
@@ -116,7 +126,7 @@ export interface E1ReviewLeft {
 
 export type E1ReviewSession = (o: { cell: string; unit: E1ReviewUnit; arm: E1Arm; rep: number; attempt: number; prompt: string; seed: string; dir: string }) => Promise<Attempt<E1ReviewLeft>>;
 
-/** Every rollout file a Codex session's driver copied out, in path order. */
+/** The path of every rollout file a Codex session's driver copied out, in path order. */
 export function rollouts(dir: string): string[] {
   if (!existsSync(dir)) return [];
   const out: string[] = [];
@@ -124,7 +134,7 @@ export function rollouts(dir: string): string[] {
     for (const n of readdirSync(d).sort()) {
       const p = join(d, n);
       if (statSync(p).isDirectory()) walk(p);
-      else if (n.endsWith(".jsonl")) out.push(readFileSync(p, "utf8"));
+      else if (n.endsWith(".jsonl")) out.push(p);
     }
   };
   walk(dir);
@@ -149,7 +159,7 @@ export function e1ReviewLauncher(o: { arms: E1Arm[]; model: E1Model; out: string
     const arms: ResolvedArms = { arms: specs, base: null, skill: null, notes: [] };
     const env = o.env as Record<string, string>;
     const call = { host, arms, tasks, out: { path: o.out, rule: "--out" }, ledger: ledgerPath(p.ledger), record: recordPath(p.record, env), item: p.item, runId: o.runId, models: [model], policy };
-    const skills: Record<string, string> = o.arms.includes("G") ? { "e1-G": "plan-eng-review" } : {};
+    const skills: Record<string, string> = { ...(o.arms.includes("G") ? { "e1-G": "plan-eng-review" } : {}), ...(o.arms.includes("P") ? { "e1-P": "statechart" } : {}) };
     const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap: Math.round(p.capUsd * 1_000_000), voice: false, ...(o.upstream ? { upstream: o.upstream } : {}) });
     const empty = join(o.out, "fixtures");
     const session: E1ReviewSession = async (s) => {
@@ -186,7 +196,7 @@ export function e1ReviewLauncher(o: { arms: E1Arm[]; model: E1Model; out: string
           ? { effort: SOL_CODEX.effort, codexSession: { hookTrust: SOL_CODEX.hookTrust, bin: LINK_DIR + "/" + SOL_CODEX.link } }
           : { systemPrompt: ER_SYSTEM_PROMPT, maxTurns: REVIEW_SESSION.maxTurns, disable1mContext: true, capStops: true, backgroundWaitMs: BACKGROUND_WAIT_MS, ...(plugins.length ? { plugins } : {}) }),
       });
-      const agent = withTmpCapture({ ...inner, env: { ...(inner.env ?? {}), ...e1Env(s.arm) } }, sol);
+      const agent = withTmpCapture({ ...inner, env: { ...(inner.env ?? {}), ...e1Env(s.arm) } }, sol, { home, session: join(run, "host", CLAUDE_SESSION) });
       const ran = await finishTrial(() => runTrial({ cell: { model, arm: name, round: 1, trial: s.rep }, task: { id: s.unit.id, prompt: s.prompt }, tasksDir: empty, sandbox, agent, dir: run, timeoutS: REVIEW_SESSION.timeoutS, network: rig.network, seed: s.seed, root: true, gate, ...(g ? { copyDirs: [{ from: STATE_ROOT_DIR, to: join(run, "host", "gstack-state") }] } : { stateRoot: false as const }) }), () => rig.finalize(binding.meter_id));
       const blank = (): E1ReviewLeft => ({ dir: run, host, plan: null, transcript: "", stateRoot: null, written, repoEdits: 0 });
       if (ran.trial === null) {
@@ -201,7 +211,8 @@ export function e1ReviewLauncher(o: { arms: E1Arm[]; model: E1Model; out: string
         if (why) o.log?.("cell " + s.cell + " a" + s.attempt + ": " + why);
         const kept = (captured as ReviewCapture | null) ?? fail("E_USAGE", "cell " + s.cell + " a" + s.attempt + ": the trial ended before its work tree was read");
         const state = join(run, "host", "gstack-state");
-        return { end, costUsd: ran.micros / 1_000_000, result: { dir: run, host, plan: kept.plan, transcript: transcript ?? "", stateRoot: g && existsSync(state) ? state : null, written, repoEdits: kept.repoEdits } };
+        const claude = join(run, "host", CLAUDE_SESSION);
+        return { end, costUsd: ran.micros / 1_000_000, result: { dir: run, host, plan: kept.plan, transcript: transcript ?? "", ...(existsSync(claude) ? { claudeSession: readFileSync(claude, "utf8") } : {}), stateRoot: g && existsSync(state) ? state : null, written, repoEdits: kept.repoEdits } };
       });
     };
     return { lease_id: rig.recovery?.lease_id ?? "", backend: session, close: async () => void (await rig.close()) };
