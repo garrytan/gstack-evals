@@ -3,7 +3,7 @@
 // the readings, exposure, labels and the prereg reader.
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { analyse, cells, complete, look, verdictAt, WIDEN_DELTA, type SrSession, type UnitFacts } from "../../lanes/outcome-skills/smreview/analysis.ts";
@@ -15,6 +15,7 @@ import { srExposure, SPECIALIST, ARMY } from "../../lanes/outcome-skills/smrevie
 import { labelsFromPublished, labelsFromReplies, labelsFromSmUnits } from "../../lanes/outcome-skills/smreview/labels.ts";
 import { readSrPrereg } from "../../lanes/outcome-skills/smreview/prereg.ts";
 import { srPlan } from "../../lanes/outcome-skills/smreview/session.ts";
+import { main as srMain } from "../../lanes/outcome-skills/smreview/cli.ts";
 import { labelsGate, readLabels, type Gate } from "../../lanes/outcome-skills/pfchecks/draw.ts";
 
 const g = (dir: string, ...a: string[]) => {
@@ -227,3 +228,74 @@ test("exposure reads a ~ path and a Bash read of the specialist and the Review A
   const b = srExposure("G+", [use("Bash", { command: "cat ~/.claude/skills/gstack/review/sections/review-army.md; sed -n 1,80p $HOME/.claude/skills/gstack/review/specialists/state-machines.md" })]);
   expect([b.army, b.specialist_read, b.ran]).toEqual([true, true, true]);
 });
+
+function story(steps: Array<(dir: string) => void>, fix: (dir: string) => void, fixFile: string): { dir: string; bic: string; base: string; patch: string } {
+  const dir = mkdtempSync(join(tmpdir(), "sr-apply-"));
+  g(dir, "init", "-q", "-b", "main");
+  mkdirSync(join(dir, "flag"));
+  const shas: string[] = [];
+  steps.forEach((s, i) => { s(dir); g(dir, "add", "-A"); g(dir, "commit", "-qm", "step " + i); shas.push(g(dir, "rev-parse", "HEAD")); });
+  const base = shas.at(-1)!;
+  fix(dir);
+  const patch = g(dir, "diff", "--", fixFile) + "\n";
+  g(dir, "checkout", "-q", "-f", base);
+  return { dir, bic: shas[1]!, base, patch };
+}
+const w = (dir: string, p: string, t: string) => writeFileSync(join(dir, p), t);
+const runGo = (reset: string, extra = "") => "package flag\n\nvar done = false\n\nfunc Run() {\n\tdone = true\n\treset(" + reset + ")\n" + extra + "}\n";
+const applyBic = (s: { dir: string; base: string; patch: string }, id: string) => findBic(s.dir, { instance_id: id, repo: "o/r", base_commit: s.base, patch: s.patch, test_patch: "" }, "go");
+test("a file the BIC edited that is gone at base is left out and listed; the BIC's other hunks stay", () => {
+  const s = story([
+    (d) => { w(d, "flag/flag.go", runGo("true")); w(d, "flag/gone.go", "package flag\n\nvar x = 1\n"); },
+    (d) => { w(d, "flag/flag.go", runGo("false")); w(d, "flag/gone.go", "package flag\n\nvar x = 2\n"); },
+    (d) => { rmSync(join(d, "flag/gone.go")); },
+  ], (d) => w(d, "flag/flag.go", runGo("true")), "flag/flag.go");
+  const u = applyBic(s, "o__r-gone");
+  expect(u.record.drop).toBeNull();
+  expect(u.record.left_out).toEqual([{ path: "flag/gone.go", hunks: 1 }]);
+  expect(u.record.kept).toBe(u.record.hunks! - 1);
+  expect(u.record.pr_files).toEqual(["flag/flag.go"]);
+  expect(u.pr).toContain("+\treset(false)");
+});
+test("a file the BIC created that a later commit extended stays in the change under review; one later edited inside is left out", () => {
+  const s = story([
+    (d) => { w(d, "flag/flag.go", runGo("true")); },
+    (d) => { w(d, "flag/reset.go", "package flag\n\nfunc Reset() {\n\treset(false)\n}\n"); w(d, "flag/help.go", "package flag\n\nvar help = 1\n"); },
+    (d) => { w(d, "flag/reset.go", "package flag\n\nfunc Reset() {\n\treset(false)\n}\n\nfunc Other() {}\n"); w(d, "flag/help.go", "package flag\n\nvar help = 2\n"); },
+  ], (d) => w(d, "flag/reset.go", "package flag\n\nfunc Reset() {\n\treset(true)\n}\n\nfunc Other() {}\n"), "flag/reset.go");
+  const u = applyBic(s, "o__r-created");
+  expect(u.record.drop).toBeNull();
+  expect(u.record.in_pr).toBe(1);
+  expect(u.record.pr_files).toEqual(["flag/reset.go"]);
+  expect(u.record.left_out).toEqual([{ path: "flag/help.go", hunks: 1 }]);
+  expect(u.record.kept).toBe(u.record.hunks! - 1);
+  expect(u.pr).toContain("+\treset(false)");
+  expect(u.pr).not.toContain("+func Other() {}");
+});
+test("a BIC that renames and edits a file keeps its hunks in the change under review", () => {
+  const s = story([
+    (d) => { w(d, "flag/flag.go", runGo("true", "\tlog(1)\n\tlog(2)\n\tlog(3)\n")); },
+    (d) => { rmSync(join(d, "flag/flag.go")); w(d, "flag/run.go", runGo("false", "\tlog(1)\n\tlog(2)\n\tlog(3)\n")); },
+    (d) => { w(d, "other.go", "package flag\n"); },
+  ], (d) => w(d, "flag/run.go", runGo("true", "\tlog(1)\n\tlog(2)\n\tlog(3)\n")), "flag/run.go");
+  const u = applyBic(s, "o__r-rename");
+  expect(u.record.drop).toBeNull();
+  expect(u.record.left_out).toEqual([]);
+  expect(u.record.pr_files).toContain("flag/run.go");
+  expect(u.record.in_pr).toBe(1);
+  expect(u.pr).toContain("+\treset(false)");
+});
+test("sr analyze refuses a catch record that is no session in --plan", async () => {
+  const d = mkdtempSync(join(tmpdir(), "sr-analyze-"));
+  writeFileSync(join(d, "plan.json"), JSON.stringify({ sessions: [{ unit: "o__r-1", part: "test", index: 0, model: SR_MODELS[0], arm: "N", rep: 1, item: "sr-opus" }] }));
+  writeFileSync(join(d, "pilot.json"), JSON.stringify({ unit: "o__r-9", model: SR_MODELS[0], arm: "N", index: 0, score: 1 }));
+  const prereg = join(import.meta.dir, "../../wiki/plans/2026-11-24-geva-588-state-machines-review-prereg/prereg.json");
+  const err: string[] = [];
+  const keep = console.error;
+  console.error = (m: string) => err.push(String(m));
+  try {
+    expect(await srMain(["analyze", "--prereg", prereg, "--bic", join(d, "none.jsonl"), "--plan", join(d, "plan.json"), "--out", join(d, "out.json"), join(d, "pilot.json")])).toBe(2);
+  } finally { console.error = keep; }
+  expect(err.join("\n")).toContain("E_SR_INPUT catch o__r-9|" + SR_MODELS[0] + "|N|0 is no session in --plan");
+});
+

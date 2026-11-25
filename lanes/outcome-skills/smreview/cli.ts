@@ -192,9 +192,13 @@ async function run(cmd: string, a: Args): Promise<number> {
   }
   if (cmd === "analyze" || cmd === "look") {
     const seeds = readSrPrereg(need(a, "prereg"));
-    const ss = catches(a._).map((c) => sessionOf(c, c.arm));
-    const fs = facts(bics(need(a, "bic")));
     const plan = readJson(need(a, "plan")).sessions as SrPlanned[];
+    const planned = new Set(plan.map((s) => [s.unit, s.model, s.arm, s.index].join("|")));
+    const ss = catches(a._).map((c) => {
+      if (!planned.has([c.unit, c.model, c.arm, c.index].join("|"))) throw new SrError("E_SR_INPUT", "catch " + [c.unit, c.model, c.arm, c.index].join("|") + " is no session in --plan; pass only that plan's catch records");
+      return sessionOf(c, c.arm);
+    });
+    const fs = facts(bics(need(a, "bic")));
     const order = [...new Set(plan.map((s) => s.unit))];
     const reps = Math.max(...plan.map((s) => s.rep));
     if (cmd === "look") {

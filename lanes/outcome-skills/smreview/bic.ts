@@ -14,9 +14,9 @@
 // scored tree is the fix's base, as the state machines harness converts it. Nothing here calls a model.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { classify, type Lang } from "../statemachines/langs.ts";
 import { patchFiles } from "../statemachines/source.ts";
 import { detectStateMachine } from "./detect.ts";
@@ -112,27 +112,27 @@ export function addedLines(diff: string): Set<string> {
 }
 const hunkCount = (diff: string) => (diff.match(/^@@ /gm) ?? []).length;
 
-/** The change under review on a scratch worktree at base: the BIC's text diff with no context lines (stripped paths left
- *  out) reverse-applied with --unidiff-zero --reject, so a hunk applies wherever its own lines still stand at base. Returns the change (base with the kept hunks reversed, to base) and each file's left-out hunks. */
+/** The change under review on a scratch worktree at base: the BIC's text diff with no context lines and no rename pairing
+ *  (stripped paths left out) reverse-applied file by file with --unidiff-zero --reject, so a hunk applies wherever its own
+ *  lines still stand at base. A file git refuses whole (gone at base, or recreated there) writes no .rej, so all its hunks
+ *  are left out; a file the BIC created that git will not delete (later commits extended it) is reversed as a plain hunk
+ *  that removes the BIC's lines where they still stand. Returns the change (base with the kept hunks reversed, to base) and
+ *  each file's left-out hunks. */
 function rebase(dir: string, bic: string, base: string, files: string[]): { pr: string; hunks: number; leftOut: Array<{ path: string; hunks: number }> } {
-  const diff = git(dir, ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--unified=0", bic + "^", bic, "--", ...files]).stdout;
+  const diff = git(dir, ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "--unified=0", bic + "^", bic, "--", ...files]).stdout;
   const wt = mkdtempSync(join(tmpdir(), "sr-pr-"));
   try {
     if (git(dir, ["worktree", "add", "--quiet", "--detach", "-f", wt, base]).status !== 0) return { pr: "", hunks: hunkCount(diff), leftOut: [] };
-    git(wt, ["apply", "-R", "--unidiff-zero", "--reject", "--whitespace=nowarn", "-"], Buffer.from(diff, "latin1"));
     const leftOut: Array<{ path: string; hunks: number }> = [];
-    const walk = (d: string) => {
-      for (const e of readdirSync(d, { withFileTypes: true })) {
-        if (e.name === ".git") continue;
-        const p = join(d, e.name);
-        if (e.isDirectory()) walk(p);
-        else if (e.name.endsWith(".rej")) {
-          leftOut.push({ path: relative(wt, p).slice(0, -4), hunks: hunkCount(readFileSync(p, "latin1")) });
-          rmSync(p);
-        }
-      }
-    };
-    walk(wt);
+    const apply = (patch: string) => git(wt, ["apply", "-R", "--unidiff-zero", "--reject", "--whitespace=nowarn", "-"], Buffer.from(patch, "latin1")).status === 0;
+    for (const part of diff.split(/^(?=diff --git )/m).filter((p) => p.startsWith("diff --git "))) {
+      const path = /^\+\+\+ b\/(.*)$/m.exec(part)?.[1] ?? /^--- a\/(.*)$/m.exec(part)?.[1] ?? part.slice(11, part.indexOf("\n"));
+      const rej = join(wt, path + ".rej");
+      let ok = apply(part);
+      if (!ok && !existsSync(rej) && /^--- \/dev\/null$/m.test(part)) ok = apply(part.replace(/^new file mode .*\n/m, "").replace(/^--- \/dev\/null$/m, "--- a/" + path));
+      if (existsSync(rej)) { leftOut.push({ path, hunks: hunkCount(readFileSync(rej, "latin1")) }); rmSync(rej); }
+      else if (!ok) leftOut.push({ path, hunks: hunkCount(part) });
+    }
     git(wt, ["add", "-A"]);
     const before = git(wt, ["write-tree"]).stdout.trim();
     const pr = git(wt, ["diff", "--no-color", "--no-ext-diff", "--no-textconv", before, base]).stdout;
@@ -173,7 +173,7 @@ export function findBic(dir: string, row: { instance_id: string; repo: string; b
   if (rec.share < MIN_SHARE) return { record: { ...rec, drop: "E_SR_BIC_SHARE" }, pr: "" };
   if (rec.bic_lines > MAX_BIC_LINES) return { record: { ...rec, drop: "E_SR_BIC_SIZE" }, pr: "" };
   rec.detector_bic = detectStateMachine(u8(git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--unified=0", "--no-color", bic + "^", bic]).stdout));
-  const text = num.filter(([x]) => x !== "-").map((x) => x.slice(2).join("\t")).filter((p) => !stripped(p));
+  const text = git(dir, ["diff", "--numstat", "--no-renames", "-z", bic + "^", bic]).stdout.split("\0").filter(Boolean).map((l) => l.split("\t")).filter(([x]) => x !== "-").map((x) => x.slice(2).join("\t")).filter((p) => !stripped(p));
   const r = rebase(dir, bic, base, text);
   const pr = u8(r.pr);
   const added = addedLines(pr);
