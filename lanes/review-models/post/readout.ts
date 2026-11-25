@@ -21,6 +21,7 @@ import { ARMS, JUDGE_CHECK, RmError, rmFail, VALUE_PER_CATCH, type Arm } from ".
 import { checkRow, kappaCheck, pilotJudgeCheck, type CheckRow, type FinalRow, type KappaCheck } from "../score/labels.ts";
 import { costGap, pilotCatches, proceedSet, readHistory, SET_ARMS, stagedRule, type ProceedSet, type Staged, type Tally } from "../score/staged.ts";
 import type { MeanSe } from "../score/stats.ts";
+import { kappa } from "../../product-value/stats.ts";
 import type { Pilot, PilotReview } from "./pilot.ts";
 
 /** Pilots table: each arm's pilot cap, a tenth of its counted budget. */
@@ -85,6 +86,8 @@ export interface Readout {
   /** Change 6's second reading: the kappa with every person no that rests on a can't tell read as naming. */
   kappa_cant_as_yes: number | null;
   cant_tell_labels: number;
+  /** Seat A against seat B on the subset both labelled (R125); null while the labels are not in. */
+  people: PersonAgreement | null;
   /** No person labels yet (final.json absent). */
   labels_waiting: boolean;
   check_rows: CheckRow[];
@@ -179,6 +182,19 @@ export function reserveReadout(pilot: Pilot, counted: { p: number; b: number; de
   return { pilot_reviews: reviews, reruns, rate, rerun_usd, sets };
 }
 
+export interface PersonAgreement {
+  reviews: number;
+  agree: number;
+  kappa: number | null;
+}
+
+/** How often seat A and seat B read the subset alike, can't tell counting as not naming, with Cohen's kappa (R125). */
+export function personAgreement(final: readonly FinalRow[] | null): PersonAgreement | null {
+  if (final === null) return null;
+  const pairs = final.flatMap((f) => (f.a_b ? [f.a_b] : []));
+  return { reviews: pairs.length, agree: pairs.filter(([a, b]) => a === b).length, kappa: kappa(pairs) };
+}
+
 /** Every read the readout makes. final is the person labels' final.json, or null while they are not in; historyPath is
  *  Harness Evals' per-pass stage 1 CSV. */
 export function pilotReadout(pilot: Pilot, final: readonly FinalRow[] | null, historyPath: string, historySha256?: string): Readout {
@@ -205,7 +221,7 @@ export function pilotReadout(pilot: Pilot, final: readonly FinalRow[] | null, hi
   const passed = Object.fromEntries(arms.map((a) => [a.arm, a.pass])) as Record<Arm, boolean>;
   const proceed = proceedSet(passed, rule?.drop_fable ?? false);
   const countedArms = proceed.arms.length ? proceed.arms : [...ARMS];
-  return { arms, reserve: reserveReadout(pilot, counted), staged: { gap, history, pilot_p, pilot_b, p_share, b_share, rule }, proceed, kappa: kappaCheck(rows, countedArms), kappa_cant_as_yes: kappaCheck(cantAsYes, countedArms).kappa, cant_tell_labels: (final ?? []).filter((f) => f.cant_tell).length, labels_waiting: final === null, check_rows: rows, contamination: pilot.contamination, counted };
+  return { arms, reserve: reserveReadout(pilot, counted), staged: { gap, history, pilot_p, pilot_b, p_share, b_share, rule }, proceed, kappa: kappaCheck(rows, countedArms), kappa_cant_as_yes: kappaCheck(cantAsYes, countedArms).kappa, cant_tell_labels: (final ?? []).filter((f) => f.cant_tell).length, people: personAgreement(final), labels_waiting: final === null, check_rows: rows, contamination: pilot.contamination, counted };
 }
 
 const usd = (x: number | null) => (x === null ? "unknown" : "$" + x.toFixed(2));
@@ -224,7 +240,7 @@ export function renderReadout(r: Readout, pilot: Pilot): string {
     L.push("## " + a.arm + ": " + (a.pass ? "passes its pilot" : "fails its pilot"), "");
     L.push("| Check | Plan | Pilot | Result |", "|---|---|---|---|");
     L.push("| Part ran | " + (a.arm === "N" ? "the read audit finds no gstack file and no drive path in its sessions" : "exposure in at least " + PART_RAN_MIN + " of 10 bug-unit reviews, " + MODEL_OF[a.arm] + " for the session and every specialist, Codex events on " + VOICE_OF[a.arm]) + " | " + a.part_ran.measured + " | " + yes(a.part_ran.pass) + " |");
-    L.push("| Judge check | every bug-unit review labelled by two people; at most " + JUDGE_CHECK.pilot_errors_max + " Carbon errors | " + a.judge.measured + (a.judge.left_out.length ? "; left out of the check: " + a.judge.left_out.join(", ") : "") + " | " + (a.judge.waiting ? "waiting" : yes(a.judge.pass)) + " |");
+    L.push("| Judge check | every bug-unit review labelled by people; at most " + JUDGE_CHECK.pilot_errors_max + " Carbon errors | " + a.judge.measured + (a.judge.left_out.length ? "; left out of the check: " + a.judge.left_out.join(", ") : "") + " | " + (a.judge.waiting ? "waiting" : yes(a.judge.pass)) + " |");
     L.push("| Supply | " + PILOT_BUG_UNITS + " units built, run and parsed | " + a.supply.measured + " | " + yes(a.supply.pass) + " |");
     L.push("| Cost per review | central " + usd(CENTRAL[a.arm]) + ", cap " + usd(PER_REVIEW_CAP[a.arm]) + " | " + usd(a.usd_per_review) + " over " + a.costed + " reviews" + (a.unknown_cost ? ", " + a.unknown_cost + " with no settled cost" : "") + " | descriptive |");
     L.push("| Wall time per review | | median " + (a.median_wall_s === null ? "unknown" : a.median_wall_s.toFixed(0) + " s") + ", mean " + (a.mean_wall_s === null ? "unknown" : a.mean_wall_s.toFixed(0) + " s") + " | descriptive |");
@@ -264,11 +280,12 @@ export function renderReadout(r: Readout, pilot: Pilot): string {
   if (r.labels_waiting) L.push("- Carbon judge check: waiting on person labels. Carbon's numbers count only once the person labels pass R78 (pre-run change 5), and the counted run waits for them.");
   else {
     L.push("- " + r.kappa.line);
+    if (r.people) L.push("- Person agreement (R125): seat A and seat B read " + r.people.agree + " of " + r.people.reviews + " subset reviews alike, kappa " + (r.people.kappa === null ? "n/a" : r.people.kappa.toFixed(3)) + ". Carbon's kappa above is against the final labels of every labelled review; this one is two engineers on the pilot's subset.");
     if (r.cant_tell_labels) L.push("- " + r.cant_tell_labels + " person label" + (r.cant_tell_labels === 1 ? "" : "s") + " rest on can't tell, read as not naming; read as naming (change 6's second reading), kappa is " + (r.kappa_cant_as_yes === null ? "n/a" : r.kappa_cant_as_yes.toFixed(3)) + ".");
   }
   const pool = (k: "P" | "B") => k + " " + r.kappa.per_pool[k].labels + " labels, " + r.kappa.per_pool[k].errors + " error" + (r.kappa.per_pool[k].errors === 1 ? "" : "s") + ", " + r.kappa.per_pool[k].abstentions + " abstaining, " + r.kappa.per_pool[k].empty_replies + " empty replies";
   if (!r.labels_waiting) L.push("- Per pool: " + pool("P") + "; " + pool("B") + ".");
-  L.push("- Decoy reviews go to the false-alarm read and are not labelled. The labels are two people's, made through the labelling desk; no model makes one.");
+  L.push("- Decoy reviews go to the false-alarm read and are not labelled. The labels are engineers', made through the labelling desk: seat A labels every review, seat B a subset and seat C the subset reviews they read differently; no model makes one.");
   L.push("");
   L.push("## Contamination (section 5)", "");
   if (!r.contamination.read) L.push("No contamination report was found, so every review reads as clean here.");

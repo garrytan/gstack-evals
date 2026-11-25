@@ -41,6 +41,8 @@ export type FinalLabel = boolean | "unresolved";
 export interface FinalRow extends LabelKey {
   label: FinalLabel;
   cant_tell?: true;
+  /** Subset reviews (R125): seat A's and seat B's readings, names or not (can't tell as not), for their agreement. */
+  a_b?: [boolean, boolean];
 }
 
 export interface CheckRow {

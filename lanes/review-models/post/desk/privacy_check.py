@@ -2,14 +2,14 @@
 # Copyright (c) 2026 Garry Tan. MIT License.
 """Privacy and blinding check on every outgoing file of one labelling package. Exit 1 on any blocking hit.
   python3 privacy_check.py <package-dir>
-Two zones. The page's own words (guide, message, bounty, the page outside its data, and every label, prompt and choice
+Two zones. The page's own words (guide, message, job, the page outside its data, and every label, prompt and choice
 in the data) must name no grader, model, arm, stack, earlier answer or other labeller. The material people read (the bug,
 the fix and the findings) is real code, so ordinary words such as "model" or "judge" there are listed for review, while
 vendor and model names, our own names and arm names still block."""
 import re, sys, os, glob, json, collections
 root = sys.argv[1]
 files = sorted(glob.glob(os.path.join(root, 'labeller', '*.html'))) + [os.path.join(root, f) for f in ('guide.md', 'message-to-labeller.txt', 'items.json')]
-if os.path.isfile(os.path.join(root, 'bounty.json')): files.append(os.path.join(root, 'bounty.json'))
+if os.path.isfile(os.path.join(root, 'job.json')): files.append(os.path.join(root, 'job.json'))
 missing = [f for f in files if not os.path.isfile(f)]
 if missing or len(files) < 5: print('MISSING:', missing or 'labeller pages'); sys.exit(1)
 EVERYWHERE = {

@@ -4482,7 +4482,7 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_RM_POST_DESK
 
-A review-models labelling package for the desk failed its privacy and blinding check (lanes/review-models/post/desk.ts): a page, the guide, the first message, the bounty or items.json names a grader, a model or vendor, an arm, gstack, Carbon, earlier answers or the other labeller, or holds a key-shaped string; or python3 could not run the check.
+A review-models labelling package for the desk failed its privacy and blinding check (lanes/review-models/post/desk.ts): a page, the guide, the first message, job.json or items.json names a grader, a model or vendor, an arm, gstack, Carbon, earlier answers or the other labeller, or holds a key-shaped string; or python3 could not run the check.
 
 Fix: Read privacy-check.md in the package folder, remove the named words from the package's own text or the item that carries them, and rebuild. Send nothing from a package whose check failed.
 
@@ -4490,9 +4490,9 @@ Exit 2. Side effects: The package folder is written with a privacy-check.md that
 
 ### E_RM_POST_LABELS
 
-A returned person labels file did not import (lanes/review-models/post/desk.ts): it is not a labels file from this package's page, a screen has no valid answer or no reason, it answers a question its page does not hold, both first-round files name the same labeller, the third round got other than one file, or the third person's file names one of the first two labellers' codes.
+A returned person labels file did not import (lanes/review-models/post/desk.ts): it is not a labels file from this package's page, a screen has no valid answer or no reason, it answers a question its page does not hold, the first import did not get one file from seat A's page and one from seat B's, both name the same labeller, the third round got other than one file, or seat C's file names seat A's or seat B's labeller code.
 
-Fix: Ask the desk for the right file (the one Download my labels saves), a redo with the printed problems, or a third person who is not one of the first two, then import again. Nothing was written.
+Fix: Ask the desk for the right file (the one Download my labels saves), a redo with the printed problems, or a seat C labeller who is neither seat A's nor seat B's, then import again. Nothing was written.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
@@ -4500,7 +4500,7 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 rm-post label-send is retired: people make the review-models judge-check labels (pre-run changes 5 and 6), so no model labeller call runs.
 
-Fix: Build the labelling package with gstack-evals rm-post desk-package and import the two people's files with rm-post labels-import (lanes/review-models/post/README.md).
+Fix: Build the labelling package with gstack-evals rm-post desk-package and import the seats' files with rm-post labels-import (lanes/review-models/post/README.md).
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 

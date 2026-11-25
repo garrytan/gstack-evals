@@ -4819,7 +4819,7 @@ export const CODES = {
   },
   E_RM_POST_DESK: {
     exit: 2,
-    meaning: "A review-models labelling package for the desk failed its privacy and blinding check (lanes/review-models/post/desk.ts): a page, the guide, the first message, the bounty or items.json names a grader, a model or vendor, an arm, gstack, Carbon, earlier answers or the other labeller, or holds a key-shaped string; or python3 could not run the check.",
+    meaning: "A review-models labelling package for the desk failed its privacy and blinding check (lanes/review-models/post/desk.ts): a page, the guide, the first message, job.json or items.json names a grader, a model or vendor, an arm, gstack, Carbon, earlier answers or the other labeller, or holds a key-shaped string; or python3 could not run the check.",
     fix: "Read privacy-check.md in the package folder, remove the named words from the package's own text or the item that carries them, and rebuild. Send nothing from a package whose check failed.",
     side_effects: "The package folder is written with a privacy-check.md that says FAILED; nothing is sent and nothing is spent.",
     retry_safe: true,
@@ -4828,8 +4828,8 @@ export const CODES = {
   },
   E_RM_POST_LABELS: {
     exit: 2,
-    meaning: "A returned person labels file did not import (lanes/review-models/post/desk.ts): it is not a labels file from this package's page, a screen has no valid answer or no reason, it answers a question its page does not hold, both first-round files name the same labeller, the third round got other than one file, or the third person's file names one of the first two labellers' codes.",
-    fix: "Ask the desk for the right file (the one Download my labels saves), a redo with the printed problems, or a third person who is not one of the first two, then import again. Nothing was written.",
+    meaning: "A returned person labels file did not import (lanes/review-models/post/desk.ts): it is not a labels file from this package's page, a screen has no valid answer or no reason, it answers a question its page does not hold, the first import did not get one file from seat A's page and one from seat B's, both name the same labeller, the third round got other than one file, or seat C's file names seat A's or seat B's labeller code.",
+    fix: "Ask the desk for the right file (the one Download my labels saves), a redo with the printed problems, or a seat C labeller who is neither seat A's nor seat B's, then import again. Nothing was written.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
@@ -4838,7 +4838,7 @@ export const CODES = {
   E_RM_POST_RETIRED: {
     exit: 2,
     meaning: "rm-post label-send is retired: people make the review-models judge-check labels (pre-run changes 5 and 6), so no model labeller call runs.",
-    fix: "Build the labelling package with gstack-evals rm-post desk-package and import the two people's files with rm-post labels-import (lanes/review-models/post/README.md).",
+    fix: "Build the labelling package with gstack-evals rm-post desk-package and import the seats' files with rm-post labels-import (lanes/review-models/post/README.md).",
     side_effects: NO_SPEND,
     retry_safe: false,
     resumable: false,
