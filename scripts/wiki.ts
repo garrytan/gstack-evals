@@ -482,14 +482,20 @@ function checkPrereg(lines: string[], date: string, p: (message: string) => void
     if (Object.hasOwn(labellers, by)) {
       const judged = judges.filter((j) => !emptyJudge(j)).flatMap((j) => j.match(/^(\S+\/\S+) scores (.+)$/)?.slice(1) ?? []);
       const labs = new Set(judged.flatMap((x, i) => (i % 2 ? x.split(",") : [x]).map((m) => labOf(m.trim()))));
-      const geminiJudges = judged.filter((m, i) => i % 2 === 0 && labOf(m) === "google").map((m) => m.toLowerCase().split("/").pop() ?? "");
-      const kind = labelled(judge, "Label kind");
-      const notes = labelled(judge, "Label notes").join(" ").toLowerCase();
+      const geminiJudges = judged
+        .filter((m, i) => i % 2 === 0 && labOf(m) === "google")
+        .map((m) => (m.toLowerCase().split("/").pop() ?? "").replace(/[:@].*$/, ""))
+        .filter((m) => /^gemini-/.test(m));
+      const field = (name: string) => judge.flatMap((l) => l.match(new RegExp("^(?:[-*] )?(?:\\*\\*|__)?" + name + "(?:\\*\\*|__)?:(?:\\*\\*|__)? *(.*)$", "i"))?.slice(1) ?? []).map((v) => v.trim());
+      const kind = field("Label kind");
+      const notes = field("Label notes").join(" ").toLowerCase();
+      const names = (id: string) => new RegExp("(?:^|[^a-z0-9.-])" + id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-]|\\.[a-z0-9])").test(notes);
+      const anchorRun = names("gemini-4-neon") && /\bfailed\b/.test(notes) && !/\b(?:not|never|no|didn't|hasn't|wasn't)\b[^.;]{0,40}\bfailed\b/.test(notes) && /known-answer anchors?\b/.test(notes) && /\brun\s+\S*\d/.test(notes);
       if (kind.length !== 1 || !/^code$/i.test(kind[0].replace(/^[`*_]+|[`*_]+$/g, "").replace(/\.$/, "")))
         p('practice 5: a model labeller needs one "Label kind: code" line; labels for anything other than code come from people' + HOW);
       if (labs.has(labellers[by]))
         p('practice 5: "Labels by: ' + by + '" needs a judge and scored models from other labs; a Gemini judge is checked with grok-4.7 or kimi-k3.1-pro, and a Gemini model under test goes to the Captain' + HOW);
-      if (by !== "gemini-4-neon" && !geminiJudges.some((g) => notes.includes(g)) && !/known-answer anchor/.test(notes))
+      if (by !== "gemini-4-neon" && !geminiJudges.some(names) && !anchorRun)
         p('practice 5: "Labels by: ' + by + '" needs a "Label notes:" line that names the Gemini judge it checks or the failed gemini-4-neon known-answer anchor run' + HOW);
     }
   }

@@ -228,6 +228,13 @@ describe("practice 5: the judge check", () => {
       expect(run(judge, "Labels by: " + by)).toEqual([note(by)]);
       expect(run(judge, "Labels by: " + by, "Label notes: checks the gemini-4-carbon judge")).toEqual([note(by)]);
     }
+    for (const notes of ["Label notes: the known-answer anchor run is still planned", "Label notes: we did not run any known-answer anchor", "Label notes: gemini-4-neon passed its known-answer anchors in run neon-7", "Label notes: gemini-4-neon did not fail; no known-answer anchors failed in run 7", "Label notes: gemini-4-neon failed its known-answer anchors", "Label notes: a model failed its known-answer anchors in run 7"]) {
+      expect(run(judge, "Labels by: grok-4.7", notes)).toEqual([note("grok-4.7")]);
+    }
+    expect(run("Judge: google/gemma-4 scores anthropic/claude-opus-5-5", "Labels by: grok-4.7", "Label notes: checks the gemma-4 judge")).toEqual([note("grok-4.7")]);
+    expect(run("Judge: google/gemini-4 scores anthropic/claude-opus-5-5", "Labels by: grok-4.7", "Label notes: gemini-4-neon was not used")).toEqual([note("grok-4.7")]);
+    expect(run("Judge: google/gemini-4-carbon:high scores anthropic/claude-opus-5-5", "Labels by: grok-4.7", "Label notes: checks the gemini-4-carbon judge")).toEqual([]);
+    expect(check(prereg(PASSING_PREREG.replace("Labels by: people\n", "**Labels by:** grok-4.7\n**Label kind:** code\n").replace("Label notes: blind to arm", "**Label notes:** gemini-4-neon failed its known-answer anchors in run neon-2026-11-25").replace("Labelled outputs: 40", "Labelled outputs: 100"), id))).toEqual([]);
     expect(run("Judge: google/gemini-4-carbon scores x-ai/grok-4.7", "Labels by: grok-4.7", "Label notes: checks the gemini-4-carbon judge")).toEqual([lab("grok-4.7")]);
     expect(run("Judge: google/gemini-4-carbon scores xai/grok-4.7", "Labels by: grok-4.7", "Label notes: checks the gemini-4-carbon judge")).toEqual([lab("grok-4.7")]);
     expect(run("Judge: google/gemini-4-carbon scores moonshotai/kimi-k3.1-pro", "Labels by: kimi-k3.1-pro", "Label notes: checks the gemini-4-carbon judge")).toEqual([lab("kimi-k3.1-pro")]);
