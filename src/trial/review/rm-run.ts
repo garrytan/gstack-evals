@@ -34,8 +34,10 @@ export const ORDER_SEED = 1795598571;
 /** The Pilots table's supply column: units build, run and parse at 5 at once. */
 export const PILOT_PARALLEL = 5;
 /** Section 11's per-review cap by cell (main reviewer cap plus voice cap): each session's allowance. */
-/** Each cell's per-session allowance: the prereg's per-review cap, with N's raised to $3 (Captain ruling D, 2026-11-25 01:00Z), since one Opus call's worst case is about $1. */
-export const REVIEW_CAP_USD: Readonly<Record<RmCell["id"], number>> = { OS: 10.5, OA: 19.5, FS: 27, FA: 36, N: 3 };
+/** The prereg's per-review cap per cell, which the validation items' caps are multiples of. */
+export const REVIEW_CAP_USD: Readonly<Record<RmCell["id"], number>> = { OS: 10.5, OA: 19.5, FS: 27, FA: 36, N: 1 };
+/** Each cell's per-session allowance: its per-review cap, except N's $3 (Captain ruling D, 2026-11-25 01:00Z), since one Opus call's worst case is about $1. Item caps do not change with it. */
+export const SESSION_ALLOWANCE_USD: Readonly<Record<RmCell["id"], number>> = { ...REVIEW_CAP_USD, N: 3 };
 /** The Pilots table's pilot cap by arm. */
 export const PILOT_CAP_USD: Readonly<Record<RmCell["id"], number>> = { OS: 120, OA: 224, FS: 310, FA: 414, N: 11 };
 /** The per-arm counted budgets the approvals file records. */
@@ -118,7 +120,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export function rmItems(): RmItem[] {
   const items: RmItem[] = [
     { item: "geva590-visibility", what: "Supply: B visibility reads (section 11)", cap_usd: 60, quotes: [QUOTES.items], after_go: false },
-    ...RM_CELLS.map((c): RmItem => ({ item: "geva590-pilot-" + lower(c.id), what: "pilot, arm " + c.id + " (11 reviews, $" + REVIEW_CAP_USD[c.id] + " per session)", cap_usd: PILOT_CAP_USD[c.id], quotes: [garry, QUOTES.pilot, QUOTES.pilotTable, QUOTES.pilotUnchanged], program: { name: PILOT_PROGRAM, skill: armId(c.arm, c.model) }, after_go: false })),
+    ...RM_CELLS.map((c): RmItem => ({ item: "geva590-pilot-" + lower(c.id), what: "pilot, arm " + c.id + " (11 reviews, $" + SESSION_ALLOWANCE_USD[c.id] + " per session)", cap_usd: PILOT_CAP_USD[c.id], quotes: [garry, QUOTES.pilot, QUOTES.pilotTable, QUOTES.pilotUnchanged], program: { name: PILOT_PROGRAM, skill: armId(c.arm, c.model) }, after_go: false })),
     { item: "geva590-retry", what: "retry reserve (section 8's one rerun; pilot, validation and counted reruns)", cap_usd: RETRY_CAP_USD.fable_leaves, quotes: [garry, QUOTES.retry, QUOTES.retryRule], raises: { full: { cap_usd: RETRY_CAP_USD.full, quotes: [garry, QUOTES.retry, QUOTES.fullGated] } }, after_go: false },
     { item: "geva590-probes", what: "Codex model probes (section 11)", cap_usd: 40, quotes: [QUOTES.items], after_go: false },
     { item: "geva590-judge", what: "judge: Carbon on all reviews (section 11; change 1 adds the validation batch's)", cap_usd: 70, quotes: [QUOTES.items], raises: { full: { cap_usd: 100, quotes: [QUOTES.items, QUOTES.fullGated] } }, after_go: false },
@@ -246,8 +248,8 @@ export function pilotCellItems(left: (item: string) => number | null): CellItems
     const item = "geva590-pilot-" + lower(c.id);
     const have = left(item);
     if (have === null) problems.push(item + " has no approved cap in the record; run gstack-evals rm-run items first");
-    else if (have < REVIEW_CAP_USD[c.id]) problems.push(item + " has $" + have.toFixed(2) + " left, under one session's allowance of $" + REVIEW_CAP_USD[c.id]);
-    else cells[armId(c.arm, c.model)] = { item, cap_usd: round2(Math.min(have, PILOT_REVIEWS * REVIEW_CAP_USD[c.id])), allowance_usd: REVIEW_CAP_USD[c.id] };
+    else if (have < SESSION_ALLOWANCE_USD[c.id]) problems.push(item + " has $" + have.toFixed(2) + " left, under one session's allowance of $" + SESSION_ALLOWANCE_USD[c.id]);
+    else cells[armId(c.arm, c.model)] = { item, cap_usd: round2(Math.min(have, PILOT_REVIEWS * SESSION_ALLOWANCE_USD[c.id])), allowance_usd: SESSION_ALLOWANCE_USD[c.id] };
   }
   const retry = left("geva590-retry");
   if (retry === null) problems.push("geva590-retry has no approved cap in the record; run gstack-evals rm-run items first");
