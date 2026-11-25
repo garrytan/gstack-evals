@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Garry Tan. MIT License.
 """Checks one returned labels file against this package's items.json.
   python3 check_return.py <returned-file> [items.json]
-The returned file may end in .json or .txt (labellers rename it so RentAHuman's upload form takes it).
+The returned file may end in .json or .txt (labellers rename it when an upload form refuses .json).
 Prints VERDICT: PASS | REDO | REJECT | ASK with reasons written for the labeller (REDO, REJECT) or for the package owner
 (ASK), then a summary. Exit 0 on PASS, 1 otherwise. Thresholds live in items.json "checks"."""
 import json, sys, os, collections, re

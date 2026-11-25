@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 Garry Tan. MIT License.
-# Hosts this package's labeller pages on one small Ubicloud VM behind Caddy (https via sslip.io), each at an unguessable
+# Hosts the labeller pages of this batch's seats on one small Ubicloud VM behind Caddy (https via sslip.io), each at an unguessable
 # path, the way handoffs/labelling/gbev130-hosting/host_pages.sh does.
 #   UBICLOUD_API_KEY must be set (read by name only). Usage: bash host_pages.sh up | refresh | verify | urls | ttl | down
-# PKGS lists the package folders to serve (default: this one, and its third-reading package once it exists). Writes
+# PKGS lists the package folders to serve (default: every seat of this batch that exists, -a, -b and -c). Writes
 # links.txt into each package folder. The VM's time limit is UBI_TTL_HOURS (default 288 = 12 days); extend by renaming
 # (playtests skill mistake 11). Take the VM down when the last review window closes.
 set -euo pipefail
@@ -11,7 +11,7 @@ S=${UBI_RUNNER:-$HOME/.capy/drive/user-garry-tan/skills/ubicloud/scripts/ubi-run
 HERE=$(cd "$(dirname "$0")" && pwd)
 L=${LABELLING_ROOT:-$(dirname "$HERE")}
 ME=$(basename "$HERE")
-PKGS=${PKGS:-$ME $( [ -d "$L/$ME-third" ] && echo "$ME-third" )}
+B=${ME%-*}; PKGS=${PKGS:-$(for s in a b c; do [ -d "$L/$B-$s" ] && echo "$B-$s"; done)}
 W=$HOME/.capy/work/geva590/host; mkdir -p "$W"
 export UBI_OWNER=${UBI_OWNER:-geva590} UBI_TTL_HOURS=${UBI_TTL_HOURS:-288}
 pages() { for p in $PKGS; do for f in "$L/$p"/labeller/*.html; do echo "$p $f"; done; done; }

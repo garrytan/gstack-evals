@@ -191,10 +191,12 @@ export interface PersonOptions {
   minutes?: number;
   /** Answer every screen the same, as a careless file does. */
   same?: string;
+  /** Give these answers on these screens, by screen id. */
+  choose?: Record<string, string>;
 }
 
 /** The labels file a page downloads, filled from the planted markers: a finding names the bug when it carries BUGMARK. */
-export function personFile(pkg: string, labeller: string, version: "A" | "B", o: PersonOptions = {}): string {
+export function personFile(pkg: string, labeller: string, version: "A" | "B" | "C", o: PersonOptions = {}): string {
   const items = JSON.parse(readFileSync(join(pkg, "items.json"), "utf8"));
   const labels: Record<string, { choice: string; note: string; at: string }> = {};
   for (const sid of items.orders[version] as string[]) {
@@ -206,6 +208,7 @@ export function personFile(pkg: string, labeller: string, version: "A" | "B", o:
       let choice: string;
       if (o.same) choice = o.same;
       else if (q.id in items.attention) choice = items.attention[q.id];
+      else if (o.choose && sid in o.choose) choice = o.choose[sid]!;
       else if (o.none_on && text.includes(o.none_on)) choice = q.findings ? "none" : "doesnt";
       else if (o.cant_on && text.includes(o.cant_on)) choice = "cant";
       else if (q.findings) choice = hit.length ? hit.join(",") : "none";

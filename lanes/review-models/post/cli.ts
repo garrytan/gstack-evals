@@ -29,12 +29,13 @@ const HELP = [
   "  second-read-send --post <dir> --run-id <id> --item <ledger item>                     (paid: Astra and Opus)",
   "  judge-send --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --run-id <id> --item <ledger item>  (paid: Gemini 4 Carbon)",
   "  desk-package --run <dir> --key <key.json> --post <dir> --desk <labelling root> [--batch pilot|validation] [--shape review|finding]",
-  "      writes <desk>/geva590-review-labels-<batch>/ for the labelling desk; the screen key stays in <post>/labels/people/",
-  "  labels-import --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --file <labels file> --file <labels file>",
-  "      reads the first two people's downloaded labels files; reviews they read differently go to a third person's",
-  "      package, <desk>/geva590-review-labels-<batch>-third/, and with no disagreement the final labels land in <post>/labels/",
-  "  labels-import --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --file <labels file> --round third",
-  "      reads the third person's file; each review they read takes the majority of three, and the final labels land",
+  "      writes seat A's and seat B's packages, <desk>/geva590-review-labels-<batch>-a/ and -b/, and the code task; the",
+  "      screen key and seat B's subset stay in <post>/labels/people/",
+  "  labels-import --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --file <seat A's file> --file <seat B's file>",
+  "      reads seat A's and seat B's labels files; subset reviews they read differently go to seat C's package,",
+  "      <desk>/geva590-review-labels-<batch>-c/, and with no disagreement the final labels land in <post>/labels/",
+  "  labels-import --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --file <seat C's file> --round third",
+  "      reads seat C's file; each review it holds takes the majority of three, and the final labels land",
   "      in <post>/labels/ (final.json for the pilot, final-validation.json for the validation batch)",
   "  label-send                                                    (retired: people make the labels; it refuses)",
   "  readout --run <dir> --key <key.json> --post <dir> --history <stage1 per-pass csv> --md <file>",
@@ -143,8 +144,8 @@ function deskCmd(f: Map<string, string[]>): number {
   const post = need(f, "--post");
   const batch = batchOf(f);
   const r = deskPackage({ reviews: pilotBatch(pilotOf(f)), batch, desk: need(f, "--desk"), post, shape: shape as Shape | undefined });
-  console.log("desk package: " + r.dir + " (" + r.key.shape + " question), " + r.labelled + " reviews on " + r.screens + " screens with repeats and attention screens, " + r.key.auto_no.length + " with no findings labelled no; 2 seats at $" + r.price + "; privacy check passed");
-  console.log("  hand the folder to the labelling desk; the screen key stays in " + join(post, "labels", "people", batch) + " and never goes with it");
+  console.log("desk packages (" + r.key.shape + " question, on hold): seat A " + r.dirs.A + ", " + r.labelled + " reviews on " + r.screens.A + " screens; seat B " + r.dirs.B + ", a subset of " + r.subset + " on " + r.screens.B + " screens; " + r.key.auto_no.length + " with no findings labelled no; privacy checks passed");
+  console.log("  code task for every labeller: " + r.code_task + "; the screen key stays in " + join(post, "labels", "people", batch) + " and never goes with the packages");
   return 0;
 }
 
@@ -154,9 +155,9 @@ function importCmd(f: Map<string, string[]>): number {
   const files = (f.get("--file") ?? []).map((p) => ({ name: p, text: readFileSync(p, "utf8") }));
   const post = need(f, "--post");
   const batch = batchOf(f);
-  if (round === "third" && files.length !== 1) rmFail("E_RM_POST_LABELS", "the third round takes exactly one labels file, the third person's, not " + files.length);
+  if (round === "third" && files.length !== 1) rmFail("E_RM_POST_LABELS", "the third round takes exactly one labels file, seat C's, not " + files.length);
   const r = round === "first" ? importFirst({ post, batch, files, reviews: pilotBatch(pilotOf(f)) }) : importThird({ post, batch, file: files[0]! });
-  console.log("labels-import (" + batch + ", " + round + "): " + r.reviews + " reviews, " + r.agreed + " read alike, " + r.disagreements + " read differently" + (r.final ? ", " + r.unresolved + " unresolved; wrote " + finalPath(post, batch) : "; the third person's package (1 seat at $" + r.price + ") is at " + r.third));
+  console.log("labels-import (" + batch + ", " + round + "): " + r.reviews + " reviews; on the subset of " + r.subset + ", seats A and B read " + r.agreed + " alike and " + r.disagreements + " differently" + (r.final ? "; " + r.unresolved + " unresolved; wrote " + finalPath(post, batch) : "; seat C's package is at " + r.third));
   return 0;
 }
 
@@ -188,7 +189,7 @@ export async function main(argv: string[]): Promise<number> {
     if (sub === "second-read-send") return await secondReadCmd(f);
     if (sub === "desk-package") return deskCmd(f);
     if (sub === "labels-import") return importCmd(f);
-    if (sub === "label-send") return rmFail("E_RM_POST_RETIRED", "label-send is retired: two people make the judge-check labels through the labelling desk (pre-run changes 5 and 6); run rm-post desk-package, then rm-post labels-import");
+    if (sub === "label-send") return rmFail("E_RM_POST_RETIRED", "label-send is retired: engineers make the judge-check labels through the labelling desk (pre-run changes 5 to 7, R125); run rm-post desk-package, then rm-post labels-import");
     if (sub === "readout") return readoutCmd(f);
     return rmFail("E_RM_POST_INPUT", "unknown subcommand " + JSON.stringify(sub) + "; gstack-evals rm-post --help lists them");
   } catch (e) {

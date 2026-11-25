@@ -12,8 +12,9 @@ finished pilot, sends the paid calls in metered batches and writes the readout.
 - audit.ts: N's read audit (no gstack file and no drive path in any session) and the models that answered in a session.
 - send.ts: the two paid batches (the Carbon judge and the contamination second read), each one lease on its ledger item
   through the cso lane's metered transport.
-- desk.ts and desk/: the judge check's person labels. Two people label the reviews through the organisation's labelling
-  desk, and a third person reads the reviews they read differently; no model makes a label. desk.ts writes the package in the desk's format (the org drive's
+- desk.ts and desk/: the judge check's person labels. Engineers label the reviews through the organisation's labelling
+  desk (R125): seat A labels every review, seat B a seeded subset, and seat C the subset reviews A and B read
+  differently; no model makes a label. desk.ts writes one package per seat in the desk's format (the org drive's
   handoffs/labelling/bg1-dev-judge/ is the model) and reads the files the people's pages download. desk/ holds the page
   template, check_return.py, privacy_check.py and host_pages.sh, copied into every package.
 - readout.ts: the per-arm pilot table, the retry reserve, the staged rule and the proceed set, as Markdown that names
@@ -32,24 +33,34 @@ with the same --run-id and pays for nothing twice.
     gstack-evals rm-post second-read-send --post $P --run-id <labels run id> --item <labels item>        (only when contamination printed cases)
     gstack-evals rm-post judge-send --run $R --key $S/post-key.json --post $P --run-id <judge run id> --item <judge item>
     gstack-evals rm-post desk-package --run $R --key $S/post-key.json --post $P --desk <labelling root>
-    gstack-evals rm-post labels-import --run $R --key $S/post-key.json --post $P --file <F1's file> --file <F2's file>
-    gstack-evals rm-post labels-import --run $R --key $S/post-key.json --post $P --file <T1's file> --round third   (only when the first import wrote a third package)
+    gstack-evals rm-post labels-import --run $R --key $S/post-key.json --post $P --file <A1's file> --file <B1's file>
+    gstack-evals rm-post labels-import --run $R --key $S/post-key.json --post $P --file <C1's file> --round third   (only when the first import wrote seat C's package)
     gstack-evals rm-post readout --run $R --key $S/post-key.json --post $P --history <review-real-bugs-stage1-per-pass.csv> --md <readout.md>
 
-The labelling root is the org drive's handoffs/labelling/. desk-package writes geva590-review-labels-pilot/ there: two
-offline pages (labeller/check-reviews-A.html and -B.html, the same screens in two orders with 3 repeats and 3 attention
-screens, one of them a screening screen that needs real code reading), guide.md, message-to-labeller.txt, bounty.json
-(dryRun true, $125 a seat, 2 seats), items.json (desk only), check_return.py, privacy_check.py with its result in
-privacy-check.md, host_pages.sh and returns/. The key from each screen's opaque id back to unit and arm stays in
-$P/labels/people/pilot/key.json, never in the package. Tell the desk the package is ready; it hosts, hires, sends,
-checks each return with check_return.py and puts the files in returns/. labels-import checks both files again. When
-the two people agree on every review, it writes $P/labels/final.json. When they read some reviews differently, it
-writes geva590-review-labels-pilot-third/ beside the first package: one page (A) with those reviews under new screen
-ids, 1 repeat and 1 attention screen (the screening screen), for one new person who is neither F1 nor F2, with its own
-bounty.json for 1 seat. The seat is priced by the minute at the first package's rate ($25 an hour, about 5 minutes a
-screen, rounded up to whole dollars with a $5 floor), and the price is in its README. Its screen key, with the two
-codes it excludes, stays in $P/labels/people/pilot/third-key.json. labels-import --round third checks the third
-person's file, refuses it if it names F1 or F2, and writes $P/labels/final.json. Until final.json exists, the readout prints "Judge check: waiting on person labels" for every
+The labelling root is the org drive's handoffs/labelling/. The packages are on hold: R125 makes the labellers
+engineers, and where they come from and what a seat pays are not settled, so no package names a recruiting source or
+a price. desk-package writes three folders there:
+
+- geva590-review-labels-pilot-a/, seat A: one offline page (labeller/check-reviews-A.html) with every review the check
+  takes, 3 repeats and 2 attention screens;
+- geva590-review-labels-pilot-b/, seat B: one page (check-reviews-B.html) with a subset of 15 of those reviews, 3 per
+  arm, plus 2 repeats and the same 2 attention screens. Within each arm the subset is the review screens' opaque ids,
+  sorted, shuffled with seed 1872089902 and taken from the front; with fewer arms the 15 spread as evenly as the arms
+  allow (5 each over three arms);
+- geva590-review-labels-code-task/: the screening item as a stand-alone task of about 10 minutes (code-task.html and
+  code-task.md), with its expected answer in answer.md, desk side, so whoever recruits can check a candidate before
+  they get a seat. The item is no longer a screen inside any package.
+
+Each seat's folder holds guide.md, message-to-labeller.txt, job.json (seat, screens, minutes, the 48-hour deadline and
+`price: null`), items.json (desk only), check_return.py, privacy_check.py with its result in privacy-check.md, and
+returns/; seat A's also holds host_pages.sh, which serves every seat of the batch. The key from each screen's opaque id
+back to unit and arm, and the subset, stay in $P/labels/people/pilot/key.json, never in a package. labels-import
+checks seat A's and seat B's files again, refuses two files from one page or one person on both seats, and reads every
+review outside the subset by seat A's file alone. When A and B read every subset review alike, it writes
+$P/labels/final.json. When they read some differently, it writes geva590-review-labels-pilot-c/: one page (C) with
+those reviews under new screen ids, 1 repeat and 1 attention screen, for an engineer who is neither A1 nor B1. Its
+key, with the two codes it excludes, stays in $P/labels/people/pilot/third-key.json. labels-import --round third
+checks seat C's file, refuses it if it names A1 or B1, and writes $P/labels/final.json. Until final.json exists, the readout prints "Judge check: waiting on person labels" for every
 arm and fails none on it. label-send is retired and refuses with E_RM_POST_RETIRED.
 
 The readout also writes $P/labels/check-rows.jsonl, the pilot's rows for the kappa gate on 100 labels, which the
@@ -65,10 +76,10 @@ desk. Use the same post dir or a new one:
 
     gstack-evals rm-post contamination --run $V --key $S/post-key.json --post $P --batch validation --journal <its proxy journal>
     gstack-evals rm-post desk-package --run $V --key $S/post-key.json --post $P --desk <labelling root> --batch validation
-    gstack-evals rm-post labels-import --run $V --key $S/post-key.json --post $P --batch validation --file <F1's file> --file <F2's file>
-    gstack-evals rm-post labels-import --run $V --key $S/post-key.json --post $P --batch validation --file <T1's file> --round third
+    gstack-evals rm-post labels-import --run $V --key $S/post-key.json --post $P --batch validation --file <A1's file> --file <B1's file>
+    gstack-evals rm-post labels-import --run $V --key $S/post-key.json --post $P --batch validation --file <C1's file> --round third
 
-The package is geva590-review-labels-validation/ (and -validation-third/ when the two differ), the screen keys sit in
+The packages are geva590-review-labels-validation-a/ and -b/ (and -c/ when A and B differ), the screen keys sit in
 $P/labels/people/validation/ and the labels land in $P/labels/final-validation.json, so the pilot's final.json is never
 overwritten. The readout reads the pilot only and refuses --batch validation.
 
@@ -89,14 +100,16 @@ overwritten. The readout reads the pilot only and refuses --batch validation.
   finding instead. A review names the bug for a person when they pick a finding (or answer names for one). Can't tell
   reads as not naming; the final row marks such a no with cant_tell, and the readout prints the kappa with those read
   as naming, change 6's second reading. A review with no findings names nothing, so it is labelled no and not shown.
-- Two people read a review differently when one says it names the bug and the other doesn't. That review goes to a
-  third person, who sees the same screen blind: nothing about earlier answers or the other labellers reaches a hire,
-  so the first two never see each other's readings (the desk's rule 4). Each of the three readings is names, doesn't
-  or can't tell, and the label is the one at least two share. All three different, or a majority of can't tell,
-  leaves the review unresolved; it stays in the check and is read both ways, as change 2 says. No model writes a
-  summary for it.
+- Every review outside seat B's subset takes seat A's label. Seat A and seat B read a subset review differently when
+  one says it names the bug and the other doesn't. That review goes to seat C, who sees the same screen blind:
+  nothing about earlier answers or the other labellers reaches a hire (the desk's rule 4). Each of the three readings
+  is names, doesn't or can't tell, and the label is the one at least two share. All three different, or a majority
+  of can't tell, leaves the review unresolved; it stays in the check and is read both ways, as change 2 says. No
+  model writes a summary for it.
+- The subset's final rows keep seat A's and seat B's readings (a_b), and the readout prints their agreement and
+  Cohen's kappa beside Carbon's kappa, with can't tell read as not naming.
 - Repeats and attention screens never become labels; check_return.py uses them to judge a file's care, and the
-  desk pays on its verdict.
+  desk accepts a return on its verdict.
 - A gstack cell's part-ran check needs, beside rm-exposure.ts's exposure, every model that answered in the session
   (main agent and subagents) to be the cell's model.
 - An arm passes its pilot on part ran, the judge check and supply, the Pilots table's three columns. Pilot spend over

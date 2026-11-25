@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=the pilot readout reads every Pilots-table column per arm from a finished pilot (exposure, the read audit,
-// judge errors against person labels from the desk package (two people, a third where they differ), supply, cost, wall time, pilot spend, reruns against the reserve), then the staged rule
+// judge errors against engineers' labels from the desk packages (seat A on every review, seat B on a subset, seat C where they differ), A-vs-B agreement, supply, cost, wall time, pilot spend, reruns against the reserve), then the staged rule
 // and the frozen proceed set, and names no unit by anything but its opaque label; fails_when=an unexposed review, a judge
 // error, a rerun or a contaminated search goes uncounted, a step runs out of order, the validation batch's labels land on the pilot's, or the Markdown quotes a unit id, PR,
 // fix commit or advisory; why_new=GEVA-590 Pilots table, change 1 items 1 to 3, change 2 sections 2 and 4; seam=rm-post's
@@ -60,13 +60,17 @@ describe("rm-post end to end on a planted pilot (keyless)", () => {
 
     const desk = join(s.dir, "desk");
     const pkg = deskPackage({ reviews: pilotBatch(pilot), batch: "pilot", desk, post: s.post });
-    expect([pkg.labelled, pkg.screens, pkg.key.shape]).toEqual([49, 55, "review"]);
-    expect(pkg.dir).toBe(join(desk, "geva590-review-labels-pilot"));
-    const first = importFirst({ post: s.post, batch: "pilot", reviews: pilotBatch(pilot), files: [{ name: "F1", text: personFile(pkg.dir, "F1", "A") }, { name: "F2", text: personFile(pkg.dir, "F2", "B", { none_on: "DISAGREE" }) }] });
-    expect(first).toMatchObject({ reviews: 49, disagreements: 1, final: false });
-    expect(existsSync(join(s.post, "labels", "final.json"))).toBe(false);
-    const settled = importThird({ post: s.post, batch: "pilot", file: { name: "T1", text: personFile(first.third!, "T1", "A") } });
-    expect(settled).toMatchObject({ reviews: 49, disagreements: 1, unresolved: 0, final: true });
+    expect([pkg.labelled, pkg.subset, pkg.screens.A, pkg.screens.B, pkg.key.shape]).toEqual([49, 15, 54, 19, "review"]);
+    expect(pkg.dirs).toEqual({ A: join(desk, "geva590-review-labels-pilot-a"), B: join(desk, "geva590-review-labels-pilot-b") });
+    const oa1 = pkg.key.screens.find((x) => x.kind === "review" && x.arm === "OA" && x.unit === s.key.pilot[0]!.unit)!;
+    const split = pkg.key.subset!.includes(oa1.sid) ? 1 : 0;
+    const first = importFirst({ post: s.post, batch: "pilot", reviews: pilotBatch(pilot), files: [{ name: "A1", text: personFile(pkg.dirs.A, "A1", "A") }, { name: "B1", text: personFile(pkg.dirs.B, "B1", "B", { none_on: "DISAGREE" }) }] });
+    expect(first).toMatchObject({ reviews: 49, subset: 15, agreed: 15 - split, disagreements: split, final: !split });
+    if (split) {
+      expect(existsSync(join(s.post, "labels", "final.json"))).toBe(false);
+      const settled = importThird({ post: s.post, batch: "pilot", file: { name: "C1", text: personFile(first.third!, "C1", "C") } });
+      expect(settled).toMatchObject({ reviews: 49, disagreements: 1, unresolved: 0, final: true });
+    }
 
     pilot = loadPilot(s.run, key, s.post);
     const final: FinalRow[] = JSON.parse(readFileSync(join(s.post, "labels", "final.json"), "utf8"));
@@ -96,6 +100,7 @@ describe("rm-post end to end on a planted pilot (keyless)", () => {
     }
     expect(md).toContain("## OA: passes its pilot");
     expect(md).toContain("Proceed set: **all**");
+    expect(md).toContain("- Person agreement (R125): seat A and seat B read " + (15 - split) + " of 15 subset reviews alike, kappa ");
     expect(() => assertSafe(md + "\n" + s.key.pilot[6]!.markers.commits[0], pilot)).toThrow(/E_RM_POST_INPUT the readout would name/);
 
     const out = join(s.dir, "readout.md");
@@ -120,15 +125,16 @@ describe("rm-post end to end on a planted pilot (keyless)", () => {
     const pilot = loadPilot(s.run, vkey, s.post, "validation");
     expect(pilot.reviews.map((r) => r.unit).every((u) => vkey.validation!.some((v) => v.unit === u))).toBe(true);
     expect(await main(["desk-package", ...args, "--desk", desk, "--batch", "validation"])).toBe(0);
-    const dir = join(desk, "geva590-review-labels-validation");
-    expect(readFileSync(join(dir, "privacy-check.md"), "utf8")).toContain("Result: BLOCKING HITS: 0.");
-    expect(existsSync(join(desk, "geva590-review-labels-pilot"))).toBe(false);
+    const dir = join(desk, "geva590-review-labels-validation-a"), dirB = join(desk, "geva590-review-labels-validation-b");
+    for (const d of [dir, dirB]) expect(readFileSync(join(d, "privacy-check.md"), "utf8")).toContain("Result: BLOCKING HITS: 0.");
+    expect(existsSync(join(desk, "geva590-review-labels-pilot-a"))).toBe(false);
     const key = JSON.parse(readFileSync(join(s.post, "labels", "people", "validation", "key.json"), "utf8")) as DeskKey;
-    expect(key).toMatchObject({ batch: "validation", package: "geva590-review-labels-validation" });
+    expect(key).toMatchObject({ batch: "validation", schema: "rm-desk-key.v2" });
+    expect(key.subset).toHaveLength(15);
     expect(key.screens.filter((x) => x.kind === "review").map((x) => x.arm + " " + x.unit).sort()).toEqual(pilotBatch(pilot).filter((r) => r.findings.length).map((r) => r.arm + " " + r.unit).sort());
-    const f1 = join(s.dir, "labels-F1-A.txt"), f2 = join(s.dir, "labels-F2-B.txt");
-    writeFileSync(f1, personFile(dir, "F1", "A"));
-    writeFileSync(f2, personFile(dir, "F2", "B"));
+    const f1 = join(s.dir, "labels-A1-A.txt"), f2 = join(s.dir, "labels-B1-B.txt");
+    writeFileSync(f1, personFile(dir, "A1", "A"));
+    writeFileSync(f2, personFile(dirB, "B1", "B"));
     expect(await main(["labels-import", ...args, "--batch", "validation", "--file", f1, "--round", "third"])).toBe(2);
     expect(await main(["labels-import", ...args, "--batch", "validation", "--file", f1, "--file", f2])).toBe(0);
     expect(JSON.parse(readFileSync(join(s.post, "labels", "final-validation.json"), "utf8"))).toHaveLength(key.screens.filter((x) => x.kind === "review").length + key.auto_no.length);
