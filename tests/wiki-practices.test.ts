@@ -199,9 +199,13 @@ describe("practice 5: the judge check", () => {
     expect(later("Label notes: blind to arm", "Label notes: blinded to model identity and arm, 2/3 majority, see [the rubric](./rubric.md)")).toEqual([]);
   });
 
-  test("a plan dated before 2026-11-26 needs no Labels by line", () => {
+  test("a plan dated before 2026-11-26 may leave the Labels by line out, but a line it has follows the same rule", () => {
+    const message = PREREG + ': practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), and put any detail on a "Label notes:" line; labels a model made, settled or agreed on are not a label set (wiki/README.md, Eval plans and results, gives the format)';
     expect(check(prereg(swap("Labels by: people\n", "")))).toEqual([]);
-    expect(check(prereg(swap("Labels by: people", "Labels by: people, settled by a model")))).toEqual([]);
+    expect(check(prereg(PASSING_PREREG))).toEqual([]);
+    for (const line of ["Labels by: people, settled by a model", "Labels by: two models agreeing", "Labels by: peo_ple", "Labels by: people\nLabels by: rule"]) {
+      expect(check(prereg(swap("Labels by: people", line)))).toEqual([message]);
+    }
   });
 
   test("a plan with no model judge needs no label line", () => {

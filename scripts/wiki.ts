@@ -474,7 +474,7 @@ function checkPrereg(lines: string[], date: string, p: (message: string) => void
     if (!(kappa >= 0.6)) p('practice 5: "Kappa at least:" must be 0.6 or more' + HOW);
     if (!/^per arm\b/i.test(labelled(judge, "Errors read")[0] ?? "")) p('practice 5: "Errors read: per arm" is missing; the judge\'s errors are read per arm, not pooled' + HOW);
     const labelsBy = judge.flatMap((l) => l.match(/^(?:[-*] )?(?:\*\*|__)?Labels by(?:\*\*|__)?:(?:\*\*|__)? *(.*)$/i)?.slice(1) ?? []);
-    if (date >= LABELS_BY_FROM && (labelsBy.length !== 1 || !/^(?:people|construction|rule)$/i.test(labelsBy[0].replace(/[`*_]/g, "").replace(/\.$/, "").trim())))
+    if ((date >= LABELS_BY_FROM || labelsBy.length) && (labelsBy.length !== 1 || !/^(?:people|construction|rule)$/i.test(labelsBy[0].trim().replace(/^[`*_]+|[`*_]+$/g, "").replace(/\.$/, ""))))
       p('practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), and put any detail on a "Label notes:" line; labels a model made, settled or agreed on are not a label set' + HOW);
   }
 

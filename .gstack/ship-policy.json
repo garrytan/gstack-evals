@@ -55,6 +55,7 @@
       "scripts/wiki.ts",
       "src/errors/**",
       "scripts/docs-only.ts",
+      "scripts/ci-tree.ts",
       ".github/workflows/**",
       ".gstack/**"
     ]
