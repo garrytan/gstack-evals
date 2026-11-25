@@ -18,8 +18,8 @@ links:
   - lanes/product-value/cutoffs.json
   - quick/laneb/tasks/swerebench-r3a4.json
 attachments:
-  - 67cc8a04d60938f102b2d49c473c75227c23f371f299f87ef6be944a0e470451  vintage-out.json
-  - 790242a07cdfd8997cace02cef29863650b591156a11c925bb4dde65db24422e  vintage.py
+  - e9bb8584edfef90972260785108ad849cd590edfeeec052058820c6600bdb770  vintage-out.json
+  - 0fbd738ecf4444f798ed4703e9897a3afe3dd61fa524a8ff7c5db9340127ff8a  vintage.py
 ---
 
 # Does a skill's lift change with task age? Finished skill-versus-plain comparisons split by model and by each task's public date
@@ -34,7 +34,7 @@ Call settled: none
 
 ## What was done
 
-No model calls, sessions or VMs. The script [vintage.py](vintage.py) reads the committed per-unit exports of five finished studies, pairs each skill arm with its plain arm by unit, and splits the pairs by each unit's public date. Its output is [vintage-out.json](vintage-out.json). Run it from the repository root as `python3 wiki/research/2026-11-25-geva-593-skill-lift-by-model-and-task-date/vintage.py out.json`. It reproduces vintage-out.json byte for byte, because the bootstrap seed is fixed.
+No model calls, sessions or VMs. The script [vintage.py](vintage.py) reads the committed per-unit exports of five finished studies, pairs each skill arm with its plain arm by unit, and splits the pairs by each unit's public date. Its output is [vintage-out.json](vintage-out.json). Run it from the repository root as `python3 wiki/research/2026-11-25-geva-593-skill-lift-by-model-and-task-date/vintage.py out.json`. It reproduces vintage-out.json byte for byte under any Python hash seed, because the bootstrap seed and the order of strata are both fixed.
 
 - **Paired delta.** Skill minus plain, in points, per model, never pooled across models, studies or metrics.
 - **Interval.** 95% cluster bootstrap over repositories, 10,000 draws, seed 20261125. A stratum with no discordant pairs gets a degenerate interval, so the table says "not estimable" instead.

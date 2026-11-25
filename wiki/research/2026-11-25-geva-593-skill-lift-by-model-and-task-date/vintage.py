@@ -10,11 +10,11 @@ def signp(b,c):
   if n==0: return 1.0
   k=min(b,c); p=sum(math.comb(n,i) for i in range(k+1))/2**n
   return round(min(1.0,2*p),4)
-def boot(pairs):
+def boot(pairs, order):
   # pairs: list of (repo, stratum, plain, skill) with numeric values
   def stats(ps):
     out={}
-    for s in set(p[1] for p in ps)|{'all'}:
+    for s in sorted(set(p[1] for p in ps))+['all']:
       q=[p for p in ps if s=='all' or p[1]==s]
       if q: out[s]=(len(q), sum(p[2] for p in q)/len(q), sum(p[3] for p in q)/len(q), sum(p[3]>p[2] for p in q), sum(p[3]<p[2] for p in q))
     return out
@@ -23,7 +23,7 @@ def boot(pairs):
   for p in pairs: byrepo[p[0]].append(p)
   repos=list(byrepo); rnd=random.Random(SEED)
   dd=collections.defaultdict(list); inter=[]
-  strata=sorted(s for s in pt if s!='all')
+  strata=[s for s in order if s in pt]
   for _ in range(DRAWS):
     ps=[x for r in (rnd.choice(repos) for _ in repos) for x in byrepo[r]]
     st=stats(ps)
@@ -33,7 +33,8 @@ def boot(pairs):
   def ci(x):
     x=sorted(x); return (x[int(0.025*len(x))], x[int(0.975*len(x))-1]) if x else (None,None)
   res={}
-  for s,v in pt.items():
+  for s in [s for s in order if s in pt]+['all']:
+    v=pt[s]
     lo,hi=ci(dd[s]); res[s]=dict(better=v[3], worse=v[4], sign_p=signp(v[3],v[4]), n=v[0], plain=round(100*v[1],1), skill=round(100*v[2],1), delta=round(100*(v[2]-v[1]),1), lo=round(100*lo,1), hi=round(100*hi,1), repos=len({p[0] for p in pairs if s=='all' or p[1]==s}))
   if inter:
     lo,hi=ci(inter); d=(pt[strata[1]][2]-pt[strata[1]][1])-(pt[strata[0]][2]-pt[strata[0]][1])
@@ -54,7 +55,7 @@ for cls in ['O','B']:
       if s['verified'] is None or t['verified'] is None or s['outcome'] is None or t['outcome'] is None: gaps+=1; continue
       m=U[u]['month']; st='post: 2026-07 on' if m>='2026-07' else 'pre: to 2026-06'
       pairs.append((U[u]['repo'],st,int(bool(s['verified'])),int(bool(t['verified']))))
-    if pairs: OUT[f'h2h|opus|{cls}|{arm}-vs-none']=dict(boot(pairs), gaps=gaps, months=dict(collections.Counter(U[u]['month'] for (u,a) in sc if a=='none' and U[u]['class']==cls)))
+    if pairs: OUT[f'h2h|opus|{cls}|{arm}-vs-none']=dict(boot(pairs,['pre: to 2026-06','post: 2026-07 on']), gaps=gaps, months=dict(collections.Counter(U[u]['month'] for (u,a) in sc if a=='none' and U[u]['class']==cls)))
 # 2. B2 test-first
 b2=[json.loads(l) for l in open(B+'2026-11-22-capy-b2-test-first-results/sessions.jsonl')]
 idx={(x['model'],x['task'],x['arm']):x for x in b2}
@@ -66,7 +67,7 @@ for model in ['claude-opus-5-5','gpt-6.2-sol','particle-1']:
       y=idx[(m,t,arm)]
       st='older: 2025-10 to 2025-12' if pool[t]<'2026-01' else 'newer: 2026-01 to 2026-05'
       pairs.append((x['repo'],st,int(bool(x['pass'])),int(bool(y['pass']))))
-    OUT[f'b2|{model}|{arm}-vs-none']=boot(pairs)
+    OUT[f'b2|{model}|{arm}-vs-none']=boot(pairs,['older: 2025-10 to 2025-12','newer: 2026-01 to 2026-05'])
 # 3. delivery route GEVA-548
 D=[json.loads(l) for l in open(B+'2026-11-18-geva-548-delivery-route-results/sessions.jsonl')]
 di={(x['model'],x['task'],x['arm']):x for x in D}
@@ -78,7 +79,7 @@ for model in ['claude-opus-5-5','gpt-6.1-sol','particle-1']:
       y=di[(m,t,arm)]
       st='older: 2025-10 to 2025-12' if pool[t]<'2026-01' else 'newer: 2026-01 to 2026-05'
       pairs.append((t.rsplit('-',1)[0],st,int(bool(x['pass'])),int(bool(y['pass']))))
-    OUT[f'548|{model}|{arm}-vs-none']=boot(pairs)
+    OUT[f'548|{model}|{arm}-vs-none']=boot(pairs,['older: 2025-10 to 2025-12','newer: 2026-01 to 2026-05'])
 # 4. cso rerun vs reused plain audit
 plain={(s['unit'],s['model']):s for s in map(json.loads,open(B+'2026-11-23-geva-561-cso-advisories-results/stage2-scores.jsonl')) if s['arm']=='none'}
 new={(s['unit'],s['model']):s for s in map(json.loads,open(B+'2026-11-24-geva-583-cso-rerun-results/rerun-scores.jsonl')) if s['arm']=='cso'}
@@ -93,7 +94,7 @@ for model in ['opus','particle']:
     g=u[u.index('ghsa-'):].lower(); pub=frame[g]['published']; csodates[u]=pub
     st='Jul-Aug 2026' if pub<'2026-09-01' else 'Sep-Oct 2026'
     pairs.append((s['repo'],st,int(bool(s['named'])),int(bool(t['named']))))
-  OUT[f'cso|{model}|cso-a3ecfd53-vs-plain']=dict(boot(pairs),gaps=gaps)
+  OUT[f'cso|{model}|cso-a3ecfd53-vs-plain']=dict(boot(pairs,['Jul-Aug 2026','Sep-Oct 2026']),gaps=gaps)
 OUT['cso_dates']=dict(min=min(csodates.values()),max=max(csodates.values()),after_2026_10_17=sorted(v for v in csodates.values() if v>'2026-10-17'), by_month=dict(collections.Counter(v[:7] for v in csodates.values())))
 # 5. GEVA-520 claim 2: S0 untouched tree vs A1 prompt tree, incremental
 a=json.load(open(B+'2026-11-17-geva-520-state-machines-prompt-results/analysis-input.json'))
@@ -112,6 +113,6 @@ for model in a['models']:
       st=(('post: '+c+' on') if m>=c else 'pre') if c else ('July 2026' if UM[u]['july'] else 'Mar-Jun 2026')
       s0=sum(vals[(u,'S0')])/len(vals[(u,'S0')]); a1=sum(vals[(u,'A1')])/len(vals[(u,'A1')])
       pairs.append((UM[u]['repo'],st,s0,a1))
-  OUT[f'sm520|{model}|A1-vs-S0']=dict(boot(pairs), months=dict(collections.Counter(UM[u]['month'] for u in UM)))
+  OUT[f'sm520|{model}|A1-vs-S0']=dict(boot(pairs,['pre','post: '+cut[model]+' on'] if cut[model] else ['Mar-Jun 2026','July 2026']), months=dict(collections.Counter(UM[u]['month'] for u in UM)))
 json.dump(OUT,open(sys.argv[1],'w'),indent=1)
 
