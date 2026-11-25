@@ -276,20 +276,20 @@
     },
     "cso3-pilot-b": {
       "central": 5,
-      "cap": 18.31,
+      "cap": 22.31,
       "spend_stop": 10,
       "runs": "one session at a time",
-      "rule": "the a1af71d5 re-pilot only (change 3); its own item because the cso3-pilot run's driver folder was lost with the second VM, so the ledger refuses that run; the cap is the room left on cso3-pilot, which takes no more spend"
+      "rule": "the a1af71d5 re-pilot only (change 3); its own item because the cso3-pilot run's driver folder was lost with the second VM, so the ledger refuses that run; the cap is the room left on cso3-pilot, which takes no more spend; raised to $22.31 for the one missing Opus session (the Captain, 2026-11-25 08:50Z)"
     },
     "cso3-main": {
-      "central": 62,
-      "cap": 80,
-      "rule": "re-priced from the pilot under the program envelope; the Captain records the cap before the first counted lease"
+      "central": 106,
+      "cap": 125,
+      "rule": "re-priced from the a1af71d5 re-pilot (Opus $1.63 and particle-1 $0.41 a session) by the Captain, 2026-11-25 08:50Z; pause if the Opus mean passes $2.20 after 20 sessions"
     },
     "cso3-judge": {
       "central": 18,
-      "cap": 25,
-      "rule": "re-priced from the pilot; recorded with the main cap"
+      "cap": 35,
+      "rule": "raised from $25 to $35 by the Captain after the first pilot, written into the ledger 2026-11-25"
     },
     "cso3-vm": {
       "central": 6,
@@ -324,6 +324,16 @@
     "program": "cso3",
     "cap_usd": 90,
     "counts": "settled spend plus every open reservation, across all cso3 items"
+  },
+  "envelope_b": {
+    "program": "cso3b",
+    "cap_usd": 125,
+    "holds": [
+      "cso3-main"
+    ],
+    "combined_cap_usd": 170,
+    "combined_check": "before each counted session the run script refuses to start it if cso3 and cso3b committed spend plus that session allowance would pass $170 (lanes/outcome-skills/cso/combined-cap.ts, exit 10 is a cap stop)",
+    "why": "the ledger records a program's envelope once and never changes it, so cso3 stays at $90 and cso3-main joins a second program; the Captain, 2026-11-25 09:05Z"
   },
   "planning_prices": {
     "per_session_usd": {
