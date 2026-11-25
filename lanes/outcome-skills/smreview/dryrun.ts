@@ -43,7 +43,7 @@ const HOME = "/root/.claude/skills/gstack";
 const PROBE = [
   "echo SR_HEAD_TREE=$(git rev-parse HEAD^{tree})", "echo SR_MAIN=$(git rev-parse origin/main)", "echo SR_PARENT=$(git rev-parse HEAD~1)",
   "echo SR_DIFF=$(git diff --name-only origin/main HEAD | tr '\\n' ,)", "echo SR_HEADREF=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>&1)",
-  "echo SR_GSTACK=$(test -e " + HOME + " && git -C " + HOME + " rev-parse HEAD || echo absent)",
+  "echo SR_GSTACK=$(test -e " + HOME + " && git -C " + HOME + " rev-parse 'HEAD^{tree}' || echo absent)",
   "echo SR_ARMY_SM=$(if test -f " + HOME + "/review/sections/review-army.md; then grep -c 'State Machines' " + HOME + "/review/sections/review-army.md; else echo absent; fi)",
   "echo SR_ARMY_ALWAYS=$(if test -f " + HOME + "/review/sections/review-army.md; then grep -c 'always, whatever SCOPE_STATE_MACHINE says' " + HOME + "/review/sections/review-army.md; else echo absent; fi)",
   "echo SR_DRIVE=$(find /home /root -maxdepth 2 -name .capy 2>/dev/null | tr '\\n' , || true)",
@@ -167,9 +167,9 @@ export async function main(argv: string[]): Promise<number> {
       const wantDiff = [...bic.pr_files].sort().join(",") + ",";
       const diff = get("SR_DIFF").split(",").filter(Boolean).sort().join(",") + ",";
       const ok = r.rec.gap === null && get("SR_HEAD_TREE") === baseTree && get("SR_MAIN") === get("SR_PARENT") && diff === wantDiff && get("SR_HEADREF") === "origin/main" &&
-        get("SR_GSTACK") === (g ? GSTACK[r.s.arm as "G+" | "G0"] : "absent") && get("SR_DRIVE") === "" &&
+        get("SR_GSTACK") === (g ? GSTACK.tree[r.s.arm as "G+" | "G0"] : "absent") && get("SR_DRIVE") === "" &&
         (r.s.arm === "G+" ? get("SR_ARMY_ALWAYS") === "1" : r.s.arm === "G0" ? get("SR_ARMY_SM") === "0" : get("SR_ARMY_SM") === "absent");
-      rule("session " + name + ": HEAD is the fix base's tree, origin/main its parent with the change's files between them, gstack only in G+ and G0 at its arm's commit, no drive", ok, "gap " + r.rec.gap + ", tree " + (get("SR_HEAD_TREE") === baseTree) + ", diff " + diff + " want " + wantDiff + ", origin/HEAD " + get("SR_HEADREF") + ", gstack " + get("SR_GSTACK") + ", army State Machines lines " + get("SR_ARMY_SM") + ", forced " + get("SR_ARMY_ALWAYS") + ", drive '" + get("SR_DRIVE") + "'");
+      rule("session " + name + ": HEAD is the fix base's tree, origin/main its parent with the change's files between them, gstack only in G+ and G0 at its arm's tree, no drive", ok, "gap " + r.rec.gap + ", tree " + (get("SR_HEAD_TREE") === baseTree) + ", diff " + diff + " want " + wantDiff + ", origin/HEAD " + get("SR_HEADREF") + ", gstack " + get("SR_GSTACK") + ", army State Machines lines " + get("SR_ARMY_SM") + ", forced " + get("SR_ARMY_ALWAYS") + ", drive '" + get("SR_DRIVE") + "'");
       const slots = (r.turns.slots ?? []) as Array<Record<string, any>>;
       const lim = srLimits(r.s.model);
       const want = (x: Record<string, any>) => Math.round(lim[x.phase as "task" | "wrapup"].allowance_usd * 1_000_000);
