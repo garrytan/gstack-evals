@@ -7,7 +7,7 @@ author: GEVA-592
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-25
-status: done
+status: superseded
 supersedes:
   - 2026-11-04-geva-281-r2-after-pin-results-home-field
   - 2026-11-04-geva-271-r2-after-pin-results
