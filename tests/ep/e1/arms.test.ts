@@ -7,7 +7,7 @@ import { EB_COMMON, EB_FORCED } from "../../../lanes/eng-build/arms.ts";
 import { C_LINE, D_LINE, e1ArmSpec, e1Env, e1Prompt, pMarker } from "../../../lanes/eng-planted/e1/arms.ts";
 import { e1Mount, writtenFiles } from "../../../lanes/eng-planted/e1/bundle.ts";
 import { PINS } from "../../../lanes/eng-planted/e1/frozen.ts";
-import { codexGstackInstall, TMP_COPY_STEP } from "../../../lanes/eng-planted/e1/launch.ts";
+import { codexFailures, codexGstackInstall, e1Stop, TMP_COPY_STEP } from "../../../lanes/eng-planted/e1/launch.ts";
 
 describe("prompts", () => {
   test("every arm ends with the common line, its lines joined by one newline", () => {
@@ -82,9 +82,34 @@ describe("the review bundle", () => {
     expect(m.files.map((f) => f.name)).toEqual(["review.md", "model.cfg", "spec.tla", "2-model.cfg"]);
     expect(m.truncated).toBe(false);
   });
+  test("every name is allocated against every name already taken, the plan's included", () => {
+    const written = [["/tmp/2-model.cfg", "a"], ["/work/model.cfg", "b"], ["/tmp/model.cfg", "c"], ["/tmp/plan.md", "d"]].map(([path, text]) => ({ path: path!, text: text! }));
+    const m = e1Mount("C", { plan: "final plan", transcript: reply("done"), stateRoot: null, written }, "authored");
+    const names = m.files.map((f) => f.name);
+    expect(names).toEqual(["review.md", "2-model.cfg", "model.cfg", "3-model.cfg", "2-plan.md"]);
+    expect(new Set(names).size).toBe(names.length);
+  });
   test("a missing plan mounts the authored plan; the cap cuts in order", () => {
     const m = e1Mount("N", { plan: null, transcript: reply("one two three four"), stateRoot: null, written: [{ path: "/tmp/x.md", text: "five six" }] }, "a b", 5);
     expect([m.plan, m.planMissing, m.truncated, m.fullWords, m.words]).toEqual(["a b", true, true, 8, 5]);
     expect(m.files.map((f) => f.name)).toEqual(["review.md"]);
   });
 });
+
+describe("session ends eval 1 reads first", () => {
+  const spent = "E_ALLOWANCE: the slot's allowance of $3.00 cannot hold this call's worst case";
+  test("Codex's allowance refusal is a limit stop; any other E_ALLOWANCE is not", () => {
+    expect(e1Stop({ kind: "missing", code: "E_ALLOWANCE" }, spent)).toEqual({ end: "limit" });
+    expect(e1Stop({ kind: "missing", code: "E_ALLOWANCE" }, "E_ALLOWANCE")).toBeNull();
+  });
+  test("a safety filter or a refusal is a result; an upstream failure and a cap stop are not", () => {
+    const events = [{ type: "turn.failed", error: { message: "Invalid prompt: flagged as potentially violating our usage policy (cyber_policy)" } }, { type: "error", message: "stream closed" }].map((e) => JSON.stringify(e)).join("\n");
+    expect(codexFailures(events)).toContain("cyber_policy");
+    expect(e1Stop({ kind: "missing", code: "UPSTREAM" }, codexFailures(events))).toEqual({ end: "completed", stop: "safety" });
+    expect(e1Stop({ kind: "arm_failure", failure: "refusal" }, "")).toEqual({ end: "completed", stop: "refusal" });
+    expect(e1Stop({ kind: "missing", code: "UPSTREAM" }, "502 Bad Gateway")).toBeNull();
+    expect(e1Stop({ kind: "cap_stop" }, "cyber_policy")).toBeNull();
+    expect(e1Stop({ kind: "completed" }, "")).toBeNull();
+  });
+});
+

@@ -212,8 +212,9 @@ export async function drivenLaunch(o: { pstack?: string; harbor?: string; pComma
     const upstream = "http://host.docker.internal:" + stub.port;
     const keys = { ANTHROPIC_API_KEY: "stub-not-a-key", OPENAI_API_KEY: "stub-not-a-key", OPENROUTER_API_KEY: "stub-not-a-key" };
     const machine = machineId();
+    const { notBefore: _keyless, ...real } = E1_REAL;
     const seams: E1Seams = {
-      ...E1_REAL,
+      ...real,
       review: (r) => e1ReviewLauncher({ arms: [r.arm], model: r.model, out: r.out, env: { ...process.env, ...keys }, runId: E1_RUN, log: r.log, upstream }),
       build: (b) => {
         const table: MountTable = new Map();

@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Keyless tests of eval 1's exposure detectors (lanes/eng-planted/e1/detect.ts), on both sides of each rule.
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { walkRollouts } from "../../scoring/codex-fixtures.ts";
 import { rollouts } from "../../../lanes/eng-planted/e1/launch.ts";
@@ -33,11 +35,14 @@ describe("D: a new diagram in the final plan", () => {
 });
 
 describe("C: TLC reached a model-checking result", () => {
-  test("a states-generated line, a completed check or a violation counts; a parse error does not", () => {
+  test("a states-generated line, a completed check or a violation with its trace counts; a parse error does not", () => {
+    const trace = "\nError: The behavior up to this point is:\nState 1: <Initial predicate>\n";
     expect(tlcResult("1234 states generated, 567 distinct states found, 0 states left on queue.")).toBe(true);
     expect(tlcResult("Model checking completed. No error has been found.")).toBe(true);
-    expect(tlcResult("Error: Invariant TypeOK is violated.")).toBe(true);
-    expect(tlcResult("Error: Deadlock reached.")).toBe(true);
+    expect(tlcResult("Error: Invariant TypeOK is violated." + trace)).toBe(true);
+    expect(tlcResult("Error: Deadlock reached." + trace)).toBe(true);
+    expect(tlcResult("Error: Invariant TypeOK is violated.")).toBe(false);
+    expect(tlcResult("echo Error: Deadlock reached.")).toBe(false);
     expect(tlcResult("***Parse Error***\nWas expecting ==== or more Module body")).toBe(false);
     expect(tlcResult("Error: The configuration file Spec.cfg does not exist.")).toBe(false);
   });
@@ -73,6 +78,14 @@ describe("P: statechart's body reached the session and TLC ran", () => {
   test("an empty marker refuses", () => {
     expect(() => pExposure("", " ")).toThrow("E_USAGE");
   });
+  test("only a Read, or a shell cat whose result holds the marker, counts as a read; a write or a grep does not", () => {
+    const use = (name: string, input: object, result: string) => [{ type: "assistant", message: { content: [{ type: "tool_use", id: "w1", name, input }] } }, { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "w1", content: result }] } }];
+    const path = "/opt/plugins/pstack/skills/statechart/SKILL.md";
+    expect(pExposure(tx(...use("Write", { file_path: path, content: "x" }, "File created"), ...run), marker).read).toBe(false);
+    expect(pExposure(tx(...use("Bash", { command: "grep -n x " + path }, marker), ...run), marker).read).toBe(false);
+    expect(pExposure(tx(...use("Bash", { command: "cat " + path }, "# statechart\n" + marker), ...run), marker)).toMatchObject({ read: true, exposed: true });
+    expect(pExposure(tx(...use("Bash", { command: "cat " + path }, "No such file"), ...run), marker).read).toBe(false);
+  });
 });
 
 describe("exposure by arm", () => {
@@ -91,6 +104,19 @@ describe("Codex rollouts read as Claude Code stream-json", () => {
     expect(uses.every((u: any) => typeof u.name === "string")).toBe(true);
     expect(uses.some((u: any) => u.name === "Bash" && String(u.input.command).includes("pytest"))).toBe(true);
     expect(texts.length).toBeGreaterThan(0);
+  });
+  test("tool calls and the root thread's messages interleave by time; a sub-agent's messages are left out", () => {
+    const dir = mkdtempSync(join(tmpdir(), "e1-cx-"));
+    const at = (s: number) => new Date(Date.UTC(2026, 10, 28, 6, 0, s)).toISOString();
+    const msg = (s: number, text: string) => ({ timestamp: at(s), type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text }] } });
+    const exec = (s: number, cmd: string) => ({ timestamp: at(s), type: "event_msg", payload: { type: "item_completed", item: { type: "CommandExecution", id: "e" + s, command: ["bash", "-lc", cmd], status: "completed", exit_code: 0, aggregated_output: "ok", cwd: "/work" } } });
+    const root = [{ timestamp: at(0), type: "session_meta", payload: { id: "root", cwd: "/work" } }, msg(1, "first"), msg(5, "last")];
+    const sub = [{ timestamp: at(2), type: "session_meta", payload: { id: "sub", parent_thread_id: "root", cwd: "/work" } }, exec(3, "echo sub"), msg(4, "from the sub-agent")];
+    writeFileSync(join(dir, "rollout-a-root.jsonl"), root.map((l) => JSON.stringify(l)).join("\n") + "\n");
+    writeFileSync(join(dir, "rollout-b-sub.jsonl"), sub.map((l) => JSON.stringify(l)).join("\n") + "\n");
+    const lines = codexAsClaude(rollouts(dir)).trim().split("\n").map((l) => JSON.parse(l));
+    const seq = lines.map((l) => (l.type === "user" ? "result" : l.message.content[0].type === "text" ? l.message.content[0].text : "call"));
+    expect(seq).toEqual(["first", "call", "result", "last"]);
   });
   test("the launcher's rollout walk hands codexAsClaude file paths", () => {
     const walked = rollouts(join(import.meta.dir, "../../scoring/fixtures/codex/direct"));

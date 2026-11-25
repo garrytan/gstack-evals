@@ -58,14 +58,19 @@ describe("draw", () => {
   });
   test("units authored here follow attempt 3's; a dropped unit is skipped and an owed one stops the walk", () => {
     const a3 = Array.from({ length: 8 }, (_, i) => u(i, { repo: "a" + i }));
-    const here = Array.from({ length: 8 }, (_, i) => u(100 + i, { repo: "h" + i, by: "here" }));
+    const here = Array.from({ length: 8 }, (_, i) => u(100 + i, { repo: "h" + i, by: "pool" }));
     const d = e1Draw("s", [...here, ...a3]);
     expect(d.calibration.every((id) => Number(id.slice(1)) < 100)).toBe(true);
     expect(d.comparison.slice(0, 2).every((id) => Number(id.slice(1)) < 100)).toBe(true);
     expect(d.comparison.slice(2).every((id) => Number(id.slice(1)) >= 100)).toBe(true);
-    const owed = e1Draw("s", [...a3, u(100, { by: "here", authoring: "owed", repo: "h" }), u(101, { by: "here", authoring: "dropped", repo: "g" })]);
+    const owed = e1Draw("s", [...a3, u(100, { by: "pool", authoring: "owed", repo: "h" }), u(101, { by: "pool", authoring: "dropped", repo: "g" })]);
     expect(owed.calibration).toEqual(d.calibration);
     expect(owed.comparison.length).toBe(2);
     expect(owed.waiting).toBe("u100");
+    const w2 = Array.from({ length: 8 }, (_, i) => u(200 + i, { repo: "w" + i, by: "wave2" }));
+    const three = e1Draw("s", [...w2, ...here, ...a3]);
+    expect(three.comparison.slice(2, 10).every((id) => Number(id.slice(1)) >= 100 && Number(id.slice(1)) < 200)).toBe(true);
+    expect(three.comparison.slice(10).every((id) => Number(id.slice(1)) >= 200)).toBe(true);
+    expect(e1Draw("s", [...a3, u(100, { by: "pool", authoring: "owed", repo: "h" }), ...w2]).comparison.length).toBe(2);
   });
 });

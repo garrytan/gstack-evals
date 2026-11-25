@@ -20,14 +20,15 @@ export interface Look {
   exposedOn: { C: E1Model[]; P: E1Model[] };
 }
 
-const exposedOn = (cells: Cell[], arm: E1Arm) => RUNS_ON[arm].filter((m) => (armState(cells, arm, m).exposure ?? 0) >= E1.exposure.final);
+const exposedOn = (cells: Cell[], arm: E1Arm) => RUNS_ON[arm].filter((m) => (armState(cells, arm, m).scoredExposure ?? 0) >= E1.exposure.final);
 
-export function look(order: readonly string[], cells: Cell[], seed: number, draws?: number): Look {
+export function look(order: readonly string[], cells: Cell[], seed: number, draws?: number, leftOut: ReadonlyArray<{ arm: E1Arm; model: E1Model }> = []): Look {
   const units = order.slice(0, Math.floor(order.length * E1.look.fraction));
   const inLook = new Set(units);
   const have = new Set(cells.filter((c) => inLook.has(c.unit)).map((c) => [c.unit, c.arm, c.model, c.rep].join("/")));
   const missing: string[] = [];
-  for (const u of units) for (const a of Object.keys(RUNS_ON) as E1Arm[]) for (const m of RUNS_ON[a]) for (let k = 0; k < E1.cells; k++) if (!have.has([u, a, m, k].join("/"))) missing.push([u, a, m, k].join("/"));
+  const skip = (a: E1Arm, m: E1Model) => leftOut.some((x) => x.arm === a && x.model === m);
+  for (const u of units) for (const a of Object.keys(RUNS_ON) as E1Arm[]) for (const m of RUNS_ON[a]) for (let k = 0; k < E1.cells; k++) if (!skip(a, m) && !have.has([u, a, m, k].join("/"))) missing.push([u, a, m, k].join("/"));
   const at = cells.filter((c) => inLook.has(c.unit));
   const on = { C: exposedOn(at, "C"), P: exposedOn(at, "P") };
   const CN = missing.length ? null : infer(pairsOf(at, "C", "N", on.C), seed, draws);

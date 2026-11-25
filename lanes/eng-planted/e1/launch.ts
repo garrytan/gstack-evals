@@ -19,7 +19,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
-import { BACKGROUND_WAIT_MS } from "../../../src/adapters/claude-code/driver.ts";
+import { ALLOWANCE_SPENT, BACKGROUND_WAIT_MS } from "../../../src/adapters/claude-code/driver.ts";
 import { hostDriver } from "../../../src/adapters/host.ts";
 import { ledgerPath, recordPath } from "../../../src/runner/ledger/paths.ts";
 import type { ResolvedArms } from "../../../src/skill-eval/cli/arms.ts";
@@ -41,6 +41,7 @@ import { e1ArmSpec, e1Env } from "./arms.ts";
 import { TMP_COPY, TMP_MARK_PREFIX, writtenFiles, type Written } from "./bundle.ts";
 import { codexAsClaude } from "./detect.ts";
 import { E1_HOST, type E1Arm, type E1Model } from "./frozen.ts";
+import type { Termination } from "../../../src/types.ts";
 
 export const E1_POLICY = join(import.meta.dir, "policy.json");
 /** Each model as the policy and the proxies name it. */
@@ -72,8 +73,9 @@ export const TMP_COPY_STEP = 'set -e; d="$PWD/' + TMP_COPY + '"; mkdir -p "$d"; 
 export const CLAUDE_SESSION = "claude-session.jsonl";
 
 /** The start mark and, on Sol, the sol-agent link, before the host CLI starts; the /tmp copy after it ends and, on Claude
- * Code, a copy of its own session file to session (home is the container's HOME). */
-export function withTmpCapture(inner: AgentDriver, sol: boolean, keep: { home: string; session: string } | null = null): AgentDriver {
+ * Code, a copy of its own session file to session (home is the container's HOME). copied hears whether the /tmp copy
+ * succeeded; a failed copy fails the attempt as infra, since the bundle would miss what the session wrote there. */
+export function withTmpCapture(inner: AgentDriver, sol: boolean, keep: { home: string; session: string } | null = null, copied: (ok: boolean) => void = () => {}): AgentDriver {
   return {
     ...(inner.env ? { env: inner.env } : {}),
     run: async (session, task, timeoutMs) => {
@@ -82,7 +84,7 @@ export function withTmpCapture(inner: AgentDriver, sol: boolean, keep: { home: s
       try {
         return await inner.run(session, task, timeoutMs);
       } finally {
-        session.exec(TMP_COPY_STEP, COPY_MS);
+        copied(session.exec(TMP_COPY_STEP, COPY_MS).exitCode === 0);
         if (keep && !sol) {
           const kept = session.exec("cat " + JSON.stringify(keep.home) + "/.claude/projects/*/*.jsonl", COPY_MS);
           if (kept.exitCode === 0 && kept.stdout) writeFileSync(keep.session, kept.stdout);
@@ -122,6 +124,34 @@ export interface E1ReviewLeft {
   stateRoot: string | null;
   written: Written;
   repoEdits: number;
+  /** A model's refusal or a provider's safety-filter stop: a result, never a gap (prereg section 5). */
+  stop?: "refusal" | "safety";
+}
+
+/** A provider's safety-filter words in a failed turn's error. */
+export const SAFETY_FILTER = /cyber_policy|content_policy|content_filter|invalid_prompt/i;
+
+/** The messages of a Codex session's failed turns and errors, read from its exec event stream. */
+export function codexFailures(events: string): string {
+  const out: string[] = [];
+  for (const raw of events.split("\n")) {
+    if (!raw.trim()) continue;
+    try {
+      const e = JSON.parse(raw) as { type?: string; message?: unknown; error?: { message?: unknown } };
+      if (e.type === "turn.failed" && typeof e.error?.message === "string") out.push(e.error.message);
+      else if (e.type === "error" && typeof e.message === "string") out.push(e.message);
+    } catch {}
+  }
+  return out.join("\n");
+}
+
+/** The ends eval 1 reads before the shared mapping: the proxy's allowance refusal on Codex is a limit stop, scored as it
+ * stands (the Claude driver maps it the same way under capStops), and a refusal or safety-filter stop is a result. */
+export function e1Stop(t: Termination, failures: string): { end: "limit" } | { end: "completed"; stop: "refusal" | "safety" } | null {
+  if (t.kind === "missing" && t.code === "E_ALLOWANCE" && ALLOWANCE_SPENT.test(failures)) return { end: "limit" };
+  if (t.kind === "arm_failure" && t.failure === "refusal") return { end: "completed", stop: "refusal" };
+  if (t.kind !== "completed" && t.kind !== "cap_stop" && SAFETY_FILTER.test(failures)) return { end: "completed", stop: "safety" };
+  return null;
 }
 
 export type E1ReviewSession = (o: { cell: string; unit: E1ReviewUnit; arm: E1Arm; rep: number; attempt: number; prompt: string; seed: string; dir: string }) => Promise<Attempt<E1ReviewLeft>>;
@@ -196,23 +226,29 @@ export function e1ReviewLauncher(o: { arms: E1Arm[]; model: E1Model; out: string
           ? { effort: SOL_CODEX.effort, codexSession: { hookTrust: SOL_CODEX.hookTrust, bin: LINK_DIR + "/" + SOL_CODEX.link } }
           : { systemPrompt: ER_SYSTEM_PROMPT, maxTurns: REVIEW_SESSION.maxTurns, disable1mContext: true, capStops: true, backgroundWaitMs: BACKGROUND_WAIT_MS, ...(plugins.length ? { plugins } : {}) }),
       });
-      const agent = withTmpCapture({ ...inner, env: { ...(inner.env ?? {}), ...e1Env(s.arm) } }, sol, { home, session: join(run, "host", CLAUDE_SESSION) });
+      let tmpCopied = true;
+      const agent = withTmpCapture({ ...inner, env: { ...(inner.env ?? {}), ...e1Env(s.arm) } }, sol, { home, session: join(run, "host", CLAUDE_SESSION) }, (ok) => void (tmpCopied = ok));
       const ran = await finishTrial(() => runTrial({ cell: { model, arm: name, round: 1, trial: s.rep }, task: { id: s.unit.id, prompt: s.prompt }, tasksDir: empty, sandbox, agent, dir: run, timeoutS: REVIEW_SESSION.timeoutS, network: rig.network, seed: s.seed, root: true, gate, ...(g ? { copyDirs: [{ from: STATE_ROOT_DIR, to: join(run, "host", "gstack-state") }] } : { stateRoot: false as const }) }), () => rig.finalize(binding.meter_id));
       const blank = (): E1ReviewLeft => ({ dir: run, host, plan: null, transcript: "", stateRoot: null, written, repoEdits: 0 });
       if (ran.trial === null) {
         o.log?.("cell " + s.cell + " a" + s.attempt + ": the trial threw " + ran.error + ", so the attempt ends infra (one rerun, then a gap)");
         return { end: "infra", costUsd: ran.micros / 1_000_000, result: blank() };
       }
+      if (!tmpCopied) {
+        o.log?.("cell " + s.cell + " a" + s.attempt + ": the /tmp copy failed after the session, so the attempt ends infra (one rerun, then a gap)");
+        return { end: "infra", costUsd: ran.micros / 1_000_000, result: blank() };
+      }
       const trial = ran.trial;
       return spending(ran.micros / 1_000_000, () => {
         const file = join(run, "host", "transcript.ndjson");
         const transcript = sol ? codexAsClaude(rollouts(join(run, "host", "codex-sessions"))) : existsSync(file) ? readFileSync(file, "utf8") : null;
-        const { end, why } = reviewEnd(erOutcome(trial.record.termination, sol ? transcript || null : transcript).outcome, s.cell);
+        const special = e1Stop(trial.record.termination, sol && existsSync(file) ? codexFailures(readFileSync(file, "utf8")) : "");
+        const { end, why } = special ? { end: special.end, why: special.end === "limit" ? "the slot's allowance was spent, a limit stop scored as it stands" : "a " + ("stop" in special ? special.stop : "") + " stop, a result with plan.md as the review left it" } : reviewEnd(erOutcome(trial.record.termination, sol ? transcript || null : transcript).outcome, s.cell);
         if (why) o.log?.("cell " + s.cell + " a" + s.attempt + ": " + why);
         const kept = (captured as ReviewCapture | null) ?? fail("E_USAGE", "cell " + s.cell + " a" + s.attempt + ": the trial ended before its work tree was read");
         const state = join(run, "host", "gstack-state");
         const claude = join(run, "host", CLAUDE_SESSION);
-        return { end, costUsd: ran.micros / 1_000_000, result: { dir: run, host, plan: kept.plan, transcript: transcript ?? "", ...(existsSync(claude) ? { claudeSession: readFileSync(claude, "utf8") } : {}), stateRoot: g && existsSync(state) ? state : null, written, repoEdits: kept.repoEdits } };
+        return { end, costUsd: ran.micros / 1_000_000, result: { dir: run, host, plan: kept.plan, transcript: transcript ?? "", ...(existsSync(claude) ? { claudeSession: readFileSync(claude, "utf8") } : {}), stateRoot: g && existsSync(state) ? state : null, written, repoEdits: kept.repoEdits, ...(special && "stop" in special ? { stop: special.stop } : {}) } };
       });
     };
     return { lease_id: rig.recovery?.lease_id ?? "", backend: session, close: async () => void (await rig.close()) };

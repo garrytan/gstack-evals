@@ -12,7 +12,9 @@
 # ends, (sd_mu, tau_mu) = (0, 0) and (the fitted sd_e, power.py's effect SD 0.5). The larger MDD, the shared end,
 # governs the start rule.
 #
-# Run: uv run -q --with numpy python lanes/eng-planted/e1/power.py --fit pilot.json [--json]
+# Run: uv run -q --with numpy python lanes/eng-planted/e1/power.py --fit pilot.json [--design <units>:<models> ...] [--json]
+# --design re-prints at the drawn unit count and the number of models a contrast still pools after the pilot (for
+# example 52:3 for D, C and G minus N, 52:2 for P's rows); with none it prints the frozen 64 and 48 by 3 and 2.
 # pilot.json: {"builds": [{"unit": "u1", "repo": "r1", "model": "opus", "avoid": 0.5, "catch": 1}, ...], "unforeseeable": 0.0}
 import argparse, json, os, sys
 import numpy as np
@@ -50,10 +52,10 @@ def mdd(n, models, p0a, p0c, sd_e, unf, mix, sd_mu, tau_mu):
     return {"mdd": diff, "power": power, "delta": hi, "levels": levels}
 
 
-def reprint(f):
+def reprint(f, designs=DESIGNS):
     mix = tuple(f["mix"]) if sum(f["mix"]) > 0 else P.PLAN_MIX
     out = []
-    for n, models in DESIGNS:
+    for n, models in designs:
         ends = []
         for sd_mu, tau_mu in ((0.0, 0.0), (f["sd_e"], P.TAU)):
             r = mdd(n, models, f["p0_avoid"], f["p0_catch"], f["sd_e"], f["unforeseeable"], mix, sd_mu, tau_mu)
@@ -66,10 +68,20 @@ def main(argv):
     ap = argparse.ArgumentParser(description="eval 1's start-rule MDD re-print with a review-by-unit term")
     ap.add_argument("--fit", required=True, help="pilot.json: N's pilot builds")
     ap.add_argument("--unforeseeable", type=float)
+    ap.add_argument("--design", action="append", default=[], help="<units>:<models>, the drawn unit count and the models a contrast pools")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
+    designs = []
+    for d in a.design:
+        try:
+            n, m = (int(x) for x in d.split(":"))
+        except ValueError:
+            ap.error("--design takes <units>:<models>, not " + d)
+        if not (1 <= n and 1 <= m <= 3):
+            ap.error("--design needs at least 1 unit and 1 to 3 models, not " + d)
+        designs.append((n, m))
     f = P.fit(a.fit, a.unforeseeable)
-    rows = reprint(f)
+    rows = reprint(f, tuple(designs) or DESIGNS)
     if a.json:
         print(json.dumps({"fit": f, "rows": rows}))
         return 0

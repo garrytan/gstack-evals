@@ -2,7 +2,9 @@
 // Eval 1's Decision rows in their order (prereg 2026-11-24-geva-587-design-time-state-modeling, the Decision section),
 // with pre-run change 2's corrections: "read" is the complement of untested; a C reading whose interval holds both 0 and
 // +10 is not distinguished; a missing Opus or Sol estimate holds C's draft; and D's cut row needs exposure only on the
-// models left in its pool. A stopped arm (the futility look) takes only rows that act on nothing.
+// models left in its pool. A stopped arm (the futility look) takes only rows that act on nothing. A contrast with no
+// reading (one of its arms untested on every model it pools) is unavailable: it never reads as "no gain", and the
+// eval 4 rows count its arm as untested (pre-run change 2 section 9).
 import { E1, type E1Arm, type E1Model } from "./frozen.ts";
 import { contrast, gains, isRead, readOnAny, type Cell, type Reading } from "./readings.ts";
 
@@ -17,10 +19,10 @@ export interface Readings {
   CNsol: Reading | null;
 }
 
-export function readAll(cells: Cell[], seed: number, draws?: number): Readings {
+export function readAll(cells: Cell[], seed: number, draws?: number, gapsZero = false): Readings {
   const three: E1Model[] = ["opus", "sol", "particle"];
   const two: E1Model[] = ["opus", "particle"];
-  const o = { draws };
+  const o = { draws, gapsZero };
   return {
     DN: contrast(cells, "D", "N", three, seed, o),
     CN: contrast(cells, "C", "N", three, seed, o),
@@ -60,11 +62,13 @@ export function decide(i: DecideInput): Decision {
   const g = (x: Reading | null, a: E1Arm) => live(a) && gains(x);
 
   for (const m of ALL) for (const a of ["D", "C", "P", "G", "N"] as E1Arm[]) if (!isRead(cells, a, m) && cells.some((c) => c.arm === a && c.model === m)) rows.push("untested: " + a + " on " + m + " leaves every pooled contrast there; the cause goes to the Captain" + (a === "G" ? " and GStack Minder" : ""));
+  if (!ALL.some((m) => isRead(cells, "N", m))) rows.push("N is untested on every model: no contrast against N has a reading, so no row below reads a gain, a loss or a null; the Captain decides what runs next");
 
   const pGainsN = g(r.PN, "P");
   const pGainsC = g(r.PC, "P");
   if (pGainsN && pGainsC) rows.push("P gains over N and over C: GStack Minder gets a brief to port /statechart's idea into plan-eng-review, crediting Lauren Tan; the C rows are not read for that fold-in");
   else if (pGainsN) rows.push("P gains over N but not over C: no fold-in from pstack's text; the C rows decide; P is replicated against C on held-out units before any later P claim");
+  else if (r.PN === null) rows.push("P minus N has no reading (P or N untested on every model P ran on): nothing comes from pstack, and P is reported as untested, not as no gain");
   else rows.push("P does not gain over N: nothing comes from pstack");
 
   const cGains = g(r.CN, "C");
@@ -82,6 +86,7 @@ export function decide(i: DecideInput): Decision {
     else if (r.CN.hi >= E1.gain) rows.push("C minus N's interval holds both 0 and +10: not distinguished; no step, FIX-METHOD, MDD printed");
     else rows.push("C minus N's upper bound is under +10: no modeling step from C" + (r.CN.hi < 0 && i.units >= E1.units.target ? "; reported as a loss" : ""));
   } else if (stopped.has("C")) rows.push("C stopped for futility: no modeling step from C, and no loss is reported");
+  else if (!(pGainsN && pGainsC) && r.CN === null) rows.push("C minus N has no reading (C or N untested on every model): no modeling step from C, and C is reported as untested, not as no gain");
 
   if (r.DN) {
     if (r.DN.lo > 0) {
@@ -98,9 +103,10 @@ export function decide(i: DecideInput): Decision {
 
   if (g(r.GN, "G")) rows.push("G gains over N: the report says plan-eng-review helps on state bugs; nothing in gstack changes");
   if (r.GN && r.GN.hi < 0) rows.push("G minus N's upper bound is under 0: GStack Minder gets a brief to find out why before the next stable cut");
+  if (r.GN === null) rows.push("G minus N has no reading (G or N untested on every model): G is reported as untested, not as no gain");
 
-  const cRead = readOnAny(cells, "C", RAN_ON.C);
-  const pRead = readOnAny(cells, "P", RAN_ON.P);
+  const cRead = readOnAny(cells, "C", RAN_ON.C) && r.CN !== null;
+  const pRead = readOnAny(cells, "P", RAN_ON.P) && r.PN !== null;
   let eval4: Eval4 = "not decided by these rows";
   if ((live("C") && gains(r.CN)) || (live("P") && gains(r.PN))) {
     rows.push("C or P gains over N: eval 4 goes back to Garry for a go");
@@ -109,7 +115,7 @@ export function decide(i: DecideInput): Decision {
     rows.push("C and P were both read and neither gains over N: no modeling step; the design-time modeling question closes with a registry row; eval 4 is dropped");
     eval4 = "dropped";
   } else if (cRead && !pRead) {
-    rows.push("C is read without a gain and P is untested on every model: no modeling step; eval 4 is dropped, because C carries the model check on all three models; P is reported as untested, FIX-METHOD on the instrument; C was read on " + RAN_ON.C.filter((m) => isRead(cells, "C", m)).join(", "));
+    rows.push("C is read without a gain and P is untested on every model: no modeling step; eval 4 is dropped, because C carries the model check on all three models; P is reported as untested, FIX-METHOD on the instrument; C was read on " + r.CN!.models.join(", "));
     eval4 = "dropped";
   } else if (pRead && !cRead) {
     rows.push("P is read without a gain and C is untested on every model: no modeling step; the question stays open as FIX-METHOD on C; eval 4 waits for a repaired C run, which the Captain decides");

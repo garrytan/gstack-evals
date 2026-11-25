@@ -31,6 +31,13 @@ describe("armState and untested", () => {
     expect(isRead([cell("u", "r", "N", "opus", 0, 0.5)], "N", "opus")).toBe(true);
     expect(isRead([], "C", "opus")).toBe(false);
   });
+  test("exposure counts every cell it ran, gaps included; the look's share counts scored cells only", () => {
+    const s = armState(mk(8, 8, 2), "C", "opus");
+    expect([s.exposure, s.scoredExposure]).toEqual([0.8, 1]);
+    const t = armState(mk(18, 15, 2), "C", "opus");
+    expect([t.exposure, t.gapShare, t.untested]).toEqual([0.75, 0.1, true]);
+    expect(t.scoredExposure!).toBeGreaterThan(0.8);
+  });
   test("cells a stop left unrun leave every denominator", () => {
     const cs = [...mk(4, 4, 0), { ...cell("x", "r", "C", "opus", 0, null, null), unrun: true }, { ...cell("y", "r", "C", "opus", 0, 0.5, false), unrun: true }];
     const s = armState(cs, "C", "opus");
@@ -77,6 +84,11 @@ describe("scores and the pooled statistic", () => {
     const h = holm([{ key: "D", p: 0.01 }, { key: "C", p: 0.04 }, { key: "P", p: 0.02 }, { key: "G", p: 0.3 }]);
     expect(h.map((x) => [x.key, x.rejects])).toEqual([["D", true], ["P", false], ["C", false], ["G", false]]);
     expect(h.map((x) => x.adjusted)).toEqual([0.04, 0.06, 0.08, 0.3]);
+  });
+  test("Holm keeps a slot with no reading at p 1, and a held slot never rejects", () => {
+    const h = holm([{ key: "D", p: 0.001 }, { key: "C", p: null }, { key: "P", p: 0.002, held: true }, { key: "G", p: 0.012 }]);
+    expect(h.map((x) => [x.key, x.rejects, x.missing])).toEqual([["D", true, false], ["P", false, false], ["G", true, false], ["C", false, true]]);
+    expect(h.map((x) => x.adjusted)).toEqual([0.004, 0.006, 0.024, 1]);
   });
 });
 
@@ -167,6 +179,16 @@ describe("the P, D, G and closing rows", () => {
     expect(run({}, { cells: cOff }).eval4).toBe("waits for a repaired run");
     expect(run({}, { cells: both }).eval4).toBe("neither started nor dropped");
     expect(has(run({}, { cells: gOff }), "untested: G on sol leaves every pooled contrast there; the cause goes to the Captain and GStack Minder")).toBe(true);
+  });
+  test("a contrast with no reading is unavailable, never no gain, and N untested everywhere goes to the Captain", () => {
+    const c = run({ CN: null });
+    expect([has(c, "C minus N has no reading"), c.eval4]).toEqual([true, "waits for a repaired run"]);
+    const p = run({ PN: null });
+    expect([has(p, "P minus N has no reading"), has(p, "P does not gain"), p.eval4]).toEqual([true, false, "dropped"]);
+    expect(has(run({ GN: null }), "G minus N has no reading")).toBe(true);
+    const nOff = all.map((x) => (x.arm === "N" ? { ...x, composite: null } : x));
+    const n = run({ DN: null, CN: null, GN: null, PN: null, PC: null, CG: null, CNopus: null, CNsol: null }, { cells: nOff });
+    expect([has(n, "N is untested on every model"), n.eval4]).toEqual([true, "neither started nor dropped"]);
   });
 });
 

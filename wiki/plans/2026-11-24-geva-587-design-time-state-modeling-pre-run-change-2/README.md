@@ -20,10 +20,11 @@ links:
 
 - The prereg's final review left seven notes that the Captain ruled not blocking and deferred to a dated change before the pilot: "Ruled by the gstack-evals Captain (GSTA-2), 2026-11-24: not blocking under R12; none changes a frozen number or a decision row; deferred to the dated change before the pilot." This is that change. Section 1 settles each note.
 - The start rule now names one fit: eval 1's power.py, fitted on the pilot's N builds, with a review-by-unit term, printed at two ends. The larger MDD governs (section 2).
-- Units authored in this run join the draw's walk after attempt 3's, so later authoring never moves a unit already drawn (section 3).
+- Units authored in this run join the draw's walk after attempt 3's, the pool's before wave 2's, so later authoring never moves a unit already drawn (sections 3 and 9).
 - G's gstack pin moves from d74ee528 (1.103.2.0) to 9a550bca (1.103.3.0), so every model role gstack names is the newest generation (section 7).
 - Sections 4 to 6 record how the harness was built where the prereg left a choice: the Sol path, the tools volume, the review bundle, the ledger items and the stage order.
 - The keyless driven launch found five faults before any paid call, and section 8 fixes them. Two change what an arm is told or how it is read. G on Codex opens with `$plan-eng-review`, the name gstack installs and documents, in place of `$gstack-plan-eng-review`, which Codex did not resolve. P's body check also reads Claude Code's own session file, because the stream the detector read never carries the expanded /statechart.
+- A second-family review of the harness (GPT-6.2 Astra, read only) raised 14 findings. Section 9 fixes the ones that matter, mostly where the code read the plan more loosely than the plan reads, and states two readings the prereg left open: exposure's denominator and a contrast with no reading.
 - No paid call has run and no pilot data exists. This change moves no frozen number, threshold, model, cap or Decision row. The only arm text it changes is G's Codex command (section 8).
 
 This change governs where it and the plan differ.
@@ -48,7 +49,7 @@ This change governs where it and the plan differ.
 
 ## 3. Supply and the draw
 
-- **The walk.** The draw walks attempt 3's authored units first, in seeded order, then the units authored in this run (pool units attempt 3 never finished, and wave 2's), in seeded order. Attempt 3's set is frozen the first time the draw reads the run (e1/segments.json). A unit owed its authoring or its screens stops the walk there. Each set only grows: a draw that would change an earlier pick is refused.
+- **The walk.** The draw walks three segments, each in seeded order: attempt 3's authored units, then the pool units attempt 3 never finished, which this run authors, then wave 2's (section 9). The segments freeze the first time the draw reads the run (e1/segments.json). A unit owed its authoring or its screens stops the walk there. Each set only grows: a draw that would change an earlier pick is refused.
 - **The sets.** As in attempt 3: calibration takes any foreseeability rating; comparison and reserve leave out units both foreseeability raters called no; at most 3 units a repository.
 - **Screens in walk order.** e1-screen screens authored units in the walk's order and only as far as the draw needs, rerun until it has nothing left. Kappa prints over every unit screened.
 - **Wave 2 timing.** Wave 2's keyless mining began on the Captain's go after the prereg merged, before the first paid step measured the pool's shortfall. Its units enter the screens only if fewer than 70 pool units pass both, and its stop at a projection of 70 state units applies once the screens give the rates. Mining is limited by GitHub's unauthenticated rate of 60 calls an hour per VM, and runs with no key.
@@ -95,6 +96,42 @@ The driven launch (lanes/eng-planted/e1/e2e.ts) runs the pilot's own commands (e
 
 On the fixed harness the driven launch shows: every pair's review ends completed; D and C read exposed on all three models and N reads null; P's /statechart resolves through the plugin directory on Opus and particle-1, so P keeps /statechart; G's skill reaches the first request on both hosts; Sol's rollouts land in host/codex-sessions and read as Bash calls with results; every mount holds the session's /tmp file; a refusal builds on the plan as left; all 14 builds complete, read the review and grade; and one lease per pair, plus one for the build stage, opens and settles. It leaves no container or network behind. The bundle picks up one file the stub never wrote: probe, one byte, in every Claude Code session and in no Sol session. It stays in, as it will in the counted run, and the read audit lists it.
 
+## 9. What the second-family review found
+
+GPT-6.2 Astra, a different model family from the Opus that built the harness, read the harness diff and raised 14 findings. Each was checked against the code and this plan. The fixes below bring the code in line with the prereg. None moves a frozen number, threshold, model, cap or Decision row, and none changes what an arm is told. Where the prereg left a reading open, the reading is stated here.
+
+**Scoring and readings**
+
+- **Exposure's denominator.** The Decision section reads an arm's exposure "over all its counted cells", and the Interim look section reads "the share of its scored cells". The code used scored cells for both. Final exposure is now exposed reviews over every cell the arm ran on that model, gaps included. The look keeps scored cells.
+- **A contrast with no reading.** When an arm or N is untested on every model a contrast pools, the contrast has no reading. The rows used to read that as no gain. Now it is unavailable: the P, C and G rows say the arm is untested, and the eval 4 rows count it as untested, not read. N untested on every model gets its own row and goes to the Captain.
+- **Holm.** Holm runs over all four slots (D, C, P and G minus N). A slot with no reading keeps its place at p = 1, so a missing contrast never makes the others easier to pass. An arm the look stopped keeps its slot and never prints as rejecting. Every reading also prints with gaps scored 0, as the prereg's section 5 asks.
+- **D's detector** reads plan.md as the build mounts it, after the bundle's word cap, so a diagram the cap cut off does not count.
+- **C's violation results** count only with TLC's behavior trace ("Error: The behavior up to this point is:"). A bare violation line, such as one a script echoed, no longer counts.
+- **P's read** counts a Read call on statechart/SKILL.md, or a shell cat of it whose result holds the marker line. A write or a grep of that path no longer counts.
+- **Sol's transcript.** codexAsClaude put every tool call before every message and took messages from sub-agent threads too. It now merges calls and messages in the order codexTranscript merges threads (timestamp, then thread, then line), and takes messages from the root thread only (the rollout whose session_meta names no parent). G's section-order check reads that order. codexTranscript gained an optional argument that reports each record's source line; its output is unchanged.
+- **Session ends on Sol.** The proxy's allowance refusal (E_ALLOWANCE with its "cannot hold this call's worst case" text) now ends a Sol review as a limit stop, scored as it stands, as the Claude driver already did. A provider's safety filter (cyber_policy and the like in a failed turn's error) and a model's refusal are results: the build takes plan.md as the review left it. Review records count refusals, safety stops and plans left unchanged, and the pilot readout and the readings print them per arm and model.
+- **Cap stops.** A cap stop leaves e1/cap-stops/<item>.json, and that item's stages refuse to restart until the Captain rules. So a cap stop is never retried to change a reading.
+- **The look's print.** When the look does not stop, it prints only the two upper bounds and each arm's exposure. Its full readings stay in e1/look.json, so nobody reads interim estimates of a run that goes on.
+- **The readings wait.** e1-read refuses while any owed comparison cell has no review or build record. A stopped arm's unrun cells are not owed.
+
+**Supply, the draw and money**
+
+- **Three segments.** The walk takes attempt 3's units, then the pool units this run authors, then wave 2's, each in seeded order. This is section 3's wave 2 timing in code: wave 2 enters only when the pool falls short. Wave 2's ids come from e1/wave2.json, written when the pool is rebuilt from custody, and freeze into e1/segments.json on the first read, which refuses while that file is missing.
+- **Authoring on demand.** e1-author authors only owed units that a stand-in walk reaches, the way e1-screen screens, so no unit is authored that the draw would never take. A unit's authoring calls settle as one call cell, as section 6 counts them. A screen that throws part way journals what its earlier calls spent.
+- **The freeze.** A new command, ep e1-freeze, writes e1/comparison.json once after the pilot: the 48 to 64 comparison units, the arm and model pairs the pilot left out (R111), and a digest. Counted stages, the look and the readings use it. A left-out pair's stages refuse, and e1-draw refuses to change a frozen comparison.
+- **Projections.** A counted item projects the frozen unit count times its 2 cells. Once the look stops C and P, their items project only the cells they ran.
+- **The start date.** Paid commands refuse before 2026-11-28 06:00 UTC. The look and the readings always use the frozen 10,000 bootstrap draws; only the tests set fewer.
+- **The pilot readout** also checks the 6 calibration units and the supply count (at least 48 comparison units), each arm's pilot spend against its tenth of the counted budget (N $41, D $46, C $74, P $46, G $81), and N's read audit: a tool call in N's sessions that names a gstack, pstack or drive path fails N's pilot.
+- **power.py** takes --design <units>:<models>, so the start rule re-prints at the drawn unit count and on the models each contrast still pools after the pilot.
+
+**Harness**
+
+- **The /tmp copy.** A /tmp copy that fails after a session now fails the attempt as infra (one rerun, then a gap), since the bundle would miss what the session wrote there.
+- **Bundle names.** Every file name in a review bundle is allocated against every name already taken, the plan's included, so a written plan.md or a file already named 2-x can't collide with another.
+- **particle-1's provider.** The review asked whether OpenRouter could serve particle-1 from another provider. Its price row pins Particle AI, so the proxy sends only Particle AI with allow_fallbacks false on every call. No change.
+
+Two findings were judged minor and left as they are: the order the screens run in moves only when money is spent, not what is drawn, and the gate's stop latch is recomputed from the journal on a restart.
+
 ## What this does not change
 
-Arms, models, prompts other than G's Codex command, limits, the composite, the 10-point line, the +5 futility bound, every Decision row, the item caps and the $4,913 cap total.
+Arms, models, prompts other than G's Codex command, limits, the composite, the 10-point line, the +5 futility bound, every Decision row, the item caps and the $4,913 cap total. Section 9's fixes change none of these.

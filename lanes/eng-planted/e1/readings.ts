@@ -3,8 +3,9 @@
 // Interim look, and pre-run change 2's corrections). Keyless and pure: every input is a scored cell.
 //
 // - A unit's score for an arm and model is the mean of its builds' composites; a gap cell is left out (and scored 0 in
-//   the gaps-0 reading). An arm reads untested on a model when its exposure share there (exposed over its non-gap cells)
-//   is under 0.80 or more than 10% of the cells it ran there are gaps. N has nothing to expose, so only the gap rule
+//   the gaps-0 reading). An arm reads untested on a model when its exposure there (exposed reviews over every cell it
+//   ran there, gaps included: the prereg's "over all its counted cells") is under 0.80 or more than 10% of the cells it
+//   ran there are gaps. The look alone reads exposure over scored cells (scoredExposure), as its own line says. N has nothing to expose, so only the gap rule
 //   applies to it. An arm is read on a model exactly when it is not untested there (pre-run change 2).
 // - X minus Y pools over the models both are read on: the mean over those models, each weighted equally, of the model's
 //   mean over its pairs (a unit both arms scored there). The interval is a 95% two-stage cluster bootstrap (repositories,
@@ -41,15 +42,17 @@ export interface Reading {
 const ran = (c: Cell) => !c.unrun;
 const isGap = (c: Cell) => c.composite === null;
 
-export function armState(cells: Cell[], arm: E1Arm, model: E1Model): { cells: number; gaps: number; exposed: number; scored: number; exposure: number | null; gapShare: number; untested: boolean } {
+export function armState(cells: Cell[], arm: E1Arm, model: E1Model): { cells: number; gaps: number; exposed: number; scored: number; exposure: number | null; scoredExposure: number | null; gapShare: number; untested: boolean } {
   const mine = cells.filter((c) => c.arm === arm && c.model === model && ran(c));
   const gaps = mine.filter(isGap).length;
   const scored = mine.length - gaps;
-  const exposed = mine.filter((c) => !isGap(c) && c.exposed === true).length;
-  const exposure = arm === "N" ? null : scored ? exposed / scored : 0;
+  const exposed = mine.filter((c) => c.exposed === true).length;
+  const scoredExposed = mine.filter((c) => !isGap(c) && c.exposed === true).length;
+  const exposure = arm === "N" ? null : mine.length ? exposed / mine.length : 0;
+  const scoredExposure = arm === "N" ? null : scored ? scoredExposed / scored : 0;
   const gapShare = mine.length ? gaps / mine.length : 0;
   const untested = !mine.length || gapShare > E1.exposure.maxGapShare || (exposure !== null && exposure < E1.exposure.final);
-  return { cells: mine.length, gaps, exposed, scored, exposure, gapShare, untested };
+  return { cells: mine.length, gaps, exposed, scored, exposure, scoredExposure, gapShare, untested };
 }
 export const isRead = (cells: Cell[], arm: E1Arm, model: E1Model) => !armState(cells, arm, model).untested;
 export const readOnAny = (cells: Cell[], arm: E1Arm, models: readonly E1Model[]) => models.some((m) => isRead(cells, arm, m));
@@ -168,14 +171,15 @@ export function contrast(cells: Cell[], x: E1Arm, y: E1Arm, models: readonly E1M
 
 export const gains = (r: Reading | null): boolean => r !== null && r.estimate >= E1.gain && r.lo > 0;
 
-/** Holm's step-down; each row's adjusted p and whether it rejects at alpha. */
-export function holm<K extends string>(rows: Array<{ key: K; p: number }>, alpha: number = E1.alpha): Array<{ key: K; p: number; adjusted: number; rejects: boolean }> {
-  const sorted = [...rows].sort((a, b) => a.p - b.p);
+/** Holm's step-down over every slot the plan names: a slot with no reading keeps its place at p = 1, and a slot marked
+ * held (an arm the look stopped) still counts toward m but never prints as rejecting. */
+export function holm<K extends string>(rows: Array<{ key: K; p: number | null; held?: boolean }>, alpha: number = E1.alpha): Array<{ key: K; p: number; adjusted: number; rejects: boolean; missing: boolean }> {
+  const sorted = rows.map((r) => ({ key: r.key, p: r.p ?? 1, missing: r.p === null, held: r.held === true })).sort((a, b) => a.p - b.p);
   let open = true;
   let maxAdj = 0;
   return sorted.map((r, i) => {
     maxAdj = Math.max(maxAdj, Math.min(1, (sorted.length - i) * r.p));
     open = open && r.p <= alpha / (sorted.length - i);
-    return { key: r.key, p: r.p, adjusted: maxAdj, rejects: open };
+    return { key: r.key, p: r.p, adjusted: maxAdj, rejects: open && !r.missing && !r.held, missing: r.missing };
   });
 }

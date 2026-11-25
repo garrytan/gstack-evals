@@ -76,8 +76,10 @@ function patchChanges(input: string, cwd: string): Change[] {
   return out;
 }
 
-/** Rollout texts (one per thread) as one Bash, Read, Write and Edit stream with the session's root folder. */
-export function codexTranscript(rollouts: string[]): CodexTranscript {
+/** Rollout texts (one per thread) as one Bash, Read, Write and Edit stream with the session's root folder. With stamps,
+ * each record's source line (its timestamp, thread and line number) is pushed in record order, so a caller can merge
+ * other lines into the stream in the same order. */
+export function codexTranscript(rollouts: string[], stamps?: Array<{ ts: number; thread: number; n: number }>): CodexTranscript {
   type Line = { ts: number; thread: number; n: number; o: any };
   const lines: Line[] = [], cwds: (string | null)[] = [];
   let unreadable = 0, rootCwd: string | null = null, rootSeen = false;
@@ -100,11 +102,14 @@ export function codexTranscript(rollouts: string[]): CodexTranscript {
   lines.sort((a, b) => a.ts - b.ts || a.thread - b.thread || a.n - b.n);
 
   const recs: Rec[] = [{ type: "SystemMessage", subtype: "init", init: { cwd: rootCwd ?? cwds[0] ?? null, tools: ["Bash", "Read", "Write", "Edit"], skills: [] } }];
+  let at = { ts: 0, thread: -1, n: -1 };
+  stamps?.push(at);
   let id = 0, here: string | null = rootCwd ?? cwds[0] ?? null;
   const call = (name: string, input: Record<string, unknown>, result: string, error = false) => {
     const tid = "cx" + id++;
     recs.push({ type: "AssistantMessage", content: [{ id: tid, name, input }] });
     recs.push({ type: "UserMessage", content: [{ tool_use_id: tid, content: result, is_error: error }] });
+    stamps?.push(at, at);
   };
   const bash = (command: string, cwd: string | null, result: string, error: boolean, background = false) => {
     const text = cwd && cwd !== here ? "cd " + shq(cwd) + " && " + command : command;
@@ -120,7 +125,8 @@ export function codexTranscript(rollouts: string[]): CodexTranscript {
 
   const calls = new Map<string, { name: string; args: any; thread: number }>();
   const ran = new Set<string>(), patched = new Set<string>(), background = new Set<string>(), sessions = new Map<number, string>();
-  for (const { o, thread } of lines) {
+  for (const { o, thread, ts, n } of lines) {
+    at = { ts, thread, n };
     const p = o?.payload;
     if (!p || typeof p !== "object") continue;
     if (o.type === "response_item" && (p.type === "function_call" || p.type === "custom_tool_call")) {

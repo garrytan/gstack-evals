@@ -86,12 +86,12 @@ export function e1Mount(arm: E1Arm, o: E1Outputs, authoredPlan: string, maxWords
   const parts = bundleParts(arm === "G" ? "precut" : "plain", { plan: o.plan, transcript: o.transcript, stateRoot: arm === "G" ? o.stateRoot : null, coverage: null });
   const planMissing = o.plan === null;
   const all = [...(planMissing ? [{ name: "plan.md", text: authoredPlan }] : []), ...parts, ...o.written.map((f) => ({ name: f.path.split("/").at(-1)!, text: f.text }))];
-  const seen = new Map<string, number>();
-  const named = all.map((p, i) => {
-    if (i === 0) return p;
-    const n = (seen.get(p.name) ?? 0) + 1;
-    seen.set(p.name, n);
-    return n === 1 ? p : { name: n + "-" + p.name, text: p.text };
+  const taken = new Set<string>();
+  const named = all.map((p) => {
+    let name = p.name;
+    for (let n = 2; taken.has(name); n++) name = n + "-" + p.name;
+    taken.add(name);
+    return name === p.name ? p : { name, text: p.text };
   });
   const c = capParts(named, maxWords);
   return { plan: c.kept[0]?.text ?? "", files: c.kept.slice(1), words: c.words, fullWords: c.fullWords, truncated: c.truncated, planMissing };

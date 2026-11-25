@@ -97,6 +97,10 @@ export interface E1ReviewRecord extends CellKey {
   writtenFiles: number;
   binaryLeftOut: number;
   repoEditsDiscarded: number;
+  /** A refusal or safety-filter stop the review ended on, a result counted per arm and model; null otherwise. */
+  stop?: "refusal" | "safety" | null;
+  /** The review left plan.md as authored (or left none); null for a gap. */
+  planUnchanged?: boolean | null;
   costUsd: number;
 }
 
@@ -162,8 +166,8 @@ export async function e1Reviews(o: { run: string; cells: readonly CellKey[]; uni
         if (gap) o.log?.("E_EB_GAP " + cell + ": " + outcome + " after 1 retry; the cell is a recorded gap and its build is not run");
         const l = last.result;
         mount = gap ? null : e1Mount(c.arm, { plan: l.plan, transcript: l.transcript, stateRoot: l.stateRoot, written: l.written.files }, authored);
-        const exposed = gap ? null : exposure({ arm: c.arm, authored, final: l.plan, transcript: l.transcript, ...(l.claudeSession ? { claudeSession: l.claudeSession } : {}), stateRoot: l.stateRoot, ...(o.statechartMarker ? { statechartMarker: o.statechartMarker } : {}) });
-        rec = { ...c, outcome, exposed, bundleWords: mount?.words ?? 0, truncated: mount?.truncated ?? false, writtenFiles: gap ? 0 : l.written.files.length, binaryLeftOut: gap ? 0 : l.written.binary + l.written.large, repoEditsDiscarded: gap ? 0 : l.repoEdits, costUsd: spent };
+        const exposed = gap ? null : exposure({ arm: c.arm, authored, final: mount ? (mount.planMissing ? null : mount.plan) : l.plan, transcript: l.transcript, ...(l.claudeSession ? { claudeSession: l.claudeSession } : {}), stateRoot: l.stateRoot, ...(o.statechartMarker ? { statechartMarker: o.statechartMarker } : {}) });
+        rec = { ...c, outcome, exposed, bundleWords: mount?.words ?? 0, truncated: mount?.truncated ?? false, writtenFiles: gap ? 0 : l.written.files.length, binaryLeftOut: gap ? 0 : l.written.binary + l.written.large, repoEditsDiscarded: gap ? 0 : l.repoEdits, stop: gap ? null : (l.stop ?? null), planUnchanged: gap ? null : l.plan === null || l.plan === authored, costUsd: spent };
       } catch (e) {
         throw addSpend(e, spent);
       }

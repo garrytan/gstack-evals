@@ -10,13 +10,14 @@ import { openLease, reconcileLease, recordApproval } from "../../../src/runner/l
 import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
 import { ledgerPath } from "../../../src/runner/ledger/paths.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
-import { e1Commands, E1_RUN, e1StubLauncher, lookPath, type E1Seams, type LookFile } from "../../../lanes/eng-planted/e1/commands.ts";
+import { capGuarded, capStopPath, comparisonDigest, comparisonPath, e1Commands, E1_RUN, e1StubLauncher, lookPath, type E1Seams, type LookFile } from "../../../lanes/eng-planted/e1/commands.ts";
 import { RUNS_ON, type E1Arm } from "../../../lanes/eng-planted/e1/frozen.ts";
 import type { E1ReviewSession } from "../../../lanes/eng-planted/e1/launch.ts";
 import { E1_ITEMS, itemName } from "../../../lanes/eng-planted/e1/pipeline.ts";
 import { codeOf, scriptedCalls } from "../../../lanes/eng-planted/stages/cases.ts";
 import type { PlantedSession } from "../../../lanes/eng-planted/stages/build.ts";
 import type { PlantedUnit } from "../../../lanes/eng-planted/types.ts";
+import { fail } from "../../../lanes/eng-planted/errors.ts";
 import type { E1Draw, SupplyRole } from "../../../lanes/eng-planted/e1/supply.ts";
 
 const io = () => {
@@ -29,7 +30,7 @@ const git = (cwd: string, ...a: string[]) => spawnSync("git", ["-c", "user.email
 const unit = (id: string, repo: string): PlantedUnit => ({ id, repo, set: "comparison", ecosystem: "node", stars: "1k-9.9k", publicMonth: "2026-06", strictWindow: true, regionLines: 10, planted: ["t1", "t2"], plantedClass: { t1: "assert", t2: "crash" }, functional: [], foresee: null, winnable: null, hard: null, pilot: false });
 const MARKER = "Model the states before the code.";
 
-function fixture() {
+function fixture(extra: Partial<E1Seams> = {}) {
   const dir = mkdtempSync(join(tmpdir(), "e1-cmd-"));
   const run = join(dir, "run");
   const units = join(dir, "units");
@@ -48,6 +49,8 @@ function fixture() {
   }
   mkdirSync(join(run, "e1"), { recursive: true });
   writeFileSync(join(run, "e1", "draw.json"), JSON.stringify({ seed: "s1", ...ids, reserve: [], skipped: [], waiting: null }));
+  writeFileSync(join(run, "e1", "wave2.json"), JSON.stringify({ units: [] }));
+  writeFileSync(comparisonPath(run), JSON.stringify({ units: ids.comparison, leftOut: [], digest: comparisonDigest(ids.comparison, []), at: "2026-11-28T06:00:00Z" }));
   const record = join(dir, "record");
   const quote = { words: "test", by: "test", source: "test" };
   for (const i of E1_ITEMS) recordApproval(record, { action: "init", item: i.item, cap_micros: Math.round(i.capUsd * 1_000_000), quotes: [quote], admission: "warn" });
@@ -79,9 +82,10 @@ function fixture() {
       const odd = /odd-unit/.test(prompt);
       return { text: role.startsWith("state") ? JSON.stringify({ defect: "yes", state_shaped: odd ? "no" : "yes", reason: "r" }) : "REACH: yes", costUsd: 0.01 };
     }),
+    draws: 200,
   };
   const paid = (item: string, extra: Record<string, string> = {}) => ({ "--run": run, "--units": units, "--repos": repos, "--item": item, "--cap-usd": String(E1_ITEMS.find((i) => i.item === item)!.capUsd), "--ledger-record": record, "--ledger": join(dir, "l.sqlite"), "--crew-usd": "0", "--hosts-usd": "0", "--cache": join(dir, "cache"), "--pstack": join(dir, "pstack"), "--work": join(dir, "work"), ...extra });
-  return { dir, run, units, repos, record, calls, cmds: e1Commands(seams), paid };
+  return { dir, run, units, repos, record, calls, cmds: e1Commands({ ...seams, ...extra }), paid };
 }
 
 const PAIRS = (Object.keys(RUNS_ON) as E1Arm[]).flatMap((arm) => RUNS_ON[arm].map((model) => ({ arm, model })));
@@ -184,7 +188,7 @@ describe("comparison", () => {
     expect(f.calls.builds).toHaveLength(PAIRS.length * 2);
     expect(f.calls.reviews.every((c) => c.startsWith("k1_"))).toBe(true);
     const lk = io();
-    expect(await f.cmds["e1-look"]!.run(args({ "--run": f.run, "--units": f.units, "--repos": f.repos, "--draws": "200" }), lk.io)).toBe(0);
+    expect(await f.cmds["e1-look"]!.run(args({ "--run": f.run, "--units": f.units, "--repos": f.repos }), lk.io)).toBe(0);
     expect(lk.out[0]).toStartWith("look on 1 units: ");
     const look = JSON.parse(readFileSync(lookPath(f.run), "utf8")) as LookFile;
     expect([look.stop, look.exposedOn]).toEqual([false, { C: [], P: [] }]);
@@ -195,8 +199,14 @@ describe("comparison", () => {
     expect(f.calls.reviews.length - before).toBe(2);
     expect(await f.cmds["e1-reviews"]!.run(half("e1-n-opus", "2"), io().io)).toBe(0);
     expect(f.calls.reviews.slice(-2).sort()).toEqual(["k2_N_opus_0", "k2_N_opus_1"]);
+    expect(await codeOf(() => f.cmds["e1-read"]!.run(args({ "--run": f.run, "--units": f.units, "--repos": f.repos }), io().io))).toBe("E_USAGE");
+    for (const p of PAIRS) {
+      const item = itemName(p.arm, p.model);
+      if (item !== "e1-c-opus" && item !== "e1-n-opus") expect(await f.cmds["e1-reviews"]!.run(half(item, "2"), io().io)).toBe(0);
+      expect(await f.cmds["e1-builds"]!.run(half(item, "2"), io().io)).toBe(0);
+    }
     const rd = io();
-    expect(await f.cmds["e1-read"]!.run(args({ "--run": f.run, "--units": f.units, "--repos": f.repos, "--draws": "200" }), rd.io)).toBe(0);
+    expect(await f.cmds["e1-read"]!.run(args({ "--run": f.run, "--units": f.units, "--repos": f.repos }), rd.io)).toBe(0);
     expect(rd.out.filter((l) => l.startsWith("arm "))).toHaveLength(PAIRS.length);
     expect(rd.out.some((l) => l.startsWith("ROW "))).toBe(true);
     expect(rd.out.at(-1)).toStartWith("eval 4: ");
@@ -245,6 +255,7 @@ describe("supply", () => {
     const seg = JSON.parse(readFileSync(join(f.run, "e1", "segments.json"), "utf8"));
     expect(seg.attempt3.sort()).toEqual(ids.slice(0, 9));
     rmSync(join(f.run, "e1", "draw.json"));
+    rmSync(comparisonPath(f.run));
     const dr = io();
     expect(await f.cmds["e1-draw"]!.run(args({ "--run": f.run, "--units": units, "--repos": f.repos }), dr.io)).toBe(0);
     const d = JSON.parse(readFileSync(join(f.run, "e1", "draw.json"), "utf8")) as E1Draw;
@@ -265,3 +276,37 @@ describe("supply", () => {
     expect(JSON.parse(readFileSync(join(f.run, "e1", "segments.json"), "utf8")).attempt3).not.toContain("s9");
   });
 });
+
+describe("guards", () => {
+  test("no paid stage runs before the start instant", async () => {
+    const f = fixture({ notBefore: "2999-01-01T00:00:00Z" });
+    expect(await codeOf(() => f.cmds["e1-reviews"]!.run(args({ ...f.paid("e1-pilot"), "--phase": "pilot" }), io().io))).toBe("E_USAGE");
+    expect(await codeOf(() => f.cmds["e1-screen"]!.run(args({ ...f.paid("e1-supply"), "--cache": f.dir }), io().io))).toBe("E_USAGE");
+    expect(f.calls.reviews).toEqual([]);
+    expect(readItem(f.record, "e1-pilot").leases).toHaveLength(0);
+  });
+  test("the freeze takes 48 to 64 units once, with its left-out pairs, and a left-out pair's stages refuse", async () => {
+    const f = fixture();
+    rmSync(comparisonPath(f.run));
+    expect(await codeOf(() => f.cmds["e1-freeze"]!.run(args({ "--run": f.run }), io().io))).toBe("E_USAGE");
+    const many = Array.from({ length: 50 }, (_, i) => "m" + i);
+    writeFileSync(join(f.run, "e1", "draw.json"), JSON.stringify({ seed: "s1", calibration: ["c1"], comparison: many, reserve: [], skipped: [], waiting: null }));
+    expect(await f.cmds["e1-freeze"]!.run(args({ "--run": f.run, "--leave-out": "p-particle" }), io().io)).toBe(0);
+    const c = JSON.parse(readFileSync(comparisonPath(f.run), "utf8"));
+    expect([c.units.length, c.leftOut, c.digest]).toEqual([50, [{ arm: "P", model: "particle" }], comparisonDigest(many, [{ arm: "P", model: "particle" }])]);
+    expect(await codeOf(() => f.cmds["e1-freeze"]!.run(args({ "--run": f.run }), io().io))).toBe("E_USAGE");
+    expect(await codeOf(() => f.cmds["e1-reviews"]!.run(args({ ...f.paid("e1-p-particle"), "--phase": "comparison", "--half": "1" }), io().io))).toBe("E_USAGE");
+    expect(f.calls.reviews).toEqual([]);
+  });
+  test("the readings wait on every owed cell, and a cap stop leaves a marker that refuses the item's restart", async () => {
+    const f = fixture();
+    expect(await codeOf(() => f.cmds["e1-read"]!.run(args({ "--run": f.run, "--units": f.units, "--repos": f.repos }), io().io))).toBe("E_USAGE");
+    expect(await codeOf(() => capGuarded(f.run, "e1-g-sol", async () => fail("E_EB_CELL_INCOMPLETE", "the proxy stopped cell k1_G_sol_0 at the cap; the stage is incomplete")))).toBe("E_EB_CELL_INCOMPLETE");
+    expect(existsSync(capStopPath(f.run, "e1-g-sol"))).toBe(true);
+    expect(await codeOf(() => f.cmds["e1-reviews"]!.run(args({ ...f.paid("e1-g-sol"), "--phase": "comparison", "--half": "1" }), io().io))).toBe("E_USAGE");
+    expect(f.calls.reviews).toEqual([]);
+    expect(await codeOf(() => capGuarded(f.run, "e1-n-sol", async () => fail("E_EB_CELL_INCOMPLETE", "review cell x: earlier runs started attempts up to a2")))).toBe("E_EB_CELL_INCOMPLETE");
+    expect(existsSync(capStopPath(f.run, "e1-n-sol"))).toBe(false);
+  });
+});
+

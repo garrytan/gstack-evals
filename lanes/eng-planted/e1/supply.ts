@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { cohenKappa, combineLabels, LABEL_FORMAT, LABEL_QUESTIONS, readLabelAnswer, STATE_SHAPED, type LabelAnswer } from "../../outcome-skills/statemachines/packets.ts";
 import { renderFiles, unforeseeable, type SourceFile } from "../stages/author.ts";
 import type { Foresee } from "../types.ts";
+import { addSpend } from "../../eng-build/spend.ts";
 import { E1 } from "./frozen.ts";
 
 export type SupplyRole = "stateAstra" | "stateOpus" | "reachCarbon" | "reachOpus";
@@ -53,10 +54,17 @@ export interface ScreenRecord {
   costUsd: number;
 }
 
+/** Screens one unit; a call that throws leaves the spend of the calls before it on the error (addSpend), so the gate
+ * journals it. */
 export async function screenUnit(call: SupplyCall, m: { message: string; diff: string; hint: string; plan: string; stubbed: SourceFile[]; callers: SourceFile[] }): Promise<ScreenRecord> {
   let cost = 0;
   const ask = async (role: SupplyRole, p: string, attempt?: number) => {
-    const r = await call(role, p, attempt);
+    let r: { text: string; costUsd: number };
+    try {
+      r = await call(role, p, attempt);
+    } catch (e) {
+      throw addSpend(e, cost);
+    }
     cost += r.costUsd;
     return r.text;
   };
@@ -91,8 +99,8 @@ export interface DrawUnit {
   repo: string;
   /** Authoring (plan, audits, hint, foreseeability ratings, hinted build): passed, dropped, or still owed. */
   authoring: "passed" | "dropped" | "owed";
-  /** Who authored it: attempt 3, or this run (pool units attempt 3 never finished, and wave 2's). */
-  by: "attempt3" | "here";
+  /** The walk's segment: attempt 3's authored units, then the pool units attempt 3 never finished, then wave 2's. */
+  by: "attempt3" | "pool" | "wave2";
   foresee: readonly [Foresee, Foresee] | null;
   screen: ScreenRecord | null;
 }
@@ -113,15 +121,15 @@ export const drawOrder = (seed: string, ids: readonly string[]) => [...ids].sort
   return k(a) < k(b) ? -1 : 1;
 });
 
-/** Attempt 3's walk with this eval's screens: attempt 3's authored units in seeded order, then the units this run
- * authors in seeded order, so authoring that lands later never displaces a unit already drawn. The walk stops at the
- * first unit still owed its authoring or its screen. */
+/** Attempt 3's walk with this eval's screens, in three segments each in seeded order: attempt 3's authored units, then
+ * the pool units this run authors, then wave 2's, so authoring that lands later never displaces a unit already drawn and
+ * wave 2 enters only after the pool. The walk stops at the first unit still owed its authoring or its screen. */
 export function e1Draw(seed: string, units: readonly DrawUnit[]): E1Draw {
   const by = new Map(units.map((u) => [u.id, u]));
   const d: E1Draw = { seed, calibration: [], comparison: [], reserve: [], skipped: [], waiting: null };
   const perRepo = new Map<string, number>();
   const ids = (who: DrawUnit["by"]) => drawOrder(seed, units.filter((u) => u.by === who).map((u) => u.id));
-  for (const id of [...ids("attempt3"), ...ids("here")]) {
+  for (const id of [...ids("attempt3"), ...ids("pool"), ...ids("wave2")]) {
     const u = by.get(id)!;
     if (u.authoring === "dropped") {
       d.skipped.push({ id, reason: "authoring" });

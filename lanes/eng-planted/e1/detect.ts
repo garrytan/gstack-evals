@@ -6,14 +6,16 @@
 // call with its result, then every assistant message as a text block. Exposure decides nothing by itself; the pilot needs
 // 5 of 6 sessions exposed per arm and model, and a counted arm and model under 0.80 reads untested.
 //
-// - D: the final plan.md holds a new block of 3 or more consecutive lines that each carry an arrow or box character
+// - D: the final plan.md as the build mounts it (capped at the bundle's word limit) holds a new block of 3 or more consecutive lines that each carry an arrow or box character
 //   (->, -->, =>, a Unicode arrow U+2190 to U+21FF, or box drawing U+2500 to U+257F), with at least two distinct labels
 //   joined by an arrow, and the authored plan lacks that block. A diagram only in the reply does not count.
 // - C: a shell call whose command matches #358's frozen checker list (lanes/outcome-skills/pfchecks/exposure.ts CHECKER)
 //   returned TLC's model-checking result: a states-generated line, a completed check, or a violated invariant, property
-//   or deadlock with its behavior trace. A run that ended on a parse, config or setup error has none of these.
+//   or deadlock with its behavior trace (TLC's "The behavior up to this point is:" line). A run that ended on a parse,
+//   config or setup error has none of these.
 // - P: statechart's SKILL.md body reached the session (its pinned marker line appears in the transcript or in Claude Code's
-//   own session file, where the expanded command lands, or a successful read of statechart/SKILL.md by any tool), and C's
+//   own session file, where the expanded command lands, or a successful Read of statechart/SKILL.md, or a shell cat of it
+//   whose result holds the marker), and C's
 //   check holds. The SDK stream never carries the expanded command, so the session file is read too, as #358 read it.
 // - G: attempt 3's precut procedure detector (lanes/eng-review/exposure.ts erExposure "precut"): Scope Challenge, Sections
 //   1 to 4 in order, the coverage diagram and the test-plan file under the session's gstack state root.
@@ -53,15 +55,19 @@ export function dExposure(authored: string, final: string | null): { exposed: bo
   return { exposed: blocks.length > 0, detail: blocks.length ? blocks.length + " new diagram block(s) of " + blocks.map((b) => b.length).join(", ") + " lines" : "no new block of 3 or more arrow or box lines with two labels joined" };
 }
 
-/** TLC's model-checking results; a parse, config or setup error prints none of these. */
+/** TLC's model-checking results; a parse, config or setup error prints none of these. A violation counts only with its
+ * behavior trace. */
 export const TLC_RESULT: readonly RegExp[] = [
   /\b\d[\d,]* states generated, \d[\d,]* distinct states found/,
   /Model checking completed\. No error has been found/,
+];
+export const TLC_VIOLATION: readonly RegExp[] = [
   /Error: Invariant \S+ is violated/,
   /Error: (?:Temporal properties were violated|Action property \S+ is violated)/,
   /Error: Deadlock reached/,
 ];
-export const tlcResult = (output: string): boolean => TLC_RESULT.some((r) => r.test(output));
+export const TLC_TRACE = /Error: The behavior up to this point is:/;
+export const tlcResult = (output: string): boolean => TLC_RESULT.some((r) => r.test(output)) || (TLC_TRACE.test(output) && TLC_VIOLATION.some((r) => r.test(output)));
 
 export function cExposure(transcript: string): { exposed: boolean; runs: number; results: number } {
   const runs = ownUses(transcript).filter((u) => u.name === "Bash" && runsChecker(String(u.input.command ?? "")));
@@ -72,7 +78,7 @@ export function cExposure(transcript: string): { exposed: boolean; runs: number;
 const STATECHART = /(^|\/)statechart\/SKILL\.md$/;
 export function pExposure(transcript: string, marker: string, claudeSession: string = ""): { exposed: boolean; body: boolean; read: boolean; checked: boolean } {
   if (!marker.trim()) throw new Error("E_USAGE: P's detector needs the pinned statechart SKILL.md marker line");
-  const read = ownUses(transcript).some((u) => u.ok && (STATECHART.test(String(u.input.file_path ?? u.input.path ?? "")) || (u.name === "Bash" && /statechart\/SKILL\.md/.test(String(u.input.command ?? "")) && u.result.includes(marker))));
+  const read = ownUses(transcript).some((u) => u.ok && ((u.name === "Read" && STATECHART.test(String(u.input.file_path ?? ""))) || (u.name === "Bash" && /\bcat\b[^|;&]*statechart\/SKILL\.md/.test(String(u.input.command ?? "")) && u.result.includes(marker))));
   const body = [transcript, claudeSession].some((t) => t.includes(JSON.stringify(marker).slice(1, -1)));
   const checked = cExposure(transcript).exposed;
   return { exposed: (body || read) && checked, body, read, checked };
@@ -104,29 +110,44 @@ export function exposure(i: ExposureInput): boolean | null {
 }
 
 type J = Record<string, any>;
-/** A Codex session's rollouts as Claude Code stream-json lines: tool calls with their results first, in call order,
- * then the assistant's messages in order. */
+/** A Codex session's rollouts as Claude Code stream-json lines: every thread's tool calls with their results, and the
+ * root thread's assistant messages (the first rollout whose session_meta names no parent_thread_id, else the first
+ * rollout), merged in the order
+ * codexTranscript merges threads (timestamp, then thread, then line). */
 export function codexAsClaude(rollouts: readonly string[]): string {
   const texts = rollouts.map((f) => readFileSync(f, "utf8"));
-  const t = codexTranscript(texts);
-  const lines: J[] = [];
-  for (const r of t.recs as J[]) {
-    if (r.type === "AssistantMessage" && Array.isArray(r.content)) lines.push({ type: "assistant", message: { content: r.content.map((b: J) => ({ type: "tool_use", id: b.id, name: b.name, input: b.input ?? {} })) } });
-    if (r.type === "UserMessage" && Array.isArray(r.content)) lines.push({ type: "user", message: { content: r.content.map((b: J) => ({ type: "tool_result", tool_use_id: b.tool_use_id, content: b.content ?? "", ...(b.is_error ? { is_error: true } : {}) })) } });
-  }
-  for (const text of texts)
-    for (const raw of text.split("\n")) {
-      if (!raw.trim()) continue;
+  const stamps: Array<{ ts: number; thread: number; n: number }> = [];
+  const t = codexTranscript(texts, stamps);
+  const events: Array<{ ts: number; thread: number; n: number; seq: number; line: J }> = [];
+  (t.recs as J[]).forEach((r, i) => {
+    const s = stamps[i]!;
+    if (r.type === "AssistantMessage" && Array.isArray(r.content)) events.push({ ...s, seq: i, line: { type: "assistant", message: { content: r.content.map((b: J) => ({ type: "tool_use", id: b.id, name: b.name, input: b.input ?? {} })) } } });
+    if (r.type === "UserMessage" && Array.isArray(r.content)) events.push({ ...s, seq: i, line: { type: "user", message: { content: r.content.map((b: J) => ({ type: "tool_result", tool_use_id: b.tool_use_id, content: b.content ?? "", ...(b.is_error ? { is_error: true } : {}) })) } } });
+  });
+  let root: number | null = null;
+  const msgsBy: Array<typeof events> = [];
+  texts.forEach((text, thread) => {
+    let ts = 0;
+    const msgs: typeof events = [];
+    msgsBy.push(msgs);
+    text.split("\n").forEach((raw, n) => {
+      if (!raw.trim()) return;
       let o: J;
       try {
         o = JSON.parse(raw);
       } catch {
-        continue;
+        return;
       }
+      const at = Date.parse(o?.timestamp ?? "");
+      if (!Number.isNaN(at)) ts = at;
+      if (o?.type === "session_meta" && root === null && !o.payload?.parent_thread_id) root = thread;
       const p = o?.payload;
-      if (o?.type !== "response_item" || p?.type !== "message" || p.role !== "assistant" || !Array.isArray(p.content)) continue;
+      if (o?.type !== "response_item" || p?.type !== "message" || p.role !== "assistant" || !Array.isArray(p.content)) return;
       const text = p.content.filter((c: J) => c?.type === "output_text" && typeof c.text === "string").map((c: J) => c.text).join("\n");
-      if (text) lines.push({ type: "assistant", message: { content: [{ type: "text", text }] } });
-    }
-  return lines.map((l) => JSON.stringify(l)).join("\n") + (lines.length ? "\n" : "");
+      if (text) msgs.push({ ts, thread, n, seq: 0, line: { type: "assistant", message: { content: [{ type: "text", text }] } } });
+    });
+  });
+  events.push(...(msgsBy[root ?? 0] ?? []));
+  events.sort((a, b) => a.ts - b.ts || a.thread - b.thread || a.n - b.n || a.seq - b.seq);
+  return events.map((e) => JSON.stringify(e.line)).join("\n") + (events.length ? "\n" : "");
 }
