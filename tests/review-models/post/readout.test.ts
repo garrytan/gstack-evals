@@ -1,20 +1,20 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Value: protects=the pilot readout reads every Pilots-table column per arm from a finished pilot (exposure, the read audit,
-// judge errors against two people's labels from the desk package, supply, cost, wall time, pilot spend, reruns against the reserve), then the staged rule
+// judge errors against person labels from the desk package (two people, a third where they differ), supply, cost, wall time, pilot spend, reruns against the reserve), then the staged rule
 // and the frozen proceed set, and names no unit by anything but its opaque label; fails_when=an unexposed review, a judge
-// error, a rerun or a contaminated search goes uncounted, a step runs out of order, or the Markdown quotes a unit id, PR,
+// error, a rerun or a contaminated search goes uncounted, a step runs out of order, the validation batch's labels land on the pilot's, or the Markdown quotes a unit id, PR,
 // fix commit or advisory; why_new=GEVA-590 Pilots table, change 1 items 1 to 3, change 2 sections 2 and 4; seam=rm-post's
 // keyless reads, its two paid batches and the desk package with planted person files, on a stub upstream behind the real metering proxy and a temporary ledger;
 // no_claim=that real sessions look like these planted ones, which only the pilot shows
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readItem } from "../../../src/runner/ledger/record.ts";
 import { readContamination, writeContamination } from "../../../src/trial/review/contamination.ts";
 import { contaminationInputs, main } from "../../../lanes/review-models/post/cli.ts";
-import { loadPilot } from "../../../lanes/review-models/post/pilot.ts";
+import { loadPilot, type PostKey } from "../../../lanes/review-models/post/pilot.ts";
 import { assertSafe, pilotReadout, renderReadout } from "../../../lanes/review-models/post/readout.ts";
-import { deskPackage, importAdjudication, importFirst, pilotBatch } from "../../../lanes/review-models/post/desk.ts";
+import { deskPackage, importFirst, importThird, pilotBatch, type DeskKey } from "../../../lanes/review-models/post/desk.ts";
 import { judgeSend, secondReadSend } from "../../../lanes/review-models/post/send.ts";
 import type { FinalRow } from "../../../lanes/review-models/score/labels.ts";
 import { DRY_ENV, ITEMS, personFile, plant, upstream } from "./fixture.ts";
@@ -65,8 +65,7 @@ describe("rm-post end to end on a planted pilot (keyless)", () => {
     const first = importFirst({ post: s.post, batch: "pilot", reviews: pilotBatch(pilot), files: [{ name: "F1", text: personFile(pkg.dir, "F1", "A") }, { name: "F2", text: personFile(pkg.dir, "F2", "B", { none_on: "DISAGREE" }) }] });
     expect(first).toMatchObject({ reviews: 49, disagreements: 1, final: false });
     expect(existsSync(join(s.post, "labels", "final.json"))).toBe(false);
-    const adj = first.adjudication!;
-    const settled = importAdjudication({ post: s.post, batch: "pilot", files: [{ name: "F1", text: personFile(adj, "F1", "A") }, { name: "F2", text: personFile(adj, "F2", "B") }] });
+    const settled = importThird({ post: s.post, batch: "pilot", file: { name: "T1", text: personFile(first.third!, "T1", "A") } });
     expect(settled).toMatchObject({ reviews: 49, disagreements: 1, unresolved: 0, final: true });
 
     pilot = loadPilot(s.run, key, s.post);
@@ -103,5 +102,37 @@ describe("rm-post end to end on a planted pilot (keyless)", () => {
     const code = await main(["readout", "--run", s.run, "--key", s.keyPath, "--post", s.post, "--history", s.history, "--md", out]);
     expect(code).toBe(2);
     expect(existsSync(out)).toBe(false);
+  }, 120_000);
+
+  test("the validation batch loads from its run dir by --batch and gets its own desk package, screen key and final labels", async () => {
+    const s = plant();
+    const up = upstream();
+    const k = JSON.parse(readFileSync(s.keyPath, "utf8")) as PostKey;
+    expect(() => loadPilot(s.run, k, s.post, "validation")).toThrow(/E_RM_POST_INPUT the post key has no validation units/);
+    const vkey: PostKey = { ...k, pilot: k.pilot.filter((u) => u.pool === "decoy"), validation: k.pilot.filter((u) => u.pool !== "decoy") };
+    const keyPath = join(s.dir, "key-validation.json");
+    writeFileSync(keyPath, JSON.stringify(vkey));
+    const desk = join(s.dir, "desk");
+    const args = ["--run", s.run, "--key", keyPath, "--post", s.post];
+    expect(await main(["desk-package", ...args, "--desk", desk, "--batch", "later"])).toBe(2);
+    expect(await main(["contamination", ...args, "--batch", "validation"])).toBe(0);
+    await secondReadSend(s.post, { item: ITEMS.second, run_id: "second-v", record: s.record, ledger: s.ledger, env: DRY_ENV, fetch: up.fetch, warn: () => {} });
+    const pilot = loadPilot(s.run, vkey, s.post, "validation");
+    expect(pilot.reviews.map((r) => r.unit).every((u) => vkey.validation!.some((v) => v.unit === u))).toBe(true);
+    expect(await main(["desk-package", ...args, "--desk", desk, "--batch", "validation"])).toBe(0);
+    const dir = join(desk, "geva590-review-labels-validation");
+    expect(readFileSync(join(dir, "privacy-check.md"), "utf8")).toContain("Result: BLOCKING HITS: 0.");
+    expect(existsSync(join(desk, "geva590-review-labels-pilot"))).toBe(false);
+    const key = JSON.parse(readFileSync(join(s.post, "labels", "people", "validation", "key.json"), "utf8")) as DeskKey;
+    expect(key).toMatchObject({ batch: "validation", package: "geva590-review-labels-validation" });
+    expect(key.screens.filter((x) => x.kind === "review").map((x) => x.arm + " " + x.unit).sort()).toEqual(pilotBatch(pilot).filter((r) => r.findings.length).map((r) => r.arm + " " + r.unit).sort());
+    const f1 = join(s.dir, "labels-F1-A.txt"), f2 = join(s.dir, "labels-F2-B.txt");
+    writeFileSync(f1, personFile(dir, "F1", "A"));
+    writeFileSync(f2, personFile(dir, "F2", "B"));
+    expect(await main(["labels-import", ...args, "--batch", "validation", "--file", f1, "--round", "third"])).toBe(2);
+    expect(await main(["labels-import", ...args, "--batch", "validation", "--file", f1, "--file", f2])).toBe(0);
+    expect(JSON.parse(readFileSync(join(s.post, "labels", "final-validation.json"), "utf8"))).toHaveLength(key.screens.filter((x) => x.kind === "review").length + key.auto_no.length);
+    expect(existsSync(join(s.post, "labels", "final.json"))).toBe(false);
+    expect(await main(["readout", ...args, "--batch", "validation", "--history", s.history, "--md", join(s.dir, "v.md")])).toBe(2);
   }, 120_000);
 });

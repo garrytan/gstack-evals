@@ -53,6 +53,8 @@ export interface KeyUnit {
 export interface PostKey {
   schema: "rm-post-key.v1";
   pilot: KeyUnit[];
+  /** The validation batch's bug units (change 1); absent from a key built before it was added. */
+  validation?: KeyUnit[];
   /** The drawn counted set's bug units by pool, for the staged rule's shares. */
   counted: { p: number; b: number; decoys: number };
 }
@@ -60,9 +62,10 @@ export interface PostKey {
 export function readKey(path: string): PostKey {
   const k = JSON.parse(readFileSync(path, "utf8")) as PostKey;
   if (k?.schema !== "rm-post-key.v1" || !Array.isArray(k.pilot) || !k.counted) return rmFail("E_RM_POST_INPUT", path + " is not an rm-post key (schema rm-post-key.v1)");
-  const labels = new Set(k.pilot.map((u) => u.label));
-  if (labels.size !== k.pilot.length || new Set(k.pilot.map((u) => u.unit)).size !== k.pilot.length) rmFail("E_RM_POST_INPUT", path + " repeats a unit or a label");
-  for (const u of k.pilot) if ((u.pool === "decoy") !== (u.bug === null)) rmFail("E_RM_POST_INPUT", "key unit " + u.label + ": a decoy has no bug and every bug unit has one");
+  if (k.validation !== undefined && !Array.isArray(k.validation)) rmFail("E_RM_POST_INPUT", path + ": validation is not a list of units");
+  const all = [...k.pilot, ...(k.validation ?? [])];
+  if (new Set(all.map((u) => u.label)).size !== all.length || new Set(all.map((u) => u.unit)).size !== all.length) rmFail("E_RM_POST_INPUT", path + " repeats a unit or a label");
+  for (const u of all) if ((u.pool === "decoy") !== (u.bug === null)) rmFail("E_RM_POST_INPUT", "key unit " + u.label + ": a decoy has no bug and every bug unit has one");
   return k;
 }
 
@@ -142,8 +145,12 @@ export function contaminationOf(post: string): { report: ContaminationReport; pe
   return { report, pending: key.filter((k) => !decided.has(k.case_id)).length };
 }
 
-/** Every pilot review: five cells by every key unit at pass 1. */
-export function loadPilot(run: string, key: PostKey, post: string | null): Pilot {
+export const BATCHES = ["pilot", "validation"] as const;
+export type Batch = (typeof BATCHES)[number];
+
+/** Every review of one batch: five cells by every key unit of the batch at pass 1. A cell the batch never ran is a gap. */
+export function loadPilot(run: string, key: PostKey, post: string | null, batch: Batch = "pilot"): Pilot {
+  const units = batch === "pilot" ? key.pilot : (key.validation ?? rmFail("E_RM_POST_INPUT", "the post key has no validation units; rebuild it with rm-post key from a draw that holds them"));
   const entries = new Map<string, Entry[]>();
   for (const e of jsonl<Entry>(join(run, "cells.ndjson"))) {
     if (e.cell.pass !== 1) continue;
@@ -162,7 +169,7 @@ export function loadPilot(run: string, key: PostKey, post: string | null): Pilot
     const runArm = cell.arm, model = cell.model, arm = cell.id as Arm;
     const dir = join(run, "arms", armId(runArm, model));
     if (!costs.has(dir)) costs.set(dir, existsSync(join(dir, "cost.tsv")) ? readCostRows(readFileSync(join(dir, "cost.tsv"), "utf8")) : new Map());
-    for (const u of key.pilot) {
+    for (const u of units) {
       const list = entries.get(runArm + "\u0000" + model + "\u0000" + u.unit) ?? [];
       const last = list.at(-1);
       const earlier = list.slice(0, -1);
@@ -208,7 +215,7 @@ export function loadPilot(run: string, key: PostKey, post: string | null): Pilot
       });
     }
   }
-  const bugs = new Map(key.pilot.filter((u) => u.bug).map((u) => [u.unit, { unit: u.unit, pool: u.pool as "P" | "B", evidence: u.bug!.evidence, fix_diff: u.bug!.fix_diff }]));
-  return { key, reviews, built: new Set(tasks.keys()), bugs, markers: key.pilot.map((u) => ({ ...u.markers, unit: u.unit })), contamination: { read: !!cont, pending_cases: cont?.pending ?? 0, arms: cont?.report.arms ?? [] } };
+  const bugs = new Map(units.filter((u) => u.bug).map((u) => [u.unit, { unit: u.unit, pool: u.pool as "P" | "B", evidence: u.bug!.evidence, fix_diff: u.bug!.fix_diff }]));
+  return { key, reviews, built: new Set(tasks.keys()), bugs, markers: units.map((u) => ({ ...u.markers, unit: u.unit })), contamination: { read: !!cont, pending_cases: cont?.pending ?? 0, arms: cont?.report.arms ?? [] } };
 }
 

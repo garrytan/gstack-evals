@@ -9,7 +9,7 @@
 // - FA on P3 ran twice in cells.ndjson, the first ending on an upstream error (a rerun, from the retry reserve);
 // - OS on B2 curls a page that quotes the unit's fix commit (a contaminated search).
 // Also planted: N on P4 runs a WebSearch with no recorded result (a doubtful case the blind second read rules clean),
-// Carbon's first reply on OS P1 is empty (retried once), and the two people read OA P1 differently until the second part.
+// Carbon's first reply on OS P1 is empty (retried once), and the two people read OA P1 differently until a third person reads it.
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

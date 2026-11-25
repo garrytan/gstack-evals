@@ -2,9 +2,9 @@
 // Value: protects=the person-label package follows the labelling desk's format (two offline pages in two orders, repeats,
 // attention screens with a code-reading screening screen, a return checker, a privacy and blinding check), names no unit,
 // arm, model or grader to the hire, keeps the screen key in the post dir, and reads two people's downloaded files into the
-// judge check's labels, with the second part going back to the same two people; fails_when=a hire-facing file names a
-// grader, model, arm or the other person, a return with an unanswered screen or a third person's file imports, a split
-// review gets a label nobody gave, or can't tell reads as naming; why_new=GEVA-590 pre-run changes 5 and 6 and the
+// judge check's labels, with the reviews they read differently going to a third person blind; fails_when=a hire-facing file names a
+// grader, model, arm or the other person, a return with an unanswered screen imports, one of the first two people takes the third seat, a split
+// review gets a label no majority gave, or can't tell reads as naming; why_new=GEVA-590 pre-run changes 5 and 6 and the
 // desk's bg1-dev-judge format; seam=desk.ts and the package's own python checks on a fake 50-review batch;
 // no_claim=that real people label the way personFile does
 import { describe, expect, test } from "bun:test";
@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { ARMS } from "../../../lanes/review-models/score/frozen.ts";
 import type { ReviewFinding } from "../../../lanes/review-models/score/judge.ts";
 import type { FinalRow } from "../../../lanes/review-models/score/labels.ts";
-import { ATTENTION, deskPackage, importAdjudication, importFirst, readLabelsFile, type BatchReview, type DeskKey } from "../../../lanes/review-models/post/desk.ts";
+import { ATTENTION, deskPackage, importFirst, importThird, majority, readLabelsFile, type BatchReview, type DeskKey } from "../../../lanes/review-models/post/desk.ts";
 import { personFile } from "./fixture.ts";
 
 const finding = (id: string, path: string, line: number, severity: string, text: string): ReviewFinding => ({ id, source: id === "v" ? "voice" : "native", severity, path, line, text });
@@ -186,8 +186,8 @@ describe("importing two people's labels (keyless)", () => {
     s.labels[ids[1]!].note = "";
     s.labels["Rdeadbeefq"] = { choice: "none", note: "x" };
     expect(readLabelsFile("a", JSON.stringify(s), key).problems).toEqual([
-      "a: screens " + (key.orders.A.indexOf(ids[0]!.slice(0, -1)) + 1) + " have no valid answer",
-      "a: screens " + (key.orders.A.indexOf(ids[1]!.slice(0, -1)) + 1) + " have no reason",
+      "a: screens " + (key.orders.A!.indexOf(ids[0]!.slice(0, -1)) + 1) + " have no valid answer",
+      "a: screens " + (key.orders.A!.indexOf(ids[1]!.slice(0, -1)) + 1) + " have no reason",
       "a: answers 1 question not on page A (Rdeadbeefq)",
     ]);
     expect(readLabelsFile("a", "<!doctype html><html>", key).problems[0]).toContain("is the labelling page itself");
@@ -198,38 +198,61 @@ describe("importing two people's labels (keyless)", () => {
     expect(existsSync(join(b.post, "labels", "people", "pilot", "first.json"))).toBe(false);
   });
 
-  test("disagreements go back to the same two people unattributed; a split that stays split is unresolved; can't tell reads as no", () => {
-    const b = build({ tokens: { 1: "SPLITME", 2: "SPLITME", 4: "SPLITTWO", 3: "UNSURE" } });
+  test("disagreements go to a third person, blind and on one page; the label is the majority of three; no majority or a majority of can't tell is unresolved", () => {
+    const b = build({ tokens: { 1: "SPLITME", 2: "SPLITNO", 4: "SPLITCANT", 5: "BOTHCANT", 3: "BOTHCANT" } });
     const dir = b.pkg.dir;
-    const split = b.reviews.filter((r) => r.findings.some((f) => /SPLIT/.test(f.text)));
-    expect(split.every((r) => r.findings[0]!.text.includes("BUGMARK"))).toBe(true);
+    const split = b.reviews.filter((r) => r.findings.some((f) => /SPLIT|BOTHCANT/.test(f.text)) && r.findings[0]!.text.includes("BUGMARK"));
+    expect(split).toHaveLength(4);
     expect(b.reviews[3]!.findings[0]!.text).not.toContain("BUGMARK");
-    const first = importFirst({ post: b.post, batch: "pilot", reviews: b.reviews, files: [{ name: "a", text: personFile(dir, "F1", "A", { cant_on: "UNSURE" }) }, { name: "b", text: personFile(dir, "F2", "B", { none_on: "SPLIT" }) }] });
-    expect(first).toMatchObject({ reviews: 51, agreed: 48, disagreements: 3, final: false });
+    expect(() => importThird({ post: b.post, batch: "pilot", file: { name: "t", text: "{}" } })).toThrow(/E_RM_POST_INPUT no third package is open for the pilot batch/);
+    const first = importFirst({ post: b.post, batch: "pilot", reviews: b.reviews, files: [{ name: "a", text: personFile(dir, "F1", "A", { cant_on: "BOTHCANT" }) }, { name: "b", text: personFile(dir, "F2", "B", { none_on: "SPLIT" }) }] });
+    expect(first).toMatchObject({ reviews: 51, agreed: 47, disagreements: 4, final: false, price: 13 });
     expect(existsSync(join(b.post, "labels", "final.json"))).toBe(false);
-    const adj = first.adjudication!;
-    expect(adj).toBe(join(b.desk, "geva590-review-labels-pilot-adjudication"));
-    expect(readdirSync(adj)).not.toContain("bounty.json");
-    expect(readFileSync(join(adj, "privacy-check.md"), "utf8")).toContain("Result: BLOCKING HITS: 0.");
-    const it = items(adj);
-    expect(it.orders.A).toHaveLength(3);
-    const readings = Object.values(it.screens).map((s: any) => s.blocks.at(-1));
-    for (const r of readings) {
-      expect(r.label).toBe("Two readings of this review");
-      expect(r.text).toMatch(/^Reading 1: (Finding 1 names the bug\.|No finding names the bug\.) Why: planted reason for \S+\n\nReading 2: (Finding 1 names the bug\.|No finding names the bug\.) Why: planted reason for \S+$/);
-    }
-    const pages = readdirSync(join(adj, "labeller")).map((f) => readFileSync(join(adj, "labeller", f), "utf8")).join("\n") + readFileSync(join(adj, "guide.md"), "utf8");
-    expect(pages).not.toMatch(/\bF1\b|\bF2\b|labellers|other labeller|earlier answers/);
-    const pair = (x: string, y: string, o = {}) => [{ name: "a", text: personFile(adj, x, "A") }, { name: "b", text: personFile(adj, y, "B", o) }];
-    expect(() => importAdjudication({ post: b.post, batch: "pilot", files: pair("F1", "F3") })).toThrow(/E_RM_POST_LABELS[\s\S]*the second part goes back to the same two people \(F1, F2\), but these files name F1, F3/);
-    const done = importAdjudication({ post: b.post, batch: "pilot", files: pair("F1", "F2", { none_on: "SPLITTWO" }) });
-    expect(done).toMatchObject({ reviews: 51, disagreements: 3, unresolved: 1, final: true });
+    const third = first.third!;
+    expect(third).toBe(join(b.desk, "geva590-review-labels-pilot-third"));
+    expect(readdirSync(third).sort()).toEqual([".meta.json", "README.md", "bounty.json", "check_return.py", "guide.md", "items.json", "labeller", "message-to-labeller.txt", "privacy-check.md", "privacy_check.py", "returns"]);
+    expect(readdirSync(join(third, "labeller"))).toEqual(["check-reviews-A.html"]);
+    expect(readFileSync(join(third, "privacy-check.md"), "utf8")).toContain("Result: BLOCKING HITS: 0.");
+    expect(JSON.parse(readFileSync(join(third, "bounty.json"), "utf8"))).toMatchObject({ dryRun: true, price: 13, spotsAvailable: 1, idempotencyKey: "geva590-review-labels-pilot-third-a" });
+    expect(readFileSync(join(third, "README.md"), "utf8")).toContain("1 seat × $13.00 fixed (6 screens at about 5 minutes each, at $25 an hour)");
+    const it = items(third);
+    expect(Object.keys(it.orders)).toEqual(["A"]);
+    expect(it.orders.A).toHaveLength(6);
+    expect(Object.keys(it.repeats)).toHaveLength(1);
+    expect(Object.keys(it.attention)).toHaveLength(1);
+    expect(it.screening).toHaveLength(1);
+    const firstItems = items(dir);
+    expect(it.orders.A.filter((s: string) => s in firstItems.screens)).toEqual([]);
+    for (const s of Object.values(it.screens) as any[]) expect(s.blocks.map((x: any) => x.label)).toEqual(["The bug, as the people who found or fixed it described it", "The change that fixed it (lines starting with - were removed, + were added)", "The review's findings"]);
+    const pages = [readFileSync(join(third, "labeller", "check-reviews-A.html"), "utf8"), readFileSync(join(third, "guide.md"), "utf8"), readFileSync(join(third, "message-to-labeller.txt"), "utf8"), readFileSync(join(third, "bounty.json"), "utf8")].join("\n");
+    expect(pages).not.toMatch(/\bF1\b|\bF2\b|planted reason|labellers|other labeller|earlier answers|Two readings|Reading 1/);
+    const thirdKey = JSON.parse(readFileSync(join(b.post, "labels", "people", "pilot", "third-key.json"), "utf8")) as DeskKey;
+    expect(thirdKey).toMatchObject({ round: "third", exclude: ["F1", "F2"], package: "geva590-review-labels-pilot-third" });
+    expect(() => importFirst({ post: b.post, batch: "pilot", reviews: b.reviews, files: [] })).toThrow(/E_RM_POST_INPUT the first round of the pilot batch is already imported/);
+    const t1 = personFile(third, "T1", "A", { none_on: "SPLITNO", cant_on: "CANT" });
+    writeFileSync(join(third, "returns", "labels-T1-A.txt"), personFile(third, "T1", "A"));
+    expect(py([join(third, "check_return.py"), join(third, "returns", "labels-T1-A.txt")]).stdout).toContain("VERDICT: PASS");
+    expect(() => importThird({ post: b.post, batch: "pilot", file: { name: "t", text: personFile(third, "F2", "A") } })).toThrow(/E_RM_POST_LABELS 1 problem in the third person's file, nothing imported:\n  t names labeller F2, one of the first two people \(F1, F2\)/);
+    expect(() => importThird({ post: b.post, batch: "pilot", file: { name: "t", text: personFile(dir, "T1", "A") } })).toThrow(/E_RM_POST_LABELS[\s\S]*comes from another page/);
+    expect(existsSync(join(b.post, "labels", "final.json"))).toBe(false);
+    const done = importThird({ post: b.post, batch: "pilot", file: { name: "t", text: t1 } });
+    expect(done).toMatchObject({ reviews: 51, agreed: 47, disagreements: 4, unresolved: 2, final: true });
     const final: FinalRow[] = JSON.parse(readFileSync(join(b.post, "labels", "final.json"), "utf8"));
     expect(final).toHaveLength(51);
     const at = (i: number) => final.find((f) => f.unit === b.reviews[i]!.unit && f.arm === b.reviews[i]!.arm)!;
-    expect([at(1).label, at(2).label, at(4).label]).toEqual([true, true, "unresolved"]);
+    expect([at(1).label, at(2).label, at(4).label, at(5).label]).toEqual([true, false, "unresolved", "unresolved"]);
+    expect(at(2).cant_tell).toBeUndefined();
     expect(at(3)).toMatchObject({ label: false, cant_tell: true });
     expect(final.find((f) => f.unit === "acme/empty#1")).toMatchObject({ label: false });
-    expect(() => importFirst({ post: b.post, batch: "pilot", reviews: b.reviews, files: [] })).toThrow(/E_RM_POST_INPUT the second part is already imported/);
+    expect(final.map((f) => f.id).sort()).toEqual([...b.pkg.key.screens.filter((s) => s.kind === "review").map((s) => s.sid), ...b.pkg.key.auto_no.map((k) => k.id)].sort());
+  });
+
+  test("majority of three", () => {
+    const r = (names: boolean, cant = false) => ({ names, cant, matched: [], text: "" });
+    expect(majority([r(true), r(false), r(true)])).toBe(true);
+    expect(majority([r(true), r(false), r(false)])).toBe(false);
+    expect(majority([r(true), r(false), r(false, true)])).toBe("unresolved");
+    expect(majority([r(true), r(false, true), r(false, true)])).toBe("unresolved");
+    expect(majority([r(false, true), r(false), r(false)])).toBe(false);
   });
 });

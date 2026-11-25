@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The post key for the review-models pilot: what the judge, the labellers, the contamination reader and the readout need
-// to know about each pilot unit, built keylessly from the supply's draw and gate records (src/trial/review/supply/,
+// to know about each pilot unit and each validation-batch unit, built keylessly from the supply's draw and gate records (src/trial/review/supply/,
 // SUPPLY.md) and the full clones the unit build used. Per unit:
 // - P bug units: the suite's evidence for the bug, the fix commit's diff against its parent, markers (the unit's PR, the
 //   fix PR, the fix commit), cluster by PR and the suite group as stratum;
@@ -44,19 +44,20 @@ export function buildKey(draw: Draw, p: readonly PRecord[], b: readonly BRecord[
   };
   const unit = (d: DrawnUnit): KeyUnit => {
     if (d.pool === "B") {
-      const r = bById.get(d.id) ?? rmFail("E_RM_POST_INPUT", "pilot B unit " + d.id + " has no gate record with a BIC");
+      const r = bById.get(d.id) ?? rmFail("E_RM_POST_INPUT", "B unit " + d.id + " has no gate record with a BIC");
       const bic = r.szz!.bic!;
       const adv = src.advisory(r.ghsa) ?? rmFail("E_RM_POST_INPUT", r.ghsa + ": the advisory cannot be read");
       const ref = PR_REF.exec(r.fix.ref ?? "");
       return { unit: d.id, label: fresh(), pool: "B", cluster: r.repo, diff_lines: src.diffLines(r.repo, bic + "^", bic), bug: { evidence: ("Advisory " + r.ghsa + ": " + adv.summary.trim() + "\n\n" + adv.details.trim()).trim(), fix_diff: src.diff(r.repo, r.fix.parent, r.fix.commit) }, markers: { unit: d.id, prs: ref ? [ref[1] + "#" + ref[2]] : [], commits: [r.fix.commit], ids: [r.ghsa, ...r.cves] } };
     }
-    const r = pById.get(d.id) ?? rmFail("E_RM_POST_INPUT", "pilot unit " + d.id + " has no gate record");
+    const r = pById.get(d.id) ?? rmFail("E_RM_POST_INPUT", "unit " + d.id + " has no gate record");
     const pr = r.repo + "#" + r.pr;
     const base = { unit: d.id, label: fresh(), cluster: pr, diff_lines: src.diffLines(r.repo, r.base, r.head) };
     if (r.decoy) return { ...base, pool: "decoy", bug: null, markers: { unit: d.id, prs: [pr], commits: [], ids: [] } };
-    const fix = r.fix ?? rmFail("E_RM_POST_INPUT", "pilot P unit " + d.id + " has no fix commit");
+    const fix = r.fix ?? rmFail("E_RM_POST_INPUT", "P unit " + d.id + " has no fix commit");
     return { ...base, pool: "P", stratum: r.group, bug: { evidence: r.evidence, fix_diff: src.diff(r.repo, fix.commit + "^", fix.commit) }, markers: { unit: d.id, prs: [...new Set([pr, r.repo + "#" + fix.pr])], commits: [fix.commit], ids: [] } };
   };
   const pilot = [...draw.pilot.p, ...draw.pilot.b, draw.pilot.decoy].map(unit);
-  return { schema: "rm-post-key.v1", pilot, counted: { p: draw.counted.filter((u) => u.pool === "P").length, b: draw.counted.filter((u) => u.pool === "B").length, decoys: draw.decoys.length } };
+  const validation = (draw.validation ?? []).map(unit);
+  return { schema: "rm-post-key.v1", pilot, validation, counted: { p: draw.counted.filter((u) => u.pool === "P").length, b: draw.counted.filter((u) => u.pool === "B").length, decoys: draw.decoys.length } };
 }

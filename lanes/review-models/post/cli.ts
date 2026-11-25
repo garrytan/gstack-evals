@@ -15,24 +15,27 @@ import type { Draw } from "../../../src/trial/review/supply/draw.ts";
 import type { PRecord } from "../../../src/trial/review/supply/p-units.ts";
 import { rmFail } from "../score/frozen.ts";
 import { buildKey, type KeySources } from "./key.ts";
-import { loadPilot, readKey, type Pilot } from "./pilot.ts";
+import { BATCHES, loadPilot, readKey, type Batch, type Pilot } from "./pilot.ts";
 import { pilotReadout, renderReadout } from "./readout.ts";
 import type { FinalRow } from "../score/labels.ts";
-import { deskPackage, finalPath, importAdjudication, importFirst, pilotBatch, SHAPES, type Shape } from "./desk.ts";
+import { deskPackage, finalPath, importFirst, importThird, pilotBatch, SHAPES, type Shape } from "./desk.ts";
 import { judgeSend, secondReadSend, type SendOptions } from "./send.ts";
 
 const HELP = [
   "gstack-evals rm-post <subcommand> [options]: the review-models pilot after its review sessions (GEVA-590).",
   "",
   "  key --draw <json> --p <jsonl> --b <jsonl> --frame <b2-frame.json> --sources <dir> --out <key.json>",
-  "  contamination --run <pilot out dir> --key <key.json> --post <dir> [--journal <proxy journal>]...",
+  "  contamination --run <out dir> --key <key.json> --post <dir> [--batch pilot|validation] [--journal <proxy journal>]...",
   "  second-read-send --post <dir> --run-id <id> --item <ledger item>                     (paid: Astra and Opus)",
-  "  judge-send --run <dir> --key <key.json> --post <dir> --run-id <id> --item <ledger item>  (paid: Gemini 4 Carbon)",
-  "  desk-package --run <dir> --key <key.json> --post <dir> --desk <labelling root> [--shape review|finding]",
-  "      writes <desk>/geva590-review-labels-pilot/ for the labelling desk; the screen key stays in <post>/labels/people/",
-  "  labels-import --run <dir> --key <key.json> --post <dir> --file <labels file> --file <labels file> [--round first|adjudication]",
-  "      reads both people's downloaded labels files; disagreements get the second part's package, and final.json lands",
-  "      in <post>/labels/ once every review has a label",
+  "  judge-send --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --run-id <id> --item <ledger item>  (paid: Gemini 4 Carbon)",
+  "  desk-package --run <dir> --key <key.json> --post <dir> --desk <labelling root> [--batch pilot|validation] [--shape review|finding]",
+  "      writes <desk>/geva590-review-labels-<batch>/ for the labelling desk; the screen key stays in <post>/labels/people/",
+  "  labels-import --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --file <labels file> --file <labels file>",
+  "      reads the first two people's downloaded labels files; reviews they read differently go to a third person's",
+  "      package, <desk>/geva590-review-labels-<batch>-third/, and with no disagreement the final labels land in <post>/labels/",
+  "  labels-import --run <dir> --key <key.json> --post <dir> [--batch pilot|validation] --file <labels file> --round third",
+  "      reads the third person's file; each review they read takes the majority of three, and the final labels land",
+  "      in <post>/labels/ (final.json for the pilot, final-validation.json for the validation batch)",
   "  label-send                                                    (retired: people make the labels; it refuses)",
   "  readout --run <dir> --key <key.json> --post <dir> --history <stage1 per-pass csv> --md <file>",
   "",
@@ -40,7 +43,7 @@ const HELP = [
   "Markdown names units by opaque label only.",
 ].join("\n");
 
-const VALUED = ["--draw", "--p", "--b", "--frame", "--sources", "--out", "--run", "--key", "--post", "--journal", "--run-id", "--item", "--history", "--md", "--desk", "--shape", "--file", "--round"];
+const VALUED = ["--draw", "--p", "--b", "--frame", "--sources", "--out", "--run", "--key", "--post", "--journal", "--run-id", "--item", "--history", "--md", "--desk", "--shape", "--file", "--round", "--batch"];
 
 function flags(argv: readonly string[]): Map<string, string[]> {
   const m = new Map<string, string[]>();
@@ -93,11 +96,17 @@ function keyCmd(f: Map<string, string[]>): number {
   const draw = JSON.parse(readFileSync(need(f, "--draw"), "utf8")) as Draw;
   const k = buildKey(draw, jsonl<PRecord>(need(f, "--p")), jsonl<BRecord>(need(f, "--b")), gitSources(need(f, "--sources"), frame.source.commit, new Map(frame.advisories.map((a: any) => [a.ghsa, a.advisory_path]))));
   write(need(f, "--out"), JSON.stringify(k, null, 2) + "\n");
-  console.log("post key: " + k.pilot.length + " pilot units (" + k.pilot.filter((u) => u.pool === "P").length + " P, " + k.pilot.filter((u) => u.pool === "B").length + " B, " + k.pilot.filter((u) => u.pool === "decoy").length + " decoy); counted set " + k.counted.p + " P, " + k.counted.b + " B, " + k.counted.decoys + " decoys");
+  console.log("post key: " + k.pilot.length + " pilot units (" + k.pilot.filter((u) => u.pool === "P").length + " P, " + k.pilot.filter((u) => u.pool === "B").length + " B, " + k.pilot.filter((u) => u.pool === "decoy").length + " decoy); " + k.validation!.length + " validation units; counted set " + k.counted.p + " P, " + k.counted.b + " B, " + k.counted.decoys + " decoys");
   return 0;
 }
 
-const pilotOf = (f: Map<string, string[]>): Pilot => loadPilot(need(f, "--run"), readKey(need(f, "--key")), need(f, "--post"));
+function batchOf(f: Map<string, string[]>): Batch {
+  const b = f.get("--batch")?.at(-1) ?? "pilot";
+  if (!BATCHES.includes(b as Batch)) rmFail("E_RM_POST_INPUT", "--batch is pilot or validation, not " + JSON.stringify(b));
+  return b as Batch;
+}
+
+const pilotOf = (f: Map<string, string[]>): Pilot => loadPilot(need(f, "--run"), readKey(need(f, "--key")), need(f, "--post"), batchOf(f));
 
 /** Every review whose session ran and left a transcript, as contamination.ts reads it. */
 export const contaminationInputs = (pilot: Pilot): ReviewInput[] =>
@@ -132,23 +141,27 @@ function deskCmd(f: Map<string, string[]>): number {
   const shape = f.get("--shape")?.at(-1);
   if (shape !== undefined && !SHAPES.includes(shape as Shape)) rmFail("E_RM_POST_INPUT", "--shape is review or finding, not " + JSON.stringify(shape));
   const post = need(f, "--post");
-  const r = deskPackage({ reviews: pilotBatch(pilotOf(f)), batch: "pilot", desk: need(f, "--desk"), post, shape: shape as Shape | undefined });
-  console.log("desk package: " + r.dir + " (" + r.key.shape + " question), " + r.labelled + " reviews on " + r.screens + " screens with repeats and attention screens, " + r.key.auto_no.length + " with no findings labelled no; privacy check passed");
-  console.log("  hand the folder to the labelling desk; the screen key stays in " + join(post, "labels", "people", "pilot") + " and never goes with it");
+  const batch = batchOf(f);
+  const r = deskPackage({ reviews: pilotBatch(pilotOf(f)), batch, desk: need(f, "--desk"), post, shape: shape as Shape | undefined });
+  console.log("desk package: " + r.dir + " (" + r.key.shape + " question), " + r.labelled + " reviews on " + r.screens + " screens with repeats and attention screens, " + r.key.auto_no.length + " with no findings labelled no; 2 seats at $" + r.price + "; privacy check passed");
+  console.log("  hand the folder to the labelling desk; the screen key stays in " + join(post, "labels", "people", batch) + " and never goes with it");
   return 0;
 }
 
 function importCmd(f: Map<string, string[]>): number {
   const round = f.get("--round")?.at(-1) ?? "first";
-  if (round !== "first" && round !== "adjudication") rmFail("E_RM_POST_INPUT", "--round is first or adjudication, not " + JSON.stringify(round));
+  if (round !== "first" && round !== "third") rmFail("E_RM_POST_INPUT", "--round is first or third, not " + JSON.stringify(round));
   const files = (f.get("--file") ?? []).map((p) => ({ name: p, text: readFileSync(p, "utf8") }));
   const post = need(f, "--post");
-  const r = round === "first" ? importFirst({ post, batch: "pilot", files, reviews: pilotBatch(pilotOf(f)) }) : importAdjudication({ post, batch: "pilot", files });
-  console.log("labels-import (" + round + "): " + r.reviews + " reviews, " + r.agreed + " read alike, " + r.disagreements + " read differently" + (r.final ? ", " + r.unresolved + " still unresolved; wrote " + finalPath(post) : "; second part for the same two people written to " + r.adjudication));
+  const batch = batchOf(f);
+  if (round === "third" && files.length !== 1) rmFail("E_RM_POST_LABELS", "the third round takes exactly one labels file, the third person's, not " + files.length);
+  const r = round === "first" ? importFirst({ post, batch, files, reviews: pilotBatch(pilotOf(f)) }) : importThird({ post, batch, file: files[0]! });
+  console.log("labels-import (" + batch + ", " + round + "): " + r.reviews + " reviews, " + r.agreed + " read alike, " + r.disagreements + " read differently" + (r.final ? ", " + r.unresolved + " unresolved; wrote " + finalPath(post, batch) : "; the third person's package (1 seat at $" + r.price + ") is at " + r.third));
   return 0;
 }
 
 function readoutCmd(f: Map<string, string[]>): number {
+  if (batchOf(f) !== "pilot") rmFail("E_RM_POST_INPUT", "readout reads the pilot batch only; the validation batch's labels join the kappa gate's rows instead");
   const pilot = pilotOf(f);
   const post = need(f, "--post");
   const finalFile = finalPath(post);

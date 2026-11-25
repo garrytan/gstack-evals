@@ -64,7 +64,7 @@ summary = dict(labeller=S.get('labeller'), version=S['version'], screens=n, ques
                repeatsDisagreeing=f'{rep_diff} of {len(rep_pairs)}', attentionMissed=f'{att_miss} of {len(att)}', screeningMissed=f'{screen_miss} of {len(screening)}', copiedReasons=copied, notesNotEnglish=foreign)
 reject, ask = [], []
 if mins < C['reject_minutes']: reject.append(f'the page recorded {mins:.0f} minutes of work for {n} screens; careful reading takes at least about {C["ask_minutes"]} minutes')
-if cnt.most_common(1)[0][1] >= 0.95 * len(qs): reject.append('almost every screen got the same answer')
+if len(qs) >= 20 and cnt.most_common(1)[0][1] >= 0.95 * len(qs): reject.append('almost every screen got the same answer')
 if att and att_miss >= max(2, (len(att) + 1) // 2): reject.append(f'{att_miss} of the {len(att)} screens with one plain answer were marked another way')
 if C['reject_minutes'] <= mins < C['ask_minutes']: ask.append(f'only {mins:.0f} active minutes recorded for {n} screens')
 if rep_pairs and rep_diff > C.get('max_repeat_diff', 1): ask.append(f'{rep_diff} of {len(rep_pairs)} repeated screens got a different answer the second time')

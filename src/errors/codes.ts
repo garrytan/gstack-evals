@@ -4828,8 +4828,8 @@ export const CODES = {
   },
   E_RM_POST_LABELS: {
     exit: 2,
-    meaning: "A returned person labels file did not import (lanes/review-models/post/desk.ts): it is not a labels file from this package's page, a screen has no valid answer or no reason, it answers a question its page does not hold, both files name the same labeller, or the second part's files are not from the first part's two people.",
-    fix: "Ask the desk for the right file (the one Download my labels saves) or a redo with the printed problems, then import both files again. Nothing was written.",
+    meaning: "A returned person labels file did not import (lanes/review-models/post/desk.ts): it is not a labels file from this package's page, a screen has no valid answer or no reason, it answers a question its page does not hold, both first-round files name the same labeller, the third round got other than one file, or the third person's file names one of the first two labellers' codes.",
+    fix: "Ask the desk for the right file (the one Download my labels saves), a redo with the printed problems, or a third person who is not one of the first two, then import again. Nothing was written.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
