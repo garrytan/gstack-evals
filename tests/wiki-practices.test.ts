@@ -188,9 +188,9 @@ describe("practice 5: the judge check", () => {
   test("a plan dated 2026-11-26 or later needs one Labels by line that says only people, construction or rule", () => {
     const id = "2026-11-26-geva-9-hook-prereg";
     const later = (from: string, to: string) => check(prereg(swap(from, to).replace("Labelled outputs: 40", "Labelled outputs: 100"), id));
-    const message = "wiki/plans/" + id + '.md: practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), and put any detail on a "Label notes:" line; labels a model made, settled or agreed on are not a label set (wiki/README.md, Eval plans and results, gives the format)';
+    const message = "wiki/plans/" + id + '.md: practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built), rule (a deterministic rule computes it), or for code labels the third-model labeller gemini-4-neon (grok-4.7 when a judge is a Gemini model), and put any detail on a "Label notes:" line; other labels a model made, settled or agreed on are not a label set (wiki/README.md, Eval plans and results, gives the format)';
     expect(later("Labels by: people\n", "")).toEqual([message]);
-    for (const line of ["Labels by:", "Labels by: people, blind to arm", "Labels by: people, final ties settled by particle-ai/particle-1", "Labels by: people and rule", "Labels by: peoples", "Labels by: models", "Labels by: people\nLabels by: rule"]) {
+    for (const line of ["Labels by:", "Labels by: people, blind to arm", "Labels by: people, final ties settled by particle-ai/particle-1", "Labels by: people and rule", "Labels by: peoples", "Labels by: models", "Labels by: people\nLabels by: rule", "Labels by: google/gemini-4-neon", "Labels by: gemini-4-argon", "Labels by: gemini-4-neon, blind", "Labels by: neon", "Labels by: x-ai/grok-4.7"]) {
       expect(later("Labels by: people", line)).toEqual([message]);
     }
     for (const line of ["Labels by: People", "Labels by: construction", "Labels by: rule", "Labels by: people.", "- Labels by: people", "**Labels by:** people", "**Labels by**: `people`"]) {
@@ -199,8 +199,28 @@ describe("practice 5: the judge check", () => {
     expect(later("Label notes: blind to arm", "Label notes: blinded to model identity and arm, 2/3 majority, see [the rubric](./rubric.md)")).toEqual([]);
   });
 
+  test("code labels by a third model name it by its exact id, and the id must come from a family outside the judge check", () => {
+    const id = "2026-11-26-geva-9-hook-prereg";
+    const later = (from: string, to: string) => check(prereg(swap(from, to).replace("Labelled outputs: 40", "Labelled outputs: 100"), id));
+    const neon = "wiki/plans/" + id + '.md: practice 5: "Labels by: gemini-4-neon" needs a judge and scored models from other labs; a Gemini judge is checked with grok-4.7, and a Gemini model under test goes to the Captain (wiki/README.md, Eval plans and results, gives the format)';
+    const grok = "wiki/plans/" + id + '.md: practice 5: "Labels by: grok-4.7" is only for a Gemini judge, with no xAI judge or scored model; otherwise write gemini-4-neon (wiki/README.md, Eval plans and results, gives the format)';
+    const judge = "Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5";
+    for (const line of ["Labels by: gemini-4-neon", "Labels by: Gemini-4-Neon", "Labels by: `gemini-4-neon`", "**Labels by:** gemini-4-neon."]) {
+      expect(later("Labels by: people", line)).toEqual([]);
+    }
+    expect(later("Labels by: people", "Labels by: grok-4.7")).toEqual([grok]);
+    const gem = (j: string, by: string) => check(prereg(swap(judge, j).replace("Labels by: people", by).replace("Labelled outputs: 40", "Labelled outputs: 100"), id));
+    expect(gem("Judge: google/gemini-4-carbon scores anthropic/claude-opus-5-5", "Labels by: grok-4.7")).toEqual([]);
+    expect(gem("Judge: openrouter/google/gemini-4-carbon scores anthropic/claude-opus-5-5", "Labels by: grok-4.7")).toEqual([]);
+    expect(gem("Judge: google/gemini-4-carbon scores anthropic/claude-opus-5-5", "Labels by: gemini-4-neon")).toEqual([neon]);
+    expect(gem("Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5, google/gemini-4-carbon", "Labels by: gemini-4-neon")).toEqual([neon]);
+    expect(gem("Judge: google/gemini-4-carbon scores x-ai/grok-4.7", "Labels by: grok-4.7")).toEqual([grok]);
+    expect(gem("Judge: openai/gpt-6-astra scores google/gemini-4-carbon", "Labels by: grok-4.7")).toEqual([grok]);
+    expect(gem("Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5\nJudge: anthropic/claude-opus-5-5 scores openai/gpt-6.2-sol", "Labels by: gemini-4-neon")).toEqual([]);
+  });
+
   test("a plan dated before 2026-11-26 may leave the Labels by line out, but a line it has follows the same rule", () => {
-    const message = PREREG + ': practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), and put any detail on a "Label notes:" line; labels a model made, settled or agreed on are not a label set (wiki/README.md, Eval plans and results, gives the format)';
+    const message = PREREG + ': practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built), rule (a deterministic rule computes it), or for code labels the third-model labeller gemini-4-neon (grok-4.7 when a judge is a Gemini model), and put any detail on a "Label notes:" line; other labels a model made, settled or agreed on are not a label set (wiki/README.md, Eval plans and results, gives the format)';
     expect(check(prereg(swap("Labels by: people\n", "")))).toEqual([]);
     expect(check(prereg(PASSING_PREREG))).toEqual([]);
     for (const line of ["Labels by: people, settled by a model", "Labels by: two models agreeing", "Labels by: peo_ple", "Labels by: people\nLabels by: rule"]) {

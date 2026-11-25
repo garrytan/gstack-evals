@@ -474,8 +474,16 @@ function checkPrereg(lines: string[], date: string, p: (message: string) => void
     if (!(kappa >= 0.6)) p('practice 5: "Kappa at least:" must be 0.6 or more' + HOW);
     if (!/^per arm\b/i.test(labelled(judge, "Errors read")[0] ?? "")) p('practice 5: "Errors read: per arm" is missing; the judge\'s errors are read per arm, not pooled' + HOW);
     const labelsBy = judge.flatMap((l) => l.match(/^(?:[-*] )?(?:\*\*|__)?Labels by(?:\*\*|__)?:(?:\*\*|__)? *(.*)$/i)?.slice(1) ?? []);
-    if ((date >= LABELS_BY_FROM || labelsBy.length) && (labelsBy.length !== 1 || !/^(?:people|construction|rule)$/i.test(labelsBy[0].trim().replace(/^[`*_]+|[`*_]+$/g, "").replace(/\.$/, ""))))
-      p('practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), and put any detail on a "Label notes:" line; labels a model made, settled or agreed on are not a label set' + HOW);
+    const by = labelsBy.length === 1 ? labelsBy[0].trim().replace(/^[`*_]+|[`*_]+$/g, "").replace(/\.$/, "").toLowerCase() : "";
+    if ((date >= LABELS_BY_FROM || labelsBy.length) && !/^(?:people|construction|rule|gemini-4-neon|grok-4\.7)$/.test(by))
+      p('practice 5: write one "Labels by:" line that says only people, construction (each label is fixed by how its item was built), rule (a deterministic rule computes it), or for code labels the third-model labeller gemini-4-neon (grok-4.7 when a judge is a Gemini model), and put any detail on a "Label notes:" line; other labels a model made, settled or agreed on are not a label set' + HOW);
+    const judged = judges.filter((j) => !emptyJudge(j)).flatMap((j) => j.match(/^(\S+\/\S+) scores (.+)$/)?.slice(1) ?? []);
+    const labs = new Set(judged.flatMap((x, i) => (i % 2 ? x.split(",") : [x]).map((m) => labOf(m.trim()))));
+    const judgeLabs = new Set(judged.filter((_, i) => i % 2 === 0).map(labOf));
+    if (by === "gemini-4-neon" && labs.has("google"))
+      p('practice 5: "Labels by: gemini-4-neon" needs a judge and scored models from other labs; a Gemini judge is checked with grok-4.7, and a Gemini model under test goes to the Captain' + HOW);
+    if (by === "grok-4.7" && (!judgeLabs.has("google") || labs.has("x-ai")))
+      p('practice 5: "Labels by: grok-4.7" is only for a Gemini judge, with no xAI judge or scored model; otherwise write gemini-4-neon' + HOW);
   }
 
   const pilots = sectionLines(lines, "Pilots");
