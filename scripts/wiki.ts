@@ -436,6 +436,7 @@ const blank = (s: string | undefined) => !s || /^(?:-|none|n\/a)$/i.test(s.trim(
 const HOW = " (wiki/README.md, Eval plans and results, gives the format)";
 
 const MORE_LABELS_FROM = "2026-11-22";
+const LABEL_MODEL = /\b(?:anthropic|openai|google|xai|meta|deepseek|qwen|zai|moonshotai|minimax|particle|openrouter)\/|\b(?:claude|opus|sonnet|haiku|fable|gpt|astra|sol|luna|terra|gemini|grok|kimi|glm|llm|models?)\b/i;
 
 function checkPrereg(lines: string[], date: string, p: (message: string) => void) {
   const decision = sectionLines(lines, "Decisions?");
@@ -472,6 +473,9 @@ function checkPrereg(lines: string[], date: string, p: (message: string) => void
     const kappa = Number(labelled(judge, "Kappa at least")[0]?.match(/^\d*\.?\d+/)?.[0] ?? NaN);
     if (!(kappa >= 0.6)) p('practice 5: "Kappa at least:" must be 0.6 or more' + HOW);
     if (!/^per arm\b/i.test(labelled(judge, "Errors read")[0] ?? "")) p('practice 5: "Errors read: per arm" is missing; the judge\'s errors are read per arm, not pooled' + HOW);
+    const labelsBy = labelled(judge, "Labels by").map((v) => v.replace(/[`*_]/g, ""));
+    if (labelsBy.length !== 1 || !/^(?:people|construction|rule)(?:,|$)/i.test(labelsBy[0]) || LABEL_MODEL.test(labelsBy[0]))
+      p('practice 5: write one "Labels by:" line that starts with people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), then a comma or the line\'s end, and names no model or lab; labels a model made, settled or agreed on are not a label set' + HOW);
   }
 
   const pilots = sectionLines(lines, "Pilots");
