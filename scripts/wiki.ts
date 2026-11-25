@@ -472,6 +472,9 @@ function checkPrereg(lines: string[], date: string, p: (message: string) => void
     const kappa = Number(labelled(judge, "Kappa at least")[0]?.match(/^\d*\.?\d+/)?.[0] ?? NaN);
     if (!(kappa >= 0.6)) p('practice 5: "Kappa at least:" must be 0.6 or more' + HOW);
     if (!/^per arm\b/i.test(labelled(judge, "Errors read")[0] ?? "")) p('practice 5: "Errors read: per arm" is missing; the judge\'s errors are read per arm, not pooled' + HOW);
+    const labelsBy = labelled(judge, "Labels by")[0] ?? "";
+    if (!/^(?:people|construction|rule)\b/i.test(labelsBy) || /\S+\/\S+/.test(labelsBy))
+      p('practice 5: "Labels by:" must start with people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), and name no model; labels a model made, or that two models agreed on, are not a label set' + HOW);
   }
 
   const pilots = sectionLines(lines, "Pilots");

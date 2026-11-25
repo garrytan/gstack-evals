@@ -39,6 +39,7 @@ Judge: openai/gpt-6-astra scores anthropic/claude-opus-5-5
 Labelled outputs: 40
 Kappa at least: 0.6
 Errors read: per arm
+Labels by: people, blind to arm
 
 ## Interim look
 
@@ -141,7 +142,7 @@ describe("practice 3: a pilot for every arm", () => {
 });
 
 describe("practice 5: the judge check", () => {
-  const noJudge = swap(/Judge: openai[\s\S]*?Errors read: per arm\n/, "Judge: none\n").replaceAll("10 pilot outputs hand-labelled; the judge agrees on this arm", "none");
+  const noJudge = swap(/Judge: openai[\s\S]*?Labels by: people, blind to arm\n/, "Judge: none\n").replaceAll("10 pilot outputs hand-labelled; the judge agrees on this arm", "none");
 
   test("a plan with no model judge passes with Judge: none", () => {
     expect(check(prereg(noJudge))).toEqual([]);
@@ -181,6 +182,21 @@ describe("practice 5: the judge check", () => {
     expect(has(check(prereg(swap("Labelled outputs: 40", "Labelled outputs: 99"), id)), "at least 100 labelled outputs")).toBe(true);
     expect(check(prereg(swap("Labelled outputs: 40", "Labelled outputs: 100"), id))).toEqual([]);
     expect(check(prereg(swap("Labelled outputs: 40", "Labelled outputs: 100"), "2026-12-01-geva-9-hook-prereg"))).toEqual([]);
+  });
+
+  test("a missing or model-made label set fails, and people, construction or rule pass", () => {
+    const message = PREREG + ': practice 5: "Labels by:" must start with people, construction (each label is fixed by how its item was built) or rule (a deterministic rule computes it), and name no model; labels a model made, or that two models agreed on, are not a label set (wiki/README.md, Eval plans and results, gives the format)';
+    expect(check(prereg(swap("Labels by: people, blind to arm\n", "")))).toEqual([message]);
+    for (const line of ["Labels by:", "Labels by: models", "Labels by: two models agreeing", "Labels by: anthropic/claude-opus-5-5 and google/gemini-4-argon", "Labels by: people, settled by openai/gpt-6-astra", "Labels by: peoples"]) {
+      expect(check(prereg(swap("Labels by: people, blind to arm", line)))).toEqual([message]);
+    }
+    for (const line of ["Labels by: People, two labellers", "Labels by: construction, planted bugs", "Labels by: rule, the hidden tests pass or fail", "- Labels by: people"]) {
+      expect(check(prereg(swap("Labels by: people, blind to arm", line)))).toEqual([]);
+    }
+  });
+
+  test("a plan with no model judge needs no label line", () => {
+    expect(check(prereg(noJudge))).toEqual([]);
   });
 
   test("a plan dated 2026-11-21 keeps the 40-label floor", () => {
