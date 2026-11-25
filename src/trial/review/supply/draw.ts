@@ -4,7 +4,7 @@
 // 2. Pilot B: the first 5 gated B units in draw order.
 // 3. Pilot decoy: the first gated decoy in seeded order (seededShuffle of decoy ids, draw seed). It is one of the
 //    counted run's decoys too, since the counted run scores all 15 and the plan holds back only bug units.
-// 4. Validation batch: the first 15 of the remaining gated bug units, P and B together, in seeded order (seededShuffle
+// 4. Validation batch (pre-run change 2: 17, one more per arm): the first 17 of the remaining gated bug units, P and B together, in seeded order (seededShuffle
 //    of their ids sorted, draw seed).
 // 5. Counted set: every remaining gated P unit in suite rank order, then remaining gated B units in draw order, to 100,
 //    with at most 3 units a repository (gate 5) across the counted set. Below 80 the draw refuses.
@@ -20,7 +20,7 @@ export const FLOOR = 80;
 export const REPO_CAP = 3;
 export const PILOT_P = 5;
 export const PILOT_B = 5;
-export const VALIDATION = 15;
+export const VALIDATION = 17;
 
 /** flags: the instruction file types the unit carries (gates.ts InstructionFlags), for the scorer's descriptive split. */
 export interface DrawnUnit { id: string; pool: "P" | "B" | "decoy"; repo: string; rank?: number; position?: number; ghsa?: string; flags: InstructionFlags | null }

@@ -24,16 +24,16 @@ describe("rm-supply command", () => {
     const f = (n: string) => join(dir, n);
     expect(await main(["draw", "--p", f("p.jsonl"), "--b", f("b.jsonl"), "--visibility", f("vis.json"), "--out", f("draw.json")])).toBe(0);
     const d = JSON.parse(readFileSync(f("draw.json"), "utf8"));
-    expect([d.pilot.p.length, d.pilot.b.length, d.validation.length, d.counted.length, d.decoys.length]).toEqual([5, 5, 15, 100, 15]);
+    expect([d.pilot.p.length, d.pilot.b.length, d.validation.length, d.counted.length, d.decoys.length]).toEqual([5, 5, 17, 100, 15]);
     expect(await main(["counts", "--p", f("p.jsonl"), "--b", f("b.jsonl"), "--visibility", f("vis.json"), "--draw", f("draw.json"), "--out", f("counts.json")])).toBe(0);
     const text = readFileSync(f("counts.json"), "utf8");
     const c = JSON.parse(text);
     expect(c.p.bug_units).toEqual({ units: 101, errors: 0, g1: 101, g4: 101, g1_and_g4: 101 });
     expect(c.b.gates_in_order).toEqual({ g1: 30, g1_g2: 30, g1_g2_g4: 30, g1_g2_g4_g3: 30, awaiting_read: 0 });
-    expect(c.draw).toMatchObject({ counted: 100, validation: 15, decoys: 15 });
+    expect(c.draw).toMatchObject({ counted: 100, validation: 17, decoys: 15 });
     expect(Object.keys(c.sha256)).toEqual(["p", "b", "visibility", "draw"]);
     expect(c.instruction_files_after_gate4.p_bug_units).toMatchObject({ units: 101, claude_md: 0, stripped_settings: 0 });
-    expect(c.draw_instruction_files).toMatchObject({ units: 140, settings: 0 });
+    expect(c.draw_instruction_files).toMatchObject({ units: 142, settings: 0 });
     for (const leak of ["f".repeat(12), "c".repeat(12), bic(3).slice(0, 12), "GHSA-"]) expect(text).not.toContain(leak);
   });
 

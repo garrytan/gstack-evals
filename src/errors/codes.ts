@@ -4781,6 +4781,24 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_RM_RUN: {
+    exit: 2,
+    meaning: "The review-models pilot path (gstack-evals rm-run, src/trial/review/rm-run.ts) refused its input: a quote for a ledger item is not in the approvals file or the pre-run changes verbatim, the draw's pilot is not 5 P, 5 B and 1 decoy, or a pilot or retry item has no approved cap or too little left.",
+    fix: "Read the message: record the item's cap with the Captain's words (gstack-evals rm-run items --approvals <file>), pass the draw rm-supply wrote, or take a shortfall to the Captain.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_RM_RESERVE: {
+    exit: 2,
+    meaning: "A review-models session ended on a provider or infrastructure error, and the retry reserve's lease cannot hold its one rerun (prereg section 8; pre-run change 2). Reruns stop; the cell stays a gap and is reported as an infrastructure miss for its arm.",
+    fix: "Take the shortfall to the Captain as a cap ask; never rerun from an arm's own item.",
+    side_effects: "The run goes on; the cell's first attempt and its spend are kept in the journal entry's rerun record.",
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

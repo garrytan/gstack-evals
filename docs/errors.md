@@ -556,6 +556,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_RM_SCORE_INPUT](#e_rm_score_input) | 2 | U20 |
 | [E_RM_HISTORY](#e_rm_history) | 2 | U20 |
 | [E_RM_LABELS](#e_rm_labels) | 2 | U20 |
+| [E_RM_RUN](#e_rm_run) | 2 | U20 |
+| [E_RM_RESERVE](#e_rm_reserve) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4440,6 +4442,22 @@ The review-models judge check's label inputs are incomplete (lanes/review-models
 Fix: Supply both labellers' first reads for every item and both adjudication reads for every disagreement; decoy reviews stay out of the check.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_RUN
+
+The review-models pilot path (gstack-evals rm-run, src/trial/review/rm-run.ts) refused its input: a quote for a ledger item is not in the approvals file or the pre-run changes verbatim, the draw's pilot is not 5 P, 5 B and 1 decoy, or a pilot or retry item has no approved cap or too little left.
+
+Fix: Read the message: record the item's cap with the Captain's words (gstack-evals rm-run items --approvals &lt;file>), pass the draw rm-supply wrote, or take a shortfall to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_RM_RESERVE
+
+A review-models session ended on a provider or infrastructure error, and the retry reserve's lease cannot hold its one rerun (prereg section 8; pre-run change 2). Reruns stop; the cell stays a gap and is reported as an infrastructure miss for its arm.
+
+Fix: Take the shortfall to the Captain as a cap ask; never rerun from an arm's own item.
+
+Exit 2. Side effects: The run goes on; the cell's first attempt and its spend are kept in the journal entry's rerun record. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

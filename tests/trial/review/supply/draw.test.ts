@@ -30,7 +30,7 @@ describe("draw", () => {
     expect(d.pilot.b.map((u) => u.position)).toEqual([0, 1, 3, 4, 6]);
     expect(d.pilot.decoy.pool).toBe("decoy");
     expect(d.decoys).toHaveLength(15);
-    expect(d.validation).toHaveLength(15);
+    expect(d.validation).toHaveLength(17);
     const pilot = new Set([...d.pilot.p, ...d.pilot.b].map((u) => u.id));
     const val = new Set(d.validation.map((u) => u.id));
     expect(d.validation.some((u) => pilot.has(u.id))).toBe(false);

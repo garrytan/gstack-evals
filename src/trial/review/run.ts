@@ -102,7 +102,8 @@ import { allowanceMicros, SESSION_ALLOWANCE } from "../../skill-eval/cli/dry-run
 import { providerOf, type LoadedPolicy } from "../../skill-eval/cli/policy.ts";
 import { armNamespaces, armTree, codexOption, slotModels, type HostRig } from "../../skill-eval/cli/run-host.ts";
 import type { ContractTask } from "../../skill-eval/contract/tasks.ts";
-import type { Host, TrialRecord } from "../../types.ts";
+import type { Host, Termination, TrialRecord } from "../../types.ts";
+import { seededRandom } from "../../runner/stats/paired.ts";
 import { cacheStale, envValuesHash, newProgress, recordSession, sessionKey, staleParts, writeProgress, type CacheStop, type SessionKey } from "../cache.ts";
 import { copyToSink, receiptsSink, sinkLinkProblem, sinkOverlapProblem, volatilePathProblem } from "../durable.ts";
 import type { Retained } from "../image.ts";
@@ -209,7 +210,38 @@ export interface ReviewRunInput {
   capStops?: boolean;
   /** The most idle time, in seconds, a session may wait on its background work; BACKGROUND_WAIT_MS / 1000 when unset. Always passed to the driver. */
   backgroundWaitS?: number;
+  /** The review-models order (GEVA-590 prereg, section 3): units in an order seeded by seed, each unit's cells in one group shuffled by the same stream, so a round holds one unit's cells. Unset, a group is one model on one unit. */
+  order?: { seed: number };
+  /** Each session's allowance by arm id, in micro-dollars, in place of allowanceMicros for the cells it names. */
+  cellAllowances?: Readonly<Record<string, number>>;
+  /** Each cell's own cap by arm id, in micro-dollars: a round starts only when every cell's worst case fits its own cap. Reruns count against rerun.cap, never here. */
+  cellCaps?: Readonly<Record<string, number>>;
+  /** One rerun of a code session that ends on a provider or infrastructure error (rerunnable), bound as attempt 2 and paid from cap (the retry reserve's lease). Once the reserve cannot hold a rerun's allowance, reruns stop and the cell stays a gap. */
+  rerun?: { cap: number };
+  /** Keep each code session's records (trial.json, transcript, Codex rollouts, gstack state, a first attempt's dir) in the receipts. */
+  keepSessions?: boolean;
   env?: Env;
+}
+
+/** Provider and infrastructure ends a rerun covers (GEVA-590 prereg, section 8): an infra incident, a send with no recorded outcome, and a missing cell for an upstream failure, an infra failure, an unavailable ledger, or a Codex config or settings step that could not run. A cap or allowance stop, a background deadline, a timeout and anything the arm did are never rerun. */
+export const RERUN_CODES: readonly ReasonCode[] = ["UPSTREAM", "E_INFRA_FAILURE", "E_LEDGER_UNAVAILABLE", "E_CODEX_CONFIG", "E_SESSION_SETTINGS"];
+export const rerunnable = (t: Termination): boolean => t.kind === "infra" || t.kind === "unknown" || (t.kind === "missing" && RERUN_CODES.includes(t.code));
+
+/** A rerun cell's first attempt, kept in its journal entry. */
+export interface RerunRecord {
+  first: { termination: Termination; usd: number; meter_id: string; dir: string };
+  /** true when the rerun ran; false when the retry reserve could not hold it. */
+  ran: boolean;
+}
+
+/** Fisher-Yates on a shared seeded stream. */
+function shuffleWith<T>(items: readonly T[], rnd: () => number): T[] {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [a[i], a[j]] = [a[j]!, a[i]!];
+  }
+  return a;
 }
 
 export interface ReviewCell {
@@ -240,6 +272,8 @@ export interface ReviewEntry {
   meter?: SessionMeter | null;
   /** Codex sessions: the refusals at the slot's allowance (a limit stop when above 0) and the arm's prompt-input capture. */
   codex?: { allowance_stops: number; prompt_input_sha256: string };
+  /** A run with rerun: the first attempt of a cell that ended on a provider or infrastructure error. */
+  rerun?: RerunRecord;
 }
 
 /** A product-value session's record (lanes/product-value/parse.ts): end_state is null for a session a cap stop ended. */
@@ -284,6 +318,7 @@ export interface ReviewRun {
 
 export const reviewCellId = (c: ReviewCell): string => JSON.stringify([c.model, c.arm, c.unit, c.pass]);
 const cellName = (c: ReviewCell): string => c.model + " " + c.arm + " " + c.unit + " pass " + c.pass;
+const usd = (micros: number): string => "$" + (micros / 1_000_000).toFixed(2);
 
 export const ARM_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
 /** The model's short name in an arm id: a Claude model's family (opus, haiku), else the id's last path segment with other
@@ -415,7 +450,11 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const dir = sessionDir(o.out, model, arm.name, unit.task, i + 1);
     return [join(dir, "trial.json"), ...["init.json", "transcript.ndjson", "codex-sessions", ...CODEX_COPY_DIRS.map((d) => d.to)].map((f) => join(dir, "host", f))];
   }).flat())))];
-  const receipts = [...codexFiles, join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.plan?.lens === CEO_LENS || pvRun ? [join(o.out, "stops.json")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : []), ...transcripts];
+  const sessionFiles = !o.keepSessions ? [] : o.arms.flatMap((arm) => (o.armModels?.[arm.name] ?? o.models).flatMap((model) => o.units.flatMap((unit) => Array.from({ length: o.passes }, (_, i) => {
+    const dir = sessionDir(o.out, model, arm.name, unit.task, i + 1);
+    return [dir, dir + "-attempt1"].flatMap((d) => [join(d, "trial.json"), ...["init.json", "transcript.ndjson", "session.json", "codex-sessions", "gstack-state"].map((f) => join(d, "host", f))]);
+  }).flat())));
+  const receipts = [...codexFiles, ...sessionFiles, ...(rig.journals ?? []).filter(inside), ...(o.order ? [join(o.out, "order.tsv")] : []), join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "refused.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.plan?.lens === CEO_LENS || pvRun ? [join(o.out, "stops.json")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : []), ...transcripts];
   const sealedSink = sealedSinkProblem(o.suite, env);
   if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
   const linked = "sink" in sink && sink.sink ? sinkLinkProblem(o.out, receipts, sink.sink) : null;
@@ -456,6 +495,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (micros === null) throw new Error("E_MODEL_POLICY: " + model + " has no price row, so its session allowance is unknown");
     return micros;
   };
+  const allowanceOf = (arm: string, model: string): number => o.cellAllowances?.[armId(arm, model)] ?? allowance(model);
   const capStops = ceo || pv !== null || (!plan && o.capStops === true);
   const prRun = o.units.some((u) => u.pr_text !== undefined);
   if (prRun && (plan || o.units.some((u) => u.pr_text === undefined))) throw new Error("E_USAGE: PR text goes to every code unit or to none, and this run " + (plan ? "is a plan run" : "gives it to only some units"));
@@ -512,9 +552,20 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: pv ? PV_TEMPLATE_SHA256 : ceo ? CEO_TEMPLATE_SHA256 : toldSha, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...(unit.pr_text !== undefined ? { pr_sha256: sha256(unit.pr_text) } : {}), ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(ceo || pv ? { allowance_micros: allowance(model) } : capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(arm.sessionKind ?? o.sessionKind ? { session_kind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}), ...(pv && arm.name === PV_GATE_ARM ? { skill_gates: PV_GATE_KEY } : {}), ...(o.backgroundWaitS !== undefined && o.backgroundWaitS * 1000 !== BACKGROUND_WAIT_MS ? { background_wait_s: o.backgroundWaitS } : {}), ...(codexArm(arm.name) ? { codex: { bin: o.codex!.bin, effort: codexArm(arm.name)!.effort, hook_trust: codexArm(arm.name)!.hook_trust, settings: codexArm(arm.name)!.settings, switches: codexArm(arm.name)!.switches } } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: pv ? PV_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : ceo ? CEO_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: ceo || pv ? envValuesHash(Object.keys(CEO_CONTEXT_ENV), CEO_CONTEXT_ENV) : envValuesHash([], env), policy: o.policy.sha256 });
 
   const groups: Planned[][] = [];
-  for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
+  if (o.order) {
+    const rnd = seededRandom(o.order.seed);
+    for (let pass = 1; pass <= o.passes; pass++) for (const unit of shuffleWith(o.units, rnd)) {
+      const cells = o.models.flatMap((model) => o.arms.filter((arm) => modelsOf(arm.name).includes(model)).map((arm) => ({ cell: { model, arm: arm.name, unit: unit.unit.id, pass }, arm, unit })));
+      if (cells.length) groups.push(shuffleWith(cells, rnd));
+    }
+  } else for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
     const arms = o.arms.filter((arm) => modelsOf(arm.name).includes(model));
     if (arms.length) groups.push(arms.map((arm) => ({ cell: { model, arm: arm.name, unit: unit.unit.id, pass }, arm, unit })));
+  }
+  const order = join(o.out, "order.tsv");
+  if (o.order) {
+    mkdirSync(o.out, { recursive: true });
+    writeFileSync(order, ["round_group\tposition\tarm_id\tunit\tpass", ...groups.flatMap((g, i) => g.map((p, j) => [i + 1, j + 1, armId(p.cell.arm, p.cell.model), p.cell.unit, p.cell.pass].join("\t")))].join("\n") + "\n");
   }
   const planned = new Map(groups.flat().map((p) => [reviewCellId(p.cell), p]));
   const entries = new Map<string, ReviewEntry>();
@@ -571,14 +622,17 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       arm: { gstack, tree_sha256: armTree(rig, name, model), prompt_input_sha256: captures.get(armId(name, model)) ?? null },
     };
   };
-  const session = async (p: Planned, attempt = 1, before: PvSession["attempts"] = []): Promise<ReviewEntry> => {
+  const cellSpent = new Map<string, number>();
+  let retrySpent = 0;
+  const session = async (p: Planned, attempt = 1, before: PvSession["attempts"] = [], first: RerunRecord["first"] | null = null): Promise<ReviewEntry> => {
     const { cell, arm, unit } = p;
     const provider = providerOf(o.policy, cell.model);
     if (!provider) throw new Error("E_MODEL_POLICY: " + cell.model + " has no provider in the policy");
     const settings = rig.cells?.[arm.name]?.[cell.model] ?? null;
     const codex = o.host === "claude" ? codexOption(o.policy, settings) : null;
-    const binding = await rig.bind({ cell: { run_id: o.runId, arm: arm.name, task: unit.task, model: cell.model, trial: cell.pass, attempt }, models: slotModels(o.policy, cell.model, codex ? settings : null), allowance_micros: allowance(cell.model) });
-    const sandbox = rig.sandbox(arm.name, false, cell.model);
+    const via = rig.route?.(arm.name, cell.model, attempt) ?? null;
+    const binding = await rig.bind({ cell: { run_id: o.runId, arm: arm.name, task: unit.task, model: cell.model, trial: cell.pass, attempt }, models: slotModels(o.policy, cell.model, codex ? settings : null), allowance_micros: allowanceOf(arm.name, cell.model), ...(codex ? { voices: [codex.provider + ":" + codex.model] } : {}) });
+    const sandbox = via?.sandbox ?? rig.sandbox(arm.name, false, cell.model);
     const dir = sessionDir(o.out, cell.model, arm.name, unit.task, cell.pass);
     rmSync(dir, { recursive: true, force: true });
     const home = sandbox.homePath(dir);
@@ -589,14 +643,33 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const cx = o.host === "codex" ? codexArm(arm.name) : null;
     let printedSha: string | null = null;
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
-    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(pv ? { entry: { user: pvRecUser(pv.family).user }, freeform: pvRecUser(pv.family).freeform } : plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(codex?.binDir ? { codexNoSandbox: true, codexRollouts: true } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(arm.sessionKind ?? o.sessionKind ? { sessionKind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo || pv ? { disable1mContext: true } : {}), ...(enforced ? { skillGateDeadlineMs: GATE_DEADLINE_MS, settings: { command: [posix.join(home, posix.dirname(install.gstack ?? ""), "gstack-skill-gates"), ...GATE_SETTINGS_ARGS].map((w) => "'" + w.replace(/'/g, "'\\''") + "'").join(" "), make: (printed: string) => ((printedSha = sha256(printed)), pv ? pvGateSettings(printed) : gateSettings(printed)) } } : {}), ...(capStops ? { capStops } : {}), ...(ceo ? { followUp: { text: FOLLOW_UP, needed: needsFollowUp } } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000, ...(cx ? { effort: cx.effort, codexSession: codexSession(cx, arm.name, install, home, cell.model) } : {}) });
+    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: via?.baseUrl ?? rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(pv ? { entry: { user: pvRecUser(pv.family).user }, freeform: pvRecUser(pv.family).freeform } : plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(codex?.binDir ? { codexNoSandbox: true, codexRollouts: true } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(arm.sessionKind ?? o.sessionKind ? { sessionKind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo || pv ? { disable1mContext: true } : {}), ...(enforced ? { skillGateDeadlineMs: GATE_DEADLINE_MS, settings: { command: [posix.join(home, posix.dirname(install.gstack ?? ""), "gstack-skill-gates"), ...GATE_SETTINGS_ARGS].map((w) => "'" + w.replace(/'/g, "'\\''") + "'").join(" "), make: (printed: string) => ((printedSha = sha256(printed)), pv ? pvGateSettings(printed) : gateSettings(printed)) } } : {}), ...(capStops ? { capStops } : {}), ...(ceo ? { followUp: { text: FOLLOW_UP, needed: needsFollowUp } } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000, ...(cx ? { effort: cx.effort, codexSession: codexSession(cx, arm.name, install, home, cell.model) } : {}) });
     const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
     const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! }, stateProjectFiles: { [PROJECT_PREFERENCES]: prefs.get(arm.name)! } } : {}), ...(enforced ? { gate: (work: string) => gateRecord({ work, host: join(dir, "host"), gstack: gstackDir(install) ?? "", settingsSha256: printedSha }) } : {}) };
-    const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...(ceo ? { copyOut: { name: "ceo-review.md", to: join(dir, "host", "ceo-review") } } : {}), ...(pv || codex?.binDir ? { copyDir: { from: STATE_ROOT_DIR, to: join(dir, "host", "gstack-state") } } : {}), ...(cx ? { copyDirs: CODEX_COPY_DIRS.map((d) => ({ from: STATE_ROOT_DIR + "/" + d.from, to: join(dir, "host", d.to) })) } : {}), ...state });
+    const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: via ? via.network : rig.network, seed: unit.tree, ...(ceo ? { copyOut: { name: "ceo-review.md", to: join(dir, "host", "ceo-review") } } : {}), ...(pv || codex?.binDir ? { copyDir: { from: STATE_ROOT_DIR, to: join(dir, "host", "gstack-state") } } : {}), ...(cx ? { copyDirs: CODEX_COPY_DIRS.map((d) => ({ from: STATE_ROOT_DIR + "/" + d.from, to: join(dir, "host", d.to) })) } : {}), ...state });
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros;
+    if (attempt === 1) cellSpent.set(armId(arm.name, cell.model), (cellSpent.get(armId(arm.name, cell.model)) ?? 0) + meter.micros);
+    else if (first) retrySpent += meter.micros;
     trial.record.cost_micros = meter.micros;
     const kind = trial.record.termination.kind;
+    let rerun: RerunRecord | undefined = first ? { first, ran: true } : undefined;
+    if (o.rerun && !plan && attempt === 1 && rerunnable(trial.record.termination)) {
+      const firstRecord = { termination: trial.record.termination, usd: meter.micros / 1_000_000, meter_id: binding.meter_id, dir: dir + "-attempt1" };
+      if (retrySpent + allowanceOf(arm.name, cell.model) <= o.rerun.cap) {
+        log(cellName(cell) + ": ended " + kind + ("code" in trial.record.termination ? " (" + trial.record.termination.code + ")" : "") + "; its one rerun runs on the retry reserve");
+        retrySpent += allowanceOf(arm.name, cell.model);
+        rmSync(dir + "-attempt1", { recursive: true, force: true });
+        renameSync(dir, dir + "-attempt1");
+        try {
+          return await session(p, 2, [], firstRecord);
+        } finally {
+          retrySpent -= allowanceOf(arm.name, cell.model);
+        }
+      }
+      log("E_RM_RESERVE " + cellName(cell) + ": ended " + kind + ", and the retry reserve has " + usd(o.rerun.cap - retrySpent) + " left, under the rerun's allowance of " + usd(allowanceOf(arm.name, cell.model)) + "; the cell stays a gap, reported as an infrastructure miss");
+      rerun = { first: firstRecord, ran: false };
+    }
     const capStopped = !plan && (kind === "turn_cap" || kind === "allowance_stop");
     const ended = trial.record.termination;
     const deadline = ended.kind === "missing" && ended.code === "E_BACKGROUND_DEADLINE";
@@ -633,7 +706,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const pvSession: PvSession | null = pvRead ? { parser_sha256: PV_PARSER_SHA256, end_state: endStateOf(pvRead.outcome), reason: pvRead.outcome.state === "infra" ? pvRead.outcome.reason : null, attempts: pvAttempts, web: pvRead.outcome.state === "contaminated" ? pvRead.outcome.web.length : 0, usd: pvAttempts.reduce((s, a) => s + a.usd, 0), wall_s: typeof clock.session_ms === "number" ? clock.session_ms / 1000 : null } : null;
     if (pvSession?.end_state === "missing") log("E_PV_INFRA_MISSING " + cellName(cell) + ": " + pvAttempts.map((a) => a.reason + " (" + a.detail + ")").join(", then ") + "; the session is missing, never 0");
     if (pvSession?.end_state === "contaminated") log("E_PV_WEB_CONTAMINATED " + cellName(cell) + ": " + pvSession.web + " successful web result" + (pvSession.web === 1 ? "" : "s") + "; the session is excluded as missing");
-    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(pvSession ? { pv: pvSession, meter: sessionMeter(meter) } : {}), ...(code ? { scored_turn: code.scored_turn } : {}), ...(ceoOutcome ? { ceo_outcome: ceoOutcome, meter: sessionMeter(meter) } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}), ...(cx ? { codex: { allowance_stops: (meter as Partial<Meter>).allowance_stops ?? 0, prompt_input_sha256: captures.get(armId(arm.name, cell.model))! } } : {}) };
+    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(pvSession ? { pv: pvSession, meter: sessionMeter(meter) } : {}), ...(code ? { scored_turn: code.scored_turn } : {}), ...(ceoOutcome ? { ceo_outcome: ceoOutcome, meter: sessionMeter(meter) } : {}), cost: (via ? via.journal : o.journal) ? meterCost(readJournalLines((via ? via.journal : o.journal)!), binding.meter_id, codex?.model ?? null) : null, ...(rerun ? { rerun } : {}), ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}), ...(cx ? { codex: { allowance_stops: (meter as Partial<Meter>).allowance_stops ?? 0, prompt_input_sha256: captures.get(armId(arm.name, cell.model))! } } : {}) };
     entries.set(reviewCellId(cell), entry);
     wall += trial.record.wall_ms ?? 0;
     ran++;
@@ -643,15 +716,22 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     return entry;
   };
 
-  const per = Math.max(1, Math.floor(o.parallel / Math.max(1, o.arms.length)));
+  const width = o.order ? Math.max(1, ...groups.map((g) => g.length)) : Math.max(1, o.arms.length);
+  const per = Math.max(1, Math.floor(o.parallel / width));
   const capCells: { cell: ReviewCell; how: "stopped" | "unstarted"; usd?: number; wall_s?: number | null }[] = [...carried];
   const unstarted = (from: number) => groups.slice(from).flat().filter((p) => !settled.has(reviewCellId(p.cell))).map((p) => ({ cell: p.cell, how: "unstarted" as const }));
   for (let i = 0; i < groups.length; i += per) {
     const fresh = groups.slice(i, i + per).flat().filter((p) => !settled.has(reviewCellId(p.cell)));
     if (!fresh.length) continue;
-    const worst = fresh.reduce((s, p) => s + allowance(p.cell.model), 0) * (pv ? 2 : 1);
+    const worst = fresh.reduce((s, p) => s + allowanceOf(p.cell.arm, p.cell.model), 0) * (pv ? 2 : 1);
     if (o.cap !== null && spent + worst > o.cap) {
       stops.push({ code: "CAP_STOP", message: "the next round's worst case (" + fresh.length + " sessions at their allowance) does not fit under the cap" });
+      capCells.push(...unstarted(i));
+      break;
+    }
+    const over = Object.entries(o.cellCaps ?? {}).filter(([id, cap]) => (cellSpent.get(id) ?? 0) + fresh.filter((p) => armId(p.cell.arm, p.cell.model) === id).reduce((s, p) => s + allowanceOf(p.cell.arm, p.cell.model), 0) > cap);
+    if (over.length) {
+      stops.push({ code: "CAP_STOP", message: "the next round's worst case does not fit under the cap of " + over.map(([id, cap]) => id + " (" + usd(cellSpent.get(id) ?? 0) + " spent of " + usd(cap) + ")").join(", ") });
       capCells.push(...unstarted(i));
       break;
     }
@@ -693,6 +773,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const modes: Record<string, number> = {};
     let withoutText = 0;
     let held = 0;
+    const reruns = { ran: 0, reserve_out: 0 };
     const capped = { turn_cap: 0, allowance_stop: 0 };
     const cappedUnits = new Set<string>();
     const sessions: CostSession[] = [];
@@ -731,6 +812,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
           if (state === "missing" || state === "contaminated") pvMissing.push(note + "; " + (state === "contaminated" ? "E_PV_WEB_CONTAMINATED: " + e.pv.web + " successful web result" + (e.pv.web === 1 ? "" : "s") : "E_PV_INFRA_MISSING: " + e.pv.attempts.map((a) => a.reason ?? a.outcome).join(", then ")));
         }
         if (e.scored_turn?.rule === "held" && e.parse.kind === "findings") held++;
+        if (e.rerun) reruns[e.rerun.ran ? "ran" : "reserve_out"]++;
         if (ended === "turn_cap" || ended === "allowance_stop") {
           capped[ended]++;
           cappedUnits.add(unit.unit.id);
@@ -768,7 +850,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
       told: pv ? { arm: arm.name, plan_arm: arm.told, lens: PV_LENS, family: pv.family, line: pvArmLine(pv.family, arm.name, pv.fallback), fallback: pv.fallback, template_sha256: PV_TEMPLATE_SHA256, rec_user_sha256: pvRecUser(pv.family).sha256 } : ceo ? { arm: arm.name, plan_arm: arm.told, lens: CEO_LENS, line: ceoArmLine(arm.name as CeoArm), template_sha256: CEO_TEMPLATE_SHA256, rec_user_sha256: REC_USER_SHA256 } : plan ? { arm: arm.told, lens: plan.lens, line: planToldLine(arm.told as PlanArm, plan.lens as PlanLens, arm.toldPrefix), ...(arm.toldPrefix !== undefined ? { prefix: arm.toldPrefix, prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: toldSha, ...(prRun ? { pr_sha256: Object.fromEntries(o.units.map((u) => [u.unit.id, sha256(u.pr_text!)])) } : {}) }, parser_sha256: pv ? PV_PARSER_SHA256 : ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
       ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { ...(ceo || pv ? {} : { completed_without_text: withoutText }), ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
-      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default", ...(ceo || pv ? { context_env: CEO_CONTEXT_ENV } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}), ...(pv && arm.name === PV_GATE_ARM ? { skill_gates: PV_GATE_KEY } : {}) }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts, ...(plan ? {} : { held_rescues: held }),
+      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default", ...(ceo || pv ? { context_env: CEO_CONTEXT_ENV } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}), ...(pv && arm.name === PV_GATE_ARM ? { skill_gates: PV_GATE_KEY } : {}) }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts, ...(plan ? {} : { held_rescues: held }), ...(o.rerun ? { reruns } : {}),
       ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
       ...(codexArm(arm.name) ? { codex: { ...codexArm(arm.name)!, bin: o.codex!.bin, codex_arms_sha256: o.codex!.sha256, prompt_input_sha256: captures.get(id) ?? null } } : {}),
       ...(pv ? { product_value: { end_states: pvStates, retries, lenient, missing: pvMissing, parser_sha256: PV_PARSER_SHA256, template_sha256: PV_TEMPLATE_SHA256 } } : {}),

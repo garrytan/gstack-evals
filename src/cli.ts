@@ -54,6 +54,7 @@ export const COMMANDS: Command[] = [
   { name: "ask-replay", summary: "Ask replay eval: the custody builder, the synthetic set, the arm prompts, the ask ledger, the paid driver under custody, scoring, the free S1 and chain reads, and the keyless dry run (plan 2026-11-15-geva-539).", module: "lanes/ask-replay/cli.ts", owner: "GEVA-539" },
   { name: "day-one", summary: "Day-one usefulness eval: the frozen texts, units under custody, the plan, build and check stages, the simulated owner, the judge, gold, the frozen readings and the keyless dry run.", module: "lanes/day-one/cli.ts", owner: "GEVA-546" },
   { name: "rm-supply", summary: "Review-models eval unit supply: P and B unit gates, SZZ, containment, the visibility read and the draw (plan 2026-11-24-geva-590).", module: "src/trial/review/supply/cli.ts", owner: "GEVA-590" },
+  { name: "rm-run", summary: "Review-models eval pilot path: ledger items with recorded words, the pilot plan and the pilot run (plan 2026-11-24-geva-590).", module: "src/trial/review/rm-run.ts", owner: "GEVA-590" },
   { name: "plan", summary: "Check a preregistration and its commit order before a counted run.", module: "src/runner/prereg/cli.ts", owner: "v1.1" },
   { name: "run", summary: "Run a preregistered Lane B matrix.", module: "src/runner/run.ts", owner: "v1.1" },
   { name: "score", summary: "Grade finished trials from their receipts.", module: "src/grade/cli.ts", owner: "v1.1" },

@@ -98,6 +98,10 @@ export interface HostRig {
   close(): Promise<{ committed: number; unknown: number; lease_id: string | null }>;
   /** What --resume needs to recover this run if the process dies: the lease and the proxy container. */
   recovery: { lease_id: string; proxy_container: string; journal: string } | null;
+  /** A rig composed of several, one lease each (review-units --cell-items): the proxy URL, network, journal and sandbox that serve a session of arm on model at this attempt. Unset, the rig's own. */
+  route?(arm: string, model: string, attempt: number): { baseUrl: string; network: string | null; journal: string | null; sandbox: Sandbox };
+  /** Every proxy journal a composed rig keeps, for the receipts. */
+  journals?: string[];
 }
 
 export interface HostRunInput {
