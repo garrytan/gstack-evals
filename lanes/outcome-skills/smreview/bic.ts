@@ -125,11 +125,14 @@ function rebase(dir: string, bic: string, base: string, files: string[]): { pr: 
     if (git(dir, ["worktree", "add", "--quiet", "--detach", "-f", wt, base]).status !== 0) return { pr: "", hunks: hunkCount(diff), leftOut: [] };
     const leftOut: Array<{ path: string; hunks: number }> = [];
     const apply = (patch: string) => git(wt, ["apply", "-R", "--unidiff-zero", "--reject", "--whitespace=nowarn", "-"], Buffer.from(patch, "latin1")).status === 0;
-    for (const part of diff.split(/^(?=diff --git )/m).filter((p) => p.startsWith("diff --git "))) {
-      const path = /^\+\+\+ b\/(.*)$/m.exec(part)?.[1] ?? /^--- a\/(.*)$/m.exec(part)?.[1] ?? part.slice(11, part.indexOf("\n"));
+    const parts = diff.split(/^(?=diff --git )/m).filter((p) => p.startsWith("diff --git "));
+    const names = git(dir, ["diff", "--name-only", "-z", "--no-renames", bic + "^", bic, "--", ...files]).stdout.split("\0").filter(Boolean);
+    if (names.length !== parts.length) throw new Error("E_SR_SOURCE the BIC's diff has " + parts.length + " file parts but " + names.length + " names");
+    for (const [i, part] of parts.entries()) {
+      const path = names[i]!;
       const rej = join(wt, path + ".rej");
       let ok = apply(part);
-      if (!ok && !existsSync(rej) && /^--- \/dev\/null$/m.test(part)) ok = apply(part.replace(/^new file mode .*\n/m, "").replace(/^--- \/dev\/null$/m, "--- a/" + path));
+      if (!ok && !existsSync(rej) && /^--- \/dev\/null$/m.test(part)) ok = apply(part.replace(/^new file mode .*\n/m, "").replace(/^--- \/dev\/null$/m, (/^\+\+\+ .*$/m.exec(part)?.[0] ?? "").replace(/^\+\+\+ ("?)b\//, "--- $1a/")));
       if (existsSync(rej)) { leftOut.push({ path, hunks: hunkCount(readFileSync(rej, "latin1")) }); rmSync(rej); }
       else if (!ok) leftOut.push({ path, hunks: hunkCount(part) });
     }

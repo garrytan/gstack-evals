@@ -299,3 +299,19 @@ test("sr analyze refuses a catch record that is no session in --plan", async () 
   expect(err.join("\n")).toContain("E_SR_INPUT catch o__r-9|" + SR_MODELS[0] + "|N|0 is no session in --plan");
 });
 
+
+test("a path with a space keeps its rejected hunks out of the change under review and lists them; a created spaced file still reverses", () => {
+  const two = (a: string, b: string) => "package flag\n\nfunc A() {\n\tset(" + a + ")\n}\n\nfunc B() {\n\tset(" + b + ")\n}\n";
+  const s = story([
+    (d) => { w(d, "flag/flag.go", runGo("true")); w(d, "flag/my file.go", two("1", "1")); },
+    (d) => { w(d, "flag/flag.go", runGo("false")); w(d, "flag/my file.go", two("2", "2")); w(d, "flag/new file.go", "package flag\n\nfunc C() {\n\tset(3)\n}\n"); },
+    (d) => { w(d, "flag/my file.go", two("2", "9")); w(d, "flag/new file.go", "package flag\n\nfunc C() {\n\tset(3)\n}\n\nfunc D() {}\n"); },
+  ], (d) => w(d, "flag/flag.go", runGo("true")), "flag/flag.go");
+  const u = applyBic(s, "o__r-space");
+  expect(u.record.drop).toBeNull();
+  expect(u.record.left_out).toEqual([{ path: "flag/my file.go", hunks: 1 }]);
+  expect(u.pr).not.toContain(".rej");
+  expect(u.pr).toContain("+++ b/flag/new file.go");
+  expect(u.pr).toContain("+\tset(2)");
+  expect(u.pr).toContain("+\tset(3)");
+});
