@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# GEVA-589 second re-pilot, missing Opus session (Captain 08:50Z), at a1af71d5 (change post, change 3), from the re-pilot script: the cso arm on the 3 pilot units, Opus 5.5 then
+# particle-1 per unit, one session at a time, on item cso3-pilot-b ($22.31; the room is its cap less every session under ~/repilot2, all on this item). No session starts once this re-pilot own spend plus
+# its planned cost (Opus $3.00, particle-1 $0.20) would pass the $10 spend stop. Each rerun spend cap is the item room left.
+set -uo pipefail
+export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
+L=$HOME/cso3-ledger; export GSTACK_EVALS_LEDGER=$L/ledger.sqlite GSTACK_EVALS_LEDGER_RECORD=$L/record
+for k in ANTHROPIC_API_KEY OPENROUTER_API_KEY; do export $k="$(cat $HOME/.keys/$k)"; done
+unset OPENAI_API_KEY CSO_READOUT_KEY
+G=$HOME/work/gstack-evals; cd $G; GE=$G/bin/gstack-evals
+export CSO_PLAN=longlist
+S=$HOME/repilot2; mkdir -p $S/units
+CAP=22.31; STOP=10; declare -A PLAN=([opus]=3.00 [particle]=0.20)
+step() { echo "== $1 $(date -u +%FT%TZ)"; }
+step head; git log --oneline -1; echo "dirty $(git status --porcelain --untracked-files=all | wc -l)"
+UNITS=(getkin__kin-openapi-ghsa-p6wj-qrr4-pgh5); echo "units ${#UNITS[@]}: ${UNITS[*]}"
+step admit
+[ -e $S/admitted ] || { GSTACK_EVALS_GH_BIN=$HOME/bin/ghshim sg docker -c "$GE rig admit --item cso3-pilot-b --proof direct --prereg wiki/plans/2026-11-24-geva-589-cso-longlist-change/README.md --run cso3-pilot-b --check-run $(cat $HOME/ci-run) --repo garrytan/gstack-evals" && touch $S/admitted || { echo "admit failed"; exit 1; }; }
+step serve
+GW=$(sg docker -c "docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}'")
+MID=$(cat $HOME/machine-id)
+setsid -f $GE outcome serve --run cso3-pilot-b --envelope-host $MID --stage cso3-pilot-b=cso:cso --host $GW --dir $S/driver --planned 6 --reruns 3 --cso-allowance claude-opus-5-5=16 > $S/serve-b.log 2>&1 < /dev/null
+for i in $(seq 60); do grep -q "^stage=" $S/serve-b.log && break; grep -q '^E_' $S/serve-b.log && break; sleep 2; done
+cat $S/serve-b.log
+export CSO_CONTROL=$(sed -n 's/^control=//p' $S/serve-b.log) CSO_PROXY=$(sed -n 's/^stage=.* proxy=//p' $S/serve-b.log)
+[ -n "$CSO_CONTROL" ] && [ -n "$CSO_PROXY" ] || { echo "driver did not start"; exit 1; }
+export CSO_WORK=$HOME/units CSO_HOME=$HOME/homes/cso CSO_STAGE=rerun-pilot CSO_OUT=$S/sessions
+alive() { pgrep -f "[o]utcome serve --run cso3-pilot-b" > /dev/null; }
+spent() { find $S/sessions -name session.json -print0 2>/dev/null | xargs -0 -r jq -s '[.[].cost_usd // 0] | add // 0'; }
+n=0; stop=""
+for U in "${UNITS[@]}"; do
+  for m in opus; do
+    n=$((n + 1))
+    echo "[\"$U\"]" > $S/units/$U.json
+    f=$(spent); f=${f:-0}
+    if awk -v f=$f -v p=${PLAN[$m]} -v s=$STOP 'BEGIN { exit !(f + p > s) }'; then stop="spend stop: \$$f spent, next $m session planned at \$${PLAN[$m]}"; break 2; fi
+    ROOM=$(awk -v c=$CAP -v f=$f 'BEGIN { printf "%.2f", c - f }')
+    extra=""; [ $m = opus ] && extra="--allowance 16"
+    step "session $n $U cso $m spent $f room $ROOM"
+    t0=$(date +%s)
+    sg docker -c "$GE cso rerun --arm cso --model $m --units $S/units/$U.json --spend-cap $ROOM $extra"; rc=$?
+    echo "rerun exit $rc wall $(( $(date +%s) - t0 ))s session $n"
+    [ $rc = 10 ] && { stop="cap stop on $m at session $n"; break 2; }
+    [ $rc != 0 ] && ! alive && { stop="driver gone after session $n"; break 2; }
+  done
+done
+[ -n "$stop" ] && echo "PILOT STOPPED: $stop"
+step stop
+curl -s -X POST $CSO_CONTROL/stop; sleep 15; alive && pkill -TERM -f "[o]utcome serve --run cso3-pilot-b"; sleep 10; tail -5 $S/serve-b.log
+$GE ledger status --item cso3-pilot-b 2>&1 | head -12
+step sessions-file
+find $S/sessions/rerun-pilot -name session.json | sort | xargs -I{} jq -c . {} > $S/sessions.jsonl; echo "sessions $(wc -l < $S/sessions.jsonl)"
+jq -c '{unit, model, end, cost_usd, wall_sec, loaded: .exposure.loaded, ran: .exposure.procedure_ran, findings_submitted: .exposure.findings_submitted}' $S/sessions.jsonl
+echo PILOT_DONE

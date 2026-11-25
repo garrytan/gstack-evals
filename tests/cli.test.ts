@@ -61,6 +61,14 @@ describe("gstack-evals dispatcher", () => {
     }
   });
 
+  test("a lane's cap stop (10) and containment stop (12) reach the shell, and any other code is an internal error", async () => {
+    const cso = COMMANDS.find((c) => c.name === "cso")!;
+    for (const exit of [10, 12]) expect(await call(["cso"], fakeRoot({ [cso.module]: "export async function main() { return " + exit + "; }\n" }))).toMatchObject({ code: exit, err: "" });
+    const odd = await call(["cso"], fakeRoot({ [cso.module]: "export async function main() { return 7; }\n" }));
+    expect(odd.code).not.toBe(7);
+    expect(odd.err).toMatch(/^E_INTERNAL .*main returned 7/);
+  });
+
   test("a built command's module gets the remaining arguments and sets the exit code", async () => {
     const skillEval = COMMANDS.find((c) => c.name === "skill-eval")!;
     const root = fakeRoot({ VERSION: "0.0.1\n", [skillEval.module]: "export async function main(argv) { console.error('args ' + argv.join(' ')); return argv.length; }\n" });

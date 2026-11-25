@@ -26,8 +26,9 @@ import { csoFail, JUDGE_MAX_OUTPUT_D, type CsoPrereg } from "../prereg.ts";
 import { judgeRoutes, LABELLER_MAX_OUTPUT, routeClients, type JudgeClient, type Transport } from "./client.ts";
 
 export const JUDGE_ITEM = "cso-judge";
-/** The ledger item the judge leases: cso2-judge under the rerun plan (GEVA-583 prereg section 9), else cso-judge. */
-export const judgeItem = (p: CsoPrereg): string => (p.rerun ? "cso2-judge" : JUDGE_ITEM);
+/** The ledger item the judge leases: the overlay's judge item (cso2-judge under the rerun plan, GEVA-583 prereg section 9;
+ *  cso3-judge under the long-list plan), else cso-judge. */
+export const judgeItem = (p: CsoPrereg): string => (p.rerun ? Object.keys(p.items).find((k) => k.endsWith("-judge"))! : JUDGE_ITEM);
 const VERTEX = /^(google|google vertex|google-vertex)$/i;
 const RETRY: RetryBudget = { attempts: 3, elapsed_ms: 900_000 };
 /** The fields the metering proxy adds before it prices a request, sent up front so the worst case priced here is the one
