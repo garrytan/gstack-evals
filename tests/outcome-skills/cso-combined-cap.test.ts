@@ -33,4 +33,5 @@ test("the check reads the named programs from the record, adds the run's spend a
   expect(run("31.29")).toBe(0);
   expect(run("31.31")).toBe(10);
   expect(main(["--cap", "170"])).toBe(2);
+  expect(main(["--cap", "170", "--programs", "cso9", "--next", "3", "--ledger-record", record])).toBe(2);
 });

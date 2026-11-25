@@ -2,9 +2,10 @@
 // GEVA-589 change 3: the counted run's check that programs cso3 and cso3b together stay inside the Captain's $170, before
 // each session. It adds the committed spend of the programs named (from the ledger record), the run's own spend so far
 // with its running sessions' allowances, the room held for later work such as counted judging, and the next session's
-// allowance. Exit 0 admits the next session; exit 10 is a cap stop.
+// allowance. Exit 0 admits the next session; exit 10 is a cap stop; exit 2 is a usage error or a ledger record it can't read.
 import { envelopeStatus } from "../../../src/runner/ledger/envelope.ts";
 import { recordPath } from "../../../src/runner/ledger/paths.ts";
+import { LedgerError } from "../../../src/runner/ledger/record.ts";
 
 const D = 1_000_000;
 
@@ -32,7 +33,14 @@ export function main(argv: string[]): number {
     console.error("E_USAGE usage: bun lanes/outcome-skills/cso/combined-cap.ts --cap <usd> --programs <a,b> --next <usd> [--spent <usd>] [--reserve <usd>] [--ledger-record <dir>]");
     return 2;
   }
-  const r = combinedCheck(recordPath(get("--ledger-record")).path, o);
+  let r: { ok: boolean; line: string };
+  try {
+    r = combinedCheck(recordPath(get("--ledger-record")).path, o);
+  } catch (error) {
+    if (!(error instanceof LedgerError)) throw error;
+    console.error(error.code + " " + error.message);
+    return 2;
+  }
   (r.ok ? console.log : console.error)(r.line);
   return r.ok ? 0 : 10;
 }
