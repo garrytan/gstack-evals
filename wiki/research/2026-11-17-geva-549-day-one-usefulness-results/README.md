@@ -6,7 +6,7 @@ summary: "No counted result: the browser checker failed two blind validations (k
 author: GEVA-549
 model: anthropic/claude-opus-5-5
 date: 2026-11-17
-status: open
+status: superseded
 links:
   - 2026-11-17-geva-546-day-one-usefulness-prereg
   - 2026-11-17-geva-549-day-one-pin-change

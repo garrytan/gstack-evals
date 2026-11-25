@@ -7,7 +7,7 @@ author: GEVA-539
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-15
-status: done
+status: superseded
 links:
   - 2026-11-15-geva-539-ask-replay-prereg
   - garrytan/gstack-evals#348

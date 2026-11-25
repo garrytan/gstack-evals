@@ -7,7 +7,7 @@ author: GEVA-142
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-02
-status: done
+status: superseded
 links:
   - 2026-11-01-geva-115-planning-ceo-v2-admission-prereg
   - 2026-11-01-geva-102-planning-r1a-pilot-stop

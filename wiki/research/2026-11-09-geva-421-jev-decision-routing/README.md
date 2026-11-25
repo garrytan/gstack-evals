@@ -7,7 +7,7 @@ author: GEVA-421
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-09
-status: done
+status: superseded
 links:
   - https://x.com/Mr_Buzzoni/status/2104783226833186920
   - https://github.com/garrytan/gstack/tree/b6155921a564ba9ec2470fd2cb3894c05e2c2d13
