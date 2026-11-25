@@ -274,6 +274,13 @@
         "rule": "the re-pilot runs inside cso3-pilot's remaining cap; it starts no session once its own spend plus that session's planned cost would pass $10"
       }
     },
+    "cso3-pilot-b": {
+      "central": 5,
+      "cap": 18.31,
+      "spend_stop": 10,
+      "runs": "one session at a time",
+      "rule": "the a1af71d5 re-pilot only (change 3); its own item because the cso3-pilot run's driver folder was lost with the second VM, so the ledger refuses that run; the cap is the room left on cso3-pilot, which takes no more spend"
+    },
     "cso3-main": {
       "central": 62,
       "cap": 80,

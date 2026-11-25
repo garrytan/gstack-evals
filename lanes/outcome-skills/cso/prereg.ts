@@ -28,7 +28,7 @@ export const RERUN_ITEMS = ["cso2-pilot", "cso2-main", "cso2-judge", "cso2-vm", 
 /** The long-list try (GEVA-589): the rerun's plan at a later gstack pin, longlist.json read the same way when CSO_PLAN=longlist. */
 export const LONGLIST_POST_ID = "2026-11-24-geva-589-cso-longlist-change";
 export const LONGLIST_PATH = join(import.meta.dir, "..", "..", "..", "wiki", "plans", LONGLIST_POST_ID, "longlist.json");
-export const LONGLIST_ITEMS = ["cso3-pilot", "cso3-main", "cso3-judge", "cso3-vm", "cso3-reserve"] as const;
+export const LONGLIST_ITEMS = ["cso3-pilot", "cso3-pilot-b", "cso3-main", "cso3-judge", "cso3-vm", "cso3-reserve"] as const;
 const OVERLAYS: Record<string, { path: string; items: readonly string[] }> = { rerun: { path: RERUN_PATH, items: RERUN_ITEMS }, longlist: { path: LONGLIST_PATH, items: LONGLIST_ITEMS } };
 
 /** The dated pre-data deviations, as the deviations post lists them: a, b, CV5 and CV6 in the Captain's approvals record

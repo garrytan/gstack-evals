@@ -16,7 +16,7 @@ export const CSO_STAGES: Record<string, string[]> = { "cso-smoke": tag(["none", 
 /** The cso session items the driver serves under the plan read: the parent's, plus the overlay's pilot and main items,
  *  which run the new cso arm only. */
 export const csoStages = (p: CsoPrereg = loadCsoPrereg()): Record<string, string[]> =>
-  p.rerun ? { ...CSO_STAGES, ...Object.fromEntries(Object.keys(p.items).filter((k) => /-(pilot|main)$/.test(k)).map((k) => [k, tag(["cso"])])) } : CSO_STAGES;
+  p.rerun ? { ...CSO_STAGES, ...Object.fromEntries(Object.keys(p.items).filter((k) => /-(pilot|main)(-[a-z])?$/.test(k)).map((k) => [k, tag(["cso"])])) } : CSO_STAGES;
 /** The Claude Code models the cso stages serve, as sessions name them to the driver. */
 export const CSO_DRIVER_MODELS: Record<string, CsoModel> = { "claude-opus-5-5": "opus", "particle-ai/particle-1": "particle" };
 

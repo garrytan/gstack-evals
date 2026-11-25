@@ -18,7 +18,7 @@ links:
   - https://github.com/garrytan/gstack/tree/a1af71d52d7d4975e8aca40c54f9afa695214980/lib/cso
   - lanes/outcome-skills/cso/
 attachments:
-  - 14f7ce584d8fb97719a241c4833d081c36e14ff6277e3440df4ba482c5576c65  longlist.json
+  - deed76be8a8b1657da7499b772869361673bce2531ce1f915464510693a1edb4  longlist.json
 ---
 
 # Dated plan change: the last /cso try with the full finding list
@@ -35,7 +35,7 @@ gstack's maintainer chose to make the helper enforce the stop rule instead of as
 
 What follows from this change:
 
-- **Re-pilot.** The same 3 units and 6 sessions at a1af71d5, with the same five checks, inside the $18.31 left on cso3-pilot, with a $10 spend stop on the re-pilot's own spend. Both earlier pilots' records stay as they are, and the results post reports all three.
+- **Re-pilot.** The same 3 units and 6 sessions at a1af71d5, with the same five checks, with a $10 spend stop on the re-pilot's own spend. It spends from its own ledger item, cso3-pilot-b, capped at the $18.31 left on cso3-pilot (the Captain's approval, 2026-11-25 07:10Z). The ledger binds an item to one run and that run to one driver folder, and the cso3-pilot run's folder was lost when the second VM was destroyed, so the ledger refuses to serve that run again; cso3-pilot takes no more spend. Both earlier pilots' records stay as they are, and the results post reports all three.
 - **The go for the counted run.** Change 2's rule that the counted run starts only on a long list is withdrawn. The Captain's ruling (2026-11-25): "Run the counted run at that pin whatever the pilot shows, inside cso3-main's $62 and the $90 envelope. Report the list length beside the verdict." This is the last build. Checks 1, 3, 4 and 5 (the procedure ran, the ranked report is the scored text, the judge's pilot gate, every session scored with the print check) still gate the counted run under R111; check 2 and the list length print beside the verdict and gate nothing.
 - **Judge check.** The rows rest on the judge's named calls, so before any counted number counts, the judge was checked on the 104 check reports (the parent's 92 check reports, 24 of them oracle or stock anchors, and the 12 cso reports from the first two pilots; masked and redacted, with the judge's outputs never shown) against a third model under R126. Gemini 4 Neon failed its known-answer anchors on both of its passes (oracle anchors named 2 and then 1 of 12) and was replaced, as the Captain and FOUN-32 ruled before the run. Grok 4.7, with the frozen pass-2 prompt, anchor gate and kappa bar, passed: kappa 0.954 (95% interval 0.879 to 1.000) on all 104, oracle anchors named 11 of 12, stock anchors left unnamed 12 of 12. The judge itself named 10 of 12 oracle anchors and none of the 12 stock anchors. Every row that rests on this check says: "judge checked against Grok 4.7, a third-party model family, not against people; Gemini 4 Neon failed its known-answer anchors and was replaced". The pooled gold check in section 4 still runs as frozen.
 - **Money.** cso3-main stays at $62 inside the $90 envelope, and a cap stop is reported, never retried.

@@ -36,6 +36,7 @@ test("each plan's driver stages and judge item are its own", () => {
   expect(csoStages(parent)).toEqual(CSO_STAGES);
   const s = csoStages(longlist);
   expect(s["cso3-pilot"]).toEqual(["cso:cso"]);
+  expect(s["cso3-pilot-b"]).toEqual(["cso:cso"]);
   expect(s["cso3-main"]).toEqual(["cso:cso"]);
   expect(Object.keys(s)).not.toContain("cso2-main");
   expect(Object.keys(csoStages(rerun))).toEqual([...Object.keys(CSO_STAGES), "cso2-pilot", "cso2-main"]);
