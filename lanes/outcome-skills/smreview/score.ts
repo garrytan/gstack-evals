@@ -29,4 +29,4 @@ export async function srScoreSession(o: ScoreIn & { arm: SrArm; transcript: stri
   return { ...c, sr: { exposure: t || cc ? srExposure(o.arm, t ?? [], cc ?? []) : null, checks: entries.length, false_alarms: falseAlarms(entries), cap_stop: sess.cap_stop === true } };
 }
 
-export const sessionOf = (c: SrCatch, arm: SrArm): SrSession => ({ unit: c.unit, repo: c.repo, model: c.model!, arm, score: c.score === null ? null : c.score ? 1 : 0, gap: c.gap, exposure: c.sr.exposure, false_alarms: c.sr.false_alarms, checks: c.sr.checks, cap_stop: c.sr.cap_stop });
+export const sessionOf = (c: SrCatch, arm: SrArm): SrSession => ({ unit: c.unit, repo: c.repo, model: c.model!, arm, score: c.score === null ? null : c.score ? 1 : 0, gap: c.gap, exposure: c.sr.exposure, false_alarms: c.sr.false_alarms, checks: c.sr.checks, cap_stop: c.sr.cap_stop, gap_reason: "gap_reason" in c ? (c.gap_reason as string | null) : null });

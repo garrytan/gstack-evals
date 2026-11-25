@@ -4694,7 +4694,7 @@ export const CODES = {
   E_SR_SOURCE: {
     exit: 2,
     meaning: "The State Machines review eval could not read a pinned source (lanes/outcome-skills/smreview): a SWE-rebench V2.1 parquet file or its tool checkout is missing or is not the pinned file, a pool row is missing from its source or is not the row the pool recorded, a V2.1 row has no test command, log parser or digest-pinned image, or a repository clone lacks a commit.",
-    fix: "Fetch the pinned files again (sr source fetch), point --cache, --export, --v21 and --tool at the pinned copies, and rerun. A pool row that no longer matches its source means the source moved; the pool is frozen in the preregistration.",
+    fix: "Fetch the pinned files again (gstack-evals sr fetch --v21 <dir>), point --cache, --export, --v21 and --tool at the pinned copies, and rerun. A pool row that no longer matches its source means the source moved; the pool is frozen in the preregistration.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: true,

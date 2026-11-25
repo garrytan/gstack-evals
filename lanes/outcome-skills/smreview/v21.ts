@@ -76,7 +76,7 @@ export function v21Rows(cache: string): V21Row[] {
   const out: V21Row[] = [];
   for (const [stem, want] of Object.entries(V21.files)) {
     const pq = join(cache, stem + ".parquet");
-    if (!existsSync(pq) || sha(readFileSync(pq)) !== want) srFail("E_SR_SOURCE", pq + " is missing or is not the pinned file; run sr source fetch");
+    if (!existsSync(pq) || sha(readFileSync(pq)) !== want) srFail("E_SR_SOURCE", pq + " is missing or is not the pinned file; run sr fetch --v21 <dir>");
     for (const line of readFileSync(join(cache, stem + ".jsonl"), "utf8").split("\n")) if (line) out.push(JSON.parse(line));
   }
   return out;

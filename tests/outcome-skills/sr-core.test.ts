@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { analyse, cells, complete, look, verdictAt, WIDEN_DELTA, type SrSession, type UnitFacts } from "../../lanes/outcome-skills/smreview/analysis.ts";
 import { GSTACK, SR_ARMS, SR_MODELS, SUFFIX, TEXT, srLimits, srTaskTurn } from "../../lanes/outcome-skills/smreview/arms.ts";
-import { findBic, stripped, trivial, type BicRecord } from "../../lanes/outcome-skills/smreview/bic.ts";
+import { addedLines, findBic, fixLines, stripped, trivial, type BicRecord } from "../../lanes/outcome-skills/smreview/bic.ts";
 import { detectStateMachine } from "../../lanes/outcome-skills/smreview/detect.ts";
 import { srDraw, srOrder } from "../../lanes/outcome-skills/smreview/draw.ts";
 import { srExposure, SPECIALIST, ARMY } from "../../lanes/outcome-skills/smreview/exposure.ts";
@@ -213,4 +213,17 @@ test("labels a results post lists as passed count as both readers' yes", () => {
   const f = labelsFromPublished("# note\nunit\tmonth\na\t2025-06\nb\t2025-07\n", new Set(["a"]), "units.tsv");
   expect(Object.keys(f.labels)).toEqual(["a"]);
   expect(f.labels.a!.astra!.state_shaped).toBe("yes");
+});
+
+test("bic diff parsers read ++ and -- lines inside a hunk as code, not headers", () => {
+  const add = "diff --git a/x.c b/x.c\n--- a/x.c\n+++ b/x.c\n@@ -0,0 +1,3 @@\n+int a;\n+++i;\n+foo(pending);\n";
+  expect([...addedLines(add)]).toEqual(["x.c:1", "x.c:2", "x.c:3"]);
+  const del = "diff --git a/q.sql b/q.sql\n--- a/q.sql\n+++ b/q.sql\n@@ -1,3 +0,0 @@\n-select 1;\n--- note\n-select 2;\n";
+  expect(fixLines(del).get("q.sql")!.deleted).toEqual([1, 2, 3]);
+});
+test("exposure reads a ~ path and a Bash read of the specialist and the Review Army section", () => {
+  const use = (name: string, input: Record<string, unknown>) => ({ type: "assistant", message: { content: [{ type: "tool_use", name, input }] } });
+  expect(srExposure("G+", [use("Read", { file_path: "~/.claude/skills/gstack/review/specialists/state-machines.md" })]).specialist_read).toBe(true);
+  const b = srExposure("G+", [use("Bash", { command: "cat ~/.claude/skills/gstack/review/sections/review-army.md; sed -n 1,80p $HOME/.claude/skills/gstack/review/specialists/state-machines.md" })]);
+  expect([b.army, b.specialist_read, b.ran]).toEqual([true, true, true]);
 });

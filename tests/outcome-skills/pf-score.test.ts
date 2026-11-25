@@ -143,3 +143,18 @@ test.skipIf(!HAS_DOCKER)("scoreSession: an S whose root is not the unit's base c
   const passed: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: f.file("gap.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "P", gap: "E_PF_ARM", gap_reason: "head_mismatch" }), exec: none });
   expect(passed).toMatchObject({ score: null, gap: "E_PF_ARM", gap_reason: "head_mismatch" });
 });
+
+// Value: protects=the State Machines review eval's two-commit session tree (section 2 of its plan); fails_when=a review session whose S is rooted at origin with base_commit in its history is gapped, or one rooted elsewhere or missing base_commit from its history scores; why_new=review sessions sit on origin plus the change under review, so S's root is origin, not base_commit; seam=score.ts scoreSession's onBase before trees.ts buildTrees; no_claim=the reading of S's changes from base_commit (trees.ts)
+test.skipIf(!HAS_DOCKER)("scoreSession: a review session scores when S is rooted at origin with base_commit in its history, and is base_mismatch otherwise", async () => {
+  const f = fixture();
+  const none = () => { throw new Error("no run expected"); };
+  const rec = (name: string, origin: unknown, base: unknown) => f.file(name, { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "G+", origin, base_commit: base, gap: null, wrapup_end: "limit_turns", forced: [] });
+  const ok: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: rec("r-ok.json", f.base, f.base), exec: none });
+  expect(ok).toMatchObject({ score: 0, gap: null });
+  const root: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: rec("r-root.json", "0".repeat(40), f.base), exec: none });
+  expect(root).toMatchObject({ score: null, gap: "E_PF_ARM", gap_reason: "base_mismatch" });
+  const empty = spawnSync("git", ["-C", f.repo, "mktree"], { input: "", encoding: "utf8" }).stdout.trim();
+  const away = spawnSync("git", ["-C", f.repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", empty, "-m", "not in S"], { encoding: "utf8" }).stdout.trim();
+  const off: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session: rec("r-off.json", f.base, away), exec: none });
+  expect(off).toMatchObject({ score: null, gap: "E_PF_ARM", gap_reason: "base_mismatch" });
+});

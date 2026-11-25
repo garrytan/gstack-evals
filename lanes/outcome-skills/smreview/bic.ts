@@ -60,18 +60,21 @@ export const trivial = (line: string): boolean => {
 export function fixLines(patch: string): Map<string, { deleted: number[]; context: number[] }> {
   const out = new Map<string, { deleted: number[]; context: number[] }>();
   let cur: { deleted: number[]; context: number[] } | null = null;
-  let old = 0, added = false;
+  let old = 0, added = false, left = 0, right = 0;
   for (const raw of patch.split("\n")) {
+    if (left > 0 || right > 0) {
+      if (!cur) continue;
+      if (raw.startsWith("-")) { cur.deleted.push(old); old += 1; left -= 1; added = false; }
+      else if (raw.startsWith("+")) { if (!added) cur.context.push(old - 1, old); added = true; right -= 1; }
+      else if (raw.startsWith(" ") || raw === "") { old += 1; left -= 1; right -= 1; added = false; }
+      continue;
+    }
     const d = /^diff --git a\/(\S+) b\/(\S+)$/.exec(raw);
     if (d) { cur = { deleted: [], context: [] }; out.set(d[1]!, cur); continue; }
     if (!cur) continue;
     if (raw.startsWith("new file mode")) { cur.deleted.length = 0; cur.context.length = 0; cur = null; continue; }
-    const h = /^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@/.exec(raw);
-    if (h) { old = Number(h[1]); added = false; continue; }
-    if (raw.startsWith("--- ") || raw.startsWith("+++ ")) continue;
-    if (raw.startsWith("-")) { cur.deleted.push(old); old += 1; added = false; }
-    else if (raw.startsWith("+")) { if (!added) cur.context.push(old - 1, old); added = true; }
-    else if (raw.startsWith(" ")) { old += 1; added = false; }
+    const h = /^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@/.exec(raw);
+    if (h) { old = Number(h[1]); left = h[2] === undefined ? 1 : Number(h[2]); right = h[3] === undefined ? 1 : Number(h[3]); added = false; }
   }
   return out;
 }
@@ -91,14 +94,19 @@ function blame(dir: string, base: string, path: string, lines: number[]): Array<
 /** New-side line numbers a diff adds, per file, keyed path:line. */
 export function addedLines(diff: string): Set<string> {
   const out = new Set<string>();
-  let path = "", n = 0;
+  let path = "", n = 0, left = 0, right = 0;
   for (const raw of diff.split("\n")) {
-    const p = /^\+\+\+ b\/(.*)$/.exec(raw);
-    if (p) { path = p[1]!; continue; }
-    const h = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
-    if (h) { n = Number(h[1]); continue; }
-    if (raw.startsWith("+") && !raw.startsWith("+++") && path) out.add(path + ":" + n++);
-    else if (raw.startsWith(" ")) n++;
+    if (left > 0 || right > 0) {
+      if (raw.startsWith("+")) { if (path) out.add(path + ":" + n); n++; right -= 1; }
+      else if (raw.startsWith("-")) left -= 1;
+      else if (raw.startsWith(" ") || raw === "") { n++; left -= 1; right -= 1; }
+      continue;
+    }
+    if (raw.startsWith("diff --git ")) { path = ""; continue; }
+    const p = /^\+\+\+ (?:b\/(.*)|\/dev\/null)$/.exec(raw);
+    if (p) { path = p[1] ?? ""; continue; }
+    const h = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(raw);
+    if (h) { n = Number(h[2]); left = h[1] === undefined ? 1 : Number(h[1]); right = h[3] === undefined ? 1 : Number(h[3]); }
   }
   return out;
 }

@@ -28,6 +28,8 @@ The 221 come from 195 repositories: Python 102, Go 43, TypeScript 27, JavaScript
 
 **Why no context lines.** With git's default 3 lines of context, 191 of 244 drops at the last gate kept some hunks but none of the bug's lines, because later commits had edited the lines around them. Reapplying with no context took the known and V2.1 rows from 139 passes to 201 and kept every one of the 139 that passed before. Rows dropped before the reapply step (the first three gates) don't depend on it, so their records were carried over from the first count rather than recomputed.
 
+**A parser fix after the count.** Review found that bic.ts's diff readers took a line inside a hunk that starts with `+++` or `--- ` (code such as `++i;` at the start of a line, or a `-- ` comment) for a file header, which shifts later line numbers. The fix reads each hunk by its own line counts. Rerun on all 679 fix patches, the lines the BIC search reads come out the same, so every BIC, share and size above stands. The other reader, which matches the change under review's added lines against the BIC's blamed lines, changes only for an added line whose code starts with `++` at its first column; that side was not recounted, because the host clones were deleted after the count. The walk rebuilds each drawn unit's change and reports any unit whose gate result moves.
+
 ## Labels: 36 in hand, 185 to buy
 
 All 36 known and labelled units that pass the BIC gates already carry both labellers' defect and state-shaped answers: 28 from the state machines eval's records and 12 from pstack-checks' published test units (7 of them in both). All 36 are state-shaped. The 185 V2.1 units have no labels. At pstack-checks' measured price ($19.89 for 279 label packets) they cost about $13.

@@ -12,7 +12,7 @@ import type { SrArm } from "./arms.ts";
 import type { SrExposure } from "./exposure.ts";
 
 export type CellArm = SrArm | "G";
-export interface SrSession { unit: string; repo: string; model: string; arm: SrArm; score: 0 | 1 | null; gap: string | null; exposure: SrExposure | null; false_alarms: number; checks: number; cap_stop?: boolean }
+export interface SrSession { unit: string; repo: string; model: string; arm: SrArm; score: 0 | 1 | null; gap: string | null; exposure: SrExposure | null; false_alarms: number; checks: number; cap_stop?: boolean; gap_reason?: string | null }
 export interface UnitFacts { id: string; repo: string; detected: boolean; pr_lines: number }
 export const SMALL_PR = 10;
 export const READINGS = ["primary", "gaps_as_miss", "arm_refusal_as_miss", "no_small_pr", "detector_fires", "detector_silent"] as const;
@@ -79,7 +79,7 @@ export function pairs(c: ReturnType<typeof cells>, a: CellArm, b: CellArm, model
 
 export interface SrContrast { a: CellArm; b: CellArm; role: string; models: string; n: number; n_repos: number; delta: number; ci95: [number, number] | null; p: number; verdict: Verdict | null; readings: Record<string, { n: number; delta: number; ci95: [number, number] | null; p: number }> }
 export interface SrAnalysis {
-  schema: "sr-analysis.v1"; units: number; sessions: number; gaps: Record<string, number>;
+  schema: "sr-analysis.v1"; units: number; sessions: number; gaps: Record<string, number>; gaps_by_arm: Record<string, number>;
   rates: Array<{ model: string; arm: SrArm; k: number; n: number; rate: number | null; ci95: [number, number] }>;
   contrasts: SrContrast[]; exposure: Array<{ model: string; arm: SrArm; sessions: number; army: number; ran: number }>;
   false_alarms: Array<{ model: string; arm: SrArm; sessions: number; checks: number; false_alarms: number }>;
@@ -105,9 +105,15 @@ export function analyse(sessions: readonly SrSession[], units: readonly UnitFact
   }
   const primary = contrasts[0]!;
   const gaps: Record<string, number> = {};
-  for (const s of sessions) if (s.gap) gaps[s.gap] = (gaps[s.gap] ?? 0) + 1;
+  const gaps_by_arm: Record<string, number> = {};
+  for (const s of sessions) {
+    if (!s.gap) continue;
+    gaps[s.gap] = (gaps[s.gap] ?? 0) + 1;
+    const k = [s.model, s.arm, s.gap + (s.gap_reason ? ":" + s.gap_reason : "")].join("|");
+    gaps_by_arm[k] = (gaps_by_arm[k] ?? 0) + 1;
+  }
   return {
-    schema: "sr-analysis.v1", units: new Set(sessions.map((s) => s.unit)).size, sessions: sessions.length, gaps,
+    schema: "sr-analysis.v1", units: new Set(sessions.map((s) => s.unit)).size, sessions: sessions.length, gaps, gaps_by_arm,
     rates: by((model, arm, ss) => { const sc = ss.filter((s) => s.score !== null); const k = sc.filter((s) => s.score === 1).length; return { model, arm, k, n: sc.length, rate: sc.length ? k / sc.length : null, ci95: wilson(k, sc.length) }; }),
     contrasts,
     exposure: by((model, arm, ss) => ({ model, arm, sessions: ss.length, army: ss.filter((s) => s.exposure?.army).length, ran: ss.filter((s) => s.exposure?.ran).length })),

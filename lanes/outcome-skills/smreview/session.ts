@@ -48,10 +48,11 @@ export interface SrRunInput {
   homes: Partial<Record<"G+" | "G0", string>>; harbor?: string; claude?: string; probeNode?: string;
 }
 
-/** The commit a home's gstack checkout is at, or null. */
-export function homeCommit(home: string): string | null {
-  const r = spawnSync("git", ["-C", join(home, ".claude/skills/gstack"), "rev-parse", "HEAD"], { encoding: "utf8" });
-  return r.status === 0 ? r.stdout.trim() : null;
+/** The commit a home's gstack checkout is at and that commit's tree, or nulls. */
+export function homeCommit(home: string): { commit: string | null; tree: string | null } {
+  const r = spawnSync("git", ["-C", join(home, ".claude/skills/gstack"), "rev-parse", "HEAD", "HEAD^{tree}"], { encoding: "utf8" });
+  const [commit, tree] = r.status === 0 ? r.stdout.trim().split("\n") : [];
+  return { commit: commit || null, tree: tree || null };
 }
 
 export async function runSrSession(i: SrRunInput, run: typeof runPfSession = runPfSession): Promise<PfRun> {
@@ -64,9 +65,9 @@ export async function runSrSession(i: SrRunInput, run: typeof runPfSession = run
   let home: string | null = null, pin: string | null = null;
   if (loadsGstack(s.arm)) {
     home = i.homes[s.arm] ?? srFail("E_SR_ARM", "arm " + s.arm + " needs its gstack home (--home-" + (s.arm === "G+" ? "gplus" : "g0") + ")");
-    pin = GSTACK[s.arm];
     const at = homeCommit(home);
-    if (at !== pin) srFail("E_SR_ARM", "arm " + s.arm + "'s home " + home + " has gstack at " + at + ", not " + pin);
+    if (at.tree !== GSTACK.tree[s.arm]) srFail("E_SR_ARM", "arm " + s.arm + "'s home " + home + " has gstack at " + at.commit + " (tree " + at.tree + "), not the tree of " + GSTACK[s.arm] + " (" + GSTACK.tree[s.arm] + ")");
+    pin = at.commit!;
   }
   return run({
     unitDir: i.unitDir, session: { unit: s.unit, part: s.part === "pilot" ? 0 : 1, index: s.index, model: s.model, arm: pfArmOf(s.arm), item: s.item }, names: i.names, control: i.control, proxy: i.proxy, out: i.out, volume: i.volume, effort: i.effort,

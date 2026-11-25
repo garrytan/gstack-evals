@@ -21,7 +21,7 @@ attachments:
   - f7599e6649ab6809093d1d203b7790aae083adc5a401fb2c4c7d68d2602ab423  power.py
   - 5a734745f3f29c7087bf900308a166e176aeab0eff2cf4c9304a3354d6db8131  power.txt
   - 357453c330dea1c45387e67ffcd0e22854297bda96e47da3380d6924e10612da  prereg.json
-  - e9c88ce068102fecc2fc5d51a731ffd6d50c9bfbf408319e1045c2640b292ceb  supply-count.md
+  - 3d961e5eefee2e056c9ecc5dfe2f9d292ddb7c0fa0f56bca98bedba45c909c61  supply-count.md
 ---
 
 # Preregistration: does gstack's State Machines review specialist catch real bug-introducing changes?
@@ -154,7 +154,7 @@ Every arm runs in Claude Code 2.1.312 through claude-agent-sdk 0.2.174 with `CLA
 
 C's text, word for word: "Review this pull request for bugs in its state machines. Find each record the changed code handles that has a kind and a pending status an owner action settles, such as proposals, holds, approvals, review queues or invitations, and read the code after the change, not only the changed lines. List every kind the settle path handles and every action that settles a pending record. For each kind and action, write down the result the owner expects, from what the kind means rather than from what the code does. Find the test that exercises exactly that kind and action and checks that result. Report each pair no test covers, each pair where the code gives a different result than expected, and each branch that sends several kinds down one destructive path."
 
-**gstack.** Pin d74ee528 (v1.103.2.0), installed with `./setup --host claude --loadout lite`. lanes/outcome-skills/smreview/gstack_arms.py makes G+ and G0 as one commit each on top of the pin (trees 51c37ad9 and 1151ad70), and every G session checks its home against its commit before it starts. G+ and G0 send the same task turn; only the installed gstack differs. Shipped G is derived (section 10) and never run.
+**gstack.** Pin d74ee528 (v1.103.2.0), installed with `./setup --host claude --loadout lite`. lanes/outcome-skills/smreview/gstack_arms.py makes G+ and G0 as one commit each on top of the pin (trees 51c37ad9 and 1151ad70), and every G session checks its home against its tree before it starts. G+ and G0 send the same task turn; only the installed gstack differs. A session checks its home by tree, not commit, so a home rebuilt on another machine (whose git identity gives a different commit sha) still serves its arm. Shipped G is derived (section 10) and never run.
 
 **Where the arms run.** N and C have no gstack, no pstack and no Capy drive in their environment. P has only pstack's plugin tree. G+ and G0 have only their gstack home. Each session runs in a Harbor docker container built from the unit's prepared tree, which holds no Capy drive and no ~/.claude/skills of its own, so the no-gstack arms are clean by construction; a read audit runs after the run and is reported as a descriptive check.
 
@@ -253,7 +253,7 @@ The pilot runs the first 6 drawn units, all five arms on both models, one sessio
 
 1. **N floor.** N catches in at least 2 of its 12 sessions (at least 1 in 10). Else FLOOR: stop.
 2. **The part under test ran (R111).** G+ ran the specialist in at least 10 of 12 sessions; G0 reached its Review Army step in at least 10 of 12 and ran the specialist in none; P loaded both pstack skills in at least 10 of 12 sessions, by #358's exposure reader (the formal-verification skill's body in the session and a Read of statechart's SKILL.md). A failing P or C is fixed or left out and reported as left out. A failing G+ or G0 means the primary cannot run: stop.
-3. **The harness works.** At most 6 of the 60 sessions end with a harness gap, and each gap's cause is named.
+3. **The harness works.** At most 6 of the 60 sessions end with a harness gap, and each gap's cause is named. Gaps print per arm and model with their reasons. One reason gets its own line: a session whose git work leaves the change under review's commit out of its history (a checkout of origin/main left in place, an amend or a rebase) scores as base_mismatch and drops out of its cell, and /review does more git work than N or C, so the pilot and the results report base_mismatch per arm and never read it as an arm effect.
 4. **Supply.** The walk yields at least 20 counted units beyond the pilot's 6.
 
 **The frozen stop rule.** Fewer than 20 counted units, a failing N floor, or a pooled G+ minus G0 MDD over 25 points (section 11) means a findings write-up, not a counted run. The write-up carries the supply counts, the detector finding, the Sol finding and the pilot's readings, and publishes no verdict.

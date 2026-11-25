@@ -675,6 +675,32 @@ def test_a_failing_keep_after_a_completed_wrapup_still_writes_the_summary_with_t
     check("PF_CAPTURE changed=1 " in sm["capture"] and sm["keep"] is None and sm["checks"] is False, (sm["capture"], sm["keep"]))
     check(not (s.ev / "s.bundle").exists(), sorted(p.name for p in s.ev.iterdir()))
 
+
+def test_check_pins_the_gstack_home_and_its_allowed_paths():
+    def session(cfg, out):
+        s = pf_turns.Session.__new__(pf_turns.Session)
+        s.cfg = {"repo": "/r", **cfg}
+        s.summary = {}
+        s.sh = lambda script, *a, **k: subprocess.CompletedProcess([], 0, stdout=out.encode(), stderr=b"")
+        return s
+
+    def refused(cfg, out, words):
+        try:
+            session(cfg, out).check()
+        except RuntimeError as e:
+            check(str(e).startswith("E_PF_ARM") and words in str(e), str(e))
+            return
+        raise AssertionError("check passed: " + out)
+
+    home = ["/root/.claude/skills/gstack/review/SKILL.md"]
+    listing = "GSTACK abc\n" + "".join("HOME " + p + "\n" for p in home)
+    session({"gstack_pin": "abc", "gstack_home": home}, listing).check()
+    refused({"gstack_pin": "def", "gstack_home": home}, listing, "not the arm's pin def")
+    refused({"gstack_pin": "abc", "gstack_home": home + ["/root/.capy"]}, listing + "HOME /root/.capy\n", "HOME /root/.capy")
+    refused({"gstack_pin": "abc", "gstack_home": home + ["/root/.claude/CLAUDE.md"]}, listing + "HOME /root/.claude/CLAUDE.md\n", "HOME /root/.claude/CLAUDE.md")
+    refused({}, "GSTACK absent\n" + "".join("HOME " + p + "\n" for p in home), "HOME /root/.claude/skills/gstack/review/SKILL.md")
+
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in [(k, v) for k, v in list(globals().items()) if k.startswith("test_")]:

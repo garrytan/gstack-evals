@@ -62,7 +62,7 @@ export async function scoreSession(o: ScoreIn) {
     git(tmp, ["init", "-q", repo]);
     git(repo, ["fetch", "-q", "--no-tags", o.s, "+" + (o.ref ?? "HEAD") + ":refs/pf/s"]);
     const root = git(repo, ["rev-list", "--max-parents=0", "refs/pf/s"]).stdout.trim();
-    const onBase = sess.origin ? root === sess.origin && git(repo, ["merge-base", "--is-ancestor", sess.base_commit!, "refs/pf/s"], { ok: [0, 1] }).status === 0 : root === sess.base_commit;
+    const onBase = sess.origin ? root === sess.origin && git(repo, ["merge-base", "--is-ancestor", sess.base_commit!, "refs/pf/s"], { ok: [0, 1, 128] }).status === 0 : root === sess.base_commit;
     if (!onBase) return { ...head, score: null, gap: "E_PF_ARM", gap_reason: "base_mismatch", readings: { no_static: null, no_api_guess: null, compile_rerun: null } };
     const testFiles = unitTestFiles(o.unitDir);
     const trees = buildTrees({ repo, ref: "refs/pf/s", lang: u.lang, testFiles, fixPatch: fixSourcePatch(o.unitDir), neutral: { mode: nrec.mode!, files: nrec.files }, ...(sess.origin ? { base: sess.base_commit! } : {}) });

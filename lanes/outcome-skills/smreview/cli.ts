@@ -21,6 +21,7 @@ import { readSrPrereg } from "./prereg.ts";
 import { sessionOf, srScoreSession, type SrCatch } from "./score.ts";
 import { runSrSession, srPlan, type SrPlanned, type Part } from "./session.ts";
 import { bicPool, buildPool, convertUnit, type Pool, type Sources } from "./units.ts";
+import { fetchV21 } from "./v21.ts";
 
 export const HELP = `Usage: gstack-evals sr <command>
   pool --cache <MultiLang cache> --v21 <V2.1 cache> --tool <tool checkout> [--export <Harbor export>] --out <pool.json>
@@ -34,11 +35,12 @@ export const HELP = `Usage: gstack-evals sr <command>
   plan --prereg <prereg.json> --draw <draw.json> --part pilot|test --out <plan.json>
   session --unit <dir> --plan <plan.json> --index <n> --control <url> --proxy <host:port> --names short|plugin --effort <effort.json>
           --home-gplus <dir> --home-g0 <dir> --out <dir> [--volume <tree volume>] [--harbor <bin>] [--claude <bin>]
-  score --s <repo> --unit <dir> --neutral <record.json> --checks <CHECKS.json> --session <session.json> --arm <arm> --out <catch.json>
+  score --s <repo> --unit <dir> --neutral <record.json> --checks <CHECKS.json> --session <session.json> [--arm <arm>] --out <catch.json>
         [--transcript <sdk-messages.jsonl>] [--claude-session <claude-session.jsonl>] [--image <id>] [--volume <name>]
   analyze --prereg <prereg.json> --bic <bic.jsonl> --plan <plan.json> --out <analysis.json> <catch.json>...
   look --prereg <prereg.json> --bic <bic.jsonl> --plan <plan.json> <catch.json>...
   items
+  fetch --v21 <dir>   SWE-rebench-V2.1's pinned parquet files, checked by sha256, with their row files
 Codes E_SR_* in docs/errors.md.`;
 
 type Args = { _: string[]; [k: string]: string | string[] | undefined };
@@ -66,10 +68,22 @@ const write = (p: string, v: unknown) => writeFileSync(p, JSON.stringify(v, null
 const sources = (a: Args): Sources => ({ cache: need(a, "cache"), v21: need(a, "v21"), tool: need(a, "tool"), ...(opt(a, "export") ? { export: opt(a, "export") } : {}) });
 const bics = (p: string) => readJsonl(p) as unknown as BicRecord[];
 const facts = (bs: BicRecord[]): UnitFacts[] => bs.filter((b) => !b.drop).map((b) => ({ id: b.id, repo: b.repo, detected: !!(b.detector as { detected?: boolean } | null)?.detected, pr_lines: (b.pr_added ?? 0) + (b.pr_deleted ?? 0) }));
-const catches = (ps: string[]) => ps.map((p) => readJson(p) as SrCatch & { arm: SrArm });
+/** Catch records, each read once: a record with no session index, or a second record for the same session, is refused. */
+function catches(ps: string[]): Array<SrCatch & { arm: SrArm; index: number }> {
+  const seen = new Set<string>();
+  return ps.map((p) => {
+    const c = readJson(p) as SrCatch & { arm: SrArm; index: number };
+    if (!Number.isSafeInteger(c.index)) throw new SrError("E_SR_INPUT", p + " names no session index; score it again with sr score");
+    const key = [c.unit, c.model, c.arm, c.index].join("|");
+    if (seen.has(key)) throw new SrError("E_SR_INPUT", p + " repeats session " + key);
+    seen.add(key);
+    return c;
+  });
+}
 
 async function run(cmd: string, a: Args): Promise<number> {
   if (cmd === "items") { for (const l of itemsTable()) console.log(l); return 0; }
+  if (cmd === "fetch") { await fetchV21(need(a, "v21")); console.log("v21 fetched to " + need(a, "v21")); return 0; }
   if (cmd === "pool") {
     const p = buildPool(sources(a));
     write(need(a, "out"), p);
@@ -159,8 +173,10 @@ async function run(cmd: string, a: Args): Promise<number> {
     return 0;
   }
   if (cmd === "score") {
-    const arm = need(a, "arm") as SrArm;
-    if (!["N", "C", "P", "G+", "G0"].includes(arm)) throw new SrError("E_SR_ARM", "--arm is N, C, P, G+ or G0");
+    const sj = readJson(need(a, "session")) as { arm?: string; index?: number };
+    const arm = sj.arm as SrArm;
+    if (!["N", "C", "P", "G+", "G0"].includes(arm) || !Number.isSafeInteger(sj.index)) throw new SrError("E_SR_INPUT", need(a, "session") + " names no SR arm or session index");
+    if (opt(a, "arm") !== undefined && opt(a, "arm") !== arm) throw new SrError("E_SR_INPUT", "--arm " + opt(a, "arm") + " differs from the session record's arm " + arm);
     const unitDir = need(a, "unit");
     const u0 = readUnit(unitDir);
     const image = opt(a, "image") ?? u0.image.runtime_id ?? u0.image.image_id ?? "";
@@ -170,7 +186,7 @@ async function run(cmd: string, a: Args): Promise<number> {
       transcript: opt(a, "transcript") ?? null, claudeSession: opt(a, "claude-session") ?? null,
       exec: (repo, u) => dockerExecutor({ repo, image, base, repoDir: u.repo_dir, workDir: u.work_dir, mode: "hardened", mounts: [], env: {}, rebuild: u.commands.rebuild }),
     });
-    write(need(a, "out"), { ...rec, arm });
+    write(need(a, "out"), { ...rec, arm, index: sj.index });
     console.log(rec.unit + " score " + rec.score + (rec.gap ? " gap " + rec.gap : "") + " checks " + rec.sr.checks + " false_alarms " + rec.sr.false_alarms);
     return 0;
   }
