@@ -70,7 +70,7 @@ A heading, a checklist or a design doc in the transcript is procedure evidence, 
 
 Base rates on all 16 calibration founders (GEVA-526): plain W was Opus 1 of 48, Sol 8 of 32 and particle-1 1 of 32, and with every fact given up front 47 of 48, 32 of 32 and 30 of 32. Plain Opus and particle-1 never gave the founder a turn (0 of 48, 0 of 32); plain Sol did in 9 of 32.
 
-**The trace, graded apart from the artifact.** The trace is read by code. Every scored Sol office-hours session opened with questions and no recommendation (170 to 230 words), drew its first key fact at founder turn 1 to 3, printed three or four numbered decision briefs, dispatched one or two subagents, wrote one file, and gave its first-move block in reply 8 or 9 at about 3,600 to 4,600 words of agent text. Plain Sol answered at once in 7 of 12 sessions and asked once in 5, at about 1,000 words. Opus with the skill answered at once in 4 of 6, with no office-hours file opened. The artifact is the first-move block. Its W score is a known-answer match against a key that Sol and Argon wrote, judged by GPT-6 Astra, Opus 5.5 or a panel whose check used model-made gold only; it carries no taste claim, and per the unchecked-judge correction it reads as checked against model labels only.
+**The trace, graded apart from the artifact.** The trace is read by code. Every scored Sol office-hours session opened with questions and no recommendation (170 to 230 words), drew its first key fact at founder turn 1 to 3, printed three or four numbered decision briefs, dispatched one or two subagents, wrote one file, and gave its first-move block in reply 8 or 9 at about 3,600 to 4,600 words of agent text. Plain Sol answered at once in 7 of 12 sessions and asked once in 5, at about 1,000 words. Opus with the skill answered at once in 4 of 6, with no office-hours file opened. The artifact is the first-move block. Its W score is a known-answer match against a key that Sol and Argon wrote, judged by GPT-6 Astra, Opus 5.5 or a panel whose check used model-made gold only; the unchecked-judge correction labels this score Q, so every W count here reads as one model's opinion, unchecked.
 
 **Did the founder's answer change what was chosen?** The design shows co-occurrence, not cause. On one founder, plain Sol answered at once in both passes and missed; Sol with the skill drew all six key facts and matched. On two founders, plain Sol asked one question and matched in all four passes. Across all calibration founders, plain Sol matched in 7 of 9 sessions where the founder answered first and in 1 of 23 where nobody answered. Sol chose when to wait in the plain arm, so none of this shows that waiting carries the skill's effect.
 
@@ -108,7 +108,7 @@ There is no null to explain: no comparison was run. For office-hours the skill's
 ## Limits
 
 - Five Sol pairs and six founders; v1.98, not the current rewrite; Sol in Claude Code, not Codex CLI; a simulated founder that failed its audit.
-- W rests on model-written keys and model judges; no person checked them.
+- W rests on model-written keys and model judges; no person checked them, and it carries the Q label (one model's opinion, unchecked).
 - The per-founder lines above are counts on tiny cells and are reported for transparency, not as estimates.
 
 ## Replication
