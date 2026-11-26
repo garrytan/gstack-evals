@@ -236,11 +236,16 @@ export interface E1Seams {
   supply(o: { out: string; cacheDir: string }): Launcher<SupplyCall>;
   /** Bootstrap draws for the look and the readings; unset is the frozen 10,000. Only test seams set it. */
   draws?: number;
-  /** No paid command runs before this instant (the brief's 2026-11-28 06:00Z); unset in test seams and the driven launch. */
-  notBefore?: string;
+  /** No paid command runs before its instant: pilot preparation (the supply screens, authoring and hinted builds) and the
+   * pilot from pilot, counted cells from counted (pre-run change 3). Unset in test seams and the driven launch. */
+  notBefore?: { pilot: string; counted: string };
+  /** The clock the guard reads; only tests set it. */
+  now?: () => number;
 }
 
-export const E1_NOT_BEFORE = "2026-11-28T06:00:00Z";
+/** Pre-run change 3: the owner's go of 2026-11-26 opens pilot preparation and the pilot; counted cells keep the prereg's
+ * 2026-11-28 06:00Z and still wait for the Captain's ruling on the pilot readout. */
+export const E1_NOT_BEFORE = { pilot: "2026-11-26T21:08:58Z", counted: "2026-11-28T06:00:00Z" } as const;
 
 export const E1_REAL: E1Seams = {
   review: (o) => e1ReviewLauncher({ arms: [o.arm], model: o.model, out: o.out, env: process.env, runId: E1_RUN, log: o.log }),
@@ -451,8 +456,9 @@ export function pilotReadout(reviews: readonly E1ReviewRecord[], builds: readonl
 
 export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
   const source = (a: Args): UnitSource => unitFolders(need(a, "--units"), need(a, "--repos"));
-  const paid = (a: Args, run: string, allowed: (item: string) => boolean): E1Paid => {
-    if (seams.notBefore && Date.now() < Date.parse(seams.notBefore)) fail("E_USAGE", "no paid e1 stage runs before " + seams.notBefore + "; nothing ran");
+  const paid = (a: Args, run: string, when: "pilot" | "counted", allowed: (item: string) => boolean): E1Paid => {
+    const at = seams.notBefore?.[when];
+    if (at && (seams.now ?? Date.now)() < Date.parse(at)) fail("E_USAGE", "no " + (when === "pilot" ? "pilot or pilot-preparation" : "counted") + " e1 stage runs before " + at + "; nothing ran");
     return e1Paid(a, run, allowed);
   };
   const phaseOf = (a: Args) => {
@@ -464,7 +470,7 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
   };
   const stagePlanFor = (a: Args, run: string) => {
     const { phase, half } = phaseOf(a);
-    const p = paid(a, run, (item) => (phase === "pilot" ? item === "e1-pilot" : parseItem(item) !== null));
+    const p = paid(a, run, phase === "pilot" ? "pilot" : "counted", (item) => (phase === "pilot" ? item === "e1-pilot" : parseItem(item) !== null));
     const which = phase === "pilot" ? null : parseItem(p.item)!;
     let planned: number | undefined;
     if (phase === "comparison") {
@@ -597,7 +603,7 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
   const screen: Command["run"] = async (a, io) => {
     const run = runDir(a);
     const src = source(a);
-    const p = paid(a, run, (item) => item === "e1-supply");
+    const p = paid(a, run, "pilot", (item) => item === "e1-supply");
     const units = drawUnits(run, src);
     const seed = drawSeed(run);
     const walk = e1Draw(seed, units.map((u) => (u.authoring === "passed" ? { ...u, screen: u.screen ?? SCREEN_OWED } : u)));
@@ -632,7 +638,7 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
     const src = source(a);
     const step = need(a, "--step");
     if (step !== "calls" && step !== "hinted") fail("E_USAGE", "--step is calls or hinted");
-    const p = paid(a, run, (item) => item === "e1-supply");
+    const p = paid(a, run, "pilot", (item) => item === "e1-supply");
     const log = logTo(io);
     const dirOf = (id: string) => join(run, "author", id);
     const all = drawUnits(run, src);

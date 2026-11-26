@@ -10,7 +10,7 @@ import { openLease, reconcileLease, recordApproval } from "../../../src/runner/l
 import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
 import { ledgerPath } from "../../../src/runner/ledger/paths.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
-import { capGuarded, capStopPath, comparisonDigest, comparisonPath, e1Commands, E1_RUN, e1StubLauncher, lookPath, type E1Seams, type LookFile } from "../../../lanes/eng-planted/e1/commands.ts";
+import { capGuarded, capStopPath, comparisonDigest, comparisonPath, e1Commands, E1_NOT_BEFORE, E1_REAL, E1_RUN, e1StubLauncher, lookPath, type E1Seams, type LookFile } from "../../../lanes/eng-planted/e1/commands.ts";
 import { RUNS_ON, type E1Arm } from "../../../lanes/eng-planted/e1/frozen.ts";
 import type { E1ReviewSession } from "../../../lanes/eng-planted/e1/launch.ts";
 import { E1_ITEMS, itemName } from "../../../lanes/eng-planted/e1/pipeline.ts";
@@ -278,12 +278,27 @@ describe("supply", () => {
 });
 
 describe("guards", () => {
-  test("no paid stage runs before the start instant", async () => {
-    const f = fixture({ notBefore: "2999-01-01T00:00:00Z" });
-    expect(await codeOf(() => f.cmds["e1-reviews"]!.run(args({ ...f.paid("e1-pilot"), "--phase": "pilot" }), io().io))).toBe("E_USAGE");
-    expect(await codeOf(() => f.cmds["e1-screen"]!.run(args({ ...f.paid("e1-supply"), "--cache": f.dir }), io().io))).toBe("E_USAGE");
-    expect(f.calls.reviews).toEqual([]);
-    expect(readItem(f.record, "e1-pilot").leases).toHaveLength(0);
+  test("before the pilot instant nothing paid runs; after it the pilot and its preparation run while counted cells wait", async () => {
+    const pilotAt = Date.parse(E1_NOT_BEFORE.pilot);
+    const before = fixture({ notBefore: E1_NOT_BEFORE, now: () => pilotAt - 1000 });
+    expect(await codeOf(() => before.cmds["e1-reviews"]!.run(args({ ...before.paid("e1-pilot"), "--phase": "pilot" }), io().io))).toBe("E_USAGE");
+    expect(await codeOf(() => before.cmds["e1-screen"]!.run(args({ ...before.paid("e1-supply"), "--cache": before.dir }), io().io))).toBe("E_USAGE");
+    expect(await codeOf(() => before.cmds["e1-author"]!.run(args({ ...before.paid("e1-supply"), "--cache": before.dir, "--step": "calls" }), io().io))).toBe("E_USAGE");
+    expect(before.calls.reviews).toEqual([]);
+    expect(readItem(before.record, "e1-pilot").leases).toHaveLength(0);
+    const after = fixture({ notBefore: E1_NOT_BEFORE, now: () => pilotAt + 1000 });
+    expect(await after.cmds["e1-reviews"]!.run(args({ ...after.paid("e1-pilot"), "--phase": "pilot" }), io().io)).toBe(0);
+    expect(after.calls.reviews).toHaveLength(PAIRS.length);
+    expect(await codeOf(() => after.cmds["e1-reviews"]!.run(args({ ...after.paid("e1-n-opus"), "--phase": "comparison", "--half": "1" }), io().io))).toBe("E_USAGE");
+    expect(await codeOf(() => after.cmds["e1-builds"]!.run(args({ ...after.paid("e1-n-opus"), "--phase": "comparison", "--half": "1" }), io().io))).toBe("E_USAGE");
+    expect(after.calls.reviews.filter((c) => c.startsWith("k"))).toEqual([]);
+    expect(readItem(after.record, "e1-n-opus").leases).toHaveLength(0);
+    const counted = fixture({ notBefore: E1_NOT_BEFORE, now: () => Date.parse(E1_NOT_BEFORE.counted) + 1000 });
+    expect(await counted.cmds["e1-reviews"]!.run(args({ ...counted.paid("e1-n-opus"), "--phase": "comparison", "--half": "1" }), io().io)).toBe(0);
+  });
+  test("the real seams carry both instants: the pilot's from the owner's go, counted cells from the prereg", () => {
+    expect(E1_REAL.notBefore).toEqual({ pilot: "2026-11-26T21:08:58Z", counted: "2026-11-28T06:00:00Z" });
+    expect(E1_REAL.now).toBeUndefined();
   });
   test("the freeze takes 48 to 64 units once, with its left-out pairs, and a left-out pair's stages refuse", async () => {
     const f = fixture();
