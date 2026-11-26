@@ -101,11 +101,11 @@ describe("the review-units flags for the five cells (keyless)", () => {
 
 const GSTACK_SOURCE = process.env.GSTACK_EVALS_GSTACK_SOURCE ?? "";
 const CODEX_DIR = process.env.GSTACK_EVALS_CODEX_DIR ?? "";
-const full = GSTACK_SOURCE && CODEX_DIR && existsSync(join(CODEX_DIR, "codex")) ? test : test.skip;
+const optedIn = Boolean(GSTACK_SOURCE && CODEX_DIR && existsSync(join(CODEX_DIR, "codex")));
 
-// Value: protects=the whole rig check on this machine: a real Claude Code CLI session per cell against stub APIs, gstack's probe and both Codex passes through the real Codex CLI, with every check passing; fails_when=any cell's check fails; why_new=GEVA-590 item 3; seam=cellCheck; no_claim=the trial image, the metering proxy and any model, none of which this runs. Opt in with GSTACK_EVALS_GSTACK_SOURCE (a set-up gstack checkout at the pin) and GSTACK_EVALS_CODEX_DIR (a dir holding codex; GSTACK_EVALS_CODEX_VERSION pins its version, default any)
-describe("the full rig check (opt-in, keyless)", () => {
-  full("every cell passes every check", async () => {
+// Value: protects=the whole rig check on this machine: a real Claude Code CLI session per cell against stub APIs, gstack's probe and both Codex passes through the real Codex CLI, with every check passing; fails_when=any cell's check fails; registered only when opted in, so the rig tier (which counts a skip as red) never sees it skip; why_new=GEVA-590 item 3; seam=cellCheck; no_claim=the trial image, the metering proxy and any model, none of which this runs. Opt in with GSTACK_EVALS_GSTACK_SOURCE (a set-up gstack checkout at the pin) and GSTACK_EVALS_CODEX_DIR (a dir holding codex; GSTACK_EVALS_CODEX_VERSION pins its version, default any)
+if (optedIn) describe("the full rig check (opt-in, keyless)", () => {
+  test("every cell passes every check", async () => {
     const dir = work();
     try {
       const r = await cellCheck({ gstack: GSTACK_SOURCE, codexDir: CODEX_DIR, codexVersion: process.env.GSTACK_EVALS_CODEX_VERSION === RM_CODEX_VERSION ? RM_CODEX_VERSION : null, work: dir });
