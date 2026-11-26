@@ -64,6 +64,7 @@ export function parseAnswer(text: string): "yes" | "no" | null {
 
 /** One reply's verdict. */
 export function verdictOf(provider: Provider, status: number, body: any): Verdict {
+  if (provider === "openai" && status === 400 && body?.error?.code === "cyber_policy") return "refused";
   if (status !== 200) return "error";
   if (provider === "anthropic" ? body?.stop_reason === "refusal" : (body?.output ?? []).some((i: any) => (i?.content ?? []).some((c: any) => c?.type === "refusal")) || body?.incomplete_details?.reason === "content_filter") return "refused";
   const answer = parseAnswer(judgeAnswer(provider, body));

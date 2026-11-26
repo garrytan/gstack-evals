@@ -33,6 +33,8 @@ describe("replies", () => {
     expect(verdictOf("openai", 200, { output: [{ type: "message", content: [{ type: "refusal", refusal: "no" }] }] })).toBe("refused");
     expect(verdictOf("openai", 200, oai("maybe"))).toBe("malformed");
     expect(verdictOf("openai", 500, null)).toBe("error");
+    expect(verdictOf("openai", 400, { error: { code: "cyber_policy", type: "invalid_request" } })).toBe("refused");
+    expect(verdictOf("openai", 400, { error: { code: "invalid_value" } })).toBe("error");
   });
 
   test("send retries a malformed reply once, asks again after an error, and resumes without resending", async () => {
