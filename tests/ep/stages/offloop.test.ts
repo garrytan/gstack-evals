@@ -137,7 +137,7 @@ describe("the build stage's driver", () => {
       '      *) [ -e "$d/built" ] ;;',
       "    esac ;;",
       "  tag|rmi) ;;",
-      '  build) sleep 2; touch "$d/built"; echo "$(date +%s%3N) built" >> "$d/calls" ;;',
+      '  build) sleep 2; touch "$d/built"; echo "$(date +%s%3N) built $(cat "$FAKE_DRIVER/sessions.jsonl" 2>/dev/null | grep -c \'"event":"launch"\')" >> "$d/calls" ;;',
       "  run)",
       '    while [ $# -gt 0 ] && [ "$1" != --entrypoint ]; do shift; done',
       '    case "$2" in',
@@ -154,8 +154,8 @@ describe("the build stage's driver", () => {
     const harbor = join(W, "harbor.sh");
     writeFileSync(harbor, "#!/bin/sh\nexit 1\n");
     chmodSync(harbor, 0o755);
-    Object.assign(process.env, { FAKE_DOCKER: calls, FAKE_UNIT: unit, FAKE_CLAUDE: claudePin().version });
     const driver = join(W, "driver");
+    Object.assign(process.env, { FAKE_DOCKER: calls, FAKE_UNIT: unit, FAKE_CLAUDE: claudePin().version, FAKE_DRIVER: driver });
     const launch = buildLauncher({ arm: "none", units: new Map([[id, { dir: join(fx.units, id) }]]), repos: fx.repos, plans: join(W, "plans"), bundles: null, out: join(W, "out"), host: "127.0.0.1", envelopeHost: "m1", sidecar: "http://127.0.0.1:9", forbidden: [], planned: 1, docker, harbor, runId: EP_RUN, skill: EP_SKILL, serve: { ...serve, dir: driver } });
     const held = await launch({ item: "ep-authoring", capUsd: 50, record: l.record, ledger: l.ledger });
     const real = globalThis.fetch;
@@ -166,7 +166,6 @@ describe("the build stage's driver", () => {
       return real(input, init);
     }) as typeof fetch;
     const start = performance.now();
-    const wall = Date.now();
     let at: number[] = [];
     try {
       await held.backend({ cell: id + "_hinted_-_1", unit: { id }, arm: "none", armName: armName("none"), prompt: "Implement the plan.", attempt: 1 }).catch(() => null);
@@ -176,11 +175,10 @@ describe("the build stage's driver", () => {
       globalThis.fetch = real;
       await held.close().catch(() => null);
     }
-    const log = readFileSync(join(calls, "calls"), "utf8").split("\n").filter(Boolean).map((x) => ({ t: Number(x.split(" ")[0]), what: x.split(" ")[1] }));
-    const launched = Date.parse(readFileSync(join(driver, "sessions.jsonl"), "utf8").split("\n").map((x) => (x ? JSON.parse(x) : {})).find((e) => e.event === "launch").at);
-    expect(log.filter((c) => c.what === "built")).toHaveLength(1);
-    expect(log.find((c) => c.what === "built")!.t).toBeLessThan(launched);
-    expect(log.filter((c) => c.what === "build" && c.t >= wall)).toEqual([]);
+    const log = readFileSync(join(calls, "calls"), "utf8").split("\n").filter(Boolean).map((x) => ({ what: x.split(" ")[1], launches: x.split(" ")[2] }));
+    expect(readFileSync(join(driver, "sessions.jsonl"), "utf8").split("\n").filter((x) => x && JSON.parse(x).event === "launch")).toHaveLength(1);
+    expect(log.filter((c) => c.what === "build")).toHaveLength(1);
+    expect(log.filter((c) => c.what === "built")).toEqual([{ what: "built", launches: "0" }]);
     expect(at.length).toBeGreaterThan(2);
     expect(widest([start, ...at])).toBeLessThan(1000);
   }, 30_000);
