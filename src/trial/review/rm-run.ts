@@ -21,6 +21,7 @@ import { RM_CELLS, RM_READER_MAP, rmArgs, type RmCell } from "./rm-cells.ts";
 import { armId } from "./run.ts";
 import type { Draw } from "./supply/draw.ts";
 import { loadUnitRepos } from "./unit-repos.ts";
+import { requireOpen } from "../../../lanes/review-models/score/opening.ts";
 
 type Env = Record<string, string | undefined>;
 interface Io {
@@ -316,6 +317,7 @@ export async function main(argv: string[], io: Io = { out: console.log, err: con
     }
     if (sub === "pilot") {
       for (const k of ["--plan", "--unit-repos", "--ledger-record", "--out"]) if (!f.has(k)) throw new Error("E_USAGE rm-run pilot: pass " + k);
+      if (!f.has("--dry-run")) requireOpen("pilot", "rm-run pilot");
       const args = pilotArgv({ plan: f.get("--plan")!, unitRepos: f.get("--unit-repos")!, out: f.get("--out")!, record: f.get("--ledger-record")!, upstream: f.get("--upstream") ?? null, ledger: f.get("--ledger") ?? null, date: f.get("--date") ?? null, dryRun: f.has("--dry-run") });
       io.out("review-units " + args.join(" "));
       return await reviewUnits(args, io, env);

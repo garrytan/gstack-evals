@@ -4853,6 +4853,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_RM_NOT_OPEN: {
+    exit: 2,
+    meaning: "A paid review-models step ran before its phase opened (lanes/review-models/score/opening.ts, pre-run change 10): pilot steps and their paid preparation open at 2026-11-26 21:30Z, counted steps, the validation batch included, at 2026-11-28 06:00Z.",
+    fix: "Wait for the printed opening time. Counted steps also wait for the gstack-evals Captain's read of the pilot readout. No flag or variable moves either time; a new time needs a dated change to the plan.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

@@ -14,6 +14,7 @@ import { rawAdvisory, type BRecord } from "../../../src/trial/review/supply/b-un
 import type { Draw } from "../../../src/trial/review/supply/draw.ts";
 import type { PRecord } from "../../../src/trial/review/supply/p-units.ts";
 import { rmFail } from "../score/frozen.ts";
+import { requireOpen } from "../score/opening.ts";
 import { buildKey, type KeySources } from "./key.ts";
 import { BATCHES, loadPilot, readKey, type Batch, type Pilot } from "./pilot.ts";
 import { pilotReadout, renderReadout } from "./readout.ts";
@@ -120,19 +121,24 @@ function contaminationCmd(f: Map<string, string[]>): number {
 const sendOptions = (f: Map<string, string[]>): SendOptions => ({ run_id: need(f, "--run-id"), item: need(f, "--item") });
 const settled = (r: { sent: number; spent_usd: number; unknown_usd: number }) => r.sent + " calls sent; settled " + r.spent_usd.toFixed(2) + " USD spent, " + r.unknown_usd.toFixed(2) + " USD unknown";
 
+const phaseOf = (f: Map<string, string[]>) => (batchOf(f) === "pilot" ? "pilot" : "counted");
+
 async function judgeCmd(f: Map<string, string[]>): Promise<number> {
+  requireOpen(phaseOf(f), "rm-post judge-send --batch " + batchOf(f));
   const r = await judgeSend(pilotOf(f), need(f, "--post"), sendOptions(f));
   console.log("judge: " + r.judged + " reviews judged, " + r.failed + " failed twice (ruled can't tell); " + settled(r));
   return 0;
 }
 
 async function secondReadCmd(f: Map<string, string[]>): Promise<number> {
+  requireOpen("pilot", "rm-post second-read-send");
   const r = await secondReadSend(need(f, "--post"), sendOptions(f));
   console.log("second read: " + r.cases + " cases, " + r.contaminated + " contaminated, " + r.clean + " clean, " + r.failed + " unread after the retry; " + settled(r));
   return 0;
 }
 
 async function labelCmd(f: Map<string, string[]>): Promise<number> {
+  requireOpen(phaseOf(f), "rm-post label-send --batch " + batchOf(f));
   const batch = batchOf(f);
   const r = await labelSend(pilotBatch(pilotOf(f)), need(f, "--post"), batch, sendOptions(f));
   const arms = Object.entries(r.per_arm).map(([a, t]) => a + " " + t.reviews + " (" + t.kimi + " Kimi, " + t.cant_tell + " can't tell, " + t.unlabelled + " unlabelled)");

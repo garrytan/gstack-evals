@@ -12,6 +12,7 @@ import { draw, type Draw } from "./draw.ts";
 import { passed, type InstructionFlags } from "./gates.ts";
 import { NON_SOURCE } from "./szz.ts";
 import { cloneDir, ghPr, gitOut, SupplyError, supplyFail } from "./git.ts";
+import { requireOpen } from "../../../../lanes/review-models/score/opening.ts";
 import { checkP, readSuite, SUITE_NAME, type PRecord } from "./p-units.ts";
 import { readVisibility, sendVisibility, visRequests, type VisReply, type VisRequest, type VisResult } from "./visibility.ts";
 
@@ -115,6 +116,7 @@ function visRequestsCmd(f: Map<string, string>): number {
 }
 
 async function visSend(f: Map<string, string>): Promise<number> {
+  requireOpen("pilot", "rm-supply vis-send");
   const { openJudgeMeter } = await import("../../../../lanes/outcome-skills/cso/judge/meter.ts");
   const requests = readJsonl<VisRequest>(need(f, "--requests"));
   const out = need(f, "--out");

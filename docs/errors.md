@@ -564,6 +564,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_RM_POST_LABELS](#e_rm_post_labels) | 2 | U20 |
 | [E_RM_POST_RETIRED](#e_rm_post_retired) | 2 | U20 |
 | [E_RM_POST_DESK_RETIRED](#e_rm_post_desk_retired) | 2 | U20 |
+| [E_RM_NOT_OPEN](#e_rm_not_open) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4512,6 +4513,14 @@ rm-post desk-package and labels-import are retired: under pre-run change 9 (R126
 Fix: Run gstack-evals rm-post label-send, which has Grok 4.7 label the judge check with Kimi K3.1 Pro as its fallback (lanes/review-models/post/README.md).
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_RM_NOT_OPEN
+
+A paid review-models step ran before its phase opened (lanes/review-models/score/opening.ts, pre-run change 10): pilot steps and their paid preparation open at 2026-11-26 21:30Z, counted steps, the validation batch included, at 2026-11-28 06:00Z.
+
+Fix: Wait for the printed opening time. Counted steps also wait for the gstack-evals Captain's read of the pilot readout. No flag or variable moves either time; a new time needs a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
