@@ -2,7 +2,7 @@
 id: 2026-11-26-geva-597-subjective-skills-trace-audit
 kind: research
 title: "Do gstack's subjective skills run and change the work? A keyless trace audit of office-hours sessions we already held, with coverage for plan-ceo-review and plan-design-review"
-summary: "On GPT-6.1 Sol, typed /office-hours waited for 7 or 8 founder answers in 6 of 6 sessions (plain 5 of 12); Opus 5.5 opened the skill in 2 of 6. No quality verdict without blind human picks."
+summary: "Typed /office-hours: Sol took 7-8 founder answers before advising in all 5 finished sessions (plain Sol took one answer in 5 of 12); Opus opened the skill in 2 of 6. No quality verdict."
 author: GEVA-597
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -24,8 +24,8 @@ links:
 
 # Do gstack's subjective skills run and change the work?
 
-- **We learned that the same typed command can run a subjective skill on one frontier model and not on another.** Typed /office-hours made GPT-6.1 Sol ask and then wait for the founder's answers before advising in 6 of 6 sessions, against 5 of 12 plain Sol sessions on the same six founders. Opus 5.5 opened an office-hours file in only 2 of 6 sessions and gave its advice in the first reply, before any answer, in 4 of 6. You should read "opened", "ran the procedure" and "waited for the user" per model before reading any outcome of an interactive skill.
-- **We learned what the skill changed in the work on Sol, as far as code can see it.** Sol with the skill drew out the founder's hidden demand facts in 5 of 5 scored sessions, against 0 of 12 plain, and wrote its recommendation only after 7 or 8 founder answers. Whether the resulting advice is better is a taste question: the only score we hold for it uses a model-written key and model judges no person has checked, so this post makes no better-or-worse claim. A five-pair blind check by the project owner is staged privately.
+- **We learned that the same typed command can run a subjective skill on one frontier model and not on another.** Typed /office-hours made GPT-6.1 Sol give the founder at least one turn before advising in 6 of 6 sessions; the 5 that finished took 7 or 8 founder answers before their recommendation, and the sixth was lost to the simulator. Plain Sol on the same six founders gave the founder a turn in 5 of 12 sessions, one answer each. Opus 5.5 opened an office-hours file in only 2 of 6 sessions and gave its advice in the first reply, before any answer, in 4 of 6. You should read "opened", "ran the procedure" and "waited for the user" per model before reading any outcome of an interactive skill.
+- **We learned what the skill changed in the work on Sol, as far as code can see it.** In the simulator's own log, the founder disclosed hidden demand facts in 5 of 5 finished Sol sessions with the skill, against 0 of 12 plain. These are simulator-reported disclosures, not facts verified as answers to the advisor's questions: the simulated founder failed its audit for volunteering facts. Whether the resulting advice is better is a taste question: the only score we hold for it uses a model-written key and model judges no person has checked, so this post makes no better-or-worse claim. A five-pair blind check by the project owner is staged privately.
 - **For plan-ceo-review the typed command never ran the procedure in two protocols, a forced line did, and the forced arm showed no gain on 84 real plans. For plan-design-review we hold no session where the skill ran against a matched plain arm.** No cut follows for any of the three skills: most of their main intentions have no score.
 
 ## Status
@@ -64,17 +64,17 @@ A heading, a checklist or a design doc in the transcript is procedure evidence, 
 | Procedure ran (GEVA-526's read, fixed after its smoke) | 1 | n/a | n/a | 6 | n/a | 0 | n/a |
 | Frozen exposure detector | 0 | n/a | n/a | 0 | n/a | 0 | n/a |
 | At least one founder turn before advice | 2 | 0 | 2 | 6 | 5 | 4 | 0 |
-| Demand facts drawn out, scored sessions | 0 of 5 | 0 of 18 | 0 of 2 | 5 of 5 | 0 of 12 | 1 of 3 | 0 of 12 |
+| Demand facts disclosed (simulator log), scored sessions | 0 of 5 | 0 of 18 | 0 of 2 | 5 of 5 | 0 of 12 | 1 of 3 | 0 of 12 |
 | First move matches the key's customer or wedge (W), scored | 1 of 5 | 0 of 18 | 1 of 2 | 5 of 5 | 6 of 12 | 1 of 3 | 0 of 12 |
 | W with a lost session counted as a miss | 1 of 6 | 0 of 18 | 1 of 2 | 5 of 6 | 6 of 12 | 1 of 6 | 0 of 12 |
 
 Base rates on all 16 calibration founders (GEVA-526): plain W was Opus 1 of 48, Sol 8 of 32 and particle-1 1 of 32, and with every fact given up front 47 of 48, 32 of 32 and 30 of 32. Plain Opus and particle-1 never gave the founder a turn (0 of 48, 0 of 32); plain Sol did in 9 of 32.
 
-**The trace, graded apart from the artifact.** The trace is read by code. Every scored Sol office-hours session opened with questions and no recommendation (170 to 230 words), drew its first key fact at founder turn 1 to 3, printed three or four numbered decision briefs, dispatched one or two subagents, wrote one file, and gave its first-move block in reply 8 or 9 at about 3,600 to 4,600 words of agent text. Plain Sol answered at once in 7 of 12 sessions and asked once in 5, at about 1,000 words. Opus with the skill answered at once in 4 of 6, with no office-hours file opened. The artifact is the first-move block. Its W score is a known-answer match against a key that Sol and Argon wrote, judged by GPT-6 Astra, Opus 5.5 or a panel whose check used model-made gold only; the unchecked-judge correction labels this score Q, so every W count here reads as one model's opinion, unchecked.
+**The trace, graded apart from the artifact.** The trace is read by code. Every scored Sol office-hours session opened with questions and no recommendation (170 to 230 words), had its first key fact disclosed at founder turn 1 to 3, printed three or four numbered decision briefs, dispatched one or two subagents, wrote one file, and gave its first-move block in reply 8 or 9 at about 3,600 to 4,600 words of agent text. Plain Sol answered at once in 7 of 12 sessions and asked once in 5, at about 1,000 words. Opus with the skill answered at once in 4 of 6, with no office-hours file opened. The artifact is the first-move block. Its W score is a known-answer match against a key that Sol and Argon wrote, judged by GPT-6 Astra, Opus 5.5 or a panel whose check used model-made gold only; the unchecked-judge correction labels this score Q, so every W count here reads as one model's opinion, unchecked.
 
-**Did the founder's answer change what was chosen?** The design shows co-occurrence, not cause. On one founder, plain Sol answered at once in both passes and missed; Sol with the skill drew all six key facts and matched. On two founders, plain Sol asked one question and matched in all four passes. Across all calibration founders, plain Sol matched in 7 of 9 sessions where the founder answered first and in 1 of 23 where nobody answered. Sol chose when to wait in the plain arm, so none of this shows that waiting carries the skill's effect.
+**Did the founder's answer change what was chosen?** The design shows co-occurrence, not cause. On one founder, plain Sol answered at once in both passes and missed; with the skill the simulator disclosed all six key facts and Sol matched. On two founders, plain Sol asked one question and matched in all four passes. Across all calibration founders, plain Sol matched in 7 of 9 sessions where the founder answered first and in 1 of 23 where nobody answered. Sol chose when to wait in the plain arm, so none of this shows that waiting carries the skill's effect.
 
-**Where the instruments failed (from GEVA-526, reused).** The simulated founder volunteered unasked facts: both auditors marked 7 of 33 audited turns (bar: at most 1), so facts drawn out are inflated wherever the founder spoke. The frozen exposure detector expected capitalised markers and missed Sol's prose-fallback format. The run's repair sentence, "taking your recommended option at every decision", stopped the skill giving the founder any turn on the re-smoke (0 turns in 12 Opus and Sol sessions); that was our harness. The second rewrite eval's simulator then failed its audit three times.
+**Where the instruments failed (from GEVA-526, reused).** The simulated founder volunteered unasked facts: both auditors marked 7 of 33 audited turns (bar: at most 1), so disclosed facts are inflated wherever the founder spoke. The frozen exposure detector expected capitalised markers and missed Sol's prose-fallback format. The run's repair sentence, "taking your recommended option at every decision", stopped the skill giving the founder any turn on the re-smoke (0 turns in 12 Opus and Sol sessions); that was our harness. The second rewrite eval's simulator then failed its audit three times.
 
 ## Coverage for plan-ceo-review and plan-design-review
 
@@ -96,7 +96,7 @@ The 84-plan exposure measures a forced line, not what a user types; the 0 of 16 
 | Forced | 16 of 16; stage 2 exposure above | Only as a phase of /autoplan --full in the day-one eval, design-phase exposure not reported |
 | Plain base rate | Seeded flaws 12 of 12; real plans, deciding issue in top three 0.341 / 0.155 / 0.226 | Planted design flaws 10 of 10, 12 of 12, 12 of 12 |
 | Paired artifacts held | Stage 2, sealed | None standalone |
-| Later-user evidence | By design: the key is what maintainers decided | One owner's first use of an app built from an /autoplan-reviewed plan (case study) |
+| Later-user evidence | By design: the key is what maintainers decided | None for the standalone skill. GEVA-549 cites the owner's complaints after first using one app built from an /autoplan-reviewed plan; that is bundle-level, and no reading shows the design phase ran |
 | Blind human picks | None | None |
 
 The missing ingredient for plan-design-review is one session per pair where the skill ran standalone on a plan, against a plain review of the same plan on the same model and harness.
