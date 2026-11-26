@@ -96,7 +96,7 @@ The 84-plan exposure measures a forced line, not what a user types; the 0 of 16 
 | Forced | 16 of 16; stage 2 exposure above | Only as a phase of /autoplan --full in the day-one eval, design-phase exposure not reported |
 | Plain base rate | Seeded flaws 12 of 12; real plans, deciding issue in top three 0.341 / 0.155 / 0.226 | Planted design flaws 10 of 10, 12 of 12, 12 of 12 |
 | Paired artifacts held | Stage 2, sealed | None standalone |
-| Later-user evidence | By design: the key is what maintainers decided | None for the standalone skill. GEVA-549 cites the owner's complaints after first using one app built from an /autoplan-reviewed plan; that is bundle-level, and no reading shows the design phase ran |
+| Later-user evidence | By design: the key is what maintainers decided | None: no matched later-user outcome is available for this skill |
 | Blind human picks | None | None |
 
 The missing ingredient for plan-design-review is one session per pair where the skill ran standalone on a plan, against a plain review of the same plan on the same model and harness.
