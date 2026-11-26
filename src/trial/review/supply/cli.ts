@@ -188,7 +188,7 @@ function countsCmd(f: Map<string, string>): number {
 function buildCmd(f: Map<string, string>): number {
   const d: Draw = readJson(need(f, "--draw"));
   const p = new Map(readJsonl<PRecord>(need(f, "--p")).map((r) => [r.id, r]));
-  const b = new Map(readJsonl<BRecord>(need(f, "--b")).map((r) => [bUnitRef(r).id, r]));
+  const b = new Map(readJsonl<BRecord>(need(f, "--b")).filter((r) => r.szz?.bic).map((r) => [bUnitRef(r).id, r]));
   const out = need(f, "--out");
   const units = [...d.pilot.p, ...d.pilot.b, ...d.validation, ...d.counted, ...d.decoys];
   const rows = [...new Map(units.map((u) => [u.id, u])).values()].map((u) => {
