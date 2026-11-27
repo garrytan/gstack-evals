@@ -242,6 +242,11 @@ describe("supply", () => {
       mkdirSync(join(units, id), { recursive: true });
       writeFileSync(join(units, id, "ep-unit.json"), JSON.stringify(unit(id, "q" + i)));
       writeFileSync(join(units, id, "ep-author.json"), JSON.stringify({ stubbed: [], implementation: [], tests: [], callers: [], fix: { message: i % 2 ? "odd-unit" : "even-unit", diff: "--- a\n+++ b" } }));
+      mkdirSync(join(f.repos, id), { recursive: true });
+      writeFileSync(join(f.repos, id, "a.ts"), "export const a = 1;\n");
+      git(join(f.repos, id), "init", "-q");
+      git(join(f.repos, id), "add", "-A");
+      git(join(f.repos, id), "commit", "-q", "-m", "B");
       const a = join(f.run, "author", id);
       mkdirSync(a, { recursive: true });
       if (i === 9) continue;
@@ -284,6 +289,50 @@ describe("supply", () => {
     expect(f.calls.builds.length === 1 && f.calls.builds[0]!.startsWith("s9")).toBe(true);
     expect(existsSync(join(f.run, "author", "s9", "hinted.json"))).toBe(true);
     expect(JSON.parse(readFileSync(join(f.run, "e1", "segments.json"), "utf8")).attempt3).not.toContain("s9");
+  });
+
+  test("a drawn unit whose stripped B tracks Codex config leaves the draw before any review of it, and never after", async () => {
+    const f = fixture();
+    const units = join(f.dir, "units3");
+    const ids = Array.from({ length: 8 }, (_, i) => "x" + i);
+    for (const [i, id] of ids.entries()) {
+      mkdirSync(join(units, id), { recursive: true });
+      writeFileSync(join(units, id, "ep-unit.json"), JSON.stringify(unit(id, "q" + i)));
+      mkdirSync(join(f.repos, id), { recursive: true });
+      writeFileSync(join(f.repos, id, "a.ts"), "export const a = 1;\n");
+      git(join(f.repos, id), "init", "-q");
+      git(join(f.repos, id), "add", "-A");
+      git(join(f.repos, id), "commit", "-q", "-m", "B");
+      const a = join(f.run, "author", id);
+      mkdirSync(a, { recursive: true });
+      writeFileSync(join(a, "calls.json"), JSON.stringify({ drop: null, foresee: ["yes", "yes"] }));
+      writeFileSync(join(a, "hinted.json"), JSON.stringify({ drop: null }));
+      mkdirSync(join(f.run, "e1", "screen"), { recursive: true });
+      writeFileSync(join(f.run, "e1", "screen", id + ".json"), JSON.stringify({ state: { astra: null, opus: null, eligible: true, packet: "" }, reach: ["yes", "yes"], drop: null, bothYes: true, costUsd: 0 }));
+    }
+    rmSync(join(f.run, "e1", "draw.json"));
+    rmSync(comparisonPath(f.run));
+    const draw = () => f.cmds["e1-draw"]!.run(args({ "--run": f.run, "--units": units, "--repos": f.repos }), io().io);
+    const read = () => JSON.parse(readFileSync(join(f.run, "e1", "draw.json"), "utf8")) as E1Draw;
+    expect(await draw()).toBe(0);
+    const before = read();
+    expect(before.calibration).toHaveLength(6);
+    const gone = before.calibration[1]!;
+    mkdirSync(join(f.repos, gone, ".agents"), { recursive: true });
+    writeFileSync(join(f.repos, gone, ".agents", "x.md"), "x\n");
+    git(join(f.repos, gone), "add", "-A");
+    git(join(f.repos, gone), "commit", "-q", "-m", "B2");
+    rmSync(join(f.run, "e1", "codex.json"));
+    mkdirSync(join(f.run, "e1", "reviews", "records"), { recursive: true });
+    writeFileSync(join(f.run, "e1", "reviews", "records", gone + "_N_opus_0.json"), "{}\n");
+    expect(await codeOf(draw)).toBe("E_USAGE");
+    expect(read()).toEqual(before);
+    rmSync(join(f.run, "e1", "reviews", "records", gone + "_N_opus_0.json"));
+    expect(await draw()).toBe(0);
+    const after = read();
+    expect(after.calibration).not.toContain(gone);
+    expect([...after.calibration, ...after.comparison].slice(0, 7)).toEqual([...before.calibration, ...before.comparison].filter((id) => id !== gone));
+    expect(after.skipped).toContainEqual({ id: gone, reason: "codex config" });
   });
 });
 

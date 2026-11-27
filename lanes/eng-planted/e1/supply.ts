@@ -103,6 +103,9 @@ export interface DrawUnit {
   by: "attempt3" | "pool" | "wave2";
   foresee: readonly [Foresee, Foresee] | null;
   screen: ScreenRecord | null;
+  /** The .codex, .agents and AGENTS.override.md paths its stripped B still tracks; any one leaves it out of the draw
+   * (pre-run change 2, section 3; pre-run change 5). */
+  codex: readonly string[];
 }
 
 export interface E1Draw {
@@ -131,6 +134,10 @@ export function e1Draw(seed: string, units: readonly DrawUnit[]): E1Draw {
   const ids = (who: DrawUnit["by"]) => drawOrder(seed, units.filter((u) => u.by === who).map((u) => u.id));
   for (const id of [...ids("attempt3"), ...ids("pool"), ...ids("wave2")]) {
     const u = by.get(id)!;
+    if (u.codex.length) {
+      d.skipped.push({ id, reason: "codex config" });
+      continue;
+    }
     if (u.authoring === "dropped") {
       d.skipped.push({ id, reason: "authoring" });
       continue;

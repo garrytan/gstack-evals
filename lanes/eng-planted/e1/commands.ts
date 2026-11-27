@@ -36,7 +36,7 @@ import { e1ReviewLauncher, rollouts, type E1ReviewSession } from "./launch.ts";
 import { codexAsClaude } from "./detect.ts";
 import { ownUses } from "../../eng-review/exposure.ts";
 import { look } from "./look.ts";
-import { cellKey, e1Builds, e1Cells, e1Item, E1_ITEMS, e1Reviews, itemName, reviewRecordPath, buildRecordPath, scoredCells, type CellKey, type E1Build, type E1ReviewRecord, type E1Unit } from "./pipeline.ts";
+import { cellKey, e1Builds, e1Cells, e1Item, E1_ITEMS, e1Reviews, itemName, reviewRecordPath, buildRecordPath, scoredCells, strippedCodexLeft, type CellKey, type E1Build, type E1ReviewRecord, type E1Unit } from "./pipeline.ts";
 import { armState, holm, rng, type Cell } from "./readings.ts";
 import { drawOrder, e1Draw, screenUnit, stateAgreement, SUPPLY_MODELS, type DrawUnit, type E1Draw, type ScreenRecord, type SupplyCall, type SupplyRole } from "./supply.ts";
 import { meterLauncher } from "../stages/commands.ts";
@@ -343,7 +343,15 @@ export function drawUnits(run: string, src: UnitSource): DrawUnit[] {
   }
   const a3 = new Set(seg.attempt3);
   const w2 = new Set(seg.wave2 ?? []);
-  return units.map(({ u, authoring }) => ({ id: u.id, repo: u.repo, authoring, by: a3.has(u.id) ? "attempt3" : w2.has(u.id) ? "wave2" : "pool", foresee: readJson<{ foresee: [Foresee, Foresee] | null }>(join(run, "author", u.id, "calls.json"))?.foresee ?? null, screen: readJson<ScreenRecord>(screenPath(run, u.id)) }));
+  const cxPath = join(run, "e1", "codex.json");
+  const cx = readJson<Record<string, string[]>>(cxPath) ?? {};
+  const fresh = units.filter(({ u }) => !(u.id in cx));
+  for (const { u } of fresh) cx[u.id] = strippedCodexLeft(src.base(u.id));
+  if (fresh.length) {
+    mkdirSync(dirname(cxPath), { recursive: true });
+    writeFileSync(cxPath, JSON.stringify(cx) + "\n");
+  }
+  return units.map(({ u, authoring }) => ({ id: u.id, repo: u.repo, authoring, codex: cx[u.id]!, by: a3.has(u.id) ? "attempt3" : w2.has(u.id) ? "wave2" : "pool", foresee: readJson<{ foresee: [Foresee, Foresee] | null }>(join(run, "author", u.id, "calls.json"))?.foresee ?? null, screen: readJson<ScreenRecord>(screenPath(run, u.id)) }));
 }
 
 /** The bootstrap seed, minted from random bytes once and recorded before anything reads a contrast. */
@@ -700,8 +708,16 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
     const run = runDir(a);
     const d = e1Draw(drawSeed(run), drawUnits(run, source(a)));
     const old = readJson<E1Draw>(join(run, "e1", "draw.json"));
-    for (const set of ["calibration", "comparison", "reserve"] as const)
-      if (old && old[set].some((id, i) => d[set][i] !== id)) fail("E_USAGE", "the draw would change its " + set + " set, which only grows; nothing written");
+    const records = existsSync(join(run, "e1", "reviews", "records")) ? readdirSync(join(run, "e1", "reviews", "records")) : [];
+    const gone = new Set(d.skipped.filter((s) => s.reason === "codex config").map((s) => s.id));
+    for (const id of gone)
+      if (old && ["calibration", "comparison", "reserve"].some((set) => old[set as "calibration"].includes(id)) && records.some((f) => f.startsWith(id + "_")))
+        fail("E_USAGE", "unit " + id + " left the draw for its Codex config after a review of it was recorded; nothing written");
+    const placed = (x: E1Draw) => [...x.calibration, ...x.comparison, ...x.reserve];
+    const left = old ? placed(old).filter((id) => gone.has(id)) : [];
+    if (old && !left.length) {
+      for (const set of ["calibration", "comparison", "reserve"] as const) if (old[set].some((id, i) => d[set][i] !== id)) fail("E_USAGE", "the draw would change its " + set + " set, which only grows; nothing written");
+    } else if (old && placed(old).filter((id) => !gone.has(id)).some((id, i) => placed(d)[i] !== id)) fail("E_USAGE", "the draw would reorder the units it had placed beyond the " + left.length + " its Codex config leaves out; nothing written");
     const frozen = readJson<E1Comparison>(comparisonPath(run));
     if (frozen && d.comparison.join("\n") !== frozen.units.join("\n")) fail("E_USAGE", "the comparison was frozen (" + comparisonPath(run) + ") and the draw would change it; nothing written");
     mkdirSync(join(run, "e1"), { recursive: true });

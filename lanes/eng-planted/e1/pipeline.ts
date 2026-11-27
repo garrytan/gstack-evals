@@ -15,7 +15,8 @@
 // - Build: attempt 3's build stage unchanged: the reviewed prompt, the mount, one fresh retry, the grader, catch.
 // - A unit whose stripped B still tracks .codex, .agents or AGENTS.override.md is left out before any outcome, as attempt 3
 //   leaves out a B that tracks project-local Claude Code config (pre-run change 2).
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { BUILD_LINE, REVIEW_LINE, stripBase } from "../../eng-build/build-stage.ts";
 import { testLinesAdded } from "../../eng-build/pipeline.ts";
@@ -87,6 +88,18 @@ export function codexConfigLeft(repo: string): string[] {
   };
   walk(repo, "");
   return out.sort();
+}
+
+/** codexConfigLeft on a copy of a unit's B after stripBase, as the review stage seeds it. */
+export function strippedCodexLeft(base: string): string[] {
+  const d = mkdtempSync(join(tmpdir(), "e1-codex-"));
+  try {
+    cpSync(base, join(d, "repo"), { recursive: true });
+    stripBase(join(d, "repo"));
+    return codexConfigLeft(join(d, "repo"));
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
 }
 
 export interface E1ReviewRecord extends CellKey {

@@ -39,7 +39,7 @@ describe("state screen", () => {
 
 describe("draw", () => {
   const pass: ScreenRecord = { state: { astra: null, opus: null, eligible: true, packet: "" }, reach: ["yes", "yes"], drop: null, bothYes: true, costUsd: 0 };
-  const u = (i: number, o: Partial<DrawUnit> = {}): DrawUnit => ({ id: "u" + i, repo: "r" + (i % 30), authoring: "passed", by: "attempt3", foresee: ["yes", "yes"], screen: pass, ...o });
+  const u = (i: number, o: Partial<DrawUnit> = {}): DrawUnit => ({ id: "u" + i, repo: "r" + (i % 30), authoring: "passed", by: "attempt3", foresee: ["yes", "yes"], screen: pass, codex: [], ...o });
   test("calibration first, comparison, reserve; at most 3 a repository", () => {
     const d = e1Draw("s", Array.from({ length: 120 }, (_, i) => u(i)));
     expect([d.calibration.length, d.comparison.length, d.reserve.length, d.waiting]).toEqual([6, 64, 6, null]);
@@ -47,6 +47,15 @@ describe("draw", () => {
     const counts = new Map<string, number>();
     for (const id of [...d.calibration, ...d.comparison, ...d.reserve]) counts.set(repo(id), (counts.get(repo(id)) ?? 0) + 1);
     expect(Math.max(...counts.values())).toBeLessThanOrEqual(3);
+  });
+  test("a unit whose stripped B tracks Codex config is left out before any set, and takes no repository slot", () => {
+    const units = Array.from({ length: 10 }, (_, i) => u(i, { repo: "same" }));
+    const clean = e1Draw("s", units);
+    const first = clean.calibration[0]!;
+    const d = e1Draw("s", units.map((x) => (x.id === first ? { ...x, codex: [".agents"] } : x)));
+    expect(d.calibration).not.toContain(first);
+    expect(d.calibration).toHaveLength(3);
+    expect(d.skipped).toContainEqual({ id: first, reason: "codex config" });
   });
   test("an unforeseeable unit serves calibration only; the walk waits at the first unscreened unit", () => {
     const units = Array.from({ length: 10 }, (_, i) => u(i, { repo: "r" + i, foresee: ["no", "no"] }));
