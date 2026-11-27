@@ -66,6 +66,14 @@
       ],
       "pattern": "https://user:pass\\x40localhost:5000/v2/_catalog",
       "reason": "a placeholder registry URL on localhost in a test in a published session diff of the skill-pack head-to-head, not a credential"
+    },
+    {
+      "finding": "env.kv",
+      "paths": [
+        "src/trial/review/recorded/codex-0.170-voice-request.json"
+      ],
+      "pattern": "^\\s*\"prompt_cache_key\": \"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\",?\\s*$",
+      "reason": "Codex's prompt_cache_key, a per-session UUID in a request recorded keyless against a local stub, not a credential"
     }
   ],
   "dependencies": {
@@ -785,7 +793,10 @@
     "lanes/weekly-stable/resolve-shim.ts": [
       "tests/weekly-stable/resolve.test.ts"
     ],
-    "lanes/weekly-stable/build.sh": []
+    "lanes/weekly-stable/build.sh": [],
+    "src/trial/review/recorded/**": [
+      "tests/proxy/voice-web-search.test.ts"
+    ]
   },
   "guards": [
     {
