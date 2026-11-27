@@ -5,7 +5,7 @@
 // seam=gate1, treeProblems, containmentAt; no_claim=real repositories
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { containmentAt, gate1, inventory, stripExecutable, treeProblems } from "../../../../src/trial/review/supply/gates.ts";
@@ -104,6 +104,15 @@ describe("instruction files under pre-run change 2", () => {
     const inv = inventory(root, null);
     expect(inv.files[".claude/skills/vendored"]).toBe(createHash("sha256").update("gitlink:" + git(sub, "rev-parse", "HEAD")).digest("hex"));
     expect(inv.flags.claude_dir).toBe(true);
+  });
+  test("a tracked .claude symlink to a directory refuses the unit", () => {
+    const root = repo({ "cfg/settings.json": JSON.stringify(settings) });
+    symlinkSync("cfg", join(root, ".claude"));
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "link .claude");
+    const inv = inventory(root, null);
+    expect(inv.refuse).toContain(".claude is a symlink");
+    expect(Object.keys(inv.files)).toContain(".claude");
   });
   test("a tree with none has no flags; a nested CLAUDE.md is not the repo's", () => {
     expect(inventory(repo(), null).flags).toEqual({ claude_md: false, root_claude_md: false, agents_md: false, claude_dir: false, settings: false, mcp_json: false });

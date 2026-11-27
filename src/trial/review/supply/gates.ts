@@ -44,7 +44,7 @@ export const EXEC_KEYS = ["hooks", "permissions", "statusLine", "apiKeyHelper", 
 const instructionFile = (path: string): boolean => {
   const parts = path.split("/");
   const name = parts[parts.length - 1];
-  return name === "CLAUDE.md" || name === "AGENTS.md" || name === ".mcp.json" || parts.slice(0, -1).includes(".claude");
+  return name === "CLAUDE.md" || name === "AGENTS.md" || name === ".mcp.json" || parts.includes(".claude");
 };
 
 /** What a unit tree carries of each instruction file type: the flags the scorer splits on later. */
@@ -73,6 +73,11 @@ export function inventory(dir: string, base: string | null): Inventory {
     const file = join(dir, path);
     const st = lstatSync(file, { throwIfNoEntry: false });
     if (!st) continue;
+    if (path.split("/").pop() === ".claude" && st.isSymbolicLink()) {
+      files[path] = sha("symlink:" + readlinkSync(file));
+      refuse ??= path + " is a symlink, so the settings it points to cannot be stripped";
+      continue;
+    }
     if (st.isDirectory()) {
       files[path] = sha("gitlink:" + gitOut(dir, ["rev-parse", "HEAD:" + path], "read the submodule commit at " + path).trim());
       continue;
