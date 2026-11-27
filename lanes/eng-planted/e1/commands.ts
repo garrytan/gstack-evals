@@ -98,6 +98,10 @@ export interface E1Paid {
   allIn: AllIn;
 }
 
+/** The outcome driver's directory for every build stage of the run: the hinted authoring builds and eval 1's builds. The
+ * ledger binds a run to the directory of its first driver lease, and the hinted builds leased first (pre-run change 6). */
+export const e1Driver = (run: string): string => join(run, "e1", "author", "driver");
+
 /** A paid command's flags, refused before any lease opens. */
 export function e1Paid(a: Args, run: string, allowed: (item: string) => boolean): E1Paid {
   const missing = ["--item", "--cap-usd", "--ledger-record", "--ledger", "--crew-usd", "--hosts-usd"].filter((f) => !a.flags.get(f));
@@ -521,7 +525,7 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
     const src = source(a);
     const log = logTo(io);
     const grader = await seams.grader({ work: need(a, "--work"), log });
-    const driver = join(run, "e1", "builds", "driver");
+    const driver = e1Driver(run);
     const opened = driverCells(driver, E1_RUN);
     const groups = which ? [which] : (Object.keys(RUNS_ON) as E1Arm[]).flatMap((arm) => RUNS_ON[arm].map((model) => ({ arm, model })));
     const all = groups.flatMap((g) => phaseCells(run, phase, half, g.arm, g.model).cells);
@@ -676,7 +680,7 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
     const todo = owed.filter((id) => readJson<{ drop: string | null }>(join(dirOf(id), "calls.json"))?.drop === null && !existsSync(join(dirOf(id), "hinted.json"))).slice(0, limit);
     const units = new Map(src.units().map((u) => [u.id, u]));
     const grader = await seams.grader({ work: need(a, "--work"), log });
-    const driver = join(run, "e1", "author", "driver");
+    const driver = e1Driver(run);
     const opened = driverCells(driver, E1_RUN);
     const key = (id: string) => buildKey(id, "hinted", null, 1);
     await paidStage(p, seams.build({ out: join(run, "e1", "author", "rig"), driver, src, units: need(a, "--units"), repos: need(a, "--repos"), ids: todo, cells: todo.map(key), a, reviewed: false }), (session) =>

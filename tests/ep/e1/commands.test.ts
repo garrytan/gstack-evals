@@ -10,7 +10,7 @@ import { openLease, reconcileLease, recordApproval } from "../../../src/runner/l
 import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
 import { ledgerPath } from "../../../src/runner/ledger/paths.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
-import { capGuarded, capStopPath, comparisonDigest, comparisonPath, e1Commands, E1_NOT_BEFORE, E1_REAL, E1_RUN, e1StubLauncher, lookPath, type E1Seams, type LookFile } from "../../../lanes/eng-planted/e1/commands.ts";
+import { capGuarded, capStopPath, comparisonDigest, comparisonPath, e1Commands, e1Driver, E1_NOT_BEFORE, E1_REAL, E1_RUN, e1StubLauncher, lookPath, type E1Seams, type LookFile } from "../../../lanes/eng-planted/e1/commands.ts";
 import { RUNS_ON, type E1Arm } from "../../../lanes/eng-planted/e1/frozen.ts";
 import type { E1ReviewSession } from "../../../lanes/eng-planted/e1/launch.ts";
 import { E1_ITEMS, itemName } from "../../../lanes/eng-planted/e1/pipeline.ts";
@@ -58,7 +58,7 @@ function fixture(extra: Partial<E1Seams> = {}) {
   mkdirSync(tree);
   writeFileSync(join(tree, "final.patch"), "");
   writeFileSync(join(tree, "sdk-messages.jsonl"), JSON.stringify({ type: "tool_use", input: { file_path: "/work/review/plan.md" } }) + "\n");
-  const calls = { reviews: [] as string[], builds: [] as string[], markers: [] as string[], supply: [] as string[] };
+  const calls = { reviews: [] as string[], builds: [] as string[], markers: [] as string[], supply: [] as string[], drivers: [] as string[] };
   const review: E1ReviewSession = async (s) => {
     calls.reviews.push(s.cell);
     const plan = "# Plan\nAdd a state.\nidle -> running\nrunning -> done\ndone -> idle\n";
@@ -70,7 +70,10 @@ function fixture(extra: Partial<E1Seams> = {}) {
   };
   const seams: E1Seams = {
     review: () => e1StubLauncher(review),
-    build: () => e1StubLauncher(build),
+    build: (o) => {
+      calls.drivers.push(o.driver);
+      return e1StubLauncher(build);
+    },
     grader: async () => ({ grade: async () => ({ planted: [{ id: "t1", runs: ["pass", "pass", "pass"] }, { id: "t2", runs: ["assert", "crash", "assert"] }], functional: [] }), catchOf: async () => ({ catch: true, drop: null }) }),
     marker: (h) => {
       calls.markers.push(h);
@@ -168,6 +171,7 @@ describe("pilot", () => {
     expect(leases).toHaveLength(PAIRS.length);
     expect(await f.cmds["e1-builds"]!.run(args({ ...f.paid("e1-pilot"), "--phase": "pilot" }), io().io)).toBe(0);
     expect(f.calls.builds).toHaveLength(PAIRS.length);
+    expect(f.calls.drivers).toEqual([e1Driver(f.run)]);
     expect(readItem(f.record, "e1-pilot").leases).toHaveLength(PAIRS.length + 1);
     const r = io();
     expect(await f.cmds["e1-pilot"]!.run(args({ "--run": f.run, "--units": f.units, "--repos": f.repos }), r.io)).toBe(3);
@@ -287,6 +291,7 @@ describe("supply", () => {
     expect(existsSync(join(f.run, "author", "s8", "plan.md"))).toBe(false);
     expect(await run("e1-author", { "--step": "hinted" })).toBe(0);
     expect(f.calls.builds.length === 1 && f.calls.builds[0]!.startsWith("s9")).toBe(true);
+    expect(f.calls.drivers.length > 0 && f.calls.drivers.every((d) => d === e1Driver(f.run))).toBe(true);
     expect(existsSync(join(f.run, "author", "s9", "hinted.json"))).toBe(true);
     expect(JSON.parse(readFileSync(join(f.run, "e1", "segments.json"), "utf8")).attempt3).not.toContain("s9");
   });
