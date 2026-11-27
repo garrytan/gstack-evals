@@ -49,7 +49,7 @@ The pilot's part-ran check (R111) reads each gstack session for the procedure gs
 | Fable 5.2 + Sol (FS) | 0 of 10 | 10 | 6 | 3 | 3 | 1 | 1 | 1 |
 | Fable 5.2 + Astra (FA) | 1 of 10 | 11 | 4 | 2 | 4 | 1 | 1 | 0 |
 
-Each count is of the 10 bug-unit reviews per arm. The one FS review in the last column lost two specialists (maintainability and security). Apart from specialists, the Claude adversarial subagent was launched and never returned in 1 FS and 2 FA reviews, and the red team in 1 FA review.
+Each count is of the 10 bug-unit reviews per arm. The one FS review in the last column lost two specialists (maintainability and security). An earlier version of this table counted launches instead and showed 2 for FS and 2 for FA; the two FA launches were the Claude adversarial subagent, not specialists. Apart from specialists, the Claude adversarial subagent was launched and never returned in 1 FS and 2 FA reviews, and the red team in 1 FA review.
 
 In 16 of the 17 reviews with no selection line, the session still launched other subagents, so dispatch happened without the printed line in most of them.
 
@@ -119,7 +119,14 @@ Everything here is an observation on one pin and one harness: gstack 284214fd, C
 - A label supply that can deliver at least 100 eligible bug-unit labels: a pinned labeller route that stays stable, or another qualified labeller.
 - Per-session allowances sized to Fable's measured cost (sessions reached $28 here).
 - A new preregistration with caps approved before any paid call.
-- Fixes for the defects the final code review found in this eval's own code. None of them fired in the pilot: it had no reruns, no validation batch, no judge that qualified and no visibility request sent twice. The defects: the judge check counts reviews that neither labeller labelled toward its 100-label minimum; the validation batch writes over the pilot's contamination report; a rerun's first attempt is never journaled, so the readout counts 0 reruns and draws nothing from the reserve; a refused rerun's record names a folder that doesn't exist; cell leases can't reopen on resume once spent; and visibility replies are not tied to the prompt they answered.
+- Fixes for seven defects the final code review found in this eval's own code. They are unresolved: this branch closes the eval instead. Every step that could pay, write over the pilot's evidence, run, resume or validate a batch, or issue a judge or visibility qualification now refuses with E_RM_CLOSED before it reads, writes or spends anything (rm-post's contamination, sends and validation readout; rm-supply's visibility steps; rm-run's pilot plan, pilot run and e2e, though not the pilot's dry run or its items step, which only records ledger items and spends nothing; review-units with --cell-items). The pilot readout still reads. None of the seven fired in the pilot: it had no reruns, no validation batch, no judge that qualified and no visibility request sent twice. The seven:
+  1. The judge check counts reviews that neither labeller labelled toward its 100-label minimum.
+  2. The validation batch writes over the pilot's contamination report.
+  3. The readout doesn't charge reruns recorded with the final attempt to the retry reserve.
+  4. A rerun's first attempt is never journaled, so the readout counts 0 reruns.
+  5. A refused rerun's record names a folder that doesn't exist.
+  6. Cell leases can't reopen on resume once spent.
+  7. Visibility replies are not tied to the prompt they answered.
 
 ## Records
 

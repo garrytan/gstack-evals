@@ -21,7 +21,7 @@ import { RM_CELLS, RM_READER_MAP, rmArgs, type RmCell } from "./rm-cells.ts";
 import { armId } from "./run.ts";
 import type { Draw } from "./supply/draw.ts";
 import { loadUnitRepos } from "./unit-repos.ts";
-import { requireOpen } from "../../../lanes/review-models/score/opening.ts";
+import { requireLive, requireOpen } from "../../../lanes/review-models/score/opening.ts";
 
 type Env = Record<string, string | undefined>;
 interface Io {
@@ -300,6 +300,7 @@ export async function main(argv: string[], io: Io = { out: console.log, err: con
     return sub ? 0 : 2;
   }
   try {
+    if (sub === "pilot-plan" || sub === "e2e" || (sub === "pilot" && !rest.includes("--dry-run"))) requireLive("rm-run " + sub);
     const f = parse(rest);
     if (sub === "items") return await items(f, io, env);
     if (sub === "pilot-plan") return pilotPlan(f, io, env);

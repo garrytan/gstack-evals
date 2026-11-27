@@ -37,6 +37,7 @@ import { loadCodexArms, type CodexArms } from "./codex.ts";
 import { cellCheckMain } from "./rm-check.ts";
 import { cellRigDir, cellRunId, composeRigs, loadCellItems, type CellItems } from "./cell-rigs.ts";
 import { loadUnitRepos } from "./unit-repos.ts";
+import { requireLive } from "../../../lanes/review-models/score/opening.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
 type Env = Record<string, string | undefined>;
@@ -183,6 +184,7 @@ export async function main(argv: string[], io: Io = { out: console.log, err: con
 
 async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const flags = parseArgs(argv);
+  if (flags.has("--cell-items") && !flags.has("--dry-run")) requireLive("review-units --cell-items");
   const one = (f: string) => flags.get(f)?.[0] ?? null;
   const unitRepos = one("--unit-repos");
   if (unitRepos !== null && (flags.has("--suite") || flags.has("--source") || flags.has("--sealed-root"))) throw new Usage("--unit-repos takes its units from a build dir, so it runs without --suite, --source and --sealed-root");

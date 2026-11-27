@@ -4871,6 +4871,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_RM_CLOSED: {
+    exit: 2,
+    meaning: "A step of the review-models eval ran after the eval closed (lanes/review-models/score/opening.ts): the pilot stopped under R111 on 2026-11-27, so no step may pay, write over the pilot's evidence, run, resume or validate a batch, or issue a judge or visibility qualification. The step refused before it read, wrote or spent anything.",
+    fix: "Read the historical result with rm-post readout or on the results page. Reopening needs a new preregistration and fixes for the defects the results page lists under What would reopen it; no flag or variable reopens it.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

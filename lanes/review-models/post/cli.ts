@@ -14,7 +14,7 @@ import { rawAdvisory, type BRecord } from "../../../src/trial/review/supply/b-un
 import type { Draw } from "../../../src/trial/review/supply/draw.ts";
 import type { PRecord } from "../../../src/trial/review/supply/p-units.ts";
 import { rmFail } from "../score/frozen.ts";
-import { requireOpen } from "../score/opening.ts";
+import { requireLive, requireOpen } from "../score/opening.ts";
 import { buildKey, type KeySources } from "./key.ts";
 import { BATCHES, loadPilot, readKey, type Batch, type Pilot } from "./pilot.ts";
 import { pilotReadout, renderReadout } from "./readout.ts";
@@ -163,6 +163,8 @@ function readoutCmd(f: Map<string, string[]>): number {
   return r.proceed.set === "stop" ? 1 : 0;
 }
 
+const CLOSED_STEPS = new Set(["contamination", "judge-send", "second-read-send", "label-send"]);
+
 export async function main(argv: string[]): Promise<number> {
   const [sub, ...rest] = argv;
   if (!sub || sub === "--help" || sub === "-h") {
@@ -171,6 +173,7 @@ export async function main(argv: string[]): Promise<number> {
   }
   try {
     if (sub === "desk-package" || sub === "labels-import") return rmFail("E_RM_POST_DESK_RETIRED", sub + " is retired: no people label the judge check (pre-run change 9, R126); run rm-post label-send, which has Grok 4.7 label it");
+    if (CLOSED_STEPS.has(sub) || (sub === "readout" && rest.includes("--validation-run"))) requireLive("rm-post " + sub);
     const f = flags(rest);
     if (sub === "key") return keyCmd(f);
     if (sub === "contamination") return contaminationCmd(f);

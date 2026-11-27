@@ -12,7 +12,7 @@ import { draw, type Draw } from "./draw.ts";
 import { passed, type InstructionFlags } from "./gates.ts";
 import { NON_SOURCE } from "./szz.ts";
 import { cloneDir, ghPr, gitOut, SupplyError, supplyFail } from "./git.ts";
-import { requireOpen } from "../../../../lanes/review-models/score/opening.ts";
+import { requireLive, requireOpen } from "../../../../lanes/review-models/score/opening.ts";
 import { checkP, readSuite, SUITE_NAME, type PRecord } from "./p-units.ts";
 import { readVisibility, sendVisibility, visRequests, type VisReply, type VisRequest, type VisResult } from "./visibility.ts";
 
@@ -212,6 +212,7 @@ export async function main(argv: string[]): Promise<number> {
     return sub ? 0 : 2;
   }
   try {
+    if (sub.startsWith("vis-")) requireLive("rm-supply " + sub);
     const f = flags(rest);
     if (sub === "p-gates") return pGates(f);
     if (sub === "b-gates") return bGates(f);
@@ -225,7 +226,7 @@ export async function main(argv: string[]): Promise<number> {
   } catch (e) {
     const code = (e as { code?: unknown }).code;
     if (typeof code !== "string" || !isReasonCode(code)) throw e;
-    const detail = e instanceof SupplyError ? e.detail : (e as Error).message;
+    const detail = e instanceof SupplyError ? e.detail : (e as Error).message.replace(code + " ", "");
     console.error(code + " " + detail + "\n" + code + " fix: " + CODES[code].fix + "\n" + code + " docs: " + docAnchor(code));
     return 2;
   }

@@ -566,6 +566,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_RM_POST_RETIRED](#e_rm_post_retired) | 2 | U20 |
 | [E_RM_POST_DESK_RETIRED](#e_rm_post_desk_retired) | 2 | U20 |
 | [E_RM_NOT_OPEN](#e_rm_not_open) | 2 | U20 |
+| [E_RM_CLOSED](#e_rm_closed) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4528,6 +4529,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable:
 A paid review-models step ran before its phase opened (lanes/review-models/score/opening.ts, pre-run change 10): pilot steps and their paid preparation open at 2026-11-26 21:30Z, counted steps, the validation batch included, at 2026-11-28 06:00Z.
 
 Fix: Wait for the printed opening time. Counted steps also wait for the gstack-evals Captain's read of the pilot readout. No flag or variable moves either time; a new time needs a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_CLOSED
+
+A step of the review-models eval ran after the eval closed (lanes/review-models/score/opening.ts): the pilot stopped under R111 on 2026-11-27, so no step may pay, write over the pilot's evidence, run, resume or validate a batch, or issue a judge or visibility qualification. The step refused before it read, wrote or spent anything.
+
+Fix: Read the historical result with rm-post readout or on the results page. Reopening needs a new preregistration and fixes for the defects the results page lists under What would reopen it; no flag or variable reopens it.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
