@@ -32,7 +32,7 @@ Call settled: none (the pilot stopped under R111; no model, voice or default cha
 
 The no-gstack arm passed its pilot. Plain Opus 5.5 produced a parseable review in 11 of 11 sessions, its read audit found no gstack file or drive path in any of them, and it cost $0.38 per review.
 
-The supply path worked. All 11 pilot units built, installed and tested, no unit was refused, and no session read the fix: the contamination read found 0 contaminated and 0 doubtful sessions in all 55.
+The supply path worked. All 11 pilot unit trees were prepared and passed the history and clean-tree checks, and no unit was refused. Those are structural checks only: as pre-run change 3 set, each unit's install and test commands were `true`, so no dependencies were installed and no unit tests ran. The contamination read found 0 contaminated and 0 doubtful sessions in all 55. Code review later found that the key's B-unit markers leave out a fix given as a bare pull request number. That affects 2 of the 5 pilot B units, and none of their 10 sessions names either fix pull request.
 
 The money controls held. Every lease closed inside its cap, the pilot spent $450.21 of its $1,034 envelope, the retry reserve was never drawn, and no paid call ran outside an admitted ledger item.
 
@@ -86,20 +86,20 @@ Gemini 4 Carbon judged 45 reviews (the 44 parsed bug-unit reviews and the OS rev
 
 ### Denominators
 
-The frame and draw are as pre-run change 11 records. The counted set drew 100 bug units (73 P, 27 B); 2 P units are refused for every arm because GitHub no longer serves their pinned heads, which leaves 98 buildable (71 P, 27 B) and 12 decoys. The validation batch drew 17 (12 P, 5 B). All 137 distinct units built. None of the validation or counted units ran. Power for 98 units would have come from the plan's 100-unit row (main-effect MDD 8.7 to 10.2 points) as an approximation; no new power calculation was run.
+The frame and draw are as pre-run change 11 records. The counted set drew 100 bug units (73 P, 27 B); 2 P units are refused for every arm because GitHub no longer serves their pinned heads, which leaves 98 buildable (71 P, 27 B) and 12 decoys. The validation batch drew 17 (12 P, 5 B). All 137 distinct unit trees were prepared and passed the history check. None of the validation or counted units ran. Power for 98 units would have come from the plan's 100-unit row (main-effect MDD 8.7 to 10.2 points) as an approximation; no new power calculation was run.
 
 ## Why null?
 
 This is not a null on review models. It is an R111 pilot stop. The part under test didn't run, so the eval measured nothing about whether Fable or Astra helps.
 
 - Exposure: the procedure ran in 1 of 40 gstack bug-unit reviews.
-- Task fit and supply: all 11 units built and ran, and the plain arm reviewed all of them.
+- Task fit and supply: all 11 unit trees were prepared and ran (no builds, installs or unit tests), and the plain arm reviewed all of them.
 - Samples and headroom: not reached; no counted unit ran.
 - Does the frontier model do it unaided: not reached.
 
 ## Limits
 
-Everything here is an observation on one pin and one harness: gstack 284214fd, Claude Code 2.1.314 run headless, Codex CLI 0.170.0, a 60-turn limit, the review-units reader map at that pin, and per-session allowances of $10.50 (OS), $19.50 (OA), $27 (FS) and $36 (FA). It is not a claim about current gstack, other harness versions or interactive use. Ten bug units per arm is a pilot, not an estimate of any rate.
+Everything here is an observation on one pin and one harness: gstack 284214fd, Claude Code 2.1.314 run headless, Codex CLI 0.170.0, a 60-turn limit, the review-units reader map at that pin, per-session allowances of $10.50 (OS), $19.50 (OA), $27 (FS) and $36 (FA), and units whose install and test commands were `true`. It is not a claim about current gstack, other harness versions or interactive use. Ten bug units per arm is a pilot, not an estimate of any rate.
 
 ## What would reopen it
 
