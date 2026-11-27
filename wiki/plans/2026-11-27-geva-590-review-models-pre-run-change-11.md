@@ -7,7 +7,7 @@ author: GEVA-590
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-27
-status: open
+status: done
 links:
   - wiki/plans/2026-11-24-geva-590-review-models-prereg/README.md
   - wiki/plans/2026-11-26-geva-590-review-models-pre-run-change-10.md
