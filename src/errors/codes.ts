@@ -4873,8 +4873,8 @@ export const CODES = {
   },
   E_RM_CLOSED: {
     exit: 2,
-    meaning: "A step of the review-models eval ran after the eval closed (lanes/review-models/score/opening.ts): the pilot stopped under R111 on 2026-11-27, so no step may pay, write over the pilot's evidence, run, resume or validate a batch, or issue a judge or visibility qualification. The step refused before it read, wrote or spent anything.",
-    fix: "Read the historical result with rm-post readout or on the results page. Reopening needs a new preregistration and fixes for the defects the results page lists under What would reopen it; no flag or variable reopens it.",
+    meaning: "A closed step of the review-models eval ran (lanes/review-models/score/opening.ts): the pilot stopped under R111 on 2026-11-27, and the steps that reach the seven unresolved defects on its results page (rm-post's sends, contamination and validation readout, rm-supply's visibility steps, rm-run's pilot plan, pilot run and e2e, and review-units with --cell-items) refuse before they read, write or spend anything. This does not close a generic review-units run without --cell-items, which can still spend against a separately admitted ledger item, or rm-run items, which can still raise caps; neither is authorized for this stopped eval.",
+    fix: "Read the historical result with rm-post readout or on the results page. Reopening needs a new preregistration and fixes for the defects the results page lists under What would reopen it; no flag or variable reopens these steps.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,

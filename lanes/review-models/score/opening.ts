@@ -6,9 +6,10 @@ import { rmFail } from "./frozen.ts";
 export const OPENS = { pilot: "2026-11-26T21:30:00Z", counted: "2026-11-28T06:00:00Z" } as const;
 export type Phase = keyof typeof OPENS;
 
-/** The eval closed when the gstack-evals Captain accepted the pilot's R111 stop. Every step that could pay, write over the
- * pilot's evidence, run, resume or validate a batch, or issue a judge or visibility qualification calls requireLive first.
- * Reading the historical pilot readout stays open. Reopening needs a new preregistration and fixes for the defects listed on
+/** The eval closed when the gstack-evals Captain accepted the pilot's R111 stop. The steps that reach the seven defects the
+ * final review found (its sends, contamination, validation readout, visibility steps, pilot plan, pilot run, e2e and
+ * review-units --cell-items) call requireLive first. Reading the historical pilot readout stays open. A generic review-units
+ * run without --cell-items and rm-run items are not closed here. Reopening needs a new preregistration and fixes for the defects listed on
  * the results page (wiki/board/2026-11-27-geva-590-review-models-results), not a change to this line alone. */
 export const CLOSED = { at: "2026-11-27T05:33:50Z", why: "the pilot stopped under R111 and the Captain accepted the stop" } as const;
 
