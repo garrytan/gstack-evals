@@ -42,12 +42,14 @@ The money controls held. Every lease closed inside its cap, the pilot spent $450
 
 The pilot's part-ran check (R111) reads each gstack session for the procedure gstack 284214fd's /review describes: a printed specialist selection, one launch per selected specialist that returns, the red team on diffs over its size threshold, and the voice's adversarial challenge and structured review, each held in a Codex rollout. Counts below are over the 10 bug units per arm; the decoy is left out.
 
-| Arm | Exposed (frozen reader) | Sessions with Codex requests (all 11) | Voice adversarial printed completed | Voice structured printed completed | No selection line printed | Red team required, not launched | Specialist selected, not launched | Specialist launched, never returned |
+| Arm | Exposed (frozen reader) | Sessions with Codex requests (all 11) | Voice adversarial printed completed | Voice structured printed completed | No selection line printed | Red team required, not launched | Specialist selected, not launched | Reviews with a specialist launched, never returned |
 |---|---|---|---|---|---|---|---|---|
 | Opus 5.5 + Sol (OS) | 0 of 10 | 0 | 0 | 0 | 6 | 7 | 2 | 0 |
 | Opus 5.5 + Astra (OA) | 0 of 10 | 0 | 0 | 0 | 4 | 7 | 3 | 0 |
-| Fable 5.2 + Sol (FS) | 0 of 10 | 10 | 6 | 3 | 3 | 1 | 1 | 2 |
-| Fable 5.2 + Astra (FA) | 1 of 10 | 11 | 4 | 2 | 4 | 1 | 1 | 2 |
+| Fable 5.2 + Sol (FS) | 0 of 10 | 10 | 6 | 3 | 3 | 1 | 1 | 1 |
+| Fable 5.2 + Astra (FA) | 1 of 10 | 11 | 4 | 2 | 4 | 1 | 1 | 0 |
+
+Each count is of the 10 bug-unit reviews per arm. The one FS review in the last column lost two specialists (maintainability and security). Apart from specialists, the Claude adversarial subagent was launched and never returned in 1 FS and 2 FA reviews, and the red team in 1 FA review.
 
 In 16 of the 17 reviews with no selection line, the session still launched other subagents, so dispatch happened without the printed line in most of them.
 
@@ -117,6 +119,7 @@ Everything here is an observation on one pin and one harness: gstack 284214fd, C
 - A label supply that can deliver at least 100 eligible bug-unit labels: a pinned labeller route that stays stable, or another qualified labeller.
 - Per-session allowances sized to Fable's measured cost (sessions reached $28 here).
 - A new preregistration with caps approved before any paid call.
+- Fixes for the defects the final code review found in this eval's own code. None of them fired in the pilot: it had no reruns, no validation batch, no judge that qualified and no visibility request sent twice. The defects: the judge check counts reviews that neither labeller labelled toward its 100-label minimum; the validation batch writes over the pilot's contamination report; a rerun's first attempt is never journaled, so the readout counts 0 reruns and draws nothing from the reserve; a refused rerun's record names a folder that doesn't exist; cell leases can't reopen on resume once spent; and visibility replies are not tied to the prompt they answered.
 
 ## Records
 
