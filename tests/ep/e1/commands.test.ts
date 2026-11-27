@@ -128,6 +128,16 @@ describe("leases", () => {
     expect(asked).toHaveLength(PAIRS.length);
     expect(asked.every((m) => m === 65_000_000)).toBe(true);
   });
+
+  test("--pair runs one pilot pair under one lease, so each pair's lease can take its own admission slot", async () => {
+    const f = fixture();
+    expect(await f.cmds["e1-reviews"]!.run(args({ ...f.paid("e1-pilot"), "--phase": "pilot", "--pair": "d-opus" }), io().io)).toBe(0);
+    expect(readItem(f.record, "e1-pilot").leases).toHaveLength(1);
+    expect(f.calls.reviews).toHaveLength(1);
+    expect(await codeOf(() => f.cmds["e1-reviews"]!.run(args({ ...f.paid("e1-pilot"), "--phase": "pilot", "--pair": "p-sol" }), io().io))).toBe("E_USAGE");
+    expect(await codeOf(() => f.cmds["e1-reviews"]!.run(args({ ...f.paid("e1-n-opus"), "--phase": "comparison", "--half": "1", "--pair": "n-opus" }), io().io))).toBe("E_USAGE");
+    expect(readItem(f.record, "e1-pilot").leases).toHaveLength(1);
+  });
 });
 
 describe("paid flags", () => {

@@ -493,7 +493,10 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
     const log = logTo(io);
     const pCommand = (a.flags.get("--p-command") ?? "/statechart") as PCommand;
     if (!P_COMMANDS.includes(pCommand)) fail("E_USAGE", "--p-command is " + P_COMMANDS.join(" or "));
-    const groups = which ? [which] : (Object.keys(RUNS_ON) as E1Arm[]).flatMap((arm) => RUNS_ON[arm].map((model) => ({ arm, model })));
+    const pair = a.flags.get("--pair");
+    if (pair !== undefined && phase !== "pilot") fail("E_USAGE", "--pair picks one pilot pair; a comparison item already names its pair");
+    const one = pair === undefined ? null : (parseItem("e1-" + pair) ?? fail("E_USAGE", "--pair is <arm>-<model> for a pair that runs (prereg section 4), such as n-opus, not " + pair));
+    const groups = which ? [which] : one ? [one] : (Object.keys(RUNS_ON) as E1Arm[]).flatMap((arm) => RUNS_ON[arm].map((model) => ({ arm, model })));
     for (const g of groups) {
       const { units, cells } = phaseCells(run, phase, half, g.arm, g.model);
       const marker = g.arm === "P" ? seams.marker(need(a, "--pstack")) : undefined;
@@ -746,7 +749,7 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
 
   return {
     "e1-ledger": { bools: ["--projection"], usage: "[--projection --run <dir> --crew-usd <usd> --hosts-usd <usd>]", summary: "eval 1's ledger lines, or its all-in projection", run: ledger },
-    "e1-reviews": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --phase pilot|comparison [--half 1|2] --item <item> --cap-usd <usd> --ledger-record <dir> --ledger <file> --crew-usd <usd> --hosts-usd <usd> [--pstack <harness dir>] [--p-command /statechart|/pstack:statechart] [--parallel <n>]", summary: "eval 1's review cells of one item (or every pair in the pilot) under one lease each", run: reviews },
+    "e1-reviews": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --phase pilot|comparison [--half 1|2] --item <item> --cap-usd <usd> --ledger-record <dir> --ledger <file> --crew-usd <usd> --hosts-usd <usd> [--pstack <harness dir>] [--p-command /statechart|/pstack:statechart] [--pair <arm>-<model>] [--parallel <n>]", summary: "eval 1's review cells of one item (or every pair in the pilot, or the one --pair names) under one lease each", run: reviews },
     "e1-builds": { bools: [], usage: "--run <dir> --units <dir> --repos <dir> --phase pilot|comparison [--half 1|2] --item <item> <paid flags> --work <dir> --host <ip> --envelope-host <id> --sidecar <url> [--harbor <bin>] [--parallel <n>]", summary: "eval 1's build cells of one item under one lease", run: builds },
     "e1-look": { bools: [], usage: "--run <dir> --units <dir> --repos <dir>", summary: "eval 1's one interim look (futility only), written once", run: lookCmd },
     "e1-read": { bools: [], usage: "--run <dir> --units <dir> --repos <dir>", summary: "eval 1's readings: arm states, the pooled contrasts, Holm and the Decision rows", run: read },
