@@ -434,7 +434,7 @@
  "include": [
   "reasoning.encrypted_content"
  ],
- "prompt_cache_key": "01a20fd7-336b-7660-b948-556679f59e42",
+ "prompt_cache_key": "00000000-0000-7000-8000-000000000000",
  "text": {
   "verbosity": "low"
  },

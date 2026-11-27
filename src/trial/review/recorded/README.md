@@ -15,7 +15,9 @@ How it was recorded:
 
 Trimmed on copy, as the Codex hooks fixtures are: message texts over 4,000 characters and tool descriptions over 400 are cut
 to their first 200 characters plus `[trimmed N chars]`, and the recording folder's path is replaced by /work. Every key, tool
-name and structure is as Codex sent it.
+name and structure is as Codex sent it. On 2026-11-27 the value of `prompt_cache_key`, a per-session UUID, was replaced by
+`00000000-0000-7000-8000-000000000000`, because the secret scanner reads it as a credential. Nothing reads that value: the
+preflight's checks look only at the tools lists.
 
 What it showed: the recorded request carries no web_search tool, so on this setup gstack's `web_search="cached"` reaches
 the proxy as nothing to remove. The same held with the built-in openai provider, with a served model catalog and with each
