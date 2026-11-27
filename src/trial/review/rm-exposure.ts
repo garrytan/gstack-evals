@@ -154,9 +154,9 @@ function passOf(calls: readonly BashCall[], gate: "review" | "structured"): Omit
   };
 }
 
-/** The prompt Codex received in a thread: its first user message after the environment context. */
+/** The prompt Codex received in a thread: its first user message that is not context Codex injects itself (the environment, a unit's AGENTS.md, user instructions). */
 export function promptOf(thread: Thread): string | null {
-  const m = thread.items.find((i) => i.kind === "message" && i.role === "user" && !i.text.startsWith("<environment_context>"));
+  const m = thread.items.find((i) => i.kind === "message" && i.role === "user" && !i.text.startsWith("<") && !i.text.startsWith("# AGENTS.md instructions for "));
   return m && m.kind === "message" ? m.text : null;
 }
 

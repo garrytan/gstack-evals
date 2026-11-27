@@ -31,9 +31,10 @@ const bash = (command: string, result: string): Msg[] => {
 const outside = (gate: "review" | "structured", model = SOL, status = "completed") =>
   bash('bun "$GSTACK/lib/outside-review-result.ts" ' + gate + ' "$_OUTSIDE_TMP/text" "$_OUTSIDE_TMP/err"', "CODEX_MODEL: " + model + " (from the probe)\nOUTSIDE_STATUS: " + status + "\nOUTSIDE_USAGE: input=1200 cached_input=300 output=80 reasoning_output=40 total=1280\n");
 
-const rollout = (name: string, prompt: string, models: string[], tokens = 1280): Rollout => {
+const rollout = (name: string, prompt: string, models: string[], tokens = 1280, agentsMd = false): Rollout => {
   const lines: unknown[] = [{ type: "session_meta", payload: { id: name, source: "exec", cli_version: "0.170.0" } }];
   for (const model of models) lines.push({ type: "turn_context", payload: { model, effort: "high" } });
+  if (agentsMd) lines.push({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "# AGENTS.md instructions for /w\n\n<INSTRUCTIONS>\nRun the tests first.\n</INSTRUCTIONS>" }] } });
   lines.push({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "<environment_context>\n  <cwd>/w</cwd>\n</environment_context>" }] } });
   lines.push({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: prompt }] } });
   lines.push({ type: "event_msg", payload: { type: "token_count", info: { total_token_usage: { input_tokens: tokens - 80, output_tokens: 80, total_tokens: tokens } } } });
@@ -76,6 +77,15 @@ describe("a fully exposed review (keyless)", () => {
     expect(adv.rollouts[0]!.tokens).toEqual({ input_tokens: 1200, output_tokens: 80, total_tokens: 1280 });
     expect(e.voice.structured.rollouts.map((r) => r.prompt_sha256)).toEqual([createHash("sha256").update(STRUCT_PROMPT).digest("hex")]);
     expect(e.voice.structured_required).toBe(true);
+  });
+
+  test("a unit's AGENTS.md block before the prompt doesn't move the structured pass's rollout to the adversarial gate", () => {
+    const s = full(240);
+    s.rollouts = [probe(), rollout("adv", ADV_PROMPT, [SOL, SOL], 1280, true), rollout("struct", STRUCT_PROMPT, [SOL], 1280, true)];
+    const e = run(240, s);
+    expect([e.exposed, e.failures]).toEqual([true, []]);
+    expect(e.voice.adversarial.rollouts.map((r) => r.path)).toEqual(["sessions/2026/11/24/rollout-adv.jsonl"]);
+    expect(e.voice.structured.rollouts.map((r) => r.path)).toEqual(["sessions/2026/11/24/rollout-struct.jsonl"]);
   });
 
   test("sessionExposure reads the same review from a host dir", () => {

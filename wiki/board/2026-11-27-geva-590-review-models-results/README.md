@@ -1,8 +1,8 @@
 ---
 id: 2026-11-27-geva-590-review-models-results
 kind: finding
-title: "Review pass models, Opus 5.5 and Sol against Fable 5.2 and Astra: the pilot stopped because gstack /review's procedure ran in 1 of 40 gstack reviews (needed 9 of 10 per arm), so the eval ranks no model"
-summary: "Pilot stop under R111: /review exposure 0, 0, 0 and 1 of 10 per gstack arm, Opus never called the Codex voice, the judge never qualified. No model or voice ranking."
+title: "Review pass models, Opus 5.5 and Sol against Fable 5.2 and Astra: the pilot stopped because gstack /review's procedure didn't reliably run (Opus 0 of 20 reviews, Fable at most 7 of 10 per arm; needed 9 of 10), so the eval ranks no model"
+summary: "Pilot stop under R111: /review exposure 0, 0, 0 and 1 of 10 as read, at most 7 of 10 on any reading; Opus never called the Codex voice; the judge never qualified."
 author: GEVA-590
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -22,8 +22,8 @@ attachments:
 
 ## Takeaways
 
-- We learned that this eval can't answer its question yet, because gstack's /review didn't run its own procedure in our harness. The plan needed the procedure (specialist dispatch, the red team where required, and both passes of the second-model voice) in at least 9 of 10 bug-unit reviews per arm. It ran in 0 of 10 for Opus 5.5 with Sol, 0 of 10 for Opus 5.5 with Astra, 0 of 10 for Fable 5.2 with Sol and 1 of 10 for Fable 5.2 with Astra. So the pilot stopped under R111, before any validation or counted unit. You should prove, keylessly, that a skill's procedure runs on each model before paying to compare models on it.
-- We learned that Opus 5.5 never called the second-model voice. The meter shows 0 Codex requests in all 22 Opus /review sessions. Fable 5.2 sent Codex requests in 21 of 22 sessions, but a voice pass finished with a Codex rollout far less often (table below). A Codex request is not a finished voice review.
+- We learned that this eval can't answer its question yet, because gstack's /review didn't run its own procedure in our harness. The plan needed the procedure (specialist dispatch, the red team where required, and both passes of the second-model voice) in at least 9 of 10 bug-unit reviews per arm. The frozen reader found it in 0 of 10 for Opus 5.5 with Sol, 0 of 10 for Opus 5.5 with Astra, 0 of 10 for Fable 5.2 with Sol and 1 of 10 for Fable 5.2 with Astra. That reader has a defect (below), but even the most generous reading of the raw sessions gives 0, 0, 7 and 7. So the pilot stopped under R111, before any validation or counted unit. You should prove, keylessly, that a skill's procedure runs on each model before paying to compare models on it.
+- We learned that Opus 5.5 never called the second-model voice. The meter shows 0 Codex requests in all 22 Opus /review sessions. Fable 5.2 sent Codex requests in 21 of 22 sessions, but a voice pass printed a completed status far less often (table below). A Codex request is not a finished voice review.
 - We learned that a Fable 5.2 /review session cost about 9 times an Opus 5.5 /review session here ($17.85 and $18.77 per attempted review against $1.96, ledger upper bounds), and 5 of 22 Fable sessions ended without a review. This page ranks no model and no voice, and makes no full-path decision.
 
 Call settled: none (the pilot stopped under R111; no model, voice or default changes)
@@ -42,7 +42,7 @@ The money controls held. Every lease closed inside its cap, the pilot spent $450
 
 The pilot's part-ran check (R111) reads each gstack session for the procedure gstack 284214fd's /review describes: a printed specialist selection, one launch per selected specialist that returns, the red team on diffs over its size threshold, and the voice's adversarial challenge and structured review, each held in a Codex rollout. Counts below are over the 10 bug units per arm; the decoy is left out.
 
-| Arm | Exposed | Sessions with Codex requests (all 11) | Voice adversarial finished | Voice structured finished | No selection line printed | Red team required, not launched | Specialist selected, not launched | Specialist launched, never returned |
+| Arm | Exposed (frozen reader) | Sessions with Codex requests (all 11) | Voice adversarial printed completed | Voice structured printed completed | No selection line printed | Red team required, not launched | Specialist selected, not launched | Specialist launched, never returned |
 |---|---|---|---|---|---|---|---|---|
 | Opus 5.5 + Sol (OS) | 0 of 10 | 0 | 0 | 0 | 6 | 7 | 2 | 0 |
 | Opus 5.5 + Astra (OA) | 0 of 10 | 0 | 0 | 0 | 4 | 7 | 3 | 0 |
@@ -53,7 +53,17 @@ In 16 of the 17 reviews with no selection line, the session still launched other
 
 ### Real skips against reader ambiguity
 
-Some failures are the reader's strictness, not the model's. A selection line that counts 2 specialists and names 3, or that names "performance-then-the-adversarial-pass", fails the reader map. That happened in every arm. But only 1 of the 40 gstack bug-unit reviews (in FS) failed on such lines alone. Every other unexposed review also had a real skip: a voice pass that never ran or left no rollout, a required red team never launched, or a selected specialist never launched or never returned. Counting a missing selection line as ambiguity too changes nothing: still only that one FS review. So a looser reader would move FS from 0 to at most 1 of 10, and no arm would come near 9.
+Some failures are the reader's, not the model's, so we recounted the 40 gstack bug-unit reviews from the raw sessions three ways:
+
+| Reading | OS | OA | FS | FA |
+|---|---|---|---|---|
+| The frozen reader, as run | 0 of 10 | 0 of 10 | 0 of 10 | 1 of 10 |
+| The reader with its rollout defect fixed | 0 of 10 | 0 of 10 | 1 of 10 | 3 of 10 |
+| Most generous: ignore selection-line wording and a missing selection line, and count the voice as run whenever its Codex rollouts exist | 0 of 10 | 0 of 10 | 7 of 10 | 7 of 10 |
+
+The rollout defect: the reader takes a Codex thread's first user message as its prompt. In units that carry an AGENTS.md, Codex puts that file in first, so both voice passes were filed under the adversarial gate and the structured pass read as "no rollout". This branch fixes that, with a test. The fixed reader still splits the two passes by a marker in the prompt, and Fable often writes its own prompts, so its split is approximate. That is why the third row exists.
+
+Even the third row is below the 9 of 10 bar in every arm. On that reading, what still fails is real: in FS and FA, a voice pass that never ran or printed no status with no rollout to show for it, a red team never launched, or a specialist selected and never launched or never returned. In OS and OA nothing changes on any reading, because the Opus sessions never called the voice at all. pilot-cells.tsv holds the frozen reader's reading.
 
 The Opus sessions rarely said why the voice didn't run. One wrote "the Codex outside review (optional, not run)", another "I skipped the Codex outside review", and the other 20 never said they skipped it. In the session we read in full, Codex 0.170.0 was installed and found, and the keyless rig check before the pilot showed both Codex calls fire when invoked. We did not test whether /review's text at this pin makes the voice optional for the main agent.
 
@@ -92,7 +102,7 @@ The frame and draw are as pre-run change 11 records. The counted set drew 100 bu
 
 This is not a null on review models. It is an R111 pilot stop. The part under test didn't run, so the eval measured nothing about whether Fable or Astra helps.
 
-- Exposure: the procedure ran in 1 of 40 gstack bug-unit reviews.
+- Exposure: the procedure ran in 1 of 40 gstack bug-unit reviews as the frozen reader read them, and in at most 14 of 40 (none on Opus) on the most generous reading.
 - Task fit and supply: all 11 unit trees were prepared and ran (no builds, installs or unit tests), and the plain arm reviewed all of them.
 - Samples and headroom: not reached; no counted unit ran.
 - Does the frontier model do it unaided: not reached.
