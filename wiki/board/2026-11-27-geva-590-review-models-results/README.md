@@ -32,7 +32,7 @@ Call settled: none (the pilot stopped under R111; no model, voice or default cha
 
 The no-gstack arm passed its pilot. Plain Opus 5.5 produced a parseable review in 11 of 11 sessions, its read audit found no gstack file or drive path in any of them, and it cost $0.38 per review.
 
-The supply path worked. All 11 pilot unit trees were prepared and passed the history and clean-tree checks, and no unit was refused. Those are structural checks only: as pre-run change 3 set, each unit's install and test commands were `true`, so no dependencies were installed and no unit tests ran. The contamination read found 0 contaminated and 0 doubtful sessions in all 55. Code review later found that the key's B-unit markers leave out a fix given as a bare pull request number. That affects 2 of the 5 pilot B units, and none of their 10 sessions names either fix pull request.
+The supply path worked. All 11 pilot unit trees were prepared and passed the history and clean-tree checks, and no unit was refused. Those are structural checks only: as pre-run change 3 set, each unit's install and test commands were `true`, so no dependencies were installed and no unit tests ran. The contamination read found 0 contaminated and 0 doubtful sessions in all 55. Code review later found that the key's B-unit markers leave out a fix given as a bare pull request number. That affects 2 of the 5 pilot B units, and none of their 10 sessions names either fix pull request. This branch fixes the key code, with a test; the pilot's contamination read ran on the old key.
 
 The money controls held. Every lease closed inside its cap, the pilot spent $450.21 of its $1,034 envelope, the retry reserve was never drawn, and no paid call ran outside an admitted ledger item.
 

@@ -44,6 +44,10 @@ describe("the post key (keyless)", () => {
     writeFileSync(path, JSON.stringify(k));
     expect(readKey(path).pilot.length).toBe(3);
   });
+  test("a B fix of kind pull with a bare number is the fix PR in the unit's repository", () => {
+    const pull = [{ ...b[0], fix: { ...b[0].fix, kind: "pull", ref: "824" } }];
+    expect(buildKey(draw, p, pull, src).pilot[1]!.markers.prs).toEqual(["acme/vault#824"]);
+  });
   test("labels never repeat, and an unreadable advisory refuses", () => {
     const seq = ["u_a", "u_a", "u_b", "u_c"];
     expect(new Set(buildKey(draw, p, b, src, () => seq.shift()!).pilot.map((u) => u.label)).size).toBe(3);

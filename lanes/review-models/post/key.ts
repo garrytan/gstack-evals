@@ -47,7 +47,7 @@ export function buildKey(draw: Draw, p: readonly PRecord[], b: readonly BRecord[
       const r = bById.get(d.id) ?? rmFail("E_RM_POST_INPUT", "B unit " + d.id + " has no gate record with a BIC");
       const bic = r.szz!.bic!;
       const adv = src.advisory(r.ghsa) ?? rmFail("E_RM_POST_INPUT", r.ghsa + ": the advisory cannot be read");
-      const ref = PR_REF.exec(r.fix.ref ?? "");
+      const ref = r.fix.kind === "pull" && /^\d+$/.test(r.fix.ref ?? "") ? [r.fix.ref, r.repo, r.fix.ref] : PR_REF.exec(r.fix.ref ?? "");
       return { unit: d.id, label: fresh(), pool: "B", cluster: r.repo, diff_lines: src.diffLines(r.repo, bic + "^", bic), bug: { evidence: ("Advisory " + r.ghsa + ": " + adv.summary.trim() + "\n\n" + adv.details.trim()).trim(), fix_diff: src.diff(r.repo, r.fix.parent, r.fix.commit) }, markers: { unit: d.id, prs: ref ? [ref[1] + "#" + ref[2]] : [], commits: [r.fix.commit], ids: [r.ghsa, ...r.cves] } };
     }
     const r = pById.get(d.id) ?? rmFail("E_RM_POST_INPUT", "unit " + d.id + " has no gate record");
