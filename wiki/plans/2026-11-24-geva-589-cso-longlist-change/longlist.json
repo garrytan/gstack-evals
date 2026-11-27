@@ -1,0 +1,364 @@
+{
+  "schema": "cso-rerun-prereg.v1",
+  "post": "2026-11-24-geva-589-cso-longlist-change",
+  "parent": "2026-11-19-geva-561-cso-advisories-prereg",
+  "parent_prereg_json_sha256": "323947121e536a388f6560547939b2d177cb414da322efafbd2d36b04bf2c7b9",
+  "minted_at": "2026-11-24T16:30:00Z",
+  "mint_rule": "no seed is minted here: gold_seed and every other seed are the rerun plan's, so the counted gold draw walks the same unit order",
+  "gold_seed": 2599129872,
+  "seeds_from_parent": {
+    "bootstrap_seed": 3802804501,
+    "order_seed": 2307533522,
+    "check_seed": 2800729426
+  },
+  "pins": {
+    "gstack": {
+      "repo": "garrytan/gstack",
+      "sha": "a1af71d52d7d4975e8aca40c54f9afa695214980",
+      "branch": "cso-keeps-auditing-until-time-runs-out",
+      "pr": "none: a branch off garrytan/gstack#4788 head dfeaed61, not through /ship",
+      "merged": false,
+      "version": "1.103.1.0",
+      "cso_skill_version": "3.0.0",
+      "helper": "gstack-cso 3.0.0 (helper ABI 3)",
+      "files_sha256": {
+        "cso/SKILL.md": "b1635bb2be53baa543b6f6ae7a70ef3fcc5f27ccf14a8fe3b9f650fe1d41b970",
+        "cso/sections/audit-phases.md": "ba27bbbda3cf72717fe8210e91959433fe20a8b8bf7aa4f5ececfe525a7478f3",
+        "cso/sections/manifest.json": "39e6d84534657be2345cfbf6ed8821393480a208b7e784c655b017aa5b3081ee",
+        "lib/cso/cli.ts": "3cd0d6980939d2310644b58667d4bd54a919b32cdf6e8cd4c2ce8542aa2a4496",
+        "lib/cso/snapshot.ts": "46eed96ba39de837d83f3c4d1b0c08b747cf2e573daaab09ebf86a274ad6d179",
+        "lib/cso/state.ts": "0fb7a30aac946806c64c306e0628f9c76787401f92f73eedf633cd68057a3b6c",
+        "lib/cso/search-worker.ts": "3baf92ab62b5490dff37207426c11411983f46824a71a867b974cf8e7a0864aa"
+      },
+      "cso_changes_since_rerun_pin": [
+        "15ed566 and its three review fix commits: no count cap and no proof bar for listing, every other plausible defect listed as a low-confidence hypothesis, every supported finding in the final table likeliest first and never trimmed, a short list no reason to finish early",
+        "ee019d5: time is only the latest remainingSeconds (inspect refreshes it); above 120 keep reading unread attacker-reachable files or run the next selected phase; finish below 120 or once every selected phase is covered; list length never decides when to stop",
+        "a1af71d: the helper's finish refuses while more than 120 seconds remain and any selected phase (application-model, attack-surface and the scope's audit domains) still has not_assessed coverage; it always works at 120 seconds or less or once every selected phase is covered; rechecks unchanged"
+      ],
+      "cso_files_changed_since_rerun_pin": [
+        "cso/SKILL.md",
+        "cso/sections/audit-phases.md",
+        "lib/cso/cli.ts"
+      ],
+      "commits_since_rerun_pin": 32
+    },
+    "old_cso_arm": {
+      "sha": "5afef04e31de1cb30c727c7f827bdd729d04713e",
+      "version": "1.101.0.0"
+    },
+    "harness_from_parent": {
+      "claude_code": "2.1.325",
+      "agent_sdk": "0.2.174",
+      "harbor": "f3a5a923"
+    },
+    "rerun_cso_arm": {
+      "sha": "a3ecfd530df3c78c2d60e92b6488586a75e0ff91",
+      "version": "1.103.0.0",
+      "use": "descriptive only: the same analysis run again with the #447 a3ecfd53 sessions as the old arm"
+    }
+  },
+  "arms": {
+    "new": [
+      {
+        "arm": "cso",
+        "model": "opus",
+        "gstack": "dfeaed61",
+        "first_turn": "\"/cso \" followed by the parent's task text"
+      },
+      {
+        "arm": "cso",
+        "model": "particle",
+        "gstack": "dfeaed61",
+        "first_turn": "\"/cso \" followed by the parent's task text"
+      }
+    ],
+    "reused": [
+      {
+        "arm": "none",
+        "model": "opus",
+        "from": "parent stage 2",
+        "sessions": 52,
+        "judge_gaps": 1
+      },
+      {
+        "arm": "none",
+        "model": "particle",
+        "from": "parent stage 2",
+        "sessions": 52,
+        "judge_gaps": 0
+      },
+      {
+        "arm": "cso",
+        "model": "opus",
+        "from": "parent stage 2 at 5afef04e",
+        "sessions": 52,
+        "judge_gaps": 0
+      },
+      {
+        "arm": "cso",
+        "model": "particle",
+        "from": "parent stage 2 at 5afef04e",
+        "sessions": 52,
+        "judge_gaps": 0
+      }
+    ],
+    "not_run": {
+      "untold": "descriptive in the parent's stage 0 and 1 only",
+      "sol": "a separate call after this result"
+    },
+    "descriptive": [
+      {
+        "arm": "cso",
+        "model": "opus",
+        "from": "the rerun at a3ecfd53 (#447)",
+        "sessions": 52
+      },
+      {
+        "arm": "cso",
+        "model": "particle",
+        "from": "the rerun at a3ecfd53 (#447)",
+        "sessions": 52
+      }
+    ]
+  },
+  "limits": {
+    "allowance_usd": {
+      "opus": 16,
+      "particle": 3
+    },
+    "wall_sec": 2700,
+    "max_turns": 200,
+    "continuation_cap": 3,
+    "doubling": "none: the reused arms ran at these limits, so they stay fixed"
+  },
+  "units": {
+    "counted": "the parent's 52 stage 2 units (results post stage2-draw.json, role stage2), in its frozen session order (stage2-draw.json order) restricted to cso cells",
+    "pilot": {
+      "size": 3,
+      "rule": "the parent's 2 stage 0 units, then its first stage 1 unit (kin-openapi, which holds a tracked symlink); the rerun plan's rule cut to 3 units to keep the pilot near $8",
+      "stage0": [
+        "capricorn86__happy-dom-ghsa-834v-8h66-3h79",
+        "patriksimek__vm2-ghsa-x6m4-chr9-cg97"
+      ],
+      "stage1_in_order": [
+        "getkin__kin-openapi-ghsa-p6wj-qrr4-pgh5",
+        "qax-os__excelize-ghsa-c85p-xxjj-2r75",
+        "follow-redirects__follow-redirects-ghsa-8r9p-f939-6h3c",
+        "containerd__containerd-ghsa-pg57-6jwg-q645",
+        "semaphoreui__semaphore-ghsa-cxvf-gvfq-36w2",
+        "rclone__rclone-ghsa-66hp-wgxq-6f5q",
+        "oras-project__oras-go-ghsa-fxhp-mv3v-67qp",
+        "payloadcms__payload-ghsa-pj5h-5q6c-3pfx",
+        "backstage__backstage-ghsa-hmp2-4m7g-22cv",
+        "yawkat__lz4-java-ghsa-gm45-99xc-r7wv",
+        "mcollina__msgpack5-ghsa-24ch-f2g6-9hhh",
+        "mcollina__msgpack5-ghsa-8hq7-ggx2-cc6m"
+      ]
+    },
+    "rebuild": "every unit's session tree is rebuilt from its public parent commit before its session; a counted unit's tree_sha256 must match the first 16 hex digits in the image tag of each of its four stage 2 session records in the GEVA-561 export (sessions/stage2/<unit>/*/run.json, MANIFEST.sha256 e79fbea9582c8749b11199b83870aa317e242090facb346d83494a735f93b458), all four agreeing; its judge inputs come from the same unit build at the parent's pin, with the rebuilt advisory's GHSA id matching the one in the unit's name in stage2-draw.json; a pilot unit's digest is recorded at the preflight and checked again before its session",
+    "containment": "the parent's gates (a) and (c) run again against the arm's install at a3ecfd53; a unit they hit leaves every contrast of this rerun, and is reported by name"
+  },
+  "exposure": {
+    "rule": "the parent's section 8, as written: a helper start call through gstack-cso-launcher returned a run id, at least one inspect or read call used that run, and a finish call ran",
+    "threshold": 0.8,
+    "detector_fixes": [
+      "start: a run id is that start's when the start printed it; or when the helper's run record saved from the session holds it, matched by order (the session's k-th unrefused start takes the record's k-th run, ordered by the creation time in its id), only when the unrefused starts and the record's runs are equal in number, else the record is not used for matching; or, when the helper didn't refuse that start, the first run id a later call prints or passes (its own output included) before any other start call. The detector reads sdk-messages.jsonl, whose events carry only seconds since session start, so matching is by order",
+      "used: an inspect or read call names the run by its id; or by a shell variable or command substitution while the session holds exactly one accepted start, when that call's output names the run id or it exited 0 with no helper refusal",
+      "finish: a finish call on the run counts when its own output holds the helper's finish object or it exited 0 with no helper refusal, even when a later command in the same Bash call failed; or the saved run record shows the run finished"
+    ],
+    "regression": "replayed over the parent's 104 stage 2 cso transcripts, the fixed detector gives 40/52 on Opus and 52/52 on particle-1, the counts the correction post (#444) published, and finds every run the frozen detector found",
+    "also_printed": [
+      "the parent's frozen detector as run",
+      "a reading that also counts search and history as using the run"
+    ]
+  },
+  "yield": {
+    "primary": "findings per cso session: every finding pass A extracts from the scored text, not only the first 10",
+    "also": [
+      "share of cso sessions with no finding",
+      "findings per session where the procedure ran",
+      "findings the helper recorded per run, from the saved run record"
+    ],
+    "contrasts": [
+      "new cso minus none",
+      "new cso minus old cso"
+    ],
+    "interval": "paired, 95% repository-clustered bootstrap, 10,000 resamples, bootstrap_seed"
+  },
+  "analysis": {
+    "primary_family": {
+      "contrasts": [
+        "new cso minus none, Opus",
+        "new cso minus none, particle-1"
+      ],
+      "adjust": "Holm at 0.05"
+    },
+    "second_family": {
+      "contrasts": [
+        "new cso minus old cso, Opus",
+        "new cso minus old cso, particle-1"
+      ],
+      "adjust": "Holm at 0.05",
+      "decides": "what we tell gstack's maintainer about the fix; not the verdict"
+    },
+    "test": "McNemar with Obuchowski's clustered variance, two-sided; exact McNemar beside",
+    "verdicts": "the parent's section 10, steps 1 to 5, in order, on the new cso arm against the reused none arm",
+    "headroom": "admitted by the parent (plain Opus named 12/51 in stage 2)",
+    "gap_bounds": "the parent's section 9",
+    "mdd_points_at_52": {
+      "0.2": [
+        null,
+        19
+      ],
+      "0.25": [
+        23,
+        22
+      ],
+      "0.3": [
+        25,
+        24
+      ],
+      "0.35": [
+        28,
+        26
+      ]
+    },
+    "mdd_note": "[alpha 0.025, alpha 0.05]; null means no difference up to the discordant share reaches 80% power; from lanes/outcome-skills/h2h/analysis/power.ts mdd()"
+  },
+  "judge": {
+    "route": "fallback-opus-particle: openai/gpt-6.2-astra judges; gold by anthropic:claude-opus-5-5 and google/gemini-4-argon",
+    "settings": "the parent's deviation (d): medium effort, 65,536 output cap; gold at high effort and 32,000",
+    "prompts": "unchanged from the parent's harness at the results merge",
+    "labelled_outputs": {
+      "parent_gold_reports": 85,
+      "pilot_cso_reports": 10,
+      "counted_cso_sample": 24,
+      "total": 119
+    },
+    "counted_sample_rule": "sort the counted units by sha256 of '<gold_seed>:<unit id>' ascending (hex string order); walk the list taking each unit's Opus new-cso report, then its particle-1 report, skipping gap sessions, until 24 are taken; drawn before any judged number of the counted run is read",
+    "gates": [
+      "kappa on named at least 0.6 on all gold reports (at least 100) and on non-anchor gold reports alone, with at least 10 in each class",
+      "on gold reports, the judge's disagreement rate on named in new cso reports and in none reports differs by at most 10 points",
+      "validity kappa at least 0.6 on pooled gold findings",
+      "refusals and over-cap gold drops at most 5% of gold reports",
+      "the parent's format-variant gates stand as passed on this route"
+    ],
+    "pilot_gate": "on the 10 pilot cso reports: no refusal, no judge gap, and gold disagrees with the judge on named in at most 2",
+    "on_failure": "no counted number counts; the rows read judge not validated (FIX-METHOD) and the Captain decides",
+    "gold_floor": "at least 100 gold reports (both labellers agree); if fewer, the draw continues down the same list in the same way, up to 20 more reports (about $12 inside cso2-judge's cap); if 100 still aren't gold, the check fails on its floor",
+    "check_rules": {
+      "check_reports_min": 100,
+      "parent_check_reports_min": 40,
+      "anchor_fill": "none: no oracle or stock anchor is added; a shortfall draws only the counted extension",
+      "parent_gold": "the parent's 85 gold reports enter as sealed, anchors included",
+      "unchanged": "every other parent judge setting (class_min 10, anchor_share_max 0.3, kappa minimums, validity finding minimum and its finding fill, format variants)"
+    }
+  },
+  "items": {
+    "cso3-pilot": {
+      "central": 6,
+      "cap": 24,
+      "spend_stop": 8,
+      "parts": {
+        "opus": {
+          "central": 5
+        },
+        "particle": {
+          "central": 1
+        }
+      },
+      "runs": "one session at a time",
+      "admission": "the cap holds one Opus session's $16 allowance on top of what the pilot spends; the pilot script starts no session once spent plus that session's planned cost would pass the $8 spend stop",
+      "repilot": {
+        "spend_stop": 10,
+        "rule": "the re-pilot runs inside cso3-pilot's remaining cap; it starts no session once its own spend plus that session's planned cost would pass $10"
+      }
+    },
+    "cso3-pilot-b": {
+      "central": 5,
+      "cap": 22.31,
+      "spend_stop": 10,
+      "runs": "one session at a time",
+      "rule": "the a1af71d5 re-pilot only (change 3); its own item because the cso3-pilot run's driver folder was lost with the second VM, so the ledger refuses that run; the cap is the room left on cso3-pilot, which takes no more spend; raised to $22.31 for the one missing Opus session (the Captain, 2026-11-25 08:50Z)"
+    },
+    "cso3-main": {
+      "central": 106,
+      "cap": 125,
+      "rule": "re-priced from the a1af71d5 re-pilot (Opus $1.63 and particle-1 $0.41 a session) by the Captain, 2026-11-25 08:50Z; pause if the Opus mean passes $2.20 after 20 sessions"
+    },
+    "cso3-judge": {
+      "central": 18,
+      "cap": 35,
+      "rule": "raised from $25 to $35 by the Captain after the first pilot, written into the ledger 2026-11-25"
+    },
+    "cso3-vm": {
+      "central": 6,
+      "cap": 15,
+      "rule": "the Captain's VM cap"
+    },
+    "cso3-reserve": {
+      "cap": 10,
+      "rule": "the settle reserve inside the $90 paid cap; moves only on the Captain's word"
+    }
+  },
+  "interim_look": {
+    "planned_paid_spend_usd": 80,
+    "look": "none (under $500)"
+  },
+  "totals": {
+    "paid_cap": 90,
+    "vm_cap": 15,
+    "thread_line": 90,
+    "all_in": 180
+  },
+  "secondaries_old_arm_exposure": "the old cso arm's per-session exposure is the fixed detector replayed over its export transcript, keyed by unit and model, never stage2-sessions.tsv's procedure flags",
+  "pilot_print_check": "every frozen secondary prints a value on the new pilot sessions, and a paired value where the parent's records in hand hold the same unit, model and measure; else it prints 'no pair in the pilot', which passes",
+  "supersedes_overlay": "2026-11-23-geva-583-cso-rerun-prereg rerun.json, for this try only; that plan and its results stand",
+  "scoring_source": {
+    "cso": "the session's assistant text as the parent froze it (scoring.scored_text and order_rule): the final assistant message first, findings in their order there, then earlier text; the final message is the skill's Phase 13 report, whose findings table lists every supported finding likeliest first with hypotheses in a separate table after it",
+    "none": "unchanged, the same rule",
+    "not_read": "the helper's report.md and report.json, which keep submission order and which the plain arm has no counterpart for",
+    "code_change": "none to scoring"
+  },
+  "envelope": {
+    "program": "cso3",
+    "cap_usd": 90,
+    "counts": "settled spend plus every open reservation, across all cso3 items"
+  },
+  "envelope_b": {
+    "program": "cso3b",
+    "cap_usd": 125,
+    "holds": [
+      "cso3-main"
+    ],
+    "combined_cap_usd": 170,
+    "combined_check": "before each counted session the run script refuses to start it if cso3's committed spend in the ledger, plus cso3-main's spend so far with its running sessions' allowances, plus the room still held for counted judging on cso3-judge, plus that session's allowance would pass $170 (lanes/outcome-skills/cso/combined-cap.ts; exit 10 is a cap stop). cso3b's own ledger line is not added, because the driver's lease reserves cso3-main's whole cap when it opens",
+    "why": "the ledger records a program's envelope once and never changes it, so cso3 stays at $90 and cso3-main joins a second program; the Captain, 2026-11-25 09:05Z"
+  },
+  "planning_prices": {
+    "per_session_usd": {
+      "opus_cso": 1.0,
+      "particle_cso": 0.15
+    },
+    "judging_per_session_usd": 0.15,
+    "gold_per_report_usd": 0.3,
+    "basis": "the rerun's measured costs at a3ecfd53 (Opus $0.76, particle-1 $0.15, judging and gold $22.60 over 114 sessions) with Opus raised for the longer list; the pilot re-prices"
+  },
+  "pin_history": [
+    {
+      "sha": "dfeaed615e6f63e7834a71df2f89b450660479e6",
+      "at": "5674e99",
+      "used_for": "the first pilot only (6 sessions, 2026-11-24); not run counted, on GStack Minder's call after the pilot showed 3.3 Opus findings a session"
+    },
+    {
+      "sha": "ee019d5e9a4c9c405b6a8955baf352e4dc10bf3d",
+      "at": "change 2",
+      "used_for": "the re-pilot only (6 sessions, 2026-11-24); not run counted: it passed its checks but Opus still listed 4.67 findings a session and finished with 387 to 444 seconds left"
+    },
+    {
+      "sha": "a1af71d52d7d4975e8aca40c54f9afa695214980",
+      "at": "change 3",
+      "used_for": "the second re-pilot and the counted run, which runs whatever list length the re-pilot shows"
+    }
+  ]
+}

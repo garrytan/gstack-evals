@@ -305,7 +305,7 @@ export const VM_HOURS_PER_SESSION = 0.05;
 // workdir; at most perRepo tasks of one repository in a split; drop step 3 keeps the first dropScored scored tasks. On a
 // VM it runs on one standard-16 under the pinned ubi-runner.sh (L1's copy), leased on the vms ledger for vmHours.
 export const SCREEN = { workdir: "/testbed", perRepo: 4, dropScored: 180, detectTimeoutSec: 300, pullWaitSec: 900, vmSize: "standard-16", vmHours: 12 } as const;
-export const UBI_RUNNER = { file: "quick/laneb/l1/ubi-runner.sh", sha256: "c040c5b5d040fcdeec5cf0b545601dd1c55124a9e7cd55e56e0dcb4b80d097b2" } as const;
+export const UBI_RUNNER = { file: "quick/laneb/l1/ubi-runner.sh", sha256: "21b321e61f12350fd97104bbd13cbb1e685b74755386ea180da1330d7af419cb" } as const;
 
 
 // D1 (pre-data harness amendment): the lines every arm's task image gets after Lane B's runtime copy, through L1's profile

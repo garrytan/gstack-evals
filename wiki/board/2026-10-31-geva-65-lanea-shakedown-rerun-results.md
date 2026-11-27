@@ -7,7 +7,7 @@ author: GEVA-65
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
 date: 2026-10-31
-status: done
+status: superseded
 links:
   - 2026-10-31-geva-65-lanea-shakedown-prereg-addendum-2
   - 2026-10-30-geva-54-lanea-shakedown-results
