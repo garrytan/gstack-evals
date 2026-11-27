@@ -74,8 +74,9 @@ export function verdictOf(provider: Provider, status: number, body: any): Verdic
 
 export type Transport = (req: { provider: Provider; route: string; body: Record<string, unknown>; attempt?: number }) => Promise<{ status: number; body: unknown }>;
 
-/** A reply that decides its model's verdict: yes, no, a refusal, or a second malformed or truncated reply. A non-200
- *  reply settles nothing, so a later send asks again. */
+/** A reply that decides its model's verdict: yes, no, a refusal, or a second malformed or truncated reply. A refusal,
+ *  an OpenAI cyber_policy 400 included, is terminal: nothing is resent, reworded or sent to another model. Any other
+ *  non-200 reply settles nothing, so a later send asks again. */
 export function settled(provider: Provider, r: VisReply): boolean {
   const v = verdictOf(provider, r.status, r.body);
   return v === "yes" || v === "no" || v === "refused" || ((v === "malformed" || v === "truncated") && r.attempt >= 2);
@@ -100,11 +101,17 @@ export async function sendVisibility(requests: readonly VisRequest[], done: read
   return sent;
 }
 
+/** Each unit and model's deciding reply: its first refusal, which is terminal (pre-run change 11), else its latest reply. */
 const latest = (replies: readonly VisReply[]): Map<string, VisReply> => {
   const m = new Map<string, VisReply>();
+  const refusedAt = new Set<string>();
   for (const r of replies) {
     const k = r.ghsa + " " + r.model;
-    if (!m.has(k) || m.get(k)!.attempt <= r.attempt) m.set(k, r);
+    if (refusedAt.has(k)) continue;
+    if (verdictOf(VIS_MODELS[r.model].provider, r.status, r.body) === "refused") {
+      refusedAt.add(k);
+      m.set(k, r);
+    } else if (!m.has(k) || m.get(k)!.attempt <= r.attempt) m.set(k, r);
   }
   return m;
 };
