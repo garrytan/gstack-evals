@@ -82,6 +82,14 @@ The run found four harness defects. Each was fixed by a dated pre-run change bef
 
 One operator error cost time but no money. A disk cleanup removed session images that two hinted build rounds still needed. Both rounds stopped with nothing spent on the failed launches and reran in batches.
 
+## Known harness issues left open
+
+A code review of the results PR raised three issues. None of them changed a number in this post, but a rerun of this harness should fix them first.
+
+- **A rebuilt unit that fails custody admission still sits in the units folder,** and the draw does not read the rebuild status. This run assembled its units folder from admitted units only: 133 of 138 rebuilt pool units, matched line for line to their sealed digests. So no unadmitted unit entered.
+- **The screen step also visits units the draw skipped.** 8 authored units with Codex files were screened, for $0.46.
+- **Extending a construct search does not reapply its repository exclusions.** Wave 2 continued attempt 3's frozen search order past the 953 repositories already searched. Attempt 3's unit repositories sit inside those 953, so wave 2 should not reach them again. The run checked that no repository sat on two wave 2 VMs and that no label was shared with the pool. It did not check wave 2's repositories by name against attempt 3's unit repositories, so this is unverified.
+
 ## Cost
 
 | Item | Spent | Cap |

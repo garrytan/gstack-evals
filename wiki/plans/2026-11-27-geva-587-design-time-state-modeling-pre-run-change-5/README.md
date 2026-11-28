@@ -23,7 +23,7 @@ links:
 - Pre-run change 2 (section 3) says a unit whose stripped B still tracks a .codex or .agents path, or an AGENTS.override.md, is left out of the draw. The harness only checked this in the review stage, where it refuses the unit. The draw never applied the rule.
 - The first pilot command found it. It refused before any session, because one calibration unit tracks a .agents path. Its lease on e1-pilot opened and settled at $0.
 - A scan of all 234 units found 17 that the rule leaves out: 1 in calibration, 8 the draw had already skipped for other reasons, and 8 it had not reached.
-- The fix: the draw skips such a unit with the reason "codex config" before any other check, so it takes no set and no repository slot. The screen and authoring steps walk the same draw, so they spend nothing on these units.
+- The fix: the draw skips such a unit with the reason "codex config" before any other check, so it takes no set and no repository slot. The authoring and hinted steps choose units from the draw's placed sets, so they spend nothing on these units. The screen step also visits skipped units that already have their authoring, so an authored unit with Codex files can still be screened. In this run that came to 8 such units and $0.46 in screen calls.
 - Nothing else changes. No new money, no change to any cap, item, arm, model, prompt, pilot check, threshold or Decision row.
 
 This change governs where it and the plan differ.

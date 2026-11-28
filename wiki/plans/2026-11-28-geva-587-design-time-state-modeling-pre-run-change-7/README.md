@@ -20,7 +20,7 @@ links:
 ## In short
 
 - An unforeseeable unit (both foreseeability ratings "no") serves calibration only. Once calibration is full, the draw always skips it, whatever its screens say.
-- The hinted step and the screen step choose their units from a stand-in walk that treats owed work as done. That walk skips an unforeseeable unit once calibration is full, so neither step ever builds or screens it.
+- The authoring and hinted steps choose their units from a stand-in walk that treats owed work as done. That walk skips an unforeseeable unit once calibration is full, so neither step authors or builds it. Without its hinted build, the screen step never reaches it either.
 - The real walk checked for owed work first. So it stopped at the first unforeseeable unit still owed its hinted build and waited for work no step would do. This run hit that: the hinted builds finished every unit they owed, and the screens then found nothing to screen, because the walk stopped at such a unit in the pool segment.
 - The fix: once calibration is full, the walk skips an unforeseeable unit that is still owed its hinted build or screen, with the reason "unforeseeable", in place of waiting on it.
 - Nothing else changes. No new money, no change to any cap, item, arm, model, prompt, pilot check, threshold or Decision row.
