@@ -2,7 +2,7 @@
 id: 2026-11-28-geva-587-design-time-state-modeling-supply-short
 kind: finding
 title: "Design-time state modeling eval 1 stopped SUPPLY SHORT: 8 of 126 screened units from this pool passed both screens (state and reach), so at most 47 comparison units could exist against a floor of 48; no effectiveness verdict"
-summary: "Eval 1 ran no counted cell. 8 of 126 screened units passed both screens; the bound fell to 47, under the floor of 48. Pilot: reviews 84/84, build cells 39/84. $143.48 paid. No verdict."
+summary: "No counted cell ran. 8 of 126 screened units passed both screens; the bound fell to 47, under the floor of 48. Pilot: reviews 84/84; build cells 40/84 opened, 39 finished. $143.48 paid. No verdict."
 author: GEVA-587
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
