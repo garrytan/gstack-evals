@@ -18,6 +18,8 @@ The plan: the preregistration [wiki/plans/2026-11-22-geva-573-weekly-stable-prer
 
 ## A week, in order
 
+**Tasks.** prepare builds each part's tasks from a local export of the SWE-rebench leaderboard package, read from `SWEREBENCH` (default `~/.capy/work/ref/swe-rebench-leaderboard`). A fresh machine has none. Download it keylessly with Harbor at the pinned commit f3a5a923f6d722472c9e797af836ae4425fb215f, the one quick/laneb/tasks/swerebench-r3a4.json records with the package version: `uv tool install "harbor @ git+https://github.com/harbor-framework/harbor@f3a5a923f6d722472c9e797af836ae4425fb215f"`, then `harbor datasets download swe-rebench/swe-rebench-leaderboard -o <export>`. Harbor writes the task folders one level down, so set `SWEREBENCH=<export>/swe-rebench-leaderboard`. Nothing new guards it: prepare (quick/laneb/runner/materialize.ts materializeRebench) already refuses any task whose folder digest or base image differs from swerebench-r3a4.json, and runs each base image by the digest that file pins.
+
 **Hold.** No paid command runs before pre-run change 4 merges. After that, the pilot runs first under its own approval row, and the weekly automation stays off until the gstack-evals Captain turns it on after the pilot passes.
 
 Every command is `bin/gstack-evals weekly ...`. `W` is the week's work folder, for example `~/.capy/work/weekly/2026-11-28`. The week runs as three ledger items, `ws-<date>-1`, `ws-<date>-2` and `ws-<date>-3` (`ws-<date>-r<n>-<k>` for a re-measure), one per part, each on its own L1 host with its own work folder `W/p1`, `W/p2` and `W/p3` beside `W/week.json`. Run each step to the end before the next, and stop at the first failure that the step says makes the week INCOMPLETE.
@@ -41,5 +43,6 @@ The one-time pilot runs the same way with the item `weekly-pilot` ($20, two sess
 ## Rules that are easy to miss
 
 - No paid session before the item's approval row; a cap stop never reruns.
+- Every command runs in a plain `bun` process: no `BUN_OPTIONS` preload and no cache setting. tests/weekly-stable/clean-process.test.ts runs attach, table, look and report that way, after planting the stale Bun transpiler-cache copy that once broke them (GST-4122).
 - Never change gstack at either sha. Never commit a weekly manifest (quick/laneb/arms/manifests/weekly is gitignored) or anything that names this week's tasks.
 - The record carries no task id, repository name or task text, and the smoke's FLAG line counts sessions without naming tasks (the per-task detail goes to the private report). An INCOMPLETE record carries no model rows, areas or realized figure. A published release is never edited; a correction takes the next `-r<k>` tag.

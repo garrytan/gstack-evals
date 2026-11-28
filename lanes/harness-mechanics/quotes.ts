@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// gstack's quote transform, read from the vendored contract checker. match.ts imports quoteSource as a Bun macro, so it runs
-// when Bun transpiles or bundles match.ts and the judge tar's facts.js carries the regex without reading a vendored file.
+// gstack's quote transform, read from the vendored contract checker. match.ts writes the same transform out as a literal, so
+// the judge tar's facts.js carries the regex without reading a vendored file; match.test.ts checks the two agree.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 

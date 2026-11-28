@@ -11,7 +11,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkContract, parseTranscript, validateContract } from "./vendor/gstack/lib/skill-contract.ts";
 import { GSTACK_BLOBS, GSTACK_VENDOR, HM, loadBundle, MATCHER, REPO, type Bundle } from "./pins.ts";
-import { quoteSource } from "./quotes.ts" with { type: "macro" };
 
 const input = (m: string): never => { throw new Error("E_HM_INPUT " + m); };
 const pinErr = (m: string): never => { throw new Error("E_HM_PIN " + m); };
@@ -45,9 +44,14 @@ export function checkCheckout(dir = process.env.HM_GSTACK ?? ""): string {
   return dir;
 }
 
-// gstack's quote transform, read from the vendored checker when Bun transpiles or bundles this file (quotes.ts): every
-// quoted string becomes a pair of empty quotes.
-const QUOTE = quoteSource();
+// gstack's quote transform, as the vendored checker holds it: every quoted string becomes a pair of empty quotes. It is
+// written out here rather than read through a Bun macro, because Bun 1.4.4's transpiler cache can serve a copy of this file
+// with the macro import removed and the call left in, so every later process failed with "quoteSource is not defined"
+// (GST-4122). tests/harness-mechanics/match.test.ts checks it against quotes.ts, which reads the vendored checker.
+const QUOTE = {
+  source: `"(?:[^"\\\\]|\\\\.)*"|'[^']*'`,
+  flags: "g",
+};
 export const QUOTES = new RegExp(QUOTE.source, QUOTE.flags);
 
 export type Label = "COUNT" | "NO" | "FLIP";
