@@ -5,11 +5,12 @@
 // digests/<unit>.txt (the sealed ep-digests lines), dock/<unit> (the sealed Dockerfile) and cmp/<unit>.json (the sealed
 // ep-unit.json). For each recipe it clones the repository, constructs, screens with the base image pinned to the sealed
 // digest, recounts and emits the unit under its sealed label, then checks it: a unit is admitted only when ep digests
-// --check matches line for line (A1) and its planted set equals the sealed one (B1). It prints counts only and writes
-// one status row per unit to <run>/rebuild-status.json.
+// --check matches line for line (A1) and its planted set equals the sealed one (B1). A unit is emitted into staging folders
+// beside --units and --repos and moved into them only once admitted, so the draw's folders hold admitted units alone. It
+// prints counts only and writes one status row per unit to <run>/rebuild-status.json.
 //
 // bun lanes/eng-planted/e1/rebuild.ts --in /dev/shm/g --run ~/g/run --work ~/g/work --units ~/g/units --repos ~/g/repos
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { construct, type Constructed } from "../construct/build.ts";
 import { compareDigests, unitDigests } from "../construct/digests.ts";
@@ -40,6 +41,27 @@ export function sealedImages(pinned: Record<string, string>, sealedDockerfile: s
   if (!from || !from.includes("@sha256:")) return pinned;
   const name = from.split("@")[0];
   return Object.fromEntries(Object.entries(pinned).map(([t, v]) => [t, v.split("@")[0] === name ? from : v]));
+}
+
+/** Moves a staged unit and its base repo into the live folders only when its digests match the sealed lines (A1) and its
+ * planted set equals the sealed one (B1). Otherwise the staged copy and any live copy under the label are removed. */
+export function admitStaged(o: { id: string; staged: { units: string; repos: string }; live: { units: string; repos: string }; sealedDigests: readonly string[]; sealedPlanted: readonly string[]; planted: readonly string[] }): Pick<Status, "digests" | "planted" | "admitted"> {
+  let match = false;
+  try {
+    match = compareDigests(o.sealedDigests, unitDigests(join(o.staged.units, o.id))).match;
+  } catch {}
+  const same = JSON.stringify([...o.sealedPlanted].sort()) === JSON.stringify([...o.planted].sort());
+  const admitted = match && same;
+  for (const k of ["repos", "units"] as const) {
+    const live = join(o.live[k], o.id);
+    rmSync(live, { recursive: true, force: true });
+    if (admitted) {
+      mkdirSync(o.live[k], { recursive: true });
+      renameSync(join(o.staged[k], o.id), live);
+    }
+  }
+  for (const k of ["units", "repos"] as const) rmSync(join(o.staged[k], o.id), { recursive: true, force: true });
+  return { digests: match ? "match" : "mismatch", planted: same ? "same" : "different", admitted };
 }
 
 if (import.meta.main) {
@@ -94,12 +116,12 @@ if (import.meta.main) {
         set({ step: o.step + ":" + (o.reason ?? ""), digests: null, planted: null, admitted: false });
         continue;
       }
-      const emitted = emitUnit({ mirror, fix: f, unit, unitDir: out, units, repos, labels });
+      const staged = { units: units + ".staging", repos: repos + ".staging" };
+      const emitted = emitUnit({ mirror, fix: f, unit, unitDir: out, units: staged.units, repos: staged.repos, labels });
       if (emitted.id !== u) throw new Error("E_USAGE unit " + u + " emitted under another label");
-      const d = compareDigests(readFileSync(join(input, "digests", u + ".txt"), "utf8").split("\n").filter(Boolean), unitDigests(join(units, u)));
-      const sealed = read<{ planted: string[] }>(join(input, "cmp", u + ".json")).planted;
-      const same = JSON.stringify([...sealed].sort()) === JSON.stringify([...emitted.planted].sort());
-      set({ step: "clean", digests: d.match ? "match" : "mismatch", planted: same ? "same" : "different", admitted: d.match && same });
+      const sealedDigests = readFileSync(join(input, "digests", u + ".txt"), "utf8").split("\n").filter(Boolean);
+      const sealedPlanted = read<{ planted: string[] }>(join(input, "cmp", u + ".json")).planted;
+      set({ step: "clean", ...admitStaged({ id: u, staged, live: { units, repos }, sealedDigests, sealedPlanted, planted: emitted.planted }) });
     }
   }
   const all = Object.values(status);

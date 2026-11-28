@@ -66,15 +66,23 @@ export function codexGstackInstall(model: string = E1_POLICY_MODEL.sol): string 
   ].join(" && ");
 }
 
-/** The shell step that copies the session's /tmp files, newer than the start mark, into the work dir. */
-export const TMP_COPY_STEP = 'set -e; d="$PWD/' + TMP_COPY + '"; mkdir -p "$d"; cd /tmp; if [ -e ' + TMP_MARK + ' ]; then find . -xdev -type f -newer ' + TMP_MARK + ' ! -path "./' + TMP_MARK_PREFIX + '*" -print0; else find . -xdev -type f ! -path "./' + TMP_MARK_PREFIX + '*" -print0; fi | tar --null -T - -cf - | tar -C "$d" -xf -';
+/** The shell step that copies the session's files under root (/tmp), newer than the start mark, into the work dir. Each
+ * stage runs on its own under set -e, with no pipe, so a file find or tar cannot read, or one tar cannot write, fails the
+ * step instead of leaving a partial copy that reads as complete. */
+export function tmpCopyStep(root: string): string {
+  const mark = root + "/" + TMP_MARK_PREFIX + "start";
+  const skip = '! -path "./' + TMP_MARK_PREFIX + '*"';
+  return 'set -e; d="$PWD/' + TMP_COPY + '"; mkdir -p "$d"; l=$(mktemp ' + root + "/" + TMP_MARK_PREFIX + 'list.XXXXXX); a=$(mktemp ' + root + "/" + TMP_MARK_PREFIX + 'tar.XXXXXX); trap \'rm -f "$l" "$a"\' EXIT; cd ' + root + "; if [ -e " + mark + " ]; then find . -xdev -type f -newer " + mark + " " + skip + ' -print0 > "$l"; else find . -xdev -type f ' + skip + ' -print0 > "$l"; fi; tar --null -T "$l" -cf "$a"; tar -C "$d" -xf "$a"';
+}
+export const TMP_COPY_STEP = tmpCopyStep("/tmp");
 
 /** Claude Code's own session file: the SDK stream never carries a slash command's expanded body, and this file does. */
 export const CLAUDE_SESSION = "claude-session.jsonl";
 
 /** The start mark and, on Sol, the sol-agent link, before the host CLI starts; the /tmp copy after it ends and, on Claude
- * Code, a copy of its own session file to session (home is the container's HOME). copied hears whether the /tmp copy
- * succeeded; a failed copy fails the attempt as infra, since the bundle would miss what the session wrote there. */
+ * Code, a copy of its own session file to session (home is the container's HOME). copied hears whether both copies
+ * succeeded; a failed or empty copy fails the attempt as infra, since the bundle or P's evidence would miss what the
+ * session wrote. */
 export function withTmpCapture(inner: AgentDriver, sol: boolean, keep: { home: string; session: string } | null = null, copied: (ok: boolean) => void = () => {}): AgentDriver {
   return {
     ...(inner.env ? { env: inner.env } : {}),
@@ -84,11 +92,13 @@ export function withTmpCapture(inner: AgentDriver, sol: boolean, keep: { home: s
       try {
         return await inner.run(session, task, timeoutMs);
       } finally {
-        copied(session.exec(TMP_COPY_STEP, COPY_MS).exitCode === 0);
+        let ok = session.exec(TMP_COPY_STEP, COPY_MS).exitCode === 0;
         if (keep && !sol) {
           const kept = session.exec("cat " + JSON.stringify(keep.home) + "/.claude/projects/*/*.jsonl", COPY_MS);
           if (kept.exitCode === 0 && kept.stdout) writeFileSync(keep.session, kept.stdout);
+          else ok = false;
         }
+        copied(ok);
       }
     },
   };
@@ -128,8 +138,22 @@ export interface E1ReviewLeft {
   stop?: "refusal" | "safety";
 }
 
-/** A provider's safety-filter words in a failed turn's error. */
-export const SAFETY_FILTER = /cyber_policy|content_policy|content_filter|invalid_prompt/i;
+/** A provider's safety-filter words in a failed turn's error: OpenAI's policy codes, Anthropic's Usage Policy refusal as
+ * Claude Code reports it, and OpenRouter's moderation flag. */
+export const SAFETY_FILTER = /cyber_policy|content_policy|content_filter|invalid_prompt|usage policy|flagged for|requires moderation/i;
+
+/** The text of a Claude Code session's API error messages, read from its SDK transcript. */
+export function claudeFailures(transcript: string): string {
+  const out: string[] = [];
+  for (const raw of transcript.split("\n")) {
+    if (!raw.trim()) continue;
+    try {
+      const m = JSON.parse(raw) as { type?: string; error?: unknown; is_api_error_message?: boolean; message?: { content?: Array<{ type?: string; text?: unknown }> } };
+      if (m.type === "assistant" && (m.error || m.is_api_error_message)) for (const b of m.message?.content ?? []) if (b.type === "text" && typeof b.text === "string") out.push(b.text);
+    } catch {}
+  }
+  return out.join("\n");
+}
 
 /** The messages of a Codex session's failed turns and errors, read from its exec event stream. */
 export function codexFailures(events: string): string {
@@ -235,14 +259,14 @@ export function e1ReviewLauncher(o: { arms: E1Arm[]; model: E1Model; out: string
         return { end: "infra", costUsd: ran.micros / 1_000_000, result: blank() };
       }
       if (!tmpCopied) {
-        o.log?.("cell " + s.cell + " a" + s.attempt + ": the /tmp copy failed after the session, so the attempt ends infra (one rerun, then a gap)");
+        o.log?.("cell " + s.cell + " a" + s.attempt + ": the /tmp or session-file copy failed after the session, so the attempt ends infra (one rerun, then a gap)");
         return { end: "infra", costUsd: ran.micros / 1_000_000, result: blank() };
       }
       const trial = ran.trial;
       return spending(ran.micros / 1_000_000, () => {
         const file = join(run, "host", "transcript.ndjson");
         const transcript = sol ? codexAsClaude(rollouts(join(run, "host", "codex-sessions"))) : existsSync(file) ? readFileSync(file, "utf8") : null;
-        const special = e1Stop(trial.record.termination, sol && existsSync(file) ? codexFailures(readFileSync(file, "utf8")) : "");
+        const special = e1Stop(trial.record.termination, sol ? (existsSync(file) ? codexFailures(readFileSync(file, "utf8")) : "") : claudeFailures(transcript ?? ""));
         const { end, why } = special ? { end: special.end, why: special.end === "limit" ? "the slot's allowance was spent, a limit stop scored as it stands" : "a " + ("stop" in special ? special.stop : "") + " stop, a result with plan.md as the review left it" } : reviewEnd(erOutcome(trial.record.termination, sol ? transcript || null : transcript).outcome, s.cell);
         if (why) o.log?.("cell " + s.cell + " a" + s.attempt + ": " + why);
         const kept = (captured as ReviewCapture | null) ?? fail("E_USAGE", "cell " + s.cell + " a" + s.attempt + ": the trial ended before its work tree was read");

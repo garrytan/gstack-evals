@@ -245,7 +245,12 @@ export interface E1Seams {
   notBefore?: { pilot: string; counted: string };
   /** The clock the guard reads; only tests set it. */
   now?: () => number;
+  /** Set once the eval is stopped: every paid command refuses before any lease. Unset in test seams. */
+  stopped?: string;
 }
+
+/** Eval 1 stopped SUPPLY SHORT; a rerun lifts this through a dated pre-run change. */
+export const E1_STOPPED = "eval 1 stopped SUPPLY SHORT under the Captain's ruling A of 2026-11-28 (wiki/board/2026-11-28-geva-587-design-time-state-modeling-supply-short)";
 
 /** Pre-run change 3: the owner's go of 2026-11-26 opens pilot preparation and the pilot; counted cells keep the prereg's
  * 2026-11-28 06:00Z and still wait for the Captain's ruling on the pilot readout. */
@@ -288,6 +293,7 @@ export const E1_REAL: E1Seams = {
   author: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "e1-author", models: WAVE2_AUTHOR_MODELS, routes: WAVE2_AUTHOR_ROUTES, roles: Object.keys(WAVE2_AUTHOR_MODELS) as AuthorRole[], runId: E1_RUN }),
   supply: (o) => meterLauncher({ ...o, maxTokens: AUTHOR_MAX_TOKENS, effort: null, label: "e1-supply", models: SUPPLY_MODELS, routes: SUPPLY_ROUTES, roles: Object.keys(SUPPLY_MODELS) as SupplyRole[], runId: E1_RUN }),
   notBefore: E1_NOT_BEFORE,
+  stopped: E1_STOPPED,
 };
 
 /** An authoring call under the supply gate that settles every call of a unit's authoring under one cell (change 2 section
@@ -469,6 +475,7 @@ export function pilotReadout(reviews: readonly E1ReviewRecord[], builds: readonl
 export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
   const source = (a: Args): UnitSource => unitFolders(need(a, "--units"), need(a, "--repos"));
   const paid = (a: Args, run: string, when: "pilot" | "counted", allowed: (item: string) => boolean): E1Paid => {
+    if (seams.stopped) fail("E_USAGE", seams.stopped + ": no paid e1 stage runs until a dated pre-run change lifts the stop; nothing ran");
     const at = seams.notBefore?.[when];
     if (at && (seams.now ?? Date.now)() < Date.parse(at)) fail("E_USAGE", "no " + (when === "pilot" ? "pilot or pilot-preparation" : "counted") + " e1 stage runs before " + at + "; nothing ran");
     return e1Paid(a, run, allowed);
@@ -622,7 +629,7 @@ export function e1Commands(seams: E1Seams = E1_REAL): Record<string, Command> {
     const units = drawUnits(run, src);
     const seed = drawSeed(run);
     const walk = e1Draw(seed, units.map((u) => (u.authoring === "passed" ? { ...u, screen: u.screen ?? SCREEN_OWED } : u)));
-    const order = [...walk.calibration, ...walk.comparison, ...walk.reserve, ...walk.skipped.map((s) => s.id)];
+    const order = [...walk.calibration, ...walk.comparison, ...walk.reserve];
     const todo = order.filter((id) => units.find((u) => u.id === id)!.authoring === "passed" && !existsSync(screenPath(run, id))).slice(0, a.flags.has("--limit") ? whole(a, "--limit", 1) : undefined);
     const gate = e1Gate(p, run);
     await paidStage(p, seams.supply({ out: join(run, "e1", "screen", "meter"), cacheDir: need(a, "--cache") }), (call) =>

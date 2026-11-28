@@ -83,14 +83,21 @@ The run found four harness defects. Each was fixed by a dated pre-run change bef
 
 One operator error cost time but no money. A disk cleanup removed session images that two hinted build rounds still needed. Both rounds stopped with nothing spent on the failed launches and reran in batches.
 
-## Known harness issues left open
+## Harness issues found in review
 
-A code review of the results PR raised three issues. None of them changed a number in this post, but a rerun of this harness should fix them first.
+A code review of the results PR found these issues. None of them changed a number in this post. This PR fixes the ones a rerun could hit, each with keyless tests that fail on the old code, and stops every paid eval 1 command.
 
-- **A rebuilt unit that fails custody admission still sits in the units folder,** and the draw does not read the rebuild status. This run assembled its units folder from admitted units only: 133 of 138 rebuilt pool units, matched line for line to their sealed digests. So no unadmitted unit entered.
-- **The screen step also visits units the draw skipped.** 8 authored units with Codex files were screened, for $0.46.
-- **Extending a construct search does not reapply its repository exclusions.** `ep search --extend` returns before it reads `--exclude`, and the saved pool is unfiltered, so an extension can draw excluded repositories again. Wave 2 did not extend a search. Attempt 3's pools and seeds were gone, so pre-run change 1 ran a fresh search with a new seed and left out attempt 3's 79 unit repositories by digest. All four wave 2 shards carry the same pool, seed and manifest, and the run log records that none of wave 2's constructed repositories is among those 79.
-- **The exposure detectors may undercount on some paths.** On Sol, a checker result that arrives by polling a background command is not tied back to the checker call, so C on Sol can read low. On Claude hosts, P's evidence reads Claude Code's own session file, and a failed copy of that file is not logged. Subagent work counts on Sol but not on Claude hosts. A provider safety stop on Claude hosts is read as an upstream gap rather than a result. So the pilot's low exposure counts, P on Opus above all, are not proof that a model skipped the procedure.
+- **Fixed: a rebuilt unit that failed custody admission stayed in the units folder,** and the draw does not read the rebuild status. The rebuild now emits each unit into staging folders and moves it into the units and repos folders only when its digests and planted set match the sealed ones. This run assembled its units folder by hand from admitted units only: 133 of 138 rebuilt pool units, matched line for line to their sealed digests. So no unadmitted unit entered.
+- **Fixed: the /tmp copy could lose files and still report success.** It ran as a pipe with no pipefail. Each stage now runs on its own and fails the step, so the attempt ends as an infrastructure gap. A Claude session whose own session file cannot be copied, which P's evidence reads, now fails the same way.
+- **Fixed: the screen step also visited units the draw had already skipped.** 8 authored units with Codex files were screened in this run, for $0.46.
+- **Fixed: extending a construct search did not reapply its repository exclusions.** A search now saves its exclusion list in its run folder, and `--extend` applies it. Wave 2 never extended a search. Attempt 3's pools and seeds were gone, so pre-run change 1 ran a fresh search with a new seed and left out attempt 3's 79 unit repositories by digest. All four wave 2 shards carry the same pool, seed and manifest, and the run log records that none of wave 2's constructed repositories is among those 79.
+- **Fixed: on Claude hosts a provider safety stop read as an upstream gap,** which the review stage retries once. The review launcher now reads Claude Code's API error text, and an Anthropic Usage Policy refusal or an OpenRouter moderation flag is a safety result, as on Sol. A transport error stays a gap.
+- **Contained: eval 1 is stopped.** Every paid eval 1 command (reviews, builds, screens, authoring) now refuses before any lease, so none of these paths can spend again. A rerun lifts the stop through a dated pre-run change. The builder's session rule, attempt 3's frozen one, still retries an upstream end once, safety stops included. It can't run while the stop holds.
+- **Open, disclosed: the exposure detectors may undercount on some paths.** On Sol, a checker result that arrives by polling a background command is not tied back to the checker call, so C on Sol (5 of 6) can read low. Subagent work counts on Sol but not on Claude hosts. No result here depends on these counts, since the eval reached no verdict. But the pilot's low exposure counts, P on Opus above all, are not proof that a model skipped the procedure.
+
+### The bound, on eligible units only
+
+The stop rests on comparison 1 plus 46 live undecided units, 47 in all. A recount from the custody records found that 2 of those 46 track Codex config (an .agents folder), so the draw would skip them. On eligible units only, the bound is 1 + 44 = 45. The cap of 3 units a repository could only lower it. Either way it stays under 48, so the stop stands.
 
 ## Cost
 

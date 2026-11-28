@@ -7,7 +7,7 @@ import { EB_COMMON, EB_FORCED } from "../../../lanes/eng-build/arms.ts";
 import { C_LINE, D_LINE, e1ArmSpec, e1Env, e1Prompt, pMarker } from "../../../lanes/eng-planted/e1/arms.ts";
 import { e1Mount, writtenFiles } from "../../../lanes/eng-planted/e1/bundle.ts";
 import { PINS } from "../../../lanes/eng-planted/e1/frozen.ts";
-import { codexFailures, codexGstackInstall, e1Stop, TMP_COPY_STEP } from "../../../lanes/eng-planted/e1/launch.ts";
+import { claudeFailures, codexFailures, codexGstackInstall, e1Stop, TMP_COPY_STEP, tmpCopyStep, withTmpCapture } from "../../../lanes/eng-planted/e1/launch.ts";
 
 describe("prompts", () => {
   test("every arm ends with the common line, its lines joined by one newline", () => {
@@ -110,6 +110,81 @@ describe("session ends eval 1 reads first", () => {
     expect(e1Stop({ kind: "missing", code: "UPSTREAM" }, "502 Bad Gateway")).toBeNull();
     expect(e1Stop({ kind: "cap_stop" }, "cyber_policy")).toBeNull();
     expect(e1Stop({ kind: "completed" }, "")).toBeNull();
+  });
+  test("on Claude hosts a Usage Policy or moderation refusal is a safety result, never an upstream gap; a transport error stays one", () => {
+    const api = (text: string) => JSON.stringify({ type: "assistant", is_api_error_message: true, error: "invalid_request", message: { content: [{ type: "text", text }] } });
+    const said = JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "This plan violates no usage policy." }] } });
+    const policy = [said, api("API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup).")].join("\n");
+    expect(claudeFailures(policy)).toContain("Usage Policy");
+    expect(claudeFailures(policy)).not.toContain("violates no");
+    expect(e1Stop({ kind: "missing", code: "UPSTREAM" }, claudeFailures(policy))).toEqual({ end: "completed", stop: "safety" });
+    expect(e1Stop({ kind: "missing", code: "UPSTREAM" }, claudeFailures(api("Provider returned error: particle-1 requires moderation on OpenRouter. Your input was flagged for \"violence\"")))).toEqual({ end: "completed", stop: "safety" });
+    expect(e1Stop({ kind: "missing", code: "UPSTREAM" }, claudeFailures([said, api("API Error: 529 Overloaded")].join("\n")))).toBeNull();
+    expect(e1Stop({ kind: "missing", code: "UPSTREAM" }, claudeFailures(said))).toBeNull();
+  });
+});
+
+describe("the /tmp copy fails closed", () => {
+  const root = () => {
+    const d = mkdtempSync(join(tmpdir(), "e1-copy-"));
+    const tmp = join(d, "tmp"), work = join(d, "work");
+    mkdirSync(join(tmp, "old"), { recursive: true });
+    mkdirSync(work);
+    writeFileSync(join(tmp, "old", "before.txt"), "old\n");
+    spawnSync("touch", ["-d", "2020-01-01", join(tmp, "old", "before.txt")]);
+    writeFileSync(join(tmp, ".e1-start"), "");
+    spawnSync("touch", ["-d", "2021-01-01", join(tmp, ".e1-start")]);
+    mkdirSync(join(tmp, "chart"));
+    writeFileSync(join(tmp, "chart", "model.cfg"), "INVARIANT Safe\n");
+    return { tmp, work };
+  };
+  const copy = (r: { tmp: string; work: string }) => spawnSync("sh", ["-c", tmpCopyStep(r.tmp)], { cwd: r.work, encoding: "utf8" });
+  const asRoot = process.getuid?.() === 0;
+
+  test("control: a clean copy exits 0 with the new files only, and leaves no list or archive behind", () => {
+    const r = root();
+    expect(copy(r).status).toBe(0);
+    expect(readFileSync(join(r.work, ".e1-tmp", "chart", "model.cfg"), "utf8")).toBe("INVARIANT Safe\n");
+    expect(existsSync(join(r.work, ".e1-tmp", "old", "before.txt"))).toBe(false);
+    expect(existsSync(join(r.work, ".e1-tmp", ".e1-start"))).toBe(false);
+    expect(spawnSync("sh", ["-c", "ls -A " + JSON.stringify(r.tmp) + " | grep -c '^.e1-' || true"], { encoding: "utf8" }).stdout.trim()).toBe("1");
+  });
+  test.skipIf(asRoot)("a file the copy cannot read fails the step", () => {
+    const r = root();
+    writeFileSync(join(r.tmp, "chart", "secret.cfg"), "x\n");
+    spawnSync("chmod", ["000", join(r.tmp, "chart", "secret.cfg")]);
+    expect(copy(r).status).not.toBe(0);
+  });
+  test.skipIf(asRoot)("a folder find cannot enter fails the step", () => {
+    const r = root();
+    mkdirSync(join(r.tmp, "locked"));
+    writeFileSync(join(r.tmp, "locked", "f.txt"), "x\n");
+    spawnSync("chmod", ["000", join(r.tmp, "locked")]);
+    const s = copy(r);
+    spawnSync("chmod", ["755", join(r.tmp, "locked")]);
+    expect(s.status).not.toBe(0);
+  });
+  test.skipIf(asRoot)("a destination the copy cannot write fails the step", () => {
+    const r = root();
+    mkdirSync(join(r.work, ".e1-tmp", "chart"), { recursive: true });
+    spawnSync("chmod", ["555", join(r.work, ".e1-tmp", "chart")]);
+    const s = copy(r);
+    spawnSync("chmod", ["755", join(r.work, ".e1-tmp", "chart")]);
+    expect(s.status).not.toBe(0);
+  });
+  test("a Claude session whose own session file cannot be copied, or is empty, reports a failed copy", async () => {
+    const run = async (cat: { exitCode: number; stdout: string }, sol = false) => {
+      const d = mkdtempSync(join(tmpdir(), "e1-keep-"));
+      let copied = null as boolean | null;
+      const session = { exec: (cmd: string) => (cmd.startsWith("cat ") ? { ...cat, stderr: "" } : { exitCode: 0, stdout: "", stderr: "" }) };
+      const agent = withTmpCapture({ run: async () => ({}) } as never, sol, { home: "/home/u", session: join(d, "claude-session.jsonl") }, (ok) => void (copied = ok));
+      await agent.run(session as never, {} as never, 1000);
+      return { copied, kept: existsSync(join(d, "claude-session.jsonl")) };
+    };
+    expect(await run({ exitCode: 0, stdout: "{}\n" })).toEqual({ copied: true, kept: true });
+    expect(await run({ exitCode: 1, stdout: "" })).toEqual({ copied: false, kept: false });
+    expect(await run({ exitCode: 0, stdout: "" })).toEqual({ copied: false, kept: false });
+    expect((await run({ exitCode: 1, stdout: "" }, true)).copied).toBe(true);
   });
 });
 

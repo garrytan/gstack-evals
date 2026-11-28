@@ -32,6 +32,7 @@ const store = (run: string) => ({
   digest: join(run, "manifest.digest"),
   pool: join(run, "pool.json"),
   poolDigest: join(run, "pool.digest"),
+  excluded: join(run, "excluded.txt"),
   mirror: (i: number) => join(run, "mirrors", String(i)),
   mined: (i: number) => join(run, "mined", i + ".json"),
   constructed: (id: string) => join(run, "constructed", id + ".json"),
@@ -72,7 +73,7 @@ const allMined = (run: string): Mined[] =>
 
 const searchCmd: Command = {
   summary: "search GitHub per ecosystem, draw in a seeded order and freeze the manifest; --extend draws the next repositories of an earlier run's pool",
-  usage: "--run <dir> --per-eco <n> [--pages <n>] [--extend <earlier run dir>] [--exclude <file of sha256 hex of lowercase owner/name, one a line>]",
+  usage: "--run <dir> --per-eco <n> [--pages <n>] [--extend <earlier run dir>: keeps that run's exclusions] [--exclude <file of sha256 hex of lowercase owner/name, one a line>]",
   bools: [],
   async run({ flags }, io) {
     const run = need(flags, "--run");
@@ -80,6 +81,12 @@ const searchCmd: Command = {
     if (existsSync(s.manifest)) fail("E_USAGE", "the run already holds a frozen manifest");
     mkdirSync(run, { recursive: true });
     const from = flags.get("--extend");
+    const hashes = (file: string) => readFileSync(file, "utf8").split("\n").map((l) => l.trim()).filter(Boolean);
+    const excludeFile = flags.get("--exclude");
+    const excluded = new Set([...(excludeFile ? hashes(excludeFile) : []), ...(from && existsSync(store(from).excluded) ? hashes(store(from).excluded) : [])]);
+    if ([...excluded].some((h) => !/^[0-9a-f]{64}$/.test(h))) fail("E_USAGE", "--exclude holds a line that is not a sha256 hex digest");
+    const kept = (r: Manifest["rows"][number]) => !excluded.has(repoKey(r.repo));
+    if (excluded.size) writeFileSync(s.excluded, [...excluded].sort().join("\n") + "\n", { mode: 0o600 });
     if (from) {
       const first = frozenManifest(from);
       const t = store(from);
@@ -87,17 +94,13 @@ const searchCmd: Command = {
       if (digest(poolText) !== readFileSync(t.poolDigest, "utf8").trim()) fail("E_USAGE", "the earlier run's pool no longer matches its frozen digest");
       const taken = new Set(first.rows.map((r) => r.repo));
       const perEco = Math.max(...ECOS.map((e) => first.rows.filter((r) => r.eco === e).length)) + Number(need(flags, "--per-eco"));
-      const m: Manifest = { searchedAt: first.searchedAt, seed: first.seed, queries: first.queries, rows: draw(JSON.parse(poolText), first.seed, perEco).filter((r) => !taken.has(r.repo)) };
+      const m: Manifest = { searchedAt: first.searchedAt, seed: first.seed, queries: first.queries, rows: draw((JSON.parse(poolText) as Manifest["rows"]).filter(kept), first.seed, perEco).filter((r) => !taken.has(r.repo)) };
       const f = freeze(m);
       writeFileSync(s.manifest, f.text, { mode: 0o600 });
       writeFileSync(s.digest, f.digest + "\n");
-      io.out("search: extension of " + taken.size + " repositories by " + m.rows.length + " in the same seeded order (" + ECOS.map((e) => e + " " + m.rows.filter((r) => r.eco === e).length).join(", ") + "), frozen as " + f.digest);
+      io.out("search: extension of " + taken.size + " repositories by " + m.rows.length + " in the same seeded order (" + ECOS.map((e) => e + " " + m.rows.filter((r) => r.eco === e).length).join(", ") + ")" + (excluded.size ? ", " + excluded.size + " listed repositories still excluded" : "") + ", frozen as " + f.digest);
       return 0;
     }
-    const excludeFile = flags.get("--exclude");
-    const excluded = new Set(excludeFile ? readFileSync(excludeFile, "utf8").split("\n").map((l) => l.trim()).filter(Boolean) : []);
-    if ([...excluded].some((h) => !/^[0-9a-f]{64}$/.test(h))) fail("E_USAGE", "--exclude holds a line that is not a sha256 hex digest");
-    const kept = (r: Manifest["rows"][number]) => !excluded.has(repoKey(r.repo));
     const seed = mintSeed();
     writeFileSync(s.seed, seed + "\n", { mode: 0o600 });
     const github = githubReader();

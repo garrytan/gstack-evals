@@ -10,7 +10,7 @@ import { openLease, reconcileLease, recordApproval } from "../../../src/runner/l
 import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
 import { ledgerPath } from "../../../src/runner/ledger/paths.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
-import { capGuarded, capStopPath, comparisonDigest, comparisonPath, e1Commands, e1Driver, E1_NOT_BEFORE, E1_REAL, E1_RUN, e1StubLauncher, lookPath, type E1Seams, type LookFile } from "../../../lanes/eng-planted/e1/commands.ts";
+import { capGuarded, capStopPath, comparisonDigest, comparisonPath, e1Commands, e1Driver, E1_NOT_BEFORE, E1_REAL, E1_RUN, E1_STOPPED, e1StubLauncher, lookPath, type E1Seams, type LookFile } from "../../../lanes/eng-planted/e1/commands.ts";
 import { RUNS_ON, type E1Arm } from "../../../lanes/eng-planted/e1/frozen.ts";
 import type { E1ReviewSession } from "../../../lanes/eng-planted/e1/launch.ts";
 import { E1_ITEMS, itemName } from "../../../lanes/eng-planted/e1/pipeline.ts";
@@ -296,6 +296,39 @@ describe("supply", () => {
     expect(JSON.parse(readFileSync(join(f.run, "e1", "segments.json"), "utf8")).attempt3).not.toContain("s9");
   });
 
+  test("the screens skip a unit the draw already skipped for Codex config, and screen the rest", async () => {
+    const f = fixture();
+    const units = join(f.dir, "units4");
+    const ids = Array.from({ length: 4 }, (_, i) => "y" + i);
+    for (const [i, id] of ids.entries()) {
+      mkdirSync(join(units, id), { recursive: true });
+      writeFileSync(join(units, id, "ep-unit.json"), JSON.stringify(unit(id, "q" + i)));
+      writeFileSync(join(units, id, "ep-author.json"), JSON.stringify({ stubbed: [], implementation: [], tests: [], callers: [], fix: { message: "even-unit", diff: "--- a\n+++ b" } }));
+      mkdirSync(join(f.repos, id), { recursive: true });
+      writeFileSync(join(f.repos, id, "a.ts"), "export const a = 1;\n");
+      if (id === "y1") {
+        mkdirSync(join(f.repos, id, ".agents"), { recursive: true });
+        writeFileSync(join(f.repos, id, ".agents", "x.md"), "x\n");
+      }
+      git(join(f.repos, id), "init", "-q");
+      git(join(f.repos, id), "add", "-A");
+      git(join(f.repos, id), "commit", "-q", "-m", "B");
+      const a = join(f.run, "author", id);
+      mkdirSync(a, { recursive: true });
+      writeFileSync(join(a, "calls.json"), JSON.stringify({ drop: null, foresee: ["yes", "yes"] }));
+      writeFileSync(join(a, "hinted.json"), JSON.stringify({ drop: null }));
+      writeFileSync(join(a, "hint.txt"), "The flag must reset.\n");
+      writeFileSync(join(a, "plan.md"), "# Plan\n");
+    }
+    rmSync(join(f.run, "e1", "draw.json"));
+    rmSync(comparisonPath(f.run));
+    expect(await f.cmds["e1-screen"]!.run(args({ ...f.paid("e1-supply"), "--units": units }), io().io)).toBe(0);
+    const screened = (id: string) => existsSync(join(f.run, "e1", "screen", id + ".json"));
+    expect(screened("y1")).toBe(false);
+    expect(["y0", "y2", "y3"].every(screened)).toBe(true);
+    expect(f.calls.supply.filter((r) => r === "stateAstra")).toHaveLength(3);
+  });
+
   test("a drawn unit whose stripped B tracks Codex config leaves the draw before any review of it, and never after", async () => {
     const f = fixture();
     const units = join(f.dir, "units3");
@@ -359,6 +392,18 @@ describe("guards", () => {
     expect(readItem(after.record, "e1-n-opus").leases).toHaveLength(0);
     const counted = fixture({ notBefore: E1_NOT_BEFORE, now: () => Date.parse(E1_NOT_BEFORE.counted) + 1000 });
     expect(await counted.cmds["e1-reviews"]!.run(args({ ...counted.paid("e1-n-opus"), "--phase": "comparison", "--half": "1" }), io().io)).toBe(0);
+  });
+  test("a stopped eval refuses every paid command before any lease or call, and the real seams carry the stop", async () => {
+    expect(E1_REAL.stopped).toBe(E1_STOPPED);
+    const f = fixture({ stopped: E1_STOPPED });
+    for (const [cmd, extra] of [["e1-reviews", { ...f.paid("e1-pilot"), "--phase": "pilot" }], ["e1-builds", { ...f.paid("e1-pilot"), "--phase": "pilot" }], ["e1-screen", { ...f.paid("e1-supply"), "--cache": f.dir }], ["e1-author", { ...f.paid("e1-supply"), "--cache": f.dir, "--step": "calls" }]] as const) {
+      expect(await codeOf(() => f.cmds[cmd]!.run(args(extra), io().io))).toBe("E_USAGE");
+    }
+    expect([f.calls.reviews, f.calls.builds, f.calls.supply]).toEqual([[], [], []]);
+    expect(readItem(f.record, "e1-pilot").leases).toHaveLength(0);
+    expect(readItem(f.record, "e1-supply").leases).toHaveLength(0);
+    const control = fixture();
+    expect(await control.cmds["e1-reviews"]!.run(args({ ...control.paid("e1-pilot"), "--phase": "pilot" }), io().io)).toBe(0);
   });
   test("the real seams carry both instants: the pilot's from the owner's go, counted cells from the prereg", () => {
     expect(E1_REAL.notBefore).toEqual({ pilot: "2026-11-26T21:08:58Z", counted: "2026-11-28T06:00:00Z" });
