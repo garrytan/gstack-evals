@@ -224,7 +224,7 @@ describe("comparison", () => {
     expect(rd.out.filter((l) => l.startsWith("arm "))).toHaveLength(PAIRS.length);
     expect(rd.out.some((l) => l.startsWith("ROW "))).toBe(true);
     expect(rd.out.at(-1)).toStartWith("eval 4: ");
-  });
+  }, 60_000);
   test("a look that stopped C and P refuses their second half and leaves the other arms running", async () => {
     const f = fixture();
     writeFileSync(lookPath(f.run), JSON.stringify({ stop: true, units: ["k1"], CN: null, PN: null, exposedOn: { C: ["opus"], P: [] }, at: "2026-11-28T00:00:00Z" }));

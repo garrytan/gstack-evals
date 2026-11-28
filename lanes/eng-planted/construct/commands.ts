@@ -143,7 +143,7 @@ const mineCmd: Command = {
       writeJson(s.mined(i), { repo: row.repo, eco: row.eco, cloned, stats: r.stats, fixes: r.fixes, mirror });
       fixes += r.fixes.length;
     }
-    io.out("mine: " + allMined(run).length + " of " + m.rows.filter((_, i) => mine(i)).length + " repositories mined" + (shard ? " in shard " + shard[1] + "/" + shard[2] : "") + ", " + fixes + " fixes mined this pass");
+    io.out("mine: " + m.rows.filter((_, i) => mine(i) && existsSync(s.mined(i))).length + " of " + m.rows.filter((_, i) => mine(i)).length + " repositories mined" + (shard ? " in shard " + shard[1] + "/" + shard[2] : "") + ", " + fixes + " fixes mined this pass");
     return 0;
   },
 };
