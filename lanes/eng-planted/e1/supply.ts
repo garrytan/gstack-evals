@@ -143,6 +143,10 @@ export function e1Draw(seed: string, units: readonly DrawUnit[]): E1Draw {
       continue;
     }
     if (u.authoring === "owed" || !u.screen) {
+      if (d.calibration.length === E1.units.calibration && unforeseeable(u.foresee)) {
+        d.skipped.push({ id, reason: "unforeseeable" });
+        continue;
+      }
       d.waiting = id;
       break;
     }

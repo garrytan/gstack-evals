@@ -57,6 +57,16 @@ describe("draw", () => {
     expect(d.calibration).toHaveLength(3);
     expect(d.skipped).toContainEqual({ id: first, reason: "codex config" });
   });
+  test("once calibration is full, an unforeseeable unit still owed its hinted build or screen is skipped, not waited on", () => {
+    const cal = Array.from({ length: 6 }, (_, i) => u(i, { repo: "c" + i }));
+    const no = u(50, { repo: "n", by: "pool", authoring: "owed", foresee: ["no", "no"], screen: null });
+    const next = u(51, { repo: "m", by: "wave2" });
+    const d = e1Draw("s", [...cal, no, next]);
+    expect([d.calibration.length, d.comparison, d.waiting]).toEqual([6, ["u51"], null]);
+    expect(d.skipped).toContainEqual({ id: "u50", reason: "unforeseeable" });
+    const early = e1Draw("s", [...cal.slice(0, 5), no, next]);
+    expect(early.waiting).toBe("u50");
+  });
   test("an unforeseeable unit serves calibration only; the walk waits at the first unscreened unit", () => {
     const units = Array.from({ length: 10 }, (_, i) => u(i, { repo: "r" + i, foresee: ["no", "no"] }));
     const d = e1Draw("s", units);
