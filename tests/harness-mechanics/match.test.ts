@@ -12,6 +12,7 @@ import {
   builtinSides, checkerSides, checkVendored, flipRule, gitBlob, loadMatcher, misplaced, nodeMajor, nodeSides, parseMatch,
   parseProbes, QUOTES, regexTimesMs, stopHookProblem, vendorFile,
 } from "../../lanes/harness-mechanics/match.ts";
+import { quoteSource } from "../../lanes/harness-mechanics/quotes.ts";
 
 const m = loadMatcher();
 const cmds = (cs: { cmd: string }[]) => cs.map((c) => c.cmd);
@@ -30,6 +31,7 @@ describe("vendored gstack", () => {
   });
 
   test("the quote transform is the vendored checker's own", () => {
+    expect({ source: QUOTES.source, flags: QUOTES.flags }).toEqual(quoteSource());
     expect(QUOTES.flags).toBe("g");
     expect("pytest -k \"a b\" -m 'x'".replace(QUOTES, '""')).toBe("pytest -k \"\" -m \"\"");
     expect(gitBlob(Buffer.from("hello\n"))).toBe("ce013625030ba8dba906f756967f9e9ca394464a");
