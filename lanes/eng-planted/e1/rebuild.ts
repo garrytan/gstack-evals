@@ -10,7 +10,7 @@
 // prints counts only and writes one status row per unit to <run>/rebuild-status.json.
 //
 // bun lanes/eng-planted/e1/rebuild.ts --in /dev/shm/g --run ~/g/run --work ~/g/work --units ~/g/units --repos ~/g/repos
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { construct, type Constructed } from "../construct/build.ts";
 import { compareDigests, unitDigests } from "../construct/digests.ts";
@@ -45,28 +45,26 @@ export function sealedImages(pinned: Record<string, string>, sealedDockerfile: s
 
 /** Moves a staged unit and its base repo into the live folders only when its digests match the sealed lines (A1) and its
  * planted set equals the sealed one (B1). A pair already live under the label first moves to `<live>.prev/<id>.<stamp>`,
- * units before repos, so the draw (which lists the live units folder) never sees it again unless the new pair is fully in
- * place, and is only removed then. A refused unit, or a promotion whose move fails, leaves the previous pair there; a
- * failed move also removes what it had placed and is raised. */
-export function admitStaged(o: { id: string; staged: { units: string; repos: string }; live: { units: string; repos: string }; sealedDigests: readonly string[]; sealedPlanted: readonly string[]; planted: readonly string[] }, move: (from: string, to: string) => void = renameSync): Pick<Status, "digests" | "planted" | "admitted"> {
+ * units before repos, so the draw (which lists the live units folder) never sees it again. A refused unit, or a promotion
+ * whose move fails, leaves it there for diagnosis; a failed move also removes what it had placed and is raised. Set-aside
+ * copies of a unit are removed only once a new pair of it is fully in place; the rebuild names any left at exit. */
+export function admitStaged(o: { id: string; staged: { units: string; repos: string }; live: { units: string; repos: string }; sealedDigests: readonly string[]; sealedPlanted: readonly string[]; planted: readonly string[] }, seams: { move?: (from: string, to: string) => void; remove?: (path: string) => void } = {}): Pick<Status, "digests" | "planted" | "admitted"> {
+  const move = seams.move ?? renameSync;
+  const remove = seams.remove ?? ((p: string) => rmSync(p, { recursive: true, force: true }));
   let match = false;
   try {
     match = compareDigests(o.sealedDigests, unitDigests(join(o.staged.units, o.id))).match;
   } catch {}
   const same = JSON.stringify([...o.sealedPlanted].sort()) === JSON.stringify([...o.planted].sort());
   const admitted = match && same;
-  const stamp = o.id + "." + Date.now();
   const staged = (k: "units" | "repos") => join(o.staged[k], o.id);
   const live = (k: "units" | "repos") => join(o.live[k], o.id);
-  const aside: string[] = [];
   const placed: string[] = [];
   try {
     for (const k of ["units", "repos"] as const) {
       if (!existsSync(live(k))) continue;
-      const prev = join(o.live[k] + ".prev", stamp);
       mkdirSync(o.live[k] + ".prev", { recursive: true });
-      move(live(k), prev);
-      aside.push(prev);
+      move(live(k), join(o.live[k] + ".prev", o.id + "." + Date.now()));
     }
     if (admitted) {
       for (const k of ["repos", "units"] as const) {
@@ -74,16 +72,20 @@ export function admitStaged(o: { id: string; staged: { units: string; repos: str
         move(staged(k), live(k));
         placed.push(live(k));
       }
-      for (const p of aside) rmSync(p, { recursive: true, force: true });
     }
   } catch (e) {
-    for (const p of placed) rmSync(p, { recursive: true, force: true });
+    for (const p of placed) remove(p);
     throw e;
   } finally {
-    for (const k of ["units", "repos"] as const) rmSync(staged(k), { recursive: true, force: true });
+    for (const k of ["units", "repos"] as const) remove(staged(k));
   }
+  if (admitted) for (const k of ["units", "repos"] as const) for (const p of setAside(o.live[k], o.id)) remove(p);
   return { digests: match ? "match" : "mismatch", planted: same ? "same" : "different", admitted };
 }
+
+/** The set-aside copies of a unit (or of every unit, with no id) beside a live folder. */
+export const setAside = (liveDir: string, id?: string): string[] =>
+  existsSync(liveDir + ".prev") ? readdirSync(liveDir + ".prev").filter((n) => id === undefined || n.startsWith(id + ".")).map((n) => join(liveDir + ".prev", n)) : [];
 
 if (import.meta.main) {
   const input = arg("--in"), run = arg("--run"), work = arg("--work"), units = arg("--units"), repos = arg("--repos");
@@ -148,4 +150,6 @@ if (import.meta.main) {
   const all = Object.values(status);
   const count = (f: (s: Status) => boolean) => all.filter(f).length;
   console.log("rebuild: " + all.length + " of " + Object.keys(recipes).length + " units done; clean " + count((s) => s.step === "clean") + ", digests match " + count((s) => s.digests === "match") + ", planted same " + count((s) => s.planted === "same") + ", admitted " + count((s) => s.admitted));
+  const left = [...setAside(units), ...setAside(repos)];
+  if (left.length) console.log("rebuild: " + left.length + " set-aside copies kept for diagnosis, outside the draw: " + left.join(" "));
 }
