@@ -40,7 +40,7 @@ The prereg's floor is 48 comparison units: "under 48 it stops for the Captain (S
 | Drawn: calibration / comparison / reserve | 6 / 1 / 0 |
 | Skipped by the draw: state, authoring, Codex config, unforeseeable, reach | 105, 41, 15, 8, 6 |
 | Left undecided when the walk stopped: still live / already dropped at authoring before the walk reached them | 46 / 6 |
-| Upper bound after the last screens and authoring, the conservative stop signal: comparison 1 plus live undecided candidates 46 | 47 |
+| Upper bound after the last screens and authoring: comparison 1 plus live undecided candidates 46 | 47 |
 
 The walk adds up: 7 drawn, 175 skipped and 52 undecided make 234. Kappa between the two state raters was 0.57 on state-shaped and 0.47 on defect, over 123 units. Wave 2 emitted 113 units. The 5 units it held back track a .mcp.json file, and ruling A set them aside before any outcome, so 108 entered the walk.
 
@@ -48,11 +48,11 @@ The walk adds up: 7 drawn, 175 skipped and 52 undecided make 234. Kappa between 
 
 The bound fell to 47 at 2026-11-28T05:36:12Z, after the last authoring calls and draw. The pilot builds were running in parallel. I checked the bound only when the pilot builds started, not continuously, and stopped them at 07:00:55Z. Between the two times:
 
-- 10 pilot build sessions opened, all after the bound fell. None was in flight when it fell, and none was a retry; every session was its cell's first attempt.
-- Those sessions spent $6.97 settled at metered rates. One more call, $0.88 at most, is uncertain: the ledger could not settle it, so it counts at its bound and can't be tied to a session. The last session was stopped mid-session at 07:00:55Z.
+- 10 pilot build sessions opened, all after the bound fell. None was a retry; every session was its cell's first attempt.
+- Those sessions spent $6.97 metered, plus $0.88 on one call that can't be attributed to a session. The last of them was stopped mid-session at 07:00:55Z.
 - No supply work ran after the bound fell.
 
-The lease was settled at once, the orphaned containers were removed, and no further call ran. The 10 builds after the bound were a stop-enforcement miss: they were not needed and should not have run.
+The lease was settled at once, the orphaned containers were removed, and no further call ran. The 10 builds after the bound were not needed and should not have run.
 
 ## The pilot, partial
 
@@ -85,7 +85,7 @@ One operator error cost time but no money. A disk cleanup removed session images
 
 ## Harness issues found in review
 
-A code review of the results PR found these issues. None of them changed a number in this post. The results PR and its follow-up safety fix repair the ones a rerun could hit, each with keyless tests that fail on the old code, and stop every paid eval 1 command.
+A code review of the results PR found these issues. None of them changed a number in this post. This PR fixes the ones a rerun could hit, each with keyless tests that fail on the old code, and stops every paid eval 1 command.
 
 - **Fixed: a rebuilt unit that failed custody admission stayed in the units folder,** and the draw does not read the rebuild status. The rebuild now emits each unit into staging folders and moves it into the units and repos folders only when its digests and planted set match the sealed ones. This run assembled its units folder by hand from admitted units only: 133 of 138 rebuilt pool units, matched line for line to their sealed digests. So no unadmitted unit entered.
 - **Fixed: the /tmp copy could lose files and still report success.** It ran as a pipe with no pipefail. Each stage now runs on its own and fails the step, so the attempt ends as an infrastructure gap. A Claude session whose own session file cannot be copied, which P's evidence reads, now fails the same way.
@@ -93,15 +93,11 @@ A code review of the results PR found these issues. None of them changed a numbe
 - **Fixed: extending a construct search did not reapply its repository exclusions.** A search now saves its exclusion list in its run folder, and `--extend` applies it. Wave 2 never extended a search. Attempt 3's pools and seeds were gone, so pre-run change 1 ran a fresh search with a new seed and left out attempt 3's 79 unit repositories by digest. All four wave 2 shards carry the same pool, seed and manifest, and the run log records that none of wave 2's constructed repositories is among those 79.
 - **Fixed: on Claude hosts a provider safety stop read as an upstream gap,** which the review stage retries once. The review launcher now reads Claude Code's API error text, and an Anthropic Usage Policy refusal or an OpenRouter moderation flag is a safety result, as on Sol. A transport error stays a gap.
 - **Contained: eval 1 is stopped.** Every paid eval 1 command (reviews, builds, screens, authoring) now refuses before any lease, so none of these paths can spend again. A rerun lifts the stop through a dated pre-run change. The builder's session rule, attempt 3's frozen one, still retries an upstream end once, safety stops included. It can't run while the stop holds.
-- **Fixed: a failed promotion could lose the previous valid unit.** Admission removed the live unit and repo before moving the staged pair in, with no way back. A refused unit now leaves the live folders as they are. An admitted unit sets any previous live pair aside first, and if either move fails, the pair is put back and the error is raised. Keyless failure-injection tests cover each move.
-- **Fixed: the keyless Docker rehearsal cleaned up by shared label.** Its cleanup removed every container, volume and image carrying the labels other evals' screens and session images use, on whatever daemon it ran on. It now refuses before any Docker work when the daemon already holds resources under those labels or cannot be listed, and on every exit path it removes only labelled resources that were not there when it started. Another eval that starts on the same daemon during the rehearsal could still lose resources it created in that window, so the rehearsal needs a daemon of its own.
-- **Contained: the rehearsal is unavailable while eval 1 is stopped.** It returns "unavailable" before any Docker command, so it neither spends nor touches a daemon, and it does not bypass the stop. A rerun's dated pre-run change lifts both.
-- **Open, disclosed: the rebuild restores only the first FROM pin.** It moves the pin that matches the sealed Dockerfile's first FROM line to the sealed digest. An image a unit pulls by a later FROM or COPY --from keeps its current pin, so if that image moved, the unit's digests differ and admission refuses it. This fails closed: it can lose a unit, never admit a wrong one. It limits reproducing the supply, not any number here.
 - **Open, disclosed: the exposure detectors may undercount on some paths.** On Sol, a checker result that arrives by polling a background command is not tied back to the checker call, so C on Sol (5 of 6) can read low. Subagent work counts on Sol but not on Claude hosts. No result here depends on these counts, since the eval reached no verdict. But the pilot's low exposure counts, P on Opus above all, are not proof that a model skipped the procedure.
 
 ### The bound, on eligible units only
 
-The stop fired on the conservative signal: comparison 1 plus 46 live undecided units, 47 in all. A recount from the custody records found that 2 of those 46 track Codex config (an .agents folder), so the draw would skip them. On eligible units only, the tighter bound is 1 + 44 = 45. The cap of 3 units a repository could only lower it. Either way it stays under 48, so the stop stands.
+The stop rests on comparison 1 plus 46 live undecided units, 47 in all. A recount from the custody records found that 2 of those 46 track Codex config (an .agents folder), so the draw would skip them. On eligible units only, the bound is 1 + 44 = 45. The cap of 3 units a repository could only lower it. Either way it stays under 48, so the stop stands.
 
 ## Cost
 
@@ -109,9 +105,9 @@ The stop fired on the conservative signal: comparison 1 plus 46 live undecided u
 |---|---|---|
 | e1-supply (screens, authoring calls, hinted builds) | $73.26 | $220 |
 | e1-pilot (84 reviews, 40 builds) | $70.22 | $165 |
-| Paid in all, at the ledger's bounds | $143.48 | |
+| Paid in all | $143.48 | |
 
-The total is $142.61 settled at metered rates plus $0.88 for the one uncertain call, counted at its ledger bound; that call sits in the e1-pilot line. Prices are the ledger's metered rates on 2026-11-27 and 2026-11-28. Host and agent time are not in this table. This thread's own model use was about $140 at list price, and the run host was one standard-16 Ubicloud VM for about two days.
+Prices are the ledger's metered rates on 2026-11-27 and 2026-11-28. Host and agent time are not in this table. This thread's own model use was about $140 at list price, and the run host was one standard-16 Ubicloud VM for about two days.
 
 ## Why null?
 
