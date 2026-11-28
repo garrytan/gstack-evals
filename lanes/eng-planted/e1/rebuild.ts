@@ -44,24 +44,47 @@ export function sealedImages(pinned: Record<string, string>, sealedDockerfile: s
 }
 
 /** Moves a staged unit and its base repo into the live folders only when its digests match the sealed lines (A1) and its
- * planted set equals the sealed one (B1). Otherwise the staged copy and any live copy under the label are removed. */
-export function admitStaged(o: { id: string; staged: { units: string; repos: string }; live: { units: string; repos: string }; sealedDigests: readonly string[]; sealedPlanted: readonly string[]; planted: readonly string[] }): Pick<Status, "digests" | "planted" | "admitted"> {
+ * planted set equals the sealed one (B1); otherwise the staged copy is removed and the live folders are left as they are.
+ * A live pair already under the label is set aside beside the live folders first and put back if either move fails, so
+ * a failed promotion never loses it. */
+export function admitStaged(o: { id: string; staged: { units: string; repos: string }; live: { units: string; repos: string }; sealedDigests: readonly string[]; sealedPlanted: readonly string[]; planted: readonly string[] }, move: (from: string, to: string) => void = renameSync): Pick<Status, "digests" | "planted" | "admitted"> {
   let match = false;
   try {
     match = compareDigests(o.sealedDigests, unitDigests(join(o.staged.units, o.id))).match;
   } catch {}
   const same = JSON.stringify([...o.sealedPlanted].sort()) === JSON.stringify([...o.planted].sort());
   const admitted = match && same;
-  for (const k of ["repos", "units"] as const) {
-    const live = join(o.live[k], o.id);
-    rmSync(live, { recursive: true, force: true });
-    if (admitted) {
-      mkdirSync(o.live[k], { recursive: true });
-      renameSync(join(o.staged[k], o.id), live);
-    }
+  const kinds = ["repos", "units"] as const;
+  const path = (where: "staged" | "live" | "prev", k: (typeof kinds)[number]) => join(where === "prev" ? o.live[k] + ".prev" : o[where][k], o.id);
+  const clearStaged = () => kinds.forEach((k) => rmSync(path("staged", k), { recursive: true, force: true }));
+  if (!admitted) {
+    clearStaged();
+    return { digests: match ? "match" : "mismatch", planted: same ? "same" : "different", admitted };
   }
-  for (const k of ["units", "repos"] as const) rmSync(join(o.staged[k], o.id), { recursive: true, force: true });
-  return { digests: match ? "match" : "mismatch", planted: same ? "same" : "different", admitted };
+  const aside: (typeof kinds)[number][] = [];
+  const placed: (typeof kinds)[number][] = [];
+  try {
+    for (const k of kinds) {
+      if (!existsSync(path("live", k))) continue;
+      mkdirSync(o.live[k] + ".prev", { recursive: true });
+      rmSync(path("prev", k), { recursive: true, force: true });
+      move(path("live", k), path("prev", k));
+      aside.push(k);
+    }
+    for (const k of kinds) {
+      mkdirSync(o.live[k], { recursive: true });
+      move(path("staged", k), path("live", k));
+      placed.push(k);
+    }
+  } catch (e) {
+    for (const k of placed) rmSync(path("live", k), { recursive: true, force: true });
+    for (const k of aside) move(path("prev", k), path("live", k));
+    clearStaged();
+    throw e;
+  }
+  for (const k of aside) rmSync(path("prev", k), { recursive: true, force: true });
+  clearStaged();
+  return { digests: "match", planted: "same", admitted };
 }
 
 if (import.meta.main) {

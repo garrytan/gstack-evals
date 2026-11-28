@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unitDigests } from "../../../lanes/eng-planted/construct/digests.ts";
@@ -50,14 +50,51 @@ describe("a rebuilt unit reaches the draw's folders only once admitted", () => {
     expect(existsSync(join(s.live.repos, "u1"))).toBe(true);
     expect(existsSync(join(s.staged.units, "u1"))).toBe(false);
   });
-  test("a digest mismatch leaves nothing in either live folder, and removes a stale live copy", () => {
+  const previous = (s: ReturnType<typeof stage>) => {
+    for (const k of ["units", "repos"] as const) {
+      mkdirSync(join(s.live[k], "u1"), { recursive: true });
+      writeFileSync(join(s.live[k], "u1", "sentinel.txt"), "previous " + k + "\n");
+    }
+  };
+  const kept = (s: ReturnType<typeof stage>) => {
+    for (const k of ["units", "repos"] as const) expect(readFileSync(join(s.live[k], "u1", "sentinel.txt"), "utf8")).toBe("previous " + k + "\n");
+    expect(existsSync(join(s.live.units, "u1", "ep-unit.json"))).toBe(false);
+    expect(existsSync(join(s.staged.units, "u1"))).toBe(false);
+    expect(existsSync(join(s.live.units + ".prev", "u1"))).toBe(false);
+    expect(existsSync(join(s.live.repos + ".prev", "u1"))).toBe(false);
+  };
+  test("a digest mismatch adds nothing to the live folders and leaves a previous live pair as it was", () => {
     const s = stage();
-    mkdirSync(join(s.live.units, "u1"), { recursive: true });
-    writeFileSync(join(s.live.units, "u1", "ep-unit.json"), "{}\n");
+    previous(s);
     const sealedDigests = s.sealed.map((l) => (l.startsWith("D ") ? "D " + "0".repeat(64) : l));
     expect(admitStaged({ id: "u1", ...s, sealedDigests, sealedPlanted: ["c1"], planted: ["c1"] })).toEqual({ digests: "mismatch", planted: "same", admitted: false });
-    gone(s);
+    kept(s);
   });
+  test("an admitted unit replaces a previous live pair and leaves nothing set aside", () => {
+    const s = stage();
+    previous(s);
+    expect(admitStaged({ id: "u1", ...s, sealedDigests: s.sealed, sealedPlanted: ["c1"], planted: ["c1"] }).admitted).toBe(true);
+    expect(existsSync(join(s.live.units, "u1", "ep-unit.json"))).toBe(true);
+    expect(existsSync(join(s.live.units, "u1", "sentinel.txt"))).toBe(false);
+    expect(existsSync(join(s.live.repos, "u1", "sentinel.txt"))).toBe(false);
+    expect(existsSync(join(s.live.units + ".prev", "u1"))).toBe(false);
+  });
+  for (const [when, fails] of [
+    ["the unit's move into the live folder", (from: string, to: string) => from.includes("units.staging")],
+    ["the repo's move into the live folder", (from: string, to: string) => from.includes("repos.staging")],
+    ["setting the previous unit aside", (from: string, to: string) => to.includes("units.prev")],
+  ] as const) {
+    test("a failure at " + when + " puts the previous live pair back and promotes nothing", () => {
+      const s = stage();
+      previous(s);
+      const move = (from: string, to: string) => {
+        if (fails(from, to)) throw new Error("injected rename failure");
+        renameSync(from, to);
+      };
+      expect(() => admitStaged({ id: "u1", ...s, sealedDigests: s.sealed, sealedPlanted: ["c1"], planted: ["c1"] }, move)).toThrow("injected rename failure");
+      kept(s);
+    });
+  }
   test("a different planted set leaves nothing in either live folder", () => {
     const s = stage();
     expect(admitStaged({ id: "u1", ...s, sealedDigests: s.sealed, sealedPlanted: ["c1"], planted: ["c1", "c2"] })).toEqual({ digests: "match", planted: "different", admitted: false });

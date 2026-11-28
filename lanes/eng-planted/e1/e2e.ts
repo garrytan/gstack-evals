@@ -15,7 +15,9 @@
 // Every lease opens on a temporary ledger whose items are inited here as the run's are, and settles. Every key variable is
 // removed first; the upstream key is a placeholder only the stub sees. It prints one PASS or FAIL line per check, with
 // counts, outcome words and fixture file names only (no pstack or gstack text), then tears down what it started and checks
-// that no container or network it made is left.
+// that no container or network it made is left. Its teardown removes only labelled resources that appeared during the
+// run, and it refuses before any Docker call on a daemon that already holds resources under those labels, or while eval
+// 1 is stopped.
 // Usage: bun lanes/eng-planted/e1/e2e.ts --pstack <pstack checkout at the pin> [--harbor <bin>] [--p-command <cmd>] [--keep]
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -29,11 +31,10 @@ import { dropKeyEnv } from "../../../src/trial/env.ts";
 import { goRepo, GO_CALC, GO_FIXED } from "../../../tests/eng-build/fixture.ts";
 import { BUILD_LINE } from "../../eng-build/build-stage.ts";
 import { EB_FORCED } from "../../eng-build/arms.ts";
-import { removeCoverageImages } from "../../eng-build/coverage.ts";
 import { buildLauncher } from "../../eng-build/launch.ts";
 import { unitGrader } from "../../eng-build/pipeline.ts";
-import { removeLabelled } from "../../eng-build/screen.ts";
-import { removeSessionImages } from "../../eng-build/session-image.ts";
+import { SCREEN_LABEL } from "../../eng-build/screen.ts";
+import { SESSION_LABEL } from "../../eng-build/session-image.ts";
 import { buildUnit } from "../../eng-build/unit.ts";
 import { buildToolsVolume, tla2tools } from "../../outcome-skills/pfchecks/tools.ts";
 import { startSidecar } from "../../real-outcome/sandbox/sidecar.ts";
@@ -106,8 +107,43 @@ const toolNames = (body: any): string[] => {
   return [...names(Array.isArray(body?.tools) ? body.tools : []), ...(Array.isArray(body?.input) ? body.input : []).filter((i: any) => i?.type === "additional_tools").flatMap((i: any) => names(i.tools ?? []))];
 };
 
+type Docker = (args: string[]) => { stdout: string; status: number | null };
+
+/** The shared labels other evals' screens, coverage images and session images carry, by resource kind. */
+const LABELLED: ReadonlyArray<{ kind: "container" | "volume" | "image"; list: string[]; remove: (ids: string[]) => string[] }> = [
+  { kind: "container", list: ["ps", "-aq", "--filter", "label=" + SCREEN_LABEL], remove: (ids) => ["rm", "-f", ...ids] },
+  { kind: "volume", list: ["volume", "ls", "-q", "--filter", "label=" + SCREEN_LABEL], remove: (ids) => ["volume", "rm", "-f", ...ids] },
+  { kind: "image", list: ["images", "-q", "--no-trunc", "--filter", "label=gstack-evals.eb=cov"], remove: (ids) => ["rmi", "-f", "--no-prune", ...ids] },
+  { kind: "image", list: ["images", "-q", "--no-trunc", "--filter", "label=" + SESSION_LABEL], remove: (ids) => ["rmi", "-f", "--no-prune", ...ids] },
+];
+
+/** Every resource under the shared labels, one set per LABELLED row; null when the daemon cannot be listed. */
+export function labelledIds(docker: Docker): Set<string>[] | null {
+  const out: Set<string>[] = [];
+  for (const l of LABELLED) {
+    const r = docker(l.list);
+    if (r.status !== 0) return null;
+    out.push(new Set(r.stdout.split("\n").filter(Boolean)));
+  }
+  return out;
+}
+
+/** Removes only the labelled resources that are not in before, and returns how many it removed. */
+export function removeCreated(docker: Docker, before: Set<string>[]): number {
+  const now = labelledIds(docker);
+  if (now === null) return 0;
+  let n = 0;
+  LABELLED.forEach((l, i) => {
+    const ids = [...now[i]!].filter((id) => !before[i]!.has(id));
+    if (ids.length) docker(l.remove(ids));
+    n += ids.length;
+  });
+  return n;
+}
+
 /** Runs the driven launch and returns its checks; the dry run reads ok and one line from it. */
 export async function drivenLaunch(o: { pstack?: string; harbor?: string; pCommand?: PCommand; keep?: boolean; log?: (l: string) => void } = {}): Promise<{ ok: boolean; detail: string; checks: Check[] }> {
+  if (E1_REAL.stopped) return { ok: false, detail: "unavailable: " + E1_REAL.stopped + "; the driven launch runs no Docker command until a dated pre-run change lifts the stop", checks: [] };
   dropKeyEnv();
   const log = o.log ?? ((l: string) => console.error(l));
   const checks: Check[] = [];
@@ -121,6 +157,8 @@ export async function drivenLaunch(o: { pstack?: string; harbor?: string; pComma
   const pCommand = o.pCommand ?? "/statechart";
   const docker = (args: string[]) => spawnSync("docker", args, { encoding: "utf8", timeout: 300_000 });
   const ids = (args: string[]) => new Set(docker(args).stdout.split("\n").filter(Boolean));
+  const labelled = labelledIds(docker);
+  if (labelled === null || labelled.some((s) => s.size > 0)) return { ok: false, detail: "refused: the Docker daemon " + (labelled === null ? "could not be listed" : "already holds resources under the shared eval labels, so it is not isolated") + "; nothing ran", checks: [] };
   const before = { containers: ids(["ps", "-aq"]), networks: ids(["network", "ls", "-q"]) };
   mkdirSync(join(homedir(), ".capy", "work"), { recursive: true });
   const W = mkdtempSync(join(homedir(), ".capy", "work", "e1-e2e-"));
@@ -291,9 +329,7 @@ export async function drivenLaunch(o: { pstack?: string; harbor?: string; pComma
     sidecar.stop();
     writeFileSync(join(W, "e2e.json"), JSON.stringify({ checks, stub: seen.length }, null, 1) + "\n");
     if (!o.keep) {
-      removeSessionImages();
-      removeCoverageImages();
-      removeLabelled();
+      removeCreated(docker, labelled);
       if (unitImage) {
         docker(["run", "--rm", "--network", "none", "--user", "0:0", "-v", W + ":/x", "--entrypoint", "sh", unitImage, "-c", "rm -rf /x/* /x/.[!.]* 2>/dev/null; true"]);
         docker(["rmi", "-f", "--no-prune", unitImage]);
