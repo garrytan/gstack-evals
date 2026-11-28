@@ -6,7 +6,7 @@
 // - pstack: ~/.claude/rules/pstack-models.md, the rule pstack's setup-pstack writes. It is derived at build time from the
 //   rule shape in the pinned tree's setup-pstack SKILL.md (its step 5) and mapped as pstack's Claude Code adapter says:
 //   in a voice cell each Claude slug becomes "<family> <effort>" and every other slug inherit-parent, so pstack's Grok
-//   and Gemini seats run on the session model; in a cheap cell every value is inherit-parent, list lengths kept, since a panel's
+//   seats run on the session model; in a cheap cell every value is inherit-parent, list lengths kept, since a panel's
 //   length sets its fan-out. The shape is read from the installed tree, so no pstack text is stored in this repo.
 // - gstack: config keys for the trial's state root, appended after the seed (seedStateRoot's extra): agent_model host,
 //   so its readers run on the parent model, and codex_reviews enabled only in a voice cell, plus any keys the run gives the
@@ -43,8 +43,6 @@ export const PSTACK_RULE = ".claude/rules/pstack-models.md";
 const SLUG = /^claude-([a-z]+)-(?:\d+-)*\d+-(max|xhigh|high|medium|low)(?:-fast)?$/;
 /** A Grok slug as pstack's rule writes one. Its seats run on the session model under Claude Code. */
 const GROK = /^grok-\d+(?:\.\d+)*-(?:max|xhigh|high|medium|low)(?:-fast)?$/;
-/** A Gemini slug as pstack's rule writes one (cursor/plugins ca782ed8 on). Like a Grok seat, it runs on the session model under Claude Code. */
-const GEMINI = /^gemini-\d+(?:\.\d+)*-[a-z]+-(?:max|xhigh|high|medium|low)$/;
 
 /** The cross-family voice each model's cell keeps (plan section 5): gpt-6.1-sol in the Opus 5.5 cells. Every other model's cell runs every role on the model. */
 export const VOICES: Readonly<Record<string, string>> = { "claude-opus-5-5": "gpt-6.1-sol" };
@@ -53,7 +51,7 @@ export const cellFor = (model: string): Cell => ({ model, voice: VOICES[model] ?
 
 /**
  * pstack's model rule for a cell, from setup-pstack's SKILL.md; null when the file holds no rule shape with role lines.
- * A value that is not a Claude slug, a Grok slug, a Gemini slug, auto or inherit-parent refuses with E_CELL_RULE, since the cell could
+ * A value that is not a Claude slug, a Grok slug, auto or inherit-parent refuses with E_CELL_RULE, since the cell could
  * not say which model that role would run on.
  */
 export function pstackModelsRule(setupSkill: string, cell: Cell): string | null {
@@ -68,8 +66,8 @@ export function pstackModelsRule(setupSkill: string, cell: Cell): string | null 
     if (v === "auto" || v === "inherit-parent") return cell.voice ? v : "inherit-parent";
     const m = SLUG.exec(v);
     if (m) return cell.voice ? m[1] + " " + m[2] : "inherit-parent";
-    if (GROK.test(v) || GEMINI.test(v)) return "inherit-parent";
-    throw new InstallError("E_CELL_RULE", "setup-pstack's rule gives the role " + JSON.stringify(role) + " the value " + JSON.stringify(v) + ", which is not a Claude slug, a Grok slug, a Gemini slug, auto or inherit-parent, so the cell cannot say which model that role runs on");
+    if (GROK.test(v)) return "inherit-parent";
+    throw new InstallError("E_CELL_RULE", "setup-pstack's rule gives the role " + JSON.stringify(role) + " the value " + JSON.stringify(v) + ", which is not a Claude slug, a Grok slug, auto or inherit-parent, so the cell cannot say which model that role runs on");
   };
   let roles = 0;
   const out = body.map((l) => {

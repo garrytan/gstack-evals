@@ -5,10 +5,9 @@
 import { DRY_CASES as CONSTRUCT } from "./construct/commands.ts";
 import { DRY_CASES as READINGS } from "./readings/commands.ts";
 import { DRY_CASES as STAGES } from "./stages/commands.ts";
-import { CASES as E1 } from "./e1/cases.ts";
 import type { DryCase } from "./types.ts";
 
-export const PARTS: Readonly<Record<string, readonly DryCase[]>> = { construct: CONSTRUCT, stages: STAGES, readings: READINGS, e1: E1 };
+export const PARTS: Readonly<Record<string, readonly DryCase[]>> = { construct: CONSTRUCT, stages: STAGES, readings: READINGS };
 
 export interface DryRunResult {
   ok: boolean;

@@ -20,7 +20,7 @@ import { qualify, recount, requireSandbox, type Outcome } from "./grade.ts";
 import { FROZEN } from "../frozen.ts";
 import { digest, starStratum, type Manifest, type MinedFix } from "./local.ts";
 import { cloneMirror, mineRepo } from "./mine.ts";
-import { draw, freeze, githubReader, mintSeed, repoKey, search } from "./search.ts";
+import { draw, freeze, githubReader, mintSeed, search } from "./search.ts";
 import { supplyGate, supplyReport } from "./supply.ts";
 
 const ECOS: Ecosystem[] = ["go", "node", "python", "rust"];
@@ -32,7 +32,6 @@ const store = (run: string) => ({
   digest: join(run, "manifest.digest"),
   pool: join(run, "pool.json"),
   poolDigest: join(run, "pool.digest"),
-  excluded: join(run, "excluded.txt"),
   mirror: (i: number) => join(run, "mirrors", String(i)),
   mined: (i: number) => join(run, "mined", i + ".json"),
   constructed: (id: string) => join(run, "constructed", id + ".json"),
@@ -73,7 +72,7 @@ const allMined = (run: string): Mined[] =>
 
 const searchCmd: Command = {
   summary: "search GitHub per ecosystem, draw in a seeded order and freeze the manifest; --extend draws the next repositories of an earlier run's pool",
-  usage: "--run <dir> --per-eco <n> [--pages <n>] [--extend <earlier run dir>: keeps that run's exclusions] [--exclude <file of sha256 hex of lowercase owner/name, one a line>]",
+  usage: "--run <dir> --per-eco <n> [--pages <n>] [--extend <earlier run dir>]",
   bools: [],
   async run({ flags }, io) {
     const run = need(flags, "--run");
@@ -81,12 +80,6 @@ const searchCmd: Command = {
     if (existsSync(s.manifest)) fail("E_USAGE", "the run already holds a frozen manifest");
     mkdirSync(run, { recursive: true });
     const from = flags.get("--extend");
-    const hashes = (file: string) => readFileSync(file, "utf8").split("\n").map((l) => l.trim()).filter(Boolean);
-    const excludeFile = flags.get("--exclude");
-    const excluded = new Set([...(excludeFile ? hashes(excludeFile) : []), ...(from && existsSync(store(from).excluded) ? hashes(store(from).excluded) : [])]);
-    if ([...excluded].some((h) => !/^[0-9a-f]{64}$/.test(h))) fail("E_USAGE", "--exclude holds a line that is not a sha256 hex digest");
-    const kept = (r: Manifest["rows"][number]) => !excluded.has(repoKey(r.repo));
-    if (excluded.size) writeFileSync(s.excluded, [...excluded].sort().join("\n") + "\n", { mode: 0o600 });
     if (from) {
       const first = frozenManifest(from);
       const t = store(from);
@@ -94,11 +87,11 @@ const searchCmd: Command = {
       if (digest(poolText) !== readFileSync(t.poolDigest, "utf8").trim()) fail("E_USAGE", "the earlier run's pool no longer matches its frozen digest");
       const taken = new Set(first.rows.map((r) => r.repo));
       const perEco = Math.max(...ECOS.map((e) => first.rows.filter((r) => r.eco === e).length)) + Number(need(flags, "--per-eco"));
-      const m: Manifest = { searchedAt: first.searchedAt, seed: first.seed, queries: first.queries, rows: draw((JSON.parse(poolText) as Manifest["rows"]).filter(kept), first.seed, perEco).filter((r) => !taken.has(r.repo)) };
+      const m: Manifest = { searchedAt: first.searchedAt, seed: first.seed, queries: first.queries, rows: draw(JSON.parse(poolText), first.seed, perEco).filter((r) => !taken.has(r.repo)) };
       const f = freeze(m);
       writeFileSync(s.manifest, f.text, { mode: 0o600 });
       writeFileSync(s.digest, f.digest + "\n");
-      io.out("search: extension of " + taken.size + " repositories by " + m.rows.length + " in the same seeded order (" + ECOS.map((e) => e + " " + m.rows.filter((r) => r.eco === e).length).join(", ") + ")" + (excluded.size ? ", " + excluded.size + " listed repositories still excluded" : "") + ", frozen as " + f.digest);
+      io.out("search: extension of " + taken.size + " repositories by " + m.rows.length + " in the same seeded order (" + ECOS.map((e) => e + " " + m.rows.filter((r) => r.eco === e).length).join(", ") + "), frozen as " + f.digest);
       return 0;
     }
     const seed = mintSeed();
@@ -115,11 +108,10 @@ const searchCmd: Command = {
     const poolText = JSON.stringify(rows) + "\n";
     writeFileSync(s.pool, poolText, { mode: 0o600 });
     writeFileSync(s.poolDigest, digest(poolText) + "\n");
-    const m: Manifest = { searchedAt, seed, queries, rows: draw(rows.filter(kept), seed, Number(need(flags, "--per-eco"))) };
+    const m: Manifest = { searchedAt, seed, queries, rows: draw(rows, seed, Number(need(flags, "--per-eco"))) };
     const f = freeze(m);
     writeFileSync(s.manifest, f.text, { mode: 0o600 });
     writeFileSync(s.digest, f.digest + "\n");
-    if (excludeFile) io.out("search: excluded " + new Set(rows.filter((r) => !kept(r)).map((r) => r.repo)).size + " of " + excluded.size + " listed repositories (list " + digest(readFileSync(excludeFile, "utf8")) + ")");
     io.out("search: " + queries.length + " queries read " + rows.length + " results; manifest " + m.rows.length + " repositories (" + ECOS.map((e) => e + " " + m.rows.filter((r) => r.eco === e).length).join(", ") + "), frozen as " + f.digest);
     return 0;
   },
@@ -127,26 +119,23 @@ const searchCmd: Command = {
 
 const mineCmd: Command = {
   summary: "mine every manifest repository for fixes in the frame, with the earliest public date",
-  usage: "--run <dir> [--cap <fixes a repository>] [--shard <k>/<n>: mine only the manifest rows whose index is k modulo n]",
+  usage: "--run <dir> [--cap <fixes a repository>]",
   bools: [],
   async run({ flags }, io) {
     const run = need(flags, "--run");
     const m = frozenManifest(run);
     const s = store(run);
     const github = githubReader();
-    const shard = flags.get("--shard")?.match(/^(\d+)\/(\d+)$/);
-    if (flags.has("--shard") && !(shard && Number(shard[1]) < Number(shard[2]))) fail("E_USAGE", "--shard takes k/n with 0 <= k < n");
-    const mine = (i: number) => !shard || i % Number(shard[2]) === Number(shard[1]);
     let fixes = 0;
     for (const [i, row] of m.rows.entries()) {
-      if (!mine(i) || existsSync(s.mined(i))) continue;
+      if (existsSync(s.mined(i))) continue;
       const mirror = s.mirror(i);
       const cloned = cloneMirror(row.repo, mirror);
       const r = cloned ? await mineRepo({ repo: row.repo, eco: row.eco, stars: row.stars, mirror, github, cap: flags.has("--cap") ? Number(flags.get("--cap")) : undefined }) : { stats: {}, fixes: [] };
       writeJson(s.mined(i), { repo: row.repo, eco: row.eco, cloned, stats: r.stats, fixes: r.fixes, mirror });
       fixes += r.fixes.length;
     }
-    io.out("mine: " + m.rows.filter((_, i) => mine(i) && existsSync(s.mined(i))).length + " of " + m.rows.filter((_, i) => mine(i)).length + " repositories mined" + (shard ? " in shard " + shard[1] + "/" + shard[2] : "") + ", " + fixes + " fixes mined this pass");
+    io.out("mine: " + allMined(run).length + " of " + m.rows.length + " repositories mined, " + fixes + " fixes mined this pass");
     return 0;
   },
 };

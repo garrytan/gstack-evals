@@ -2,13 +2,9 @@
 // Keyless tests of the planted-unit search, seeded draw and manifest freeze (lanes/eng-planted/construct/search.ts) and
 // the miner's earliest public date (mine.ts), against stubbed GitHub reads.
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { main } from "../../../lanes/eng-planted/cli.ts";
-import { digest, type ManifestRow } from "../../../lanes/eng-planted/construct/local.ts";
+import type { ManifestRow } from "../../../lanes/eng-planted/construct/local.ts";
 import { earliestPublic } from "../../../lanes/eng-planted/construct/mine.ts";
-import { draw, freeze, queries, repoKey, search } from "../../../lanes/eng-planted/construct/search.ts";
+import { draw, freeze, queries, search } from "../../../lanes/eng-planted/construct/search.ts";
 
 const row = (repo: string, over: Partial<ManifestRow> = {}): ManifestRow => ({ repo, eco: "go", stars: 500, sizeKB: 1000, pushedAt: "2026-10-20T00:00:00Z", query: 0, ...over });
 
@@ -37,14 +33,6 @@ describe("search", () => {
     expect(draw(rows, "seed-1", 10).map((r) => r.repo).sort()).toEqual(["a/1", "a/2", "a/3", "b/1"]);
   });
 
-  test("an exclusion key is the sha256 of the lowercase name, so a listed repository leaves the draw whatever its case", () => {
-    expect(repoKey("Owner/Repo")).toBe(repoKey("owner/repo"));
-    expect(repoKey("owner/repo")).toMatch(/^[0-9a-f]{64}$/);
-    const out = new Set([repoKey("a/2")]);
-    const rows = [row("a/1"), row("A/2"), row("a/3")];
-    expect(draw(rows.filter((r) => !out.has(repoKey(r.repo))), "seed-1", 10).map((r) => r.repo).sort()).toEqual(["a/1", "a/3"]);
-  });
-
   test("the manifest freezes by the digest of its text", () => {
     const f = freeze({ searchedAt: "2026-11-15T00:00:00Z", seed: "s", queries: [], rows: [row("a/1")] });
     expect(f.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -69,49 +57,3 @@ describe("earliest public date", () => {
     expect(await earliestPublic(gh([]), "o/r", "abc", "2026-08-05T00:00:00Z", "fix, closes #9")).toEqual({ drop: "issue_unreadable" });
   });
 });
-
-describe("ep search --extend keeps the earlier run's exclusions", () => {
-  const rows = Array.from({ length: 12 }, (_, i) => row("o/r" + i));
-  const seed = "seed-x";
-  const io = () => {
-    const out: string[] = [];
-    return { out, io: { out: (t: string) => out.push(t), err: (t: string) => out.push(t) } };
-  };
-  const earlier = (excludeFirst: boolean, record = excludeFirst) => {
-    const dir = mkdtempSync(join(tmpdir(), "ep-extend-"));
-    const first = join(dir, "first");
-    mkdirSync(first);
-    const poolText = JSON.stringify(rows) + "\n";
-    writeFileSync(join(first, "pool.json"), poolText);
-    writeFileSync(join(first, "pool.digest"), digest(poolText) + "\n");
-    const leader = draw(rows, seed, 1)[0]!.repo;
-    const kept = rows.filter((r) => !excludeFirst || r.repo !== leader);
-    const f = freeze({ searchedAt: "2026-11-01T00:00:00Z", seed, queries: [], rows: draw(kept, seed, 1) });
-    writeFileSync(join(first, "manifest.json"), f.text);
-    writeFileSync(join(first, "manifest.digest"), f.digest + "\n");
-    if (record) writeFileSync(join(first, "excluded.txt"), repoKey(leader) + "\n");
-    return { dir, first, leader };
-  };
-  const extend = async (e: ReturnType<typeof earlier>) => {
-    const next = join(e.dir, "next");
-    const o = io();
-    expect(await main(["search", "--run", next, "--extend", e.first, "--per-eco", "4"], o.io)).toBe(0);
-    return { next, repos: (JSON.parse(readFileSync(join(next, "manifest.json"), "utf8")) as { rows: ManifestRow[] }).rows.map((r) => r.repo), out: o.out };
-  };
-
-  test("an excluded repository the seeded order puts first stays out of the extension, and the list carries forward", async () => {
-    const e = earlier(true);
-    const x = await extend(e);
-    expect(x.repos).toHaveLength(4);
-    expect(x.repos).not.toContain(e.leader);
-    expect(readFileSync(join(x.next, "excluded.txt"), "utf8")).toBe(repoKey(e.leader) + "\n");
-    expect(x.out.at(-1)).toContain("1 listed repositories still excluded");
-  });
-  test("control: when the earlier run left no exclusion list, the same extension draws that repository first", async () => {
-    const e = earlier(true, false);
-    const x = await extend(e);
-    expect(x.repos[0]).toBe(e.leader);
-    expect(x.out.at(-1)).not.toContain("still excluded");
-  });
-});
-

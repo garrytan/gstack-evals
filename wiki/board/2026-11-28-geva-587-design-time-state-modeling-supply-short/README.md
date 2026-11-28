@@ -16,7 +16,6 @@ links:
   - wiki/plans/2026-11-27-geva-587-design-time-state-modeling-pre-run-change-5/README.md
   - wiki/plans/2026-11-27-geva-587-design-time-state-modeling-pre-run-change-6/README.md
   - wiki/plans/2026-11-28-geva-587-design-time-state-modeling-pre-run-change-7/README.md
-  - lanes/eng-planted/e1/
 ---
 
 # Design-time state modeling, eval 1: stopped SUPPLY SHORT
@@ -40,7 +39,7 @@ The prereg's floor is 48 comparison units: "under 48 it stops for the Captain (S
 | Drawn: calibration / comparison / reserve | 6 / 1 / 0 |
 | Skipped by the draw: state, authoring, Codex config, unforeseeable, reach | 105, 41, 15, 8, 6 |
 | Left undecided when the walk stopped: still live / already dropped at authoring before the walk reached them | 46 / 6 |
-| Upper bound after the last screens and authoring: comparison 1 plus live undecided candidates 46 | 47 |
+| Upper bound after the last screens and authoring, the conservative stop signal: comparison 1 plus live undecided candidates 46 | 47 |
 
 The walk adds up: 7 drawn, 175 skipped and 52 undecided make 234. Kappa between the two state raters was 0.57 on state-shaped and 0.47 on defect, over 123 units. Wave 2 emitted 113 units. The 5 units it held back track a .mcp.json file, and ruling A set them aside before any outcome, so 108 entered the walk.
 
@@ -48,11 +47,11 @@ The walk adds up: 7 drawn, 175 skipped and 52 undecided make 234. Kappa between 
 
 The bound fell to 47 at 2026-11-28T05:36:12Z, after the last authoring calls and draw. The pilot builds were running in parallel. I checked the bound only when the pilot builds started, not continuously, and stopped them at 07:00:55Z. Between the two times:
 
-- 10 pilot build sessions opened, all after the bound fell. None was a retry; every session was its cell's first attempt.
-- Those sessions spent $6.97 metered, plus $0.88 on one call that can't be attributed to a session. The last of them was stopped mid-session at 07:00:55Z.
+- 10 pilot build sessions opened, all after the bound fell. None was in flight when it fell, and none was a retry; every session was its cell's first attempt.
+- Those sessions spent $6.97 settled at metered rates. One more call, $0.88 at most, is uncertain: the ledger could not settle it, so it counts at its bound and can't be tied to a session. The last session was stopped mid-session at 07:00:55Z.
 - No supply work ran after the bound fell.
 
-The lease was settled at once, the orphaned containers were removed, and no further call ran. The 10 builds after the bound were not needed and should not have run.
+The lease was settled at once, the orphaned containers were removed, and no further call ran. The 10 builds after the bound were a stop-enforcement miss: they were not needed and should not have run.
 
 ## The pilot, partial
 
@@ -85,19 +84,29 @@ One operator error cost time but no money. A disk cleanup removed session images
 
 ## Harness issues found in review
 
-A code review of the results PR found these issues. None of them changed a number in this post. This PR fixes the ones a rerun could hit, each with keyless tests that fail on the old code, and stops every paid eval 1 command.
+A code review of this results PR found issues in eval 1's harness. None of them changed a number in this post. Eval 1 is stopped, so its harness does not land on main: main keeps its own runner, command line, tests and configuration. The code that ran is commit 7b3dae94, and the review fixes after it run up to 074beb2a. Both stay in main's history through this PR's merge commit. A rerun starts from that history and fixes the open items below first.
 
-- **Fixed: a rebuilt unit that failed custody admission stayed in the units folder,** and the draw does not read the rebuild status. The rebuild now emits each unit into staging folders and moves it into the units and repos folders only when its digests and planted set match the sealed ones. This run assembled its units folder by hand from admitted units only: 133 of 138 rebuilt pool units, matched line for line to their sealed digests. So no unadmitted unit entered.
-- **Fixed: the /tmp copy could lose files and still report success.** It ran as a pipe with no pipefail. Each stage now runs on its own and fails the step, so the attempt ends as an infrastructure gap. A Claude session whose own session file cannot be copied, which P's evidence reads, now fails the same way.
-- **Fixed: the screen step also visited units the draw had already skipped.** 8 authored units with Codex files were screened in this run, for $0.46.
-- **Fixed: extending a construct search did not reapply its repository exclusions.** A search now saves its exclusion list in its run folder, and `--extend` applies it. Wave 2 never extended a search. Attempt 3's pools and seeds were gone, so pre-run change 1 ran a fresh search with a new seed and left out attempt 3's 79 unit repositories by digest. All four wave 2 shards carry the same pool, seed and manifest, and the run log records that none of wave 2's constructed repositories is among those 79.
-- **Fixed: on Claude hosts a provider safety stop read as an upstream gap,** which the review stage retries once. The review launcher now reads Claude Code's API error text, and an Anthropic Usage Policy refusal or an OpenRouter moderation flag is a safety result, as on Sol. A transport error stays a gap.
-- **Contained: eval 1 is stopped.** Every paid eval 1 command (reviews, builds, screens, authoring) now refuses before any lease, so none of these paths can spend again. A rerun lifts the stop through a dated pre-run change. The builder's session rule, attempt 3's frozen one, still retries an upstream end once, safety stops included. It can't run while the stop holds.
-- **Open, disclosed: the exposure detectors may undercount on some paths.** On Sol, a checker result that arrives by polling a background command is not tied back to the checker call, so C on Sol (5 of 6) can read low. Subagent work counts on Sol but not on Claude hosts. No result here depends on these counts, since the eval reached no verdict. But the pilot's low exposure counts, P on Opus above all, are not proof that a model skipped the procedure.
+Fixed at 074beb2a, each with keyless tests that fail on the old code:
+
+- **A rebuilt unit that failed custody admission stayed in the units folder,** and the draw does not read the rebuild status. The rebuild now emits each unit into staging folders and moves it into the units and repos folders only when its digests and planted set match the sealed ones. This run assembled its units folder by hand from admitted units only: 133 of 138 rebuilt pool units, matched line for line to their sealed digests. So no unadmitted unit entered.
+- **The /tmp copy could lose files and still report success.** It ran as a pipe with no pipefail. Each stage now runs on its own and fails the step, so the attempt ends as an infrastructure gap. A Claude session whose own session file cannot be copied, which P's evidence reads, now fails the same way.
+- **The screen step also visited units the draw had already skipped.** 8 authored units with Codex files were screened in this run, for $0.46.
+- **Extending a construct search did not reapply its repository exclusions.** Wave 2 never extended a search. Attempt 3's pools and seeds were gone, so pre-run change 1 ran a fresh search with a new seed and left out attempt 3's 79 unit repositories by digest. All four wave 2 shards carry the same pool, seed and manifest, and the run log records that none of wave 2's constructed repositories is among those 79.
+- **On Claude hosts a provider safety stop read as an upstream gap,** which the review stage retries once. It is now a safety result, as on Sol. A transport error stays a gap.
+- **Eval 1 is stopped in code.** Every paid eval 1 command (reviews, builds, screens, authoring) refuses before any lease.
+
+Open, not fixed:
+
+- **Docker cleanup by shared label.** The keyless rehearsal (lanes/eng-planted/e1/e2e.ts) and the pool rebuild remove every container, volume or image that carries labels other evals' screens and session images share. On a shared Docker daemon, that can delete another run's resources. A rerun must limit cleanup to resources it can prove it created, or run on a daemon of its own.
+- **Promotion with no way back.** At 074beb2a, admitting a rebuilt unit removes the live unit and repo before both moves into place succeed, so a failed move can lose a valid pair.
+- **The rebuild restores only the first FROM pin.** It moves the pin that matches the sealed Dockerfile's first FROM line to the sealed digest. An image a unit pulls by a later FROM or COPY --from keeps its current pin, so if that image moved, the unit's digests differ and admission refuses it. This fails closed: it can lose a unit, never admit a wrong one. It limits reproducing the supply, not any number here.
+- **The exposure detectors may undercount on some paths.** On Sol, a checker result that arrives by polling a background command is not tied back to the checker call, so C on Sol (5 of 6) can read low. Subagent work counts on Sol but not on Claude hosts. No result here depends on these counts, since the eval reached no verdict. But the pilot's low exposure counts, P on Opus above all, are not proof that a model skipped the procedure.
+
+A follow-up fix for the first two items was reviewed and closed unmerged (#468). Its last review still found three problems: a Docker dry-run case that always fails, the rebuild's shared-label cleanup, and a rebuild that stops when an old copy cannot be removed. Its branch is kept.
 
 ### The bound, on eligible units only
 
-The stop rests on comparison 1 plus 46 live undecided units, 47 in all. A recount from the custody records found that 2 of those 46 track Codex config (an .agents folder), so the draw would skip them. On eligible units only, the bound is 1 + 44 = 45. The cap of 3 units a repository could only lower it. Either way it stays under 48, so the stop stands.
+The stop fired on the conservative signal: comparison 1 plus 46 live undecided units, 47 in all. A recount from the custody records found that 2 of those 46 track Codex config (an .agents folder), so the draw would skip them. On eligible units only, the tighter bound is 1 + 44 = 45. The cap of 3 units a repository could only lower it. Either way it stays under 48, so the stop stands.
 
 ## Cost
 
@@ -105,9 +114,9 @@ The stop rests on comparison 1 plus 46 live undecided units, 47 in all. A recoun
 |---|---|---|
 | e1-supply (screens, authoring calls, hinted builds) | $73.26 | $220 |
 | e1-pilot (84 reviews, 40 builds) | $70.22 | $165 |
-| Paid in all | $143.48 | |
+| Paid in all, at the ledger's bounds | $143.48 | |
 
-Prices are the ledger's metered rates on 2026-11-27 and 2026-11-28. Host and agent time are not in this table. This thread's own model use was about $140 at list price, and the run host was one standard-16 Ubicloud VM for about two days.
+The total is $142.605678 settled at metered rates plus $0.878960 for the one uncertain call, counted at its ledger bound, which makes $143.484638. That call sits in the e1-pilot line. Rounded on their own, the two parts read $142.61 and $0.88, a cent more than the rounded total. Prices are the ledger's metered rates on 2026-11-27 and 2026-11-28. Host and agent time are not in this table. This thread's own model use was about $140 at list price, and the run host was one standard-16 Ubicloud VM for about two days.
 
 ## Why null?
 
@@ -115,11 +124,11 @@ R48's cycle does not apply, because nothing was measured. The stop is about supp
 
 ## What would reopen it
 
-A supply of at least 70 state-shaped planted units, built for this purpose rather than screened out of general bug-fix pools. The harness, the four pre-run changes and the frozen arms can run again on such a supply under a new prereg.
+A supply of at least 70 state-shaped planted units, built for this purpose rather than screened out of general bug-fix pools. The harness at 7b3dae94, the four pre-run changes and the frozen arms can run again on such a supply under a new prereg, once the open review items above are fixed.
 
 ## Replication and records
 
-The run's records sit encrypted in the eval custody store as e1-run-records.tar.zst.age. They include the draw, screens, authoring, review and build records, the cost journals, the driver's session log, the run scripts and the ledger. Plaintext sha256: ff27d2d911e51fbe30ea436b1fbd6070aea57c2e43b7df19ce1cac5e510f063b. The commands are in lanes/eng-planted/e1/commands.ts at the results branch's head (`ep e1-screen`, `ep e1-author`, `ep e1-draw`, `ep e1-reviews --phase pilot --pair`, `ep e1-builds --phase pilot`, `ep e1-pilot`). The run pins are unchanged: gstack 9a550bca, pstack cursor/plugins ca782ed8, Claude Code 2.1.314, Codex 0.170.0. The run host was destroyed after the export. Unit bodies stay sealed, so this post gives counts only.
+The run's records sit encrypted in the eval custody store as e1-run-records.tar.zst.age. They include the draw, screens, authoring, review and build records, the cost journals, the driver's session log, the run scripts and the ledger. Plaintext sha256: ff27d2d911e51fbe30ea436b1fbd6070aea57c2e43b7df19ce1cac5e510f063b. The commands are in lanes/eng-planted/e1/commands.ts at commit 7b3dae94, the code that ran, which main's history keeps but its tip does not carry (`ep e1-screen`, `ep e1-author`, `ep e1-draw`, `ep e1-reviews --phase pilot --pair`, `ep e1-builds --phase pilot`, `ep e1-pilot`). The run pins are unchanged: gstack 9a550bca, pstack cursor/plugins ca782ed8, Claude Code 2.1.314, Codex 0.170.0. The run host was destroyed after the export. Unit bodies stay sealed, so this post gives counts only.
 
 ## Disclosures
 

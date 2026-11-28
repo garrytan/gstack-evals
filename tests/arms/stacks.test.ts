@@ -228,9 +228,7 @@ describe("pstack and tstack installs", () => {
       const shape = (value: string) => "### 5. Write\n\n```\nreviewers: claude-opus-5-5-xhigh, " + value + "\n```\n";
       expect(pstackModelsRule(shape("grok-4.7-xhigh-fast"), opus)).toBe("reviewers: opus xhigh, inherit-parent\n");
       expect(pstackModelsRule(shape("grok-4.7-xhigh-fast"), cheap)).toBe("reviewers: inherit-parent, inherit-parent\n");
-      expect(pstackModelsRule(shape("gemini-4-neon-xhigh"), opus)).toBe("reviewers: opus xhigh, inherit-parent\n");
-      expect(pstackModelsRule(shape("gemini-4-neon-xhigh"), cheap)).toBe("reviewers: inherit-parent, inherit-parent\n");
-      for (const v of ["gpt-6.1-sol-high", "opus", "claude-opus", "grok-latest", "gemini-latest"]) {
+      for (const v of ["gpt-6.1-sol-high", "opus", "claude-opus", "grok-latest"]) {
         expect(stop(() => pstackModelsRule(shape(v), opus))).toBe("E_CELL_RULE");
         expect(stop(() => pstackModelsRule(shape(v), cheap))).toBe("E_CELL_RULE");
       }
