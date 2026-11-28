@@ -7,7 +7,7 @@ author: GEVA-401
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-23
-status: done
+status: superseded
 links:
   - 2026-11-05-geva-313-trust-but-verify-prereg
   - 2026-11-05-geva-326-tbv-prereg-amendment-1

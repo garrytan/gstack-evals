@@ -12,8 +12,9 @@ import { hostEnvText } from "../l1/l1.ts";
 
 const LANEB = join(import.meta.dir, "..");
 const RUNNER = join(LANEB, "l1/ubi-runner.sh");
-// gstack 53593535's scripts/ubicloud/ubi-runner.sh, the copy L1 runs pin as UBI_RUNNER_SHA256.
-const RUNNER_SHA256 = "c040c5b5d040fcdeec5cf0b545601dd1c55124a9e7cd55e56e0dcb4b80d097b2";
+// gstack 53593535's scripts/ubicloud/ubi-runner.sh with upstream 3374c583's API key header line, the copy L1 runs pin as
+// UBI_RUNNER_SHA256. Runs that pinned c040c5b5 used 53593535's file unchanged.
+const RUNNER_SHA256 = "21b321e61f12350fd97104bbd13cbb1e685b74755386ea180da1330d7af419cb";
 
 // host.sh sources host.env, then exports these before it runs launch.sh.
 function hostEnv(): Record<string, string> {
@@ -85,4 +86,54 @@ describe("launch.sh's up call against the pinned ubi-runner", () => {
     }
     expect(r.create![1]).toMatch(new RegExp("/ubirun-geva302-\\d+-[0-9a-f]+-t" + env.UBI_TTL_HOURS + "$"));
   }, 30000);
+});
+
+// GST-3959: the runner's API calls send the Ubicloud key as a header read from a file descriptor, never as a curl
+// argument, where any local user could read it from the process list. Keyless: a stand-in curl records its arguments
+// and the header files it was handed, and the real curl talks only to a local server. The value is an inert dummy.
+describe("the pinned ubi-runner keeps the Ubicloud key out of curl's arguments", () => {
+  const KEY = "dummy-not-a-key-GST3959-4711";
+
+  test("a stand-in curl sees the key only in a header file, never in its argv", () => {
+    const t = mkdtempSync(join(tmpdir(), "l1-runner-key-"));
+    const argv = join(t, "argv.log"), hdr = join(t, "hdr.log");
+    mkdirSync(join(t, "bin"));
+    writeFileSync(join(t, "bin/curl"), [
+      "#!/usr/bin/env bash",
+      "printf '%s\\n' \"$*\" >> '" + argv + "'",
+      "out=''; prev=''",
+      "for a in \"$@\"; do",
+      "  [ \"$prev\" = -o ] && out=$a",
+      "  [ \"$prev\" = -H ] && case $a in @*) cat \"${a#@}\" >> '" + hdr + "' ;; esac",
+      "  prev=$a",
+      "done",
+      "cat >/dev/null; printf '' > \"$out\"; printf 200",
+      "",
+    ].join("\n"));
+    chmodSync(join(t, "bin/curl"), 0o755);
+    writeFileSync(argv, ""); writeFileSync(hdr, "");
+    const r = Bun.spawnSync(["bash", RUNNER, "cli", "vm", "list"], {
+      env: { PATH: join(t, "bin") + ":/usr/bin:/bin", HOME: t, UBICLOUD_API_KEY: KEY, UBI_RUNNER_STATE: join(t, "state") },
+      timeout: 10_000,
+    });
+    expect(r.exitCode, r.stderr.toString()).toBe(0);
+    expect(readFileSync(argv, "utf8")).toContain("/cli");
+    expect(readFileSync(argv, "utf8")).not.toContain(KEY);
+    expect(readFileSync(hdr, "utf8")).toBe("Authorization: Bearer " + KEY + "\n");
+  });
+
+  test("the real curl still sends the Authorization header to the API", async () => {
+    const t = mkdtempSync(join(tmpdir(), "l1-runner-key-"));
+    let seen = "";
+    const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { seen = req.headers.get("authorization") ?? ""; return new Response("eu-central-h1 vm-a\n"); } });
+    try {
+      const p = Bun.spawn(["bash", RUNNER, "cli", "vm", "list"], {
+        env: { PATH: "/usr/bin:/bin", HOME: t, UBICLOUD_API_KEY: KEY, UBI_RUNNER_STATE: join(t, "state"), UBICLOUD_API_URL: "http://127.0.0.1:" + server.port },
+        stdout: "pipe", stderr: "pipe",
+      });
+      expect(await p.exited).toBe(0);
+      expect(await new Response(p.stdout).text()).toBe("eu-central-h1 vm-a\n");
+      expect(seen).toBe("Bearer " + KEY);
+    } finally { server.stop(true); }
+  }, 20000);
 });

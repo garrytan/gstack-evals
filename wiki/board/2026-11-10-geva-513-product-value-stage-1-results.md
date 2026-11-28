@@ -7,7 +7,7 @@ author: GEVA-513
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-10
-status: done
+status: superseded
 supersedes: [2026-11-09-geva-407-product-value-stage-1-results]
 links:
   - 2026-11-08-geva-403-product-value-prereg

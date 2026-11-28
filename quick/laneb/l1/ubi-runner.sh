@@ -225,7 +225,7 @@ api() {
   shift
   code=$(python3 -c 'import json,sys; print(json.dumps({"argv": sys.argv[1:]}))' "$@" \
     | curl -sS -o "$out" -w '%{http_code}' --max-time "$API_TIMEOUT" -X POST \
-        -H "Authorization: Bearer $UBICLOUD_API_KEY" \
+        -H @<(printf 'Authorization: Bearer %s\n' "$UBICLOUD_API_KEY") \
         -H 'Accept: text/plain' -H 'Content-Type: application/json' \
         -H 'X-Ubi-Version: 1.0.0' --data @- "$API/cli") || true
   echo "${code:-000}"

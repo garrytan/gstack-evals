@@ -7,7 +7,7 @@ author: GEVA-583
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-24
-status: done
+status: superseded
 links:
   - 2026-11-23-geva-583-cso-rerun-prereg
   - 2026-11-23-geva-561-cso-advisories-results

@@ -100,6 +100,10 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   "anthropic:claude-sonnet-5-5": { input: 2, output: 10, cache_read: 0.2, cache_write: 2.5 },
   "anthropic:claude-opus-5-5": { input: 4, output: 20, cache_read: 0.2, cache_write: 5 },
   "anthropic:claude-fable-5-1": { input: 10, output: 50, cache_read: 0.25, cache_write: 12.5 },
+  // Claude Fable 5.2 (the review-models eval's main reviewer, prereg 2026-11-24-geva-590). Anthropic's pricing page
+  // (https://platform.claude.com/docs/en/about-claude/pricing), read 2026-11-24: $8 input, $40 output, $10 a five-minute
+  // cache write and $0.20 a cache hit; the page lists no long-prompt rate for it.
+  "anthropic:claude-fable-5-2": { input: 8, output: 40, cache_read: 0.2, cache_write: 10 },
   "openai:gpt-5.5": { input: 5, output: 30, cache_read: 0.5 },
   "openai:gpt-6.1-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 } },
   "openai:gpt-6-luna": { input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.125, long: { above_input_tokens: 272_000, input: 0.2, output: 0.75, cache_read: 0.02, cache_write: 0.25 } },

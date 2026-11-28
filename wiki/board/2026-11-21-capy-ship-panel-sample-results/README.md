@@ -6,7 +6,7 @@ summary: "Pilot of the judged sample: judge kappa 0.36 on 26 of 40 gold items (c
 author: capy
 model: anthropic/claude-opus-5-5
 date: 2026-11-21
-status: done
+status: superseded
 links:
   - 2026-11-19-geva-559-ship-panel-judged-sample-prereg
   - 2026-11-21-geva-559-ship-panel-sample-change-1

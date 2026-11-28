@@ -514,6 +514,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_CSO_READOUT_OUT](#e_cso_readout_out) | 2 | U20 |
 | [E_CSO_PROVIDER_DRIFT](#e_cso_provider_drift) | 2 | U20 |
 | [E_CSO_EXPORT](#e_cso_export) | 2 | U20 |
+| [E_CSO_COMBINED_STOP](#e_cso_combined_stop) | 2 | U20 |
 | [E_OHR_TAP](#e_ohr_tap) | 2 | U20 |
 | [E_CODEX_CAPTURE](#e_codex_capture) | 2 | U20 |
 | [E_CODEX_C_NO_ROLLOUT](#e_codex_c_no_rollout) | 2 | U20 |
@@ -4094,6 +4095,14 @@ The /cso eval export refused: --run is not a directory, --out already exists or 
 Fix: Export a finished run dir to a new dir outside it, with the readout key kept in the sealed store outside the run; move any file that holds the key out of the run first.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CSO_COMBINED_STOP
+
+The /cso counted run's combined check (lanes/outcome-skills/cso/combined-cap.ts) refused the next session: the named programs' committed spend, the run's spend with its running sessions' allowances, the room held for later work and the next session's allowance together pass the Captain's total. The CLI exits 10.
+
+Fix: Report the run as incomplete. A cap stop is never retried to change a verdict; a new total needs the Captain's word.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_OHR_TAP
 

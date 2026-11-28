@@ -4400,6 +4400,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_CSO_COMBINED_STOP: {
+    exit: 2,
+    meaning: "The /cso counted run's combined check (lanes/outcome-skills/cso/combined-cap.ts) refused the next session: the named programs' committed spend, the run's spend with its running sessions' allowances, the room held for later work and the next session's allowance together pass the Captain's total. The CLI exits 10.",
+    fix: "Report the run as incomplete. A cap stop is never retried to change a verdict; a new total needs the Captain's word.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_OHR_TAP: {
     exit: 2,
     meaning: "Office-hours rewrite eval (pre-run change 2): the model tap between the Sol arms' Codex CLI and the metering proxy did not start, or did not print TAP_READY within 30 seconds. No Sol session starts without it, because Codex records no reported model of its own.",

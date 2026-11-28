@@ -131,6 +131,6 @@ export async function run(argv: string[], io: Io = { out: console.log, err: cons
   } catch (error) {
     return internalError(io, command, error instanceof Error ? error.message : String(error));
   }
-  if (code === 0 || code === 1 || code === 2 || code === 3) return code;
-  return internalError(io, command, "main returned " + String(code) + ", not an exit code from 0 to 3");
+  if (code === 0 || code === 1 || code === 2 || code === 3 || code === 10 || code === 12) return code;
+  return internalError(io, command, "main returned " + String(code) + ", not an exit code from 0 to 3, 10 (a cap stop) or 12 (a containment stop)");
 }

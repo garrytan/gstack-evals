@@ -1,0 +1,64 @@
+Power rows for 2026-11-24-geva-590-review-models-prereg. Seeds: 5 (fit), 20261124 (part 1), 7 (part 2). Scripts are in power-sim.txt.
+
+Fit (fit_he.py) to Harness Evals' per-pass stage 1 data (HARN-154, review-real-bugs-stage1-per-pass.csv, 54 outside bugs, any-severity naming, /review and plain on Opus 5.5, 2 passes each). Observed: /review 72.2%, plain 56.5%, pass-to-pass disagreement 11.1% (/review) and 13.0% (plain), cross-arm disagreement 23.1%, SD of per-bug /review minus plain 0.386. Best fit: beta concentration 0.5, per-arm per-bug logit wobble 2.0 (fitted 12.5%, 14.1%, 24.5%, SD 0.393).
+
+Part 1: decision power at 100 bug units, one review per cell, with the fitted model.
+5% gaps scored as misses; per-review cost lognormal (cv 0.5) around OS $6.50, OA $11.00, FS $14.00, FA $18.50. "Shows doesn't pay": the paired net value per unit ($25 x catch gain minus cost gap) has its upper bound below 0 at the look (50 units, z 2.797) or at the end (z 1.655); the two bounds hold the one-sided error at 5% (0.0495 by 2,000,000 correlated normal draws, bounds.py in power-sim.txt). "Catches more": two-sided, Holm over the two main effects (alpha 0.025 for the first). pair-OS-OA is the voice contrast left after Fable leaves.
+
+P-like control 75% | primary | true gain 0.0 pts | P(shows doesn't pay) 1.00 | P(two-sided Holm catches-more) 0.03
+P-like control 75% | primary | true gain 2.0 pts | P(shows doesn't pay) 1.00 | P(two-sided Holm catches-more) 0.06
+P-like control 75% | primary | true gain 3.8 pts | P(shows doesn't pay) 1.00 | P(two-sided Holm catches-more) 0.14
+P-like control 75% | primary | true gain 5.4 pts | P(shows doesn't pay) 1.00 | P(two-sided Holm catches-more) 0.24
+P-like control 75% | primary | true gain 7.4 pts | P(shows doesn't pay) 1.00 | P(two-sided Holm catches-more) 0.44
+P-like control 75% | voice | true gain 0.0 pts | P(shows doesn't pay) 0.99 | P(two-sided Holm catches-more) 0.02
+P-like control 75% | voice | true gain 2.0 pts | P(shows doesn't pay) 0.98 | P(two-sided Holm catches-more) 0.06
+P-like control 75% | voice | true gain 3.8 pts | P(shows doesn't pay) 0.95 | P(two-sided Holm catches-more) 0.11
+P-like control 75% | voice | true gain 5.4 pts | P(shows doesn't pay) 0.90 | P(two-sided Holm catches-more) 0.23
+P-like control 75% | voice | true gain 7.4 pts | P(shows doesn't pay) 0.78 | P(two-sided Holm catches-more) 0.42
+P-like control 75% | pair-OS-OA | true gain 0.0 pts | P(shows doesn't pay) 0.95 | P(two-sided Holm catches-more) 0.03
+P-like control 75% | pair-OS-OA | true gain 2.0 pts | P(shows doesn't pay) 0.91 | P(two-sided Holm catches-more) 0.04
+P-like control 75% | pair-OS-OA | true gain 3.9 pts | P(shows doesn't pay) 0.84 | P(two-sided Holm catches-more) 0.07
+P-like control 75% | pair-OS-OA | true gain 5.4 pts | P(shows doesn't pay) 0.76 | P(two-sided Holm catches-more) 0.12
+P-like control 75% | pair-OS-OA | true gain 7.4 pts | P(shows doesn't pay) 0.66 | P(two-sided Holm catches-more) 0.22
+P+B mix control 60% | primary | true gain 0.0 pts | P(shows doesn't pay) 1.00 | P(two-sided Holm catches-more) 0.03
+P+B mix control 60% | primary | true gain 2.5 pts | P(shows doesn't pay) 1.00 | P(two-sided Holm catches-more) 0.07
+P+B mix control 60% | primary | true gain 4.9 pts | P(shows doesn't pay) 1.00 | P(two-sided Holm catches-more) 0.18
+P+B mix control 60% | primary | true gain 7.0 pts | P(shows doesn't pay) 1.00 | P(two-sided Holm catches-more) 0.35
+P+B mix control 60% | primary | true gain 9.7 pts | P(shows doesn't pay) 1.00 | P(two-sided Holm catches-more) 0.61
+P+B mix control 60% | voice | true gain 0.0 pts | P(shows doesn't pay) 0.99 | P(two-sided Holm catches-more) 0.03
+P+B mix control 60% | voice | true gain 2.5 pts | P(shows doesn't pay) 0.96 | P(two-sided Holm catches-more) 0.06
+P+B mix control 60% | voice | true gain 4.9 pts | P(shows doesn't pay) 0.90 | P(two-sided Holm catches-more) 0.17
+P+B mix control 60% | voice | true gain 6.9 pts | P(shows doesn't pay) 0.80 | P(two-sided Holm catches-more) 0.36
+P+B mix control 60% | voice | true gain 9.7 pts | P(shows doesn't pay) 0.60 | P(two-sided Holm catches-more) 0.61
+P+B mix control 60% | pair-OS-OA | true gain 0.0 pts | P(shows doesn't pay) 0.94 | P(two-sided Holm catches-more) 0.03
+P+B mix control 60% | pair-OS-OA | true gain 2.5 pts | P(shows doesn't pay) 0.88 | P(two-sided Holm catches-more) 0.04
+P+B mix control 60% | pair-OS-OA | true gain 4.9 pts | P(shows doesn't pay) 0.74 | P(two-sided Holm catches-more) 0.10
+P+B mix control 60% | pair-OS-OA | true gain 7.0 pts | P(shows doesn't pay) 0.62 | P(two-sided Holm catches-more) 0.18
+P+B mix control 60% | pair-OS-OA | true gain 9.6 pts | P(shows doesn't pay) 0.49 | P(two-sided Holm catches-more) 0.32
+
+Part 2: MDD (80% power, two-sided, alpha 0.025), one review per cell, with the fitted model. Columns: pool, bug units, reviews per cell, contrast (primary and voice are 2x2 main effects; pair is OA minus OS alone), MDD in points, power reached at it, mean 95% half-width in points. Control: P-like 75%, mixed 60%.
+
+P-like refit 80 1 primary 9.9 0.81 6.5
+P-like refit 80 1 voice 9.5 0.77 6.4
+P-like refit 80 1 pair 13.7 0.79 8.9
+P-like refit 100 1 primary 8.9 0.79 5.8
+P-like refit 100 1 voice 8.7 0.77 5.8
+P-like refit 100 1 pair 11.8 0.74 7.9
+P-like refit 150 1 primary 7.3 0.79 4.7
+P-like refit 150 1 voice 7.3 0.8 4.7
+P-like refit 150 1 pair 10.2 0.81 6.5
+P-like refit 200 1 primary 6.3 0.79 4.0
+P-like refit 200 1 voice 6.1 0.77 4.1
+P-like refit 200 1 pair 8.9 0.8 5.7
+mixed refit 80 1 primary 11.4 0.8 7.3
+mixed refit 80 1 voice 11.9 0.84 7.3
+mixed refit 80 1 pair 15.8 0.81 10.1
+mixed refit 100 1 primary 10.2 0.8 6.5
+mixed refit 100 1 voice 10.2 0.8 6.6
+mixed refit 100 1 pair 14.3 0.82 9.1
+mixed refit 150 1 primary 8.5 0.82 5.3
+mixed refit 150 1 voice 8.3 0.8 5.3
+mixed refit 150 1 pair 11.9 0.82 7.4
+mixed refit 200 1 primary 7.1 0.77 4.6
+mixed refit 200 1 voice 7.1 0.81 4.6
+mixed refit 200 1 pair 10.2 0.8 6.4

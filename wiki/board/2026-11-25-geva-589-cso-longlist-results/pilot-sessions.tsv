@@ -1,0 +1,7 @@
+unit	model	arm	model_id	harness	harness_version	end	attempts	cost_usd	wall_sec	loaded	procedure_ran	completeness	findings_submitted	tooling_errors	host_reads_after_start	helper_scope
+capricorn86__happy-dom-ghsa-834v-8h66-3h79	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	1.345727	387	true	true	partial	5	0	3	daily/default
+capricorn86__happy-dom-ghsa-834v-8h66-3h79	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.174603	353	true	true	partial	7	0	19	daily/default
+getkin__kin-openapi-ghsa-p6wj-qrr4-pgh5	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	1.19881	324	true	true	partial	6	1	9	daily/default
+getkin__kin-openapi-ghsa-p6wj-qrr4-pgh5	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.120997	318	true	true	partial	5	1	1	daily/default
+patriksimek__vm2-ghsa-x6m4-chr9-cg97	opus	cso	claude-opus-5-5	claude-code	2.1.325	completed	1	1.918291	378	true	true	partial	7	0	7	daily/default
+patriksimek__vm2-ghsa-x6m4-chr9-cg97	particle	cso	particle-ai/particle-1	claude-code	2.1.325	completed	1	0.944918	809	true	true	partial	5	2	17	daily/default
