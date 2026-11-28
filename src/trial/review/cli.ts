@@ -2,7 +2,7 @@
 // repository and tree from local source clones, builds the Docker rig (arm images, the lease with its rig admission, the
 // trial network and the metering proxy) and runs runReviewUnits. --dry-run prints the plan and writes nothing. Whatever
 // it cannot do refuses with E_USAGE before anything is built or spent.
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { BACKGROUND_WAIT_MS, MAX_TURNS, SYSTEM_PROMPTS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -34,6 +34,10 @@ import { ER_LENS } from "./eng-review.ts";
 import { erMain } from "./er-cli.ts";
 import { prTextProblem, TOLD_COMMANDS, TOLD_PR_SHA256, TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { loadCodexArms, type CodexArms } from "./codex.ts";
+import { cellCheckMain } from "./rm-check.ts";
+import { cellRigDir, cellRunId, composeRigs, loadCellItems, type CellItems } from "./cell-rigs.ts";
+import { loadUnitRepos } from "./unit-repos.ts";
+import { requireLive } from "../../../lanes/review-models/score/opening.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
 type Env = Record<string, string | undefined>;
@@ -52,6 +56,9 @@ export const REVIEW_UNITS_HELP = [
   "    [--system-prompt <arm>=sdk-default|claude-code-preset]... [--told-prefix <arm>=<file>]... [--render <arm>=interactive|unattended]...",
   "    [--max-turns <n>] [--session-kind unattended | --arm-session-kind <arm>=unattended...] [--cap-stops] [--reader-map <file>] [--background-wait <s>]",
   "    [--pr-context <dir>] [--host claude|codex --codex-arms <file> [--upstream <url>]]",
+  "    [--arm-voice <arm>=<model>]... [--voice-cli <dir>] [--arm-models <arm>=<model>[,<model>]...]",
+  "    [--unit-repos <dir> in place of --suite and --source] [--order-seed <n>] [--cell-items <file>] [--remove-voice-web-search] [--upstream <url>]",
+  "gstack-evals review-units cell-check --gstack <dir> [--codex <bin>] [--out <dir>]: the review-models eval's keyless rig check (rm-check.ts)",
   "",
   "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha>, gstack-<suffix>=<repo>@<sha> (a second",
   "gstack arm, which needs a --told-prefix) and gstack-auto=<repo>@<sha>, each with its plan line and the frozen plan output",
@@ -101,11 +108,25 @@ export const REVIEW_UNITS_HELP = [
   "arm. Each arm's model input is captured keylessly before the first session (captures/). --upstream <url> sends every",
   "model call to that base URL instead of the provider, for keyless checks only: it is refused while a provider key is set, and the proxy gets placeholder keys.",
   "On --host codex the proxy's journal also keeps each request's reasoning field on its request line, so every request's effort can be read.",
+  "",
+  "--arm-voice gives a gstack arm's cells that second-model voice in place of the default (gpt-6.1-sol in an Opus cell, none in",
+  "any other), on host claude and code units, so one run holds main reviewer by voice cells (the review-models eval). --voice-cli",
+  "runs every voice's Codex from <dir> in the arm image, first on PATH, with GSTACK_CODEX_NO_SANDBOX=1, and copies its",
+  "rollouts and the gstack state root beside each session's records. Both change the cell's tree, so they join the session key.",
+  "On code units --arm-models limits an arm to some of --models (the review-models eval runs the plain arm on Opus only).",
+  "",
+  "The review-models eval's run (src/trial/review/rm-run.ts writes these): --unit-repos <dir> runs the units gstack-evals rm-supply",
+  "build wrote, each repository as built with its stripped config kept (unit-repos.ts); --units names them by full id or all. A",
+  "unit whose install or test then fails is refused for every arm and listed in <out>/refused.json. --order-seed puts units in",
+  "seeded order with each unit's cells together in one round, also seeded (order.tsv). --cell-items <file> gives every cell its",
+  "own ledger item, lease and session allowance, and a retry item for one rerun of a session that ends on a provider or",
+  "infrastructure error (cell-rigs.ts). --remove-voice-web-search has the proxy remove a web_search tool from each voice request",
+  "and journal it. --upstream works on host claude too, under the same keyless rules.",
 ].join("\n");
 
-const VALUE = new Set(["--host", "--codex-arms", "--upstream", "--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map", "--background-wait", "--pr-context"]);
-const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test", "--arm-models", "--system-prompt", "--told-prefix", "--render", "--arm-session-kind"]);
-const BOOL = new Set(["--resume", "--dry-run", "--cap-stops"]);
+const VALUE = new Set(["--unit-repos", "--order-seed", "--cell-items", "--voice-cli", "--host", "--codex-arms", "--upstream", "--suite", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--repair", "--parallel", "--timeout", "--allowance", "--severity-map", "--policy", "--date", "--plan", "--sealed-root", "--max-turns", "--session-kind", "--reader-map", "--background-wait", "--pr-context"]);
+const LIST = new Set(["--units", "--arms", "--models", "--source", "--base-branch", "--install", "--test", "--arm-models", "--system-prompt", "--told-prefix", "--render", "--arm-session-kind", "--arm-voice"]);
+const BOOL = new Set(["--resume", "--dry-run", "--cap-stops", "--remove-voice-web-search"]);
 
 class Usage extends Error {}
 
@@ -141,6 +162,7 @@ const usd = (micros: number) => "$" + (micros / 1_000_000).toFixed(2);
 export async function main(argv: string[], io: Io = { out: console.log, err: console.error }, env: Env = process.env): Promise<number> {
   if (argv.some((a, i) => a === "--plan" && argv[i + 1] === PV_LENS)) return pvMain(argv, io, env);
   if (argv.some((a, i) => a === "--plan" && argv[i + 1] === ER_LENS)) return erMain(argv, io, env);
+  if (argv[0] === "cell-check") return cellCheckMain(argv.slice(1), io);
   if (argv.includes("--help") || argv.includes("-h")) {
     io.out(REVIEW_UNITS_HELP);
     return 0;
@@ -162,24 +184,29 @@ export async function main(argv: string[], io: Io = { out: console.log, err: con
 
 async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const flags = parseArgs(argv);
+  if (flags.has("--cell-items") && !flags.has("--dry-run")) requireLive("review-units --cell-items");
   const one = (f: string) => flags.get(f)?.[0] ?? null;
-  for (const f of ["--suite", "--units", "--arms", "--models", "--out"]) if (!flags.has(f)) throw new Usage("needs " + f);
+  const unitRepos = one("--unit-repos");
+  if (unitRepos !== null && (flags.has("--suite") || flags.has("--source") || flags.has("--sealed-root"))) throw new Usage("--unit-repos takes its units from a build dir, so it runs without --suite, --source and --sealed-root");
+  for (const f of [...(unitRepos === null ? ["--suite"] : []), "--units", "--arms", "--models", "--out"]) if (!flags.has(f)) throw new Usage("needs " + f);
   const dry = flags.has("--dry-run");
   const resume = flags.has("--resume");
   const host = (one("--host") ?? "claude") as Host;
   if (host !== "claude" && host !== "codex") throw new Usage("--host takes claude or codex");
-  const codexOnly = ["--codex-arms", "--upstream"].filter((f) => flags.has(f));
+  const codexOnly = ["--codex-arms"].filter((f) => flags.has(f));
   if (host === "claude" && codexOnly.length) throw new Usage(codexOnly.join(" and ") + " run with --host codex");
   if (host === "codex") {
-    const claudeOnly = ["--plan", "--told-prefix", "--system-prompt", "--render", "--reader-map", "--cap-stops", "--arm-models"].filter((f) => flags.has(f));
+    const claudeOnly = ["--plan", "--told-prefix", "--system-prompt", "--render", "--reader-map", "--cap-stops", "--arm-models", "--arm-voice", "--voice-cli"].filter((f) => flags.has(f));
     if (claudeOnly.length) throw new Usage(claudeOnly.join(", ") + " run on host claude only");
     if (!flags.has("--codex-arms")) throw new Usage("--host codex needs --codex-arms <file>");
   }
   const upstream = one("--upstream");
   if (upstream !== null && ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"].some((k) => env[k])) throw new Usage("--upstream is for keyless checks, and a provider key is set in this environment; unset it, or leave out --upstream");
   let loaded: ReturnType<typeof loadSuite>;
+  let prebuilt: ReturnType<typeof loadUnitRepos> | null = null;
   try {
-    loaded = loadSuite(one("--suite")!, { sealedRoot: one("--sealed-root") });
+    if (unitRepos !== null) prebuilt = loadUnitRepos(unitRepos, flags.get("--units") ?? []);
+    loaded = prebuilt ? { suite: prebuilt.suite, path: join(resolve(unitRepos!), "units.json"), sha256: prebuilt.sha256, stub: null } : loadSuite(one("--suite")!, { sealedRoot: one("--sealed-root") });
   } catch (e) {
     throw new Usage((e as Error).message);
   }
@@ -191,9 +218,9 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   if (ceo && suite.kind !== "ceo-outcome") throw new Usage("--plan ceo-outcome needs a ceo-outcome suite, and suite " + suite.id + " is " + suite.kind + "\n  fix: pass a ceo-outcome suite with --suite, or another --plan for this one");
   if (!ceo && suite.kind === "ceo-outcome") throw new Usage("suite " + suite.id + " is a ceo-outcome suite; pass --plan ceo-outcome\n  fix: rerun with --plan ceo-outcome");
   if (!ceo && (suite.kind === "plan") !== (lens !== null)) throw new Usage(lens ? "--plan needs a plan suite, and suite " + suite.id + " is " + suite.kind : "suite " + suite.id + " is a plan suite; pass --plan <lens>");
-  if (flags.has("--arm-models") && !lens) throw new Usage("--arm-models runs with --plan");
+  if (lens && (flags.has("--arm-voice") || flags.has("--voice-cli"))) throw new Usage("--arm-voice and --voice-cli run on code units; plan units run no second model");
   const refs = flags.get("--units")!;
-  const units: Unit[] = refs.length === 1 && refs[0] === "all" ? [...suite.units] : refs.map((ref) => {
+  const units: Unit[] = prebuilt ? prebuilt.units : refs.length === 1 && refs[0] === "all" ? [...suite.units] : refs.map((ref) => {
     const r = resolveUnit(suite, ref);
     if (!r.unit) throw new Usage("--units: " + r.problem);
     return r.unit;
@@ -236,6 +263,15 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     return m;
   };
   const systemPrompts = perArm("--system-prompt", SYSTEM_PROMPTS);
+  const voices = perArm("--arm-voice", null);
+  for (const [name, voice] of voices) {
+    const spec = specs.find((a) => a.name === name)!;
+    if (spec.kind !== "stack" || toldArmOf(spec) !== "gstack") throw new Usage("--arm-voice names arm " + name + ", which is not a gstack stack arm (<name>=<gstack repo>@<sha>)");
+    const provider = providerOf(policy as LoadedPolicy, voice);
+    if (provider !== "openai" && provider !== "openrouter") throw new Usage("--arm-voice gives arm " + name + " the voice " + voice + ", which has no Codex route in the policy (openai or openrouter)");
+  }
+  const voiceCli = one("--voice-cli");
+  if (voiceCli !== null && !/^\/[\w./-]+$/.test(voiceCli)) throw new Usage("--voice-cli takes an absolute directory in the arm image, such as /opt/codex-0.170.0/bin");
   const renders = perArm("--render", ["interactive", "unattended"]);
   for (const name of renders.keys()) {
     const spec = specs.find((a) => a.name === name)!;
@@ -358,6 +394,20 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (ids.has(id)) throw new Usage("arm id " + JSON.stringify(id) + " names both " + ids.get(id) + " and " + pair + "; rename an arm or drop one of the models");
     ids.set(id, pair);
   }
+  const orderFlag = one("--order-seed");
+  const orderSeed = orderFlag === null ? null : Number(orderFlag);
+  if (orderSeed !== null && (!/^\d+$/.test(orderFlag!) || !Number.isSafeInteger(orderSeed))) throw new Usage("--order-seed takes a whole number");
+  const cellItemsFile = one("--cell-items");
+  if (cellItemsFile !== null && ["--item", "--spend-cap", "--allowance"].some((f) => flags.has(f))) throw new Usage("--cell-items gives each cell its own item, cap and allowance, so it runs without --item, --spend-cap and --allowance");
+  if (cellItemsFile !== null && (host !== "claude" || lens)) throw new Usage("--cell-items runs code units on host claude");
+  let cellItems: CellItems | null = null;
+  try {
+    cellItems = cellItemsFile === null ? null : loadCellItems(cellItemsFile, [...ids.keys()]);
+  } catch (e) {
+    throw new Usage((e as Error).message);
+  }
+  const removeWebSearch = flags.has("--remove-voice-web-search");
+  if (removeWebSearch && (host !== "claude" || lens)) throw new Usage("--remove-voice-web-search acts on a gstack arm's voice, on host claude and code units");
   const skills = Object.fromEntries(arms.flatMap((a) => {
     const skill = lens ? planSkill(a.told as Parameters<typeof planSkill>[0], lens) : toldSkill(a.told as Parameters<typeof toldSkill>[0], a.toldPrefix);
     return skill ? [[a.name, skill]] : [];
@@ -380,7 +430,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const branches = pairs("--base-branch", flags.get("--base-branch"));
   const installs = pairs("--install", flags.get("--install"));
   const tests = pairs("--test", flags.get("--test"));
-  for (const repo of new Set(units.map((u) => u.repo))) {
+  for (const repo of new Set(units.filter((u) => !prebuilt?.repos.has(u.id)).map((u) => u.repo))) {
     if (!sources.has(repo)) throw new Usage("no --source for " + repo + "; name a full local clone as " + repo + "=<path>");
     if (!branches.has(repo) && !DEFAULT_BRANCHES[repo]) throw new Usage("no base branch is known for " + repo + "; pass --base-branch " + repo + "=<name>");
   }
@@ -423,13 +473,18 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.err("E_CACHE_STALE review-units: run " + prior.run_id + (priorUpstream ? " ran keyless against --upstream" : " ran against the providers") + ", and this resume gives " + (upstream !== null ? "--upstream" : "no --upstream") + "; a keyless check's cells never count as results\n  fix: start a new run in a new --out");
     return 2;
   }
+  const priorOrder = (prior as { order_seed?: number } | null)?.order_seed ?? null;
+  if (prior && priorOrder !== orderSeed) {
+    io.err("E_CACHE_STALE review-units: run " + prior.run_id + " ran with order seed " + (priorOrder ?? "none") + ", and this resume gives " + (orderSeed ?? "none") + "\n  fix: resume with the run's own --order-seed, or start a new run in a new --out");
+    return 2;
+  }
   const kindsNow = JSON.stringify(Object.fromEntries([...armKinds].sort()));
   const kindsWas = JSON.stringify(Object.fromEntries(Object.entries(prior?.arm_session_kinds ?? {}).sort()));
   if (prior && kindsWas !== kindsNow) {
     io.err("E_CACHE_STALE review-units: run " + prior.run_id + " ran with arm session kinds " + kindsWas + ", and this resume gives " + kindsNow + "\n  fix: resume with the run's own --arm-session-kind flags, or start a new run in a new --out");
     return 2;
   }
-  const perSession = (m: string) => allowance ?? allowanceMicros({ policy: policy as LoadedPolicy }, m, SESSION_ALLOWANCE) ?? 0;
+  const perSession = (m: string, arm?: string) => (cellItems && arm ? Math.round(cellItems.cells[armId(arm, m)]!.allowance_usd * 1_000_000) : null) ?? allowance ?? allowanceMicros({ policy: policy as LoadedPolicy }, m, SESSION_ALLOWANCE) ?? 0;
   const sessions = units.length * passes * arms.reduce((s, a) => s + modelsOf(a.name).length, 0);
   if (dry) {
     io.out("review-units dry run: nothing is built, written or spent");
@@ -444,17 +499,26 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(ceo ? ceoArmLine(a.name as CeoArm) : planToldLine(a.told as PlanArm, lens, a.toldPrefix)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
     io.out("models: " + models.map((m) => m + " (" + providerOf(policy as LoadedPolicy, m) + ")").join(", ") + "; passes " + passes + "; sessions " + sessions);
     if (armKinds.size) io.out("arm session kinds: " + arms.map((a) => a.name + " " + (a.sessionKind ?? "not set")).join(", "));
+    if (voices.size || voiceCli !== null) io.out("voices: " + ([...voices].map(([a, v]) => a + " " + v).join(", ") || "the default per model") + (voiceCli !== null ? "; every voice runs " + voiceCli + "/codex with GSTACK_CODEX_NO_SANDBOX=1, its rollouts and the gstack state root copied out" : ""));
     if (maxTurns !== MAX_TURNS || sessionKind) io.out("max turns " + maxTurns + "; session kind " + (sessionKind ?? "not set"));
     io.out("background wait " + backgroundWaitS + " s: a session idle with background work it started still out ends at that deadline as a missing cell, E_BACKGROUND_DEADLINE");
     if (capStops) io.out("cap stops: a code session the turn cap or the allowance ends is recorded as turn_cap or allowance_stop and scored on the findings it wrote before the stop");
     if (prDir !== null) io.out("pr context " + resolve(prDir) + ": each unit's pr.md after the told prompt's first paragraph; told pr template sha256 " + TOLD_PR_SHA256);
     if (mapPin) io.out("reader map " + mapPin.file + " (sha256 " + mapPin.sha256 + ", gstack " + mapPin.gstack.repo + "@" + mapPin.gstack.sha + ")");
-    io.out("worst case at the allowance: " + usd(arms.reduce((s, a) => s + modelsOf(a.name).reduce((t, m) => t + perSession(m) * units.length * passes, 0), 0)) + "; spend cap " + (cap === null ? "none" : usd(cap)));
+    if (prebuilt) io.out("unit repos " + resolve(unitRepos!) + " (units.json sha256 " + prebuilt.sha256 + "): each unit's built repository as it stands, its stripped config kept; a unit whose install or test fails is refused for every arm and listed in refused.json");
+    if (orderSeed !== null) io.out("order seed " + orderSeed + ": units in seeded order, each unit's cells together in one round in seeded order (order.tsv)");
+    if (removeWebSearch) io.out("the proxy removes a web_search tool from each voice request and journals a tool_removed line");
+    if (upstream !== null) io.out("every model call goes to " + upstream + " (keyless; the cells never count as results)");
+    if (cellItems) {
+      for (const [id, c] of Object.entries(cellItems.cells)) io.out("cell " + id + ": item " + c.item + ", lease " + usd(c.cap_usd * 1_000_000) + ", allowance " + usd(c.allowance_usd * 1_000_000) + " a session");
+      io.out(cellItems.retry ? "retry: item " + cellItems.retry.item + " under run " + cellItems.retry.run_id + ", lease " + usd(cellItems.retry.cap_usd * 1_000_000) + "; one rerun of a session that ends on a provider or infrastructure error" : "retry: none; nothing reruns");
+    }
+    io.out("worst case at the allowance: " + usd(arms.reduce((s, a) => s + modelsOf(a.name).reduce((t, m) => t + perSession(m, a.name) * units.length * passes, 0), 0)) + "; spend cap " + (cellItems ? "per cell" : cap === null ? "none" : usd(cap)));
     io.out("out " + out + (resume ? " (resume)" : ""));
     return 0;
   }
   const item = one("--item");
-  if (item === null || cap === null) throw new Usage("a run needs a ledger line item (--item) and --spend-cap");
+  if (!cellItems && (item === null || cap === null)) throw new Usage("a run needs a ledger line item (--item) and --spend-cap, or --cell-items");
   const volatile = volatilePathProblem(out);
   if (volatile) throw new Error("E_RECEIPTS_VOLATILE " + volatile);
   if (existsSync(out) && !resume) throw new Usage(out + " exists; pass --resume to continue that run, or a new --out");
@@ -471,24 +535,45 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   if (!pin.ok) throw new Error(pin.code + " " + pin.message);
   const prepared: PreparedUnit[] = [];
   const problems: string[] = [];
+  const refusedFile = join(out, "refused.json");
+  const refused: { unit: string; task: string; problems: string[] }[] = prebuilt && resume && existsSync(refusedFile) ? JSON.parse(readFileSync(refusedFile, "utf8")).units : [];
   for (const u of units) {
     const task = unitTaskId(u);
     const root = join(out, "units", task);
     const tree = join(root, "tree");
+    if (refused.some((r) => r.unit === u.id)) continue;
     try {
       if (resume && existsSync(join(root, "unit.json")) && existsSync(tree)) {
         const kept = JSON.parse(readFileSync(join(root, "unit.json"), "utf8")) as { repo: UnitRepo; check: PreparedUnit["check"]; retained: PreparedUnit["retained"] };
         const hp = historyProblems(tree, kept.repo);
+        if (hp.length && prebuilt) {
+          refused.push({ unit: u.id, task, problems: hp });
+          io.err("E_UNIT_REPO " + u.id + ": refused for every arm: " + hp.join("; "));
+          continue;
+        }
         if (hp.length) throw new UnitError("E_UNIT_REPO", hp.map((p) => u.id + ": " + p));
         prepared.push({ unit: u, task, base_branch: kept.repo.base_branch, merge_base: kept.repo.merge_base, tree, tree_sha256: dirTreeSha256(tree), instructions: kept.repo.instructions, retained: kept.retained, check: kept.check, ...(prTexts.has(u.id) ? { pr_text: prTexts.get(u.id)! } : {}) });
         continue;
       }
       rmSync(root, { recursive: true, force: true });
-      const repo = buildUnitRepo({ unit: u, source: sources.get(u.repo)!, dest: join(root, "repo"), ...(branches.has(u.repo) ? { baseBranch: branches.get(u.repo)! } : {}) });
+      const kept = prebuilt?.repos.get(u.id) ?? null;
+      const repo = kept ?? buildUnitRepo({ unit: u, source: sources.get(u.repo)!, dest: join(root, "repo"), ...(branches.has(u.repo) ? { baseBranch: branches.get(u.repo)! } : {}) });
       const hp = historyProblems(repo.dir, repo);
+      if (hp.length && kept) {
+        refused.push({ unit: u.id, task, problems: hp });
+        io.err("E_UNIT_REPO " + u.id + ": refused for every arm: " + hp.join("; "));
+        continue;
+      }
       if (hp.length) throw new UnitError("E_UNIT_REPO", hp.map((p) => u.id + ": " + p));
+      mkdirSync(root, { recursive: true });
       const built = buildUnitTree({ repo, task, dest: tree, image: pin.pin.tag, test: lens ? null : (tests.get(u.repo) ?? "bun test"), ...(lens ? { install: null } : installs.has(u.repo) ? { install: installs.get(u.repo)! } : {}), scratch: join(out, "units", ".scratch"), retain: join(state, "retained"), docker });
-      rmSync(repo.dir, { recursive: true, force: true });
+      if (!kept) rmSync(repo.dir, { recursive: true, force: true });
+      if (built.problems.length && kept) {
+        refused.push({ unit: u.id, task, problems: built.problems });
+        rmSync(root, { recursive: true, force: true });
+        io.err("E_UNIT_IMAGE " + u.id + ": refused for every arm: " + built.problems.join("; "));
+        continue;
+      }
       if (built.problems.length) throw new UnitError("E_UNIT_IMAGE", built.problems.map((p) => u.id + ": " + p));
       const check = built.install && built.test ? { install: built.install.command, test: built.test.command, passed: built.test.passed } : null;
       writeFileSync(join(root, "unit.json"), JSON.stringify({ repo, check, retained: built.retained }, null, 2) + "\n");
@@ -502,20 +587,46 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     for (const p of problems) io.err(p);
     return 2;
   }
+  if (prebuilt) {
+    mkdirSync(out, { recursive: true });
+    writeFileSync(refusedFile, JSON.stringify({ schema: "rm-refused.v1", rule: "pre-run change 2, gate 4, and the Captain's ruling E (2026-11-25 01:00Z): a stripped unit that fails the history check, or whose install, test or clean-tree check fails, is refused for every arm", units: refused }, null, 2) + "\n");
+  }
+  if (!prepared.length) {
+    io.err("E_UNIT_IMAGE review-units: every unit was refused, so nothing runs");
+    return 2;
+  }
   const tasks = join(out, "fixtures", "tasks.json");
   mkdirSync(dirname(tasks), { recursive: true });
   writeFileSync(tasks, "[]\n");
   const runId = prior?.run_id ?? newRunId("review-units");
-  writeFileSync(runFile, JSON.stringify({ run_id: runId, ...(host === "codex" ? { host, codex_arms_sha256: codexArms!.sha256, ...(upstream !== null ? { upstream: "keyless" } : {}) } : {}), max_turns: maxTurns, session_kind: sessionKind, ...(armKinds.size ? { arm_session_kinds: Object.fromEntries([...armKinds].sort()) } : {}), background_wait_s: backgroundWaitS, ...(allowanceUsd !== null ? { allowance_usd: allowanceUsd } : {}), ...(mapPin ? { reader_map: { sha256: mapPin.sha256, gstack: mapPin.gstack } } : {}) }, null, 2) + "\n");
+  writeFileSync(runFile, JSON.stringify({ run_id: runId, ...(host === "codex" ? { host, codex_arms_sha256: codexArms!.sha256 } : {}), ...(upstream !== null ? { upstream: "keyless" } : {}), ...(prebuilt ? { unit_repos_sha256: prebuilt.sha256 } : {}), ...(orderSeed !== null ? { order_seed: orderSeed } : {}), ...(cellItems ? { cell_items_sha256: createHash("sha256").update(readFileSync(cellItemsFile!)).digest("hex") } : {}), ...(removeWebSearch ? { remove_voice_web_search: true } : {}), max_turns: maxTurns, session_kind: sessionKind, ...(armKinds.size ? { arm_session_kinds: Object.fromEntries([...armKinds].sort()) } : {}), background_wait_s: backgroundWaitS, ...(allowanceUsd !== null ? { allowance_usd: allowanceUsd } : {}), ...(mapPin ? { reader_map: { sha256: mapPin.sha256, gstack: mapPin.gstack } } : {}), ...(voices.size ? { arm_voices: Object.fromEntries([...voices].sort()) } : {}), ...(voiceCli !== null ? { voice_cli: voiceCli } : {}) }, null, 2) + "\n");
   const served = specs.map((a): ArmSpec => (a.kind === "stack" && renders.has(a.name) ? { ...a, render: renders.get(a.name) as "interactive" | "unattended" } : a));
   const resolved: ResolvedArms = { arms: [...served.filter((a) => a.kind !== "placebo"), ...served.filter((a) => a.kind === "placebo")], base: null, skill: null, notes: [] };
   const call = { host, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record: recordPath(one("--record") ?? undefined, env), item, runId, models, policy: policy as LoadedPolicy };
   const codexConfig = codexArms ? Object.fromEntries(Object.entries(codexArms.arms).filter(([, a]) => Object.keys(a.gstack_config).length).map(([name, a]) => [name, a.gstack_config])) : {};
   const gstackConfig = { ...(ceo && specs.some((a) => a.name === ENFORCED_ARM) ? { [ENFORCED_ARM]: GATE_CONFIG } : {}), ...codexConfig };
-  const rig = dockerRig(call, { env: upstream !== null ? { ...env, ANTHROPIC_API_KEY: "stub-not-a-key", OPENAI_API_KEY: "stub-not-a-key", OPENROUTER_API_KEY: "stub-not-a-key" } : env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens || host === "codex" ? { voice: false } : {}), ...(Object.keys(gstackConfig).length ? { gstackConfig } : {}), ...(upstream !== null ? { upstream } : {}), ...(host === "codex" ? { requestFields: ["reasoning"] } : {}) });
+  const rigOptions = { env: upstream !== null ? { ...env, ANTHROPIC_API_KEY: "stub-not-a-key", OPENAI_API_KEY: "stub-not-a-key", OPENROUTER_API_KEY: "stub-not-a-key" } : env, skill: null, skills, nonce: randomBytes(6).toString("hex"), ...(lens || host === "codex" ? { voice: false } : {}), ...(Object.keys(gstackConfig).length ? { gstackConfig } : {}), ...(upstream !== null ? { upstream } : {}), ...(host === "codex" ? { requestFields: ["reasoning"] } : {}), ...(voices.size ? { voices: Object.fromEntries(voices) } : {}), ...(voiceCli !== null ? { voiceCli: { bin_dir: voiceCli } } : {}), ...(removeWebSearch ? { removeVoiceWebSearch: true } : {}) };
+  let rig: ReturnType<typeof dockerRig>;
+  if (!cellItems) rig = dockerRig(call, { ...rigOptions, cap: cap! });
+  else {
+    const opened = new Map<string, ReturnType<typeof dockerRig>>();
+    let retryRig: ReturnType<typeof dockerRig> | null = null;
+    try {
+      for (const a of resolved.arms) for (const m of modelsOf(a.name)) {
+        const id = armId(a.name, m);
+        const c = cellItems.cells[id]!;
+        opened.set(id, dockerRig({ ...call, arms: { ...resolved, arms: [a] }, models: [m], item: c.item, runId: cellRunId(runId, id), out: { path: cellRigDir(out, id), rule: "--out" } }, { ...rigOptions, cap: Math.round(c.cap_usd * 1_000_000) }));
+      }
+      if (cellItems.retry) retryRig = dockerRig({ ...call, item: cellItems.retry.item, runId: cellItems.retry.run_id, out: { path: cellRigDir(out, "retry"), rule: "--out" } }, { ...rigOptions, cap: Math.round(cellItems.retry.cap_usd * 1_000_000) });
+    } catch (e) {
+      for (const r of [...opened.values(), ...(retryRig ? [retryRig] : [])]) await r.close().catch(() => undefined);
+      throw e;
+    }
+    rig = composeRigs(opened, retryRig);
+  }
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
-    run = await runReviewUnits({ host, ...(codexArms ? { codex: codexArms } : {}), suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs, ...(bound ?? {}) }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256(host), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens: ceo ? CEO_LENS : lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
+    run = await runReviewUnits({ host, ...(codexArms ? { codex: codexArms } : {}), suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs, ...(bound ?? {}) }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256(host), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens: ceo ? CEO_LENS : lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(orderSeed !== null ? { order: { seed: orderSeed } } : {}), ...(cellItems ? { cellAllowances: Object.fromEntries(Object.entries(cellItems.cells).map(([id, c]) => [id, Math.round(c.allowance_usd * 1_000_000)])), cellCaps: Object.fromEntries(Object.entries(cellItems.cells).map(([id, c]) => [id, Math.round(c.cap_usd * 1_000_000)])), ...(cellItems.retry ? { rerun: { cap: Math.round(cellItems.retry.cap_usd * 1_000_000) } } : {}) } : {}), ...(voiceCli !== null ? { keepSessions: true } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
   } finally {
     const closed = await rig.close();
     io.out("lease " + closed.lease_id + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls");

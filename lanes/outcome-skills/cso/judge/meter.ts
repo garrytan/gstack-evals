@@ -30,11 +30,22 @@ export const JUDGE_ITEM = "cso-judge";
  *  cso3-judge under the long-list plan), else cso-judge. */
 export const judgeItem = (p: CsoPrereg): string => (p.rerun ? Object.keys(p.items).find((k) => k.endsWith("-judge"))! : JUDGE_ITEM);
 const VERTEX = /^(google|google vertex|google-vertex)$/i;
+/** The providers an OpenRouter request is pinned to (provider.only), google-vertex when it names none. */
+const pinnedTo = (body: Record<string, unknown>): string[] => {
+  const only = (body.provider as { only?: unknown } | undefined)?.only;
+  return Array.isArray(only) && only.length ? only.map(String) : ["google-vertex"];
+};
+/** Whether OpenRouter's served provider name ("Google", "Amazon Bedrock", "DeepInfra") is one the request was pinned to. */
+const servedAsPinned = (body: Record<string, unknown>, served: unknown): boolean =>
+  typeof served === "string" && pinnedTo(body).some((p) => (p === "google-vertex" ? VERTEX.test(served) : p === served.trim().toLowerCase().replace(/\s+/g, "-")));
 const RETRY: RetryBudget = { attempts: 3, elapsed_ms: 900_000 };
 /** The fields the metering proxy adds before it prices a request, sent up front so the worst case priced here is the one
  *  it reserves (as statemachines/send.ts does). */
 const PROXY_FIELDS = { openai: { service_tier: "default" }, anthropic: { inference_geo: "global" }, openrouter: { usage: { include: true } } } as const;
 const KEY_ENV = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" } as const;
+/** The output cap the proxy writes into a request that states none. The meter writes it first, so the worst case it
+ *  prices is the one the proxy reserves. */
+const PROXY_MAX_OUTPUT = Math.max(LABELLER_MAX_OUTPUT, JUDGE_MAX_OUTPUT_D);
 
 export interface MeterOptions { run_id: string; out: string; item?: string; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; warn?: (line: string) => void; seal?: Buffer }
 export interface JudgeMeter { lease_id: string; transport: Transport; sent(): number; close(): Promise<{ spent_micros: number; unknown_micros: number }> }
@@ -62,7 +73,7 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
     const open = readItem(record, item).open;
     if (open && open.run_id === o.run_id && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
     lease = openLease(record, local, { item, run_id: o.run_id, warn, requireAdmission: rigAdmission({ proof: "direct" }) });
-    proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "cso-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: Math.max(LABELLER_MAX_OUTPUT, JUDGE_MAX_OUTPUT_D), refuseServerTools: true });
+    proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "cso-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: PROXY_MAX_OUTPUT, refuseServerTools: true });
     proxy.start();
   } catch (e) {
     if (lease.lease_id && !proxy) settleLease(record, local, lease.lease_id, warn);
@@ -73,7 +84,8 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
   const log = join(out, "calls.jsonl");
   let sent = 0, closed = false;
   const transport: Transport = async ({ provider, route, body: asked, attempt = 1 }) => {
-    const body: Record<string, unknown> = { ...asked, ...PROXY_FIELDS[provider as keyof typeof PROXY_FIELDS] };
+    const capless = asked.max_tokens === undefined && asked.max_output_tokens === undefined;
+    const body: Record<string, unknown> = { ...asked, ...PROXY_FIELDS[provider as keyof typeof PROXY_FIELDS], ...(capless ? { [provider === "openai" ? "max_output_tokens" : "max_tokens"]: PROXY_MAX_OUTPUT } : {}) };
     if (closed) csoFail("E_USAGE", "the judge meter is closed");
     const digest = createHash("sha256").update(provider + route + JSON.stringify(body) + (attempt > 1 ? "#attempt" + attempt : "")).digest("hex");
     const kept = join(out, "replies", digest + ".json");
@@ -109,7 +121,7 @@ export async function openJudgeMeter(o: MeterOptions): Promise<JudgeMeter> {
       parsed = JSON.parse(text);
     } catch {}
     appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), event: "reply", digest, meter_id: b.meter_id, status, micros: local.meters(lease.lease_id).get(b.meter_id)?.spent_micros ?? null }) + "\n");
-    if (status === 200 && provider === "openrouter" && !(typeof parsed?.provider === "string" && VERTEX.test(parsed.provider))) csoFail("E_CSO_PROVIDER_DRIFT", model + " was served by " + (parsed?.provider ?? "an unnamed provider") + ", not google-vertex; stop and ask the Captain");
+    if (status === 200 && provider === "openrouter" && !servedAsPinned(body, parsed?.provider)) csoFail("E_CSO_PROVIDER_DRIFT", model + " was served by " + (parsed?.provider ?? "an unnamed provider") + ", not " + pinnedTo(body).join(" or ") + "; stop and ask the Captain");
     if (status === 200 && parsed) writeFileSync(kept, o.seal ? sealRow(parsed, o.seal) : JSON.stringify(parsed));
     return { status, body: parsed };
   };

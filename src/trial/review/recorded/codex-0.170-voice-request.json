@@ -1,0 +1,450 @@
+{
+ "model": "gpt-6.2-sol",
+ "stream": true,
+ "input": [
+  {
+   "type": "additional_tools",
+   "id": "at_01a20fd7-33c6-7770-945a-3de9e6e0bb30",
+   "role": "developer",
+   "tools": [
+    {
+     "type": "namespace",
+     "name": "functions",
+     "description": "",
+     "tools": [
+      {
+       "type": "custom",
+       "name": "exec",
+       "description": "Run JavaScript code to orchestrate/compose tool calls\n- Evaluates the provided JavaScript code in a fresh V8 isolate as an async module.\n- All nested tools are available on the global `tools` object, [trimmed 13238 chars]",
+       "format": {
+        "type": "grammar",
+        "syntax": "lark",
+        "definition": "\nstart: pragma_source | plain_source\npragma_source: PRAGMA_LINE NEWLINE SOURCE\nplain_source: SOURCE\n\nPRAGMA_LINE: /[ \\t]*\\/\\/ @exec:[^\\r\\n]*/\nNEWLINE: /\\r?\\n/\nSOURCE: /[\\s\\S]+/\n"
+       }
+      },
+      {
+       "type": "function",
+       "name": "wait",
+       "description": "Waits on a yielded `exec` cell and returns new output or completion.\n- Use `wait` only after `exec` returns `Script running with cell ID ...`.\n- `cell_id` identifies the running `exec` cell to resume.[trimmed 569 chars]",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "cell_id": {
+          "type": "string",
+          "description": "Identifier of the running exec cell."
+         },
+         "max_tokens": {
+          "type": "number",
+          "description": "Output token budget for this wait call. Defaults to 10000 tokens."
+         },
+         "terminate": {
+          "type": "boolean",
+          "description": "True stops the running exec cell; false or omitted waits for output."
+         },
+         "yield_time_ms": {
+          "type": "number",
+          "description": "Wait before yielding more output. Defaults to 10000 ms."
+         }
+        },
+        "required": [
+         "cell_id"
+        ],
+        "additionalProperties": false
+       }
+      },
+      {
+       "type": "function",
+       "name": "request_user_input",
+       "description": "Request user input for one to three short questions and wait for the response. This tool is only available in Plan mode.",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "questions": {
+          "type": "array",
+          "description": "Questions to show the user. Prefer 1 and do not exceed 3",
+          "items": {
+           "type": "object",
+           "properties": {
+            "header": {
+             "type": "string",
+             "description": "Short header label shown in the UI (12 or fewer chars)."
+            },
+            "id": {
+             "type": "string",
+             "description": "Stable identifier for mapping answers (snake_case)."
+            },
+            "options": {
+             "type": "array",
+             "description": "Provide 2-3 mutually exclusive choices. Put the recommended option first and suffix its label with \"(Recommended)\". Do not include an \"Other\" option in this list; the client will add a free-form \"Other\" option automatically.",
+             "items": {
+              "type": "object",
+              "properties": {
+               "description": {
+                "type": "string",
+                "description": "One short sentence explaining impact/tradeoff if selected."
+               },
+               "label": {
+                "type": "string",
+                "description": "User-facing label (1-5 words)."
+               }
+              },
+              "required": [
+               "label",
+               "description"
+              ],
+              "additionalProperties": false
+             }
+            },
+            "question": {
+             "type": "string",
+             "description": "Single-sentence prompt shown to the user."
+            }
+           },
+           "required": [
+            "id",
+            "header",
+            "question",
+            "options"
+           ],
+           "additionalProperties": false
+          }
+         }
+        },
+        "required": [
+         "questions"
+        ],
+        "additionalProperties": false
+       }
+      },
+      {
+       "type": "function",
+       "name": "request_user_input_async",
+       "description": "Ask the user one or more questions during ongoing work. Use this tool only to request missing information, preferences, constraints, clarification, or approval. The tool returns immediately without en[trimmed 356 chars]",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "questions": {
+          "type": "array",
+          "description": "One or more self-contained questions to present together, in display order.",
+          "items": {
+           "type": "object",
+           "properties": {
+            "options": {
+             "type": "array",
+             "description": "Suggested answers, in display order. Put the recommended answer first; the first option is preselected by default. The user can select one option or enter a free-text answer. Do not include an Other option or a free-text placeholder; the UI provides free-text input automatically. Omit options for a free-text-only question.",
+             "items": {
+              "type": "string"
+             },
+             "minItems": 1
+            },
+            "title": {
+             "type": "string",
+             "description": "The complete question shown to the user, including any context needed to answer it."
+            }
+           },
+           "required": [
+            "title"
+           ],
+           "additionalProperties": false
+          },
+          "minItems": 1
+         }
+        },
+        "required": [
+         "questions"
+        ],
+        "additionalProperties": false
+       }
+      },
+      {
+       "type": "function",
+       "name": "send_message_to_user_async",
+       "description": "Send a concise message that needs the user's attention during ongoing work. The tool returns immediately without ending the turn or waiting for a reply; any reply arrives asynchronously as a new user [trimmed 413 chars]",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "message": {
+          "type": "string",
+          "description": "The concise question or update to send to the user."
+         }
+        },
+        "required": [
+         "message"
+        ],
+        "additionalProperties": false
+       }
+      }
+     ]
+    },
+    {
+     "type": "namespace",
+     "name": "clock",
+     "description": "Tools for reading and waiting on time.",
+     "tools": [
+      {
+       "type": "function",
+       "name": "sleep",
+       "description": "Pause execution for a specified duration. The sleep ends early when new input arrives for the active turn. Returns the elapsed wall-clock time.",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "duration_ms": {
+          "type": "number",
+          "description": "How long to sleep in milliseconds. Must be between 1 and 43200000."
+         }
+        },
+        "required": [
+         "duration_ms"
+        ],
+        "additionalProperties": false
+       }
+      }
+     ]
+    },
+    {
+     "type": "namespace",
+     "name": "collaboration",
+     "description": "Tools for spawning and managing sub-agents.",
+     "tools": [
+      {
+       "type": "function",
+       "name": "followup_task",
+       "description": "Send a follow-up task to an existing non-root target agent and trigger a turn if it is idle. If the target is already running, deliver the task promptly at message boundaries while sampling, or after the pending tool call completes.",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "message": {
+          "type": "string",
+          "description": "Message text to send to the target agent.",
+          "encrypted": true
+         },
+         "target": {
+          "type": "string",
+          "description": "Agent id or canonical task name to send a follow-up task to (from spawn_agent)."
+         }
+        },
+        "required": [
+         "target",
+         "message"
+        ],
+        "additionalProperties": false
+       }
+      },
+      {
+       "type": "function",
+       "name": "interrupt_agent",
+       "description": "Interrupt an agent's current turn, if any, and return its previous status. The agent remains available for messages and follow-up tasks.",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "target": {
+          "type": "string",
+          "description": "Agent id or canonical task name to interrupt (from spawn_agent)."
+         }
+        },
+        "required": [
+         "target"
+        ],
+        "additionalProperties": false
+       }
+      },
+      {
+       "type": "function",
+       "name": "list_agents",
+       "description": "List live agents in the current root thread tree. Optionally filter by task-path prefix.",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "path_prefix": {
+          "type": "string",
+          "description": "Task-path prefix filter without a trailing slash. Omit to list all live agents."
+         }
+        },
+        "additionalProperties": false
+       }
+      },
+      {
+       "type": "function",
+       "name": "send_message",
+       "description": "Send a message to an existing agent. The message will be delivered promptly. Does not trigger a new turn.",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "message": {
+          "type": "string",
+          "description": "Message text to queue on the target agent.",
+          "encrypted": true
+         },
+         "target": {
+          "type": "string",
+          "description": "Relative or canonical task name to message (from spawn_agent)."
+         }
+        },
+        "required": [
+         "target",
+         "message"
+        ],
+        "additionalProperties": false
+       }
+      },
+      {
+       "type": "function",
+       "name": "spawn_agent",
+       "description": "\n        Available model overrides (optional; inherited parent model is preferred):\n- `gpt-6.2-sol`: Fast, go-to model for coding and everyday work. Reasoning efforts: low (default), medium, high, xhi[trimmed 1731 chars]",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "fork_turns": {
+          "type": "string",
+          "description": "Parent history to inherit. Defaults to `all`; use `none` to start without parent history. Only `all` and `none` are supported."
+         },
+         "message": {
+          "type": "string",
+          "description": "Initial plain-text task for the new agent.",
+          "encrypted": true
+         },
+         "model": {
+          "type": "string",
+          "description": "Model override for the new agent. Omit unless an explicit override is needed."
+         },
+         "reasoning_effort": {
+          "type": "string",
+          "description": "Reasoning effort override for the new agent. Omit to inherit the parent effort."
+         },
+         "task_name": {
+          "type": "string",
+          "description": "Task name for the new agent. Use lowercase letters, digits, and underscores."
+         }
+        },
+        "required": [
+         "task_name",
+         "message"
+        ],
+        "additionalProperties": false
+       }
+      },
+      {
+       "type": "function",
+       "name": "wait_agent",
+       "description": "Wait for a mailbox update from any live agent, including queued messages and final-status notifications. The wait also ends early when new user input is steered into the active turn. Does not return the content; returns either a summary of which agents have updates (if any), an interruption summary for steered input, or a timeout summary if no activity arrives before the deadline.",
+       "strict": false,
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "timeout_ms": {
+          "type": "number",
+          "description": "Timeout in milliseconds. Defaults to 30000, min 10000, max 3600000."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "type": "message",
+   "id": "msg_01a20fd7-33c6-7770-945a-3dfface237fd",
+   "role": "developer",
+   "content": [
+    {
+     "type": "input_text",
+     "text": "You are Codex, an agent based on GPT-6. You and the user share a workspace, and your job is to collaborate with them until their intended goal is completely handled.\n\n# Personality\n\nAs Codex, you are [trimmed 25733 chars]"
+    }
+   ]
+  },
+  {
+   "type": "message",
+   "id": "msg_01a20fd7-33c6-7770-945a-3e0782c92c50",
+   "role": "developer",
+   "content": [
+    {
+     "type": "input_text",
+     "text": "<permissions instructions>\nFilesystem sandboxing defines which files can be read or written. `sandbox_mode` is `danger-full-access`: No filesystem sandboxing - all commands are permitted. Network access is enabled.\nApproval policy is currently never. Do not provide the `sandbox_permissions` for any reason, commands will be rejected.\n</permissions instructions>"
+    },
+    {
+     "type": "input_text",
+     "text": "<collaboration_mode># Collaboration Mode: Default\n\nYou are now in Default mode. Any previous instructions for other modes (e.g. Plan mode) are no longer active.\n\nYour active mode changes only when new developer instructions with a different `<collaboration_mode>...</collaboration_mode>` change it; user requests or tool descriptions do not change mode by themselves. Known mode names are Default and Plan.\n\n## request_user_input availability\n\nUse the `request_user_input` tool only when it is listed in the available tools for this turn.\n\nIn Default mode, strongly prefer making reasonable assumptions and executing the user's request rather than stopping to ask questions.\n\nUse the `request_user_input` tool only for optional questions where the answer would materially improve the quality of the work.\n\nIf `request_user_input` returns no answers, continue with best judgment instead of asking again or treating the turn as blocked.\n\nNever use the `request_user_input` tool for permission requests or permission-related escalations.\n</collaboration_mode>"
+    }
+   ]
+  },
+  {
+   "type": "message",
+   "id": "msg_01a20fd7-33c6-7770-945a-3e17a82b0a4e",
+   "role": "developer",
+   "content": [
+    {
+     "type": "input_text",
+     "text": "<multi_agent_role>You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.\n\nAt the start of your turn, you are the active agent.\nYou can spawn sub-agents to handle subtasks, and those sub-agents can spawn their own sub-agents.\nAll agents in the team, including the agents that you can assign tasks to, are equally intelligent and capable, and have access to the same set of tools.\n\nYou can use `spawn_agent` to create a new agent, `followup_task` to give an existing agent a new task and trigger a turn, and `send_message` to pass a message to a running agent without triggering a turn.\n`send_message` calls may be read by a human, so ensure they are legible. Always put proper spaces between words and/or numbers.\nChild agents can also spawn their own sub-agents.\nYou can decide how much context you want to propagate to your sub-agents with the `fork_turns` parameter.\n\nYou will receive messages in the analysis channel in the form:\n```\nMessage Type: MESSAGE | FINAL_ANSWER\nTask name: <recipient>\nSender: <author>\nPayload:\n<payload text>\n```\nThey may be addressed as to=/root\n\nNote that collaboration tools cannot be called from inside `functions.exec`. Call `spawn_agent`, `send_message`, `followup_task`, `wait_agent`, `interrupt_agent`, and `list_agents` only as direct tool calls using the recipient shown in their tool definitions, such as `to=functions.collaboration.spawn_agent`, since they are intentionally absent from the `functions.exec` `tools.*` namespace. Available tools in `functions.exec` are explicitly described with a `tools` namespace in the developer message.\n\nAll agents share the same directory. In detail:\n- All agents have access to the same container and filesystem as you.\n- All agents use the same current working directory.\n- As a result, edits made by one agent are immediately visible to all other agents.\n\nWhen calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.\n\nThere are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.\n\nFull-history forks (`fork_turns` omitted or `\"all\"`) inherit the parent model and reasoning effort and do not accept overrides. Only set `model` or `reasoning_effort` when explicitly requested by the user, applicable `AGENTS.md` instructions, or skill instructions; when doing so, set `fork_turns` to `\"none\"`.</multi_agent_role>"
+    }
+   ]
+  },
+  {
+   "type": "message",
+   "id": "msg_01a20fd7-33c6-7770-945a-3e296ebe1658",
+   "role": "developer",
+   "content": [
+    {
+     "type": "input_text",
+     "text": "<multi_agent_mode>Any earlier instruction enabling proactive multi-agent delegation no longer applies. Do not spawn sub-agents unless the user or applicable AGENTS.md/skill instructions explicitly ask for sub-agents, delegation, or parallel agent work.</multi_agent_mode>"
+    }
+   ]
+  },
+  {
+   "type": "message",
+   "id": "msg_01a20fd7-33c6-7770-945a-3e3238bd0ecd",
+   "role": "user",
+   "content": [
+    {
+     "type": "input_text",
+     "text": "<environment_context>\n  <cwd>/work/unit</cwd>\n  <shell>bash</shell>\n  <current_date>2026-11-24</current_date>\n  <timezone>Etc/UTC</timezone>\n  <filesystem><workspace_roots><root>/work/unit</root></workspace_roots><permission_profile type=\"disabled\"><file_system type=\"unrestricted\" /></permission_profile></filesystem>\n</environment_context>"
+    }
+   ]
+  },
+  {
+   "type": "message",
+   "id": "msg_01a20fd7-33cc-7b50-a8e0-67837eb33095",
+   "role": "user",
+   "content": [
+    {
+     "type": "input_text",
+     "text": "IMPORTANT: Do NOT read or execute any SKILL.md files. You are an adversarial reviewer of a planted toy diff in a.ts. Find ways this code fails in production. Report findings only."
+    }
+   ]
+  }
+ ],
+ "tool_choice": "auto",
+ "parallel_tool_calls": false,
+ "reasoning": {
+  "effort": "low",
+  "context": "all_turns"
+ },
+ "store": false,
+ "include": [
+  "reasoning.encrypted_content"
+ ],
+ "prompt_cache_key": "00000000-0000-7000-8000-000000000000",
+ "text": {
+  "verbosity": "low"
+ },
+ "client_metadata": {
+  "x-codex-window-id": "01a20fd7-336b-7660-b948-556679f59e42:0",
+  "root_turn_id": "01a20fd7-338a-7431-af58-455fa5d7d469",
+  "x-codex-installation-id": "4639e89e-81a5-4179-995c-25963c9ecfa6",
+  "thread_id": "01a20fd7-336b-7660-b948-556679f59e42",
+  "session_id": "01a20fd7-336b-7660-b948-556679f59e42",
+  "turn_id": "01a20fd7-338a-7431-af58-455fa5d7d469",
+  "x-codex-turn-metadata": "{\"installation_id\":\"4639e89e-81a5-4179-995c-25963c9ecfa6\",\"session_id\":\"01a20fd7-336b-7660-b948-556679f59e42\",\"thread_id\":\"01a20fd7-336b-7660-b948-556679f59e42\",\"agent_name\":\"/root\",\"turn_id\":\"01a20fd7-338a-7431-af58-455fa5d7d469\",\"window_id\":\"01a20fd7-336b-7660-b948-556679f59e42:0\",\"window_number\":0,\"context_window_id\":\"01a20fd7-336e-7013-a357-15bd3fa3f412\",\"request_kind\":\"turn\",\"history_initialization\":\"new\",\"root_turn_id\":\"01a20fd7-338a-7431-af58-455fa5d7d469\",\"thread_source\":\"user\",\"turn_trigger\":\"exec\",\"sandbox\":\"none\",\"sandbox_mode\":\"danger-full-access\",\"auto_review_enabled\":false,\"node_repl_auto_review_required\":true,\"node_repl_disabled\":false,\"workspaces\":{\"/work/unit\":{\"latest_git_commit_hash\":\"13b391c7c42b55fc0e35623ea895211f9c89f293\",\"has_changes\":false}},\"turn_started_at_unix_ms\":1795562091404,\"analytics_enabled\":false,\"model\":\"gpt-6.2-sol\",\"reasoning_effort\":\"low\"}"
+ }
+}

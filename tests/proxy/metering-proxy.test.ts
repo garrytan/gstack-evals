@@ -694,7 +694,7 @@ describe("OpenRouter route", () => {
     expect(routable("openrouter", `${PARTICLE}:online`)).toBe(false);
     expect(routable("openrouter", "claude-opus-5-5")).toBe(false);
     expect(routable("gemini", "gemini-4-argon")).toBe(false);
-    expect(Object.keys(CHAT_PRICES).filter(id => id.startsWith("openrouter:"))).toEqual([`openrouter:${PARTICLE}`, `openrouter:${DEEPSEEK}`, "openrouter:openai/gpt-6.1-sol", "openrouter:google/gemini-4-argon", "openrouter:google/gemini-4-carbon"]);
+    expect(Object.keys(CHAT_PRICES).filter(id => id.startsWith("openrouter:"))).toEqual([`openrouter:${PARTICLE}`, `openrouter:${DEEPSEEK}`, "openrouter:openai/gpt-6.1-sol", "openrouter:google/gemini-4-argon", "openrouter:google/gemini-4-carbon", "openrouter:x-ai/grok-4.7", "openrouter:moonshotai/kimi-k3.1-pro"]);
   });
 
   // Value: protects=Claude Code's token counts on OpenRouter's Messages route are answered by the proxy, as Lane B's proxy answers them, instead of refused into review-units' degraded share, and still pass the slot's model check; fails_when=a count is refused, sent upstream, reserved or charged, or a model off the slot gets a count; why_new=GST-1019 (GEVA-89: all 106 of particle-1's refusals were token counts); seam=forward's estimate route; no_claim=how Claude Code uses the count
@@ -731,6 +731,8 @@ describe("OpenRouter route", () => {
     [PARTICLE]: '{"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}}',
     [DEEPSEEK]: '{"only":["inference-net"],"allow_fallbacks":false,"quantizations":["fp8"],"data_collection":"deny","max_price":{"prompt":0.08,"completion":0.55,"request":0,"image":0}}',
     [SOL]: '{"only":["openai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":4,"completion":15,"request":0,"image":0}}',
+    "x-ai/grok-4.7": '{"only":["amazon-bedrock"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":4,"completion":12,"request":0,"image":0}}',
+    "moonshotai/kimi-k3.1-pro": '{"only":["deepinfra"],"allow_fallbacks":false,"quantizations":["bf16"],"data_collection":"deny","max_price":{"prompt":1.9,"completion":9.5,"request":0,"image":0}}',
   };
   /** main's openRouterRouting at 5a01538, copied so a row with no image price can be held to it byte for byte. */
   const mainRouting = (price: (typeof CHAT_PRICES)[string]) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), ...(price.quantizations ? { quantizations: price.quantizations } : {}), data_collection: "deny" as const, max_price: { prompt: Math.max(price.input, price.long?.input ?? 0), completion: Math.max(price.output, price.long?.output ?? 0), request: 0, image: 0 } });
@@ -745,9 +747,9 @@ describe("OpenRouter route", () => {
     expect(t.calls.map(c => c.raw)).toEqual([`{"model":"${ARGON}","messages":[{"role":"user","content":"Hello"}],"max_tokens":1,"provider":${argon},"usage":{"include":true}}`]);
   });
 
-  // Value: protects=a Carbon send reaches the same google-vertex/global endpoint at the same max_price as Argon, image price included; fails_when=the Carbon row drifts from the endpoint read its comment cites, or routes without the image price Argon needed; why_new=GEVA-537's rater and second gold labeller call Carbon through the product-value meter; seam=the Carbon row, openRouterRouting and the proxy's outgoing body; no_claim=OpenRouter's live endpoint list after the cited read
-  test("Carbon's routing carries the same provider, max_price and image price as Argon's, in the proxy's outgoing body too", async () => {
-    const carbon = '{"only":["google-vertex"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":2,"completion":10,"request":0,"image":0.000002}}';
+  // Value: protects=a Carbon send reaches google-vertex at Carbon's 2026-12-01 ceiling ($4 and $20, the image price doubled), since the review-models judge runs across that date; fails_when=the Carbon row drifts from the rate its comment cites, or routes without an image price; why_new=GEVA-537's rater and second gold labeller call Carbon through the product-value meter, and GEVA-590 section 10 item 6 moved the row to the new rate; seam=the Carbon row, openRouterRouting and the proxy's outgoing body; no_claim=OpenRouter's live endpoint list after the cited read
+  test("Carbon's routing carries google-vertex and its 2026-12-01 max_price and image price, in the proxy's outgoing body too", async () => {
+    const carbon = '{"only":["google-vertex"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":4,"completion":20,"request":0,"image":0.000004}}';
     expect(JSON.stringify(openRouterRouting(CHAT_PRICES[`openrouter:${CARBON}`]!))).toBe(carbon);
     const t = setup(() => ok({ prompt_tokens: 32, completion_tokens: 1, cost: 0.00007326 }));
     const a = t.bind({ models: [`openrouter:${CARBON}`] });

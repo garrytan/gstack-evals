@@ -17,6 +17,28 @@ it gets the session cache key, resume, receipts and the rig's lease admission. N
 - codex.ts: what a Codex arm adds (`--host codex`): the codex-arms file's arm specs and the keyless capture of each arm's
   model input before its first session.
 - cli.ts: the command.
+- rm-cells.ts: the review-models eval's five cells (OS, OA, FS, FA and N) and the review-units flags that hold them.
+- rm-exposure.ts: that eval's exposure reader (its prereg's section 6): did one gstack review run its specialists, its
+  red team, its Claude adversarial subagent and both second-model passes on the cell's voice.
+- rm-check.ts: `review-units cell-check`, that eval's keyless rig check: each cell through the run loop with a recording
+  driver, then a local Claude Code session per cell against stub APIs, with the real Codex CLI in the voice cells.
+- rm-run.ts: `gstack-evals rm-run`, that eval's pilot path: `items` records the pilot line's $1,034 envelope and each
+  line item with its cap and the recorded words, checked verbatim against the approvals file and the pre-run changes;
+  `pilot-plan` writes the pilot's 11 units and each cell's item, worst-case lease and per-session allowance; `pilot` runs
+  review-units on them with the seeded order, one lease per cell, the retry reserve, web_search removal and no-op
+  install and test; `e2e` runs that path keylessly with Docker (rm-e2e.ts).
+- cell-rigs.ts: one HostRig per cell (its own ledger item and lease) plus the retry rig, composed into one rig for the
+  run loop; attempt 2 of a session binds on the retry rig.
+- unit-repos.ts: `--unit-repos <dir>`, units prebuilt by `rm-supply build`, taken as they stand so stripped config stays
+  stripped.
+- proxy-preflight.ts: the review-models eval's keyless proxy preflights (prereg 2026-11-24-geva-590, section 10 items 2
+  and 6): a recorded gstack voice request (recorded/) passes the metering proxy with its web_search tool removed, and a
+  Carbon judge request routes and settles at Carbon's 2026-12-01 rate. `bun src/trial/review/proxy-preflight.ts`.
+- contamination.ts: that eval's search extraction and contamination rule (section 5): every attempted search per review,
+  per-arm counts, and the blind second read's input file. `bun src/trial/review/contamination.ts <input.json> <out>`.
+- supply/: the review-models eval's unit supply (`gstack-evals rm-supply`, plan 2026-11-24-geva-590): P units from Harness
+  Evals' review-real-bugs suite, B units by SZZ on the skill-pack security frame, gates 1 to 5, the visibility read's
+  requests and reader, and the draw. Its gate records are answer keys and stay outside the repository.
 
 ## Unit repositories
 
@@ -119,6 +141,14 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   and 32k output tokens) at its model's price, $7.04 on Opus 5.5. The proxy refuses a call whose worst case the slot's
   allowance cannot hold (E_ALLOWANCE).
 - `--cap-stops`, code units only: cap stops (below). Off by default.
+- `--arm-voice <arm>=<model>`, repeatable, on a gstack stack arm, host claude and code units: the arm's second-model
+  voice in every cell, in place of the default (gpt-6.1-sol in an Opus cell, none in any other). The voice needs an
+  openai or openrouter route in the policy. Each voice changes the cell tree, so each cell keys apart.
+- `--voice-cli <dir>`: an absolute directory in the arm image holding the codex every voice runs, such as
+  /opt/codex-0.170.0/bin. It goes first on PATH, sets GSTACK_CODEX_NO_SANDBOX=1, copies the voice's rollouts to
+  host/codex-sessions and the gstack state root to host/gstack-state, and joins the cell tree.
+- `--arm-models <arm>=<model>[,<model>]` limits an arm to some of `--models` on code units too, as the five cells need
+  for the none arm (Opus only).
 - `--reader-map <file>`, code units only: reader rows (below). Every gstack stack arm must run the map's gstack commit
   and be told /review, whose readers the map names.
 - `--pr-context <dir>`, code units only: every arm sees the PR's title and its first description. The run reads

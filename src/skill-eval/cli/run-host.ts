@@ -43,7 +43,7 @@ import { homedir } from "node:os";
 import { dirname, join, posix, relative, resolve, sep } from "node:path";
 import { calibrationProbes, judgeCalibration, sentinelFor, withSentinel, type CalibrationFailure, type ProbeRun } from "../../adapters/calibration.ts";
 import { dockerInstaller, installArms, releaseInstalls, runHold, sentinelLayer, stackSources, type ArmInstall, type Layer } from "../../arms/install.ts";
-import { cellFor, cellSettings, type CellSettings } from "../../arms/cells.ts";
+import { cellFor, cellSettings, type CellSettings, type VoiceCli } from "../../arms/cells.ts";
 import { catalogEffort, type CodexProvider } from "../../adapters/codex/driver.ts";
 import { hostDriver, skillRoot, type HostDriverOptions } from "../../adapters/host.ts";
 import type { Call as HostCall } from "../../grade/transcript.ts";
@@ -98,6 +98,10 @@ export interface HostRig {
   close(): Promise<{ committed: number; unknown: number; lease_id: string | null }>;
   /** What --resume needs to recover this run if the process dies: the lease and the proxy container. */
   recovery: { lease_id: string; proxy_container: string; journal: string } | null;
+  /** A rig composed of several, one lease each (review-units --cell-items): the proxy URL, network, journal and sandbox that serve a session of arm on model at this attempt. Unset, the rig's own. */
+  route?(arm: string, model: string, attempt: number): { baseUrl: string; network: string | null; journal: string | null; sandbox: Sandbox };
+  /** Every proxy journal a composed rig keeps, for the receipts. */
+  journals?: string[];
 }
 
 export interface HostRunInput {
@@ -193,12 +197,12 @@ export function slotModels(policy: LoadedPolicy, model: string, cell: CellSettin
   return [at(model), ...(cell?.codex ? [at(cell.codex.model)] : [])];
 }
 
-/** The Claude Code driver's codex option for a cell: the voice and the route the policy gives it, or null. */
-export function codexOption(policy: LoadedPolicy, cell: CellSettings | null): { provider: CodexProvider; model: string } | null {
+/** The Claude Code driver's codex option for a cell: the voice and the route the policy gives it, and the voice's CLI directory when the cell names one, or null. */
+export function codexOption(policy: LoadedPolicy, cell: CellSettings | null): { provider: CodexProvider; model: string; binDir?: string } | null {
   if (!cell?.codex) return null;
   const provider = providerOf(policy, cell.codex.model);
   if (provider !== "openai" && provider !== "openrouter") throw new Error("E_MODEL_POLICY: the cell's voice " + cell.codex.model + " needs an openai or openrouter route for the Codex CLI, and the policy gives " + (provider ?? "none"));
-  return { provider, model: cell.codex.model };
+  return { provider, model: cell.codex.model, ...(cell.codex.cli ? { binDir: cell.codex.cli.bin_dir } : {}) };
 }
 
 /** The namespaces a Skill call may use for an arm's skill: each plugin's manifest name (else its folder name), and gstack for an arm that installs gstack. */
@@ -218,14 +222,15 @@ export function armNamespaces(install: Pick<ArmInstall, "gstack"> & Partial<Pick
 /**
  * Each stack arm's cell settings for each model of the run, by arm and model. A cell whose voice the policy cannot route
  * refuses, so a stack never loses its voice silently and scores its reviewer's absence as a loss. voice false builds
- * every cell without its voice (a plan run, which runs no second model), so the policy need not route one.
+ * every cell without its voice (a plan run, which runs no second model), so the policy need not route one. voices gives an
+ * arm's cells the voice named there in place of VOICES' default for each model, and voiceCli names every voice's CLI.
  */
-export function armCells(installs: readonly ArmInstall[], models: readonly string[], policy: LoadedPolicy, dir: string, o: { voice?: boolean; gstackConfig?: Readonly<Record<string, Readonly<Record<string, string>>>> } = {}): Record<string, Record<string, CellSettings>> {
+export function armCells(installs: readonly ArmInstall[], models: readonly string[], policy: LoadedPolicy, dir: string, o: { voice?: boolean; gstackConfig?: Readonly<Record<string, Readonly<Record<string, string>>>>; voices?: Readonly<Record<string, string>>; voiceCli?: VoiceCli } = {}): Record<string, Record<string, CellSettings>> {
   const out: Record<string, Record<string, CellSettings>> = {};
   for (const install of installs) {
     if (install.provenance.kind !== "stack") continue;
     out[install.name] = Object.fromEntries(models.map((model) => {
-      const settings = cellSettings(install, o.voice === false ? { model, voice: null } : cellFor(model), dir, o.gstackConfig?.[install.name]);
+      const settings = cellSettings(install, o.voice === false ? { model, voice: null } : cellFor(model, o.voices?.[install.name], o.voiceCli), dir, o.gstackConfig?.[install.name]);
       codexOption(policy, settings);
       return [model, settings];
     }));
@@ -361,7 +366,7 @@ export async function runOnHost(o: HostRunInput, rig: HostRig, log: (line: strin
     const armName = s.arm?.name ?? JUDGE_ARM;
     const cell = s.arm ? (rig.cells?.[s.arm.name]?.[s.model] ?? null) : null;
     const codex = s.host === "claude" ? codexOption(o.policy, cell) : null;
-    const binding = await rig.bind({ cell: { run_id: o.runId, arm: armName, task: s.task.id, model: s.model, trial: s.trial, attempt: s.round }, models: s.arm ? slotModels(o.policy, s.model, codex ? cell : null) : [provider + ":" + s.model], allowance_micros: s.allowance });
+    const binding = await rig.bind({ cell: { run_id: o.runId, arm: armName, task: s.task.id, model: s.model, trial: s.trial, attempt: s.round }, models: s.arm ? slotModels(o.policy, s.model, codex ? cell : null) : [provider + ":" + s.model], allowance_micros: s.allowance, ...(codex ? { voices: [codex.provider + ":" + codex.model] } : {}) });
     const home = s.sandbox.homePath(s.dir);
     const armInstall = s.arm ? rig.arms[s.arm.name]! : null;
     const installed = armInstall?.skill ?? null;
@@ -549,7 +554,7 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
 }
 
 /** The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it, the installs the run built included. */
-export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number; voice?: boolean; gstackConfig?: Readonly<Record<string, Readonly<Record<string, string>>>>; upstream?: string; requestFields?: string[] }): HostRig {
+export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number; voice?: boolean; gstackConfig?: Readonly<Record<string, Readonly<Record<string, string>>>>; voices?: Readonly<Record<string, string>>; voiceCli?: VoiceCli; upstream?: string; requestFields?: string[]; removeVoiceWebSearch?: boolean }): HostRig {
   const bin = o.env.GSTACK_EVALS_DOCKER_BIN || "docker";
   const state = stateRoot(o.env);
   const pin = checkImagePin({ state, docker: bin });
@@ -562,7 +567,7 @@ export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "
     const retain = join(state, "retained");
     const kept = retainImage(pin.pin.tag, retain, dockerRun, bin);
     if ("ok" in kept) throw new Error(kept.code + ": " + kept.message);
-    const cells = armCells(installs, call.models, call.policy, join(state, "cells"), { voice: o.voice ?? true, ...(o.gstackConfig ? { gstackConfig: o.gstackConfig } : {}) });
+    const cells = armCells(installs, call.models, call.policy, join(state, "cells"), { voice: o.voice ?? true, ...(o.gstackConfig ? { gstackConfig: o.gstackConfig } : {}), ...(o.voices ? { voices: o.voices } : {}), ...(o.voiceCli ? { voiceCli: o.voiceCli } : {}) });
     const images = armImages({ trialImage: pin.pin.tag, home, installs, marks: sentinels(call.arms.arms, o.nonce), tasksDir: dirname(resolve(call.tasks)), state, docker: bin, out: call.out.path, retain, cells: Object.fromEntries(Object.entries(cells).map(([arm, byModel]) => [arm, Object.values(byModel)])) });
     const local = openLocalLedger(call.ledger);
     const lease = openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) });
@@ -571,7 +576,7 @@ export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "
     undo.unshift(() => removeTrialNetwork(network, bin));
     const token = randomBytes(32).toString("hex");
     const providerKeys = Object.fromEntries(PROVIDER_KEYS.flatMap((k) => (o.env[k] ? [[k, o.env[k]!]] : [])));
-    const proxy = startProxyContainer({ image: pin.pin.tag, net: network, dir: join(call.out.path, "proxy"), ledger: call.ledger.path, leaseId: lease.lease_id, managementToken: token, retry: { attempts: 3, elapsed_ms: 300_000 }, providerKeys, docker: bin, ...(o.upstream ? { upstream: o.upstream } : {}), ...(o.requestFields ? { requestFields: o.requestFields } : {}) });
+    const proxy = startProxyContainer({ image: pin.pin.tag, net: network, dir: join(call.out.path, "proxy"), ledger: call.ledger.path, leaseId: lease.lease_id, managementToken: token, retry: { attempts: 3, elapsed_ms: 300_000 }, providerKeys, docker: bin, ...(o.upstream ? { upstream: o.upstream } : {}), ...(o.requestFields ? { requestFields: o.requestFields } : {}), ...(o.removeVoiceWebSearch ? { removeVoiceWebSearch: true } : {}) });
     const control = new ProxyControl(proxy.socket, token);
     return {
       baseUrl: proxy.baseUrl,

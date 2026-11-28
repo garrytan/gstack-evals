@@ -785,7 +785,10 @@
     "lanes/weekly-stable/resolve-shim.ts": [
       "tests/weekly-stable/resolve.test.ts"
     ],
-    "lanes/weekly-stable/build.sh": []
+    "lanes/weekly-stable/build.sh": [],
+    "src/trial/review/recorded/**": [
+      "tests/proxy/voice-web-search.test.ts"
+    ]
   },
   "guards": [
     {

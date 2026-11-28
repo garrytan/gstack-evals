@@ -7,7 +7,7 @@ author: GEVA-590
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-24
-status: open
+status: done
 links:
   - https://github.com/garrytan/gstack/tree/284214fd896f493471b1bb5e98bcdc899a87bcdb
   - https://github.com/garrytan/g-harness-evals/tree/74f0de63dc86728486538d907d8184ff721e05a1/docs/benchmarks/2026-11-review-real-bugs

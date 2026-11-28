@@ -547,6 +547,26 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_B2_LOOK](#e_b2_look) | 2 | U20 |
 | [E_B2_SESSIONS](#e_b2_sessions) | 2 | U20 |
 | [E_B2_SCORER](#e_b2_scorer) | 2 | U20 |
+| [E_CELL_CHECK](#e_cell_check) | 2 | U20 |
+| [E_RM_PROXY_PREFLIGHT](#e_rm_proxy_preflight) | 2 | U20 |
+| [E_RMS_INPUT](#e_rms_input) | 2 | U20 |
+| [E_RMS_GIT](#e_rms_git) | 2 | U20 |
+| [E_RMS_PENDING](#e_rms_pending) | 2 | U20 |
+| [E_RMS_FLOOR](#e_rms_floor) | 2 | U20 |
+| [E_RM_JUDGE](#e_rm_judge) | 2 | U20 |
+| [E_RM_SCORE_INPUT](#e_rm_score_input) | 2 | U20 |
+| [E_RM_HISTORY](#e_rm_history) | 2 | U20 |
+| [E_RM_LABELS](#e_rm_labels) | 2 | U20 |
+| [E_RM_RUN](#e_rm_run) | 2 | U20 |
+| [E_RM_RESERVE](#e_rm_reserve) | 2 | U20 |
+| [E_RM_POST_INPUT](#e_rm_post_input) | 2 | U20 |
+| [E_RM_POST_SEND](#e_rm_post_send) | 2 | U20 |
+| [E_RM_POST_DESK](#e_rm_post_desk) | 2 | U20 |
+| [E_RM_POST_LABELS](#e_rm_post_labels) | 2 | U20 |
+| [E_RM_POST_RETIRED](#e_rm_post_retired) | 2 | U20 |
+| [E_RM_POST_DESK_RETIRED](#e_rm_post_desk_retired) | 2 | U20 |
+| [E_RM_NOT_OPEN](#e_rm_not_open) | 2 | U20 |
+| [E_RM_CLOSED](#e_rm_closed) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -4357,6 +4377,166 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 B2's scorer seam is not built yet (lanes/test-first/scorer.ts): the Codex rollout reader comes with the B2 scorer branch.
 
 Fix: Merge the B2 scorer branch into the run lane, then build the table again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_CELL_CHECK
+
+The review-models eval's keyless rig check (review-units cell-check, src/trial/review/rm-check.ts) could not run: the gstack checkout is not at the pin, the Claude Code CLI or the voice's codex is missing, or a step it needs failed. A check that ran and failed prints FAIL on its line, and the command exits 1.
+
+Fix: Point --gstack at a set-up gstack checkout at the pin, run bun install --frozen-lockfile for the Claude Code CLI, give --codex-dir the directory holding Codex 0.170.0 (docker cp it out of the trial image), and run the check again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_PROXY_PREFLIGHT
+
+The review-models eval's keyless proxy preflight failed (src/trial/review/proxy-preflight.ts): the recorded gstack voice request did not pass the metering proxy with its web_search tool removed, a web_search from any other caller was not refused, or a Carbon judge request did not route and settle at Carbon's 2026-12-01 rate. The line names each failed check.
+
+Fix: Read the printed report, fix the proxy's voice removal (removeVoiceWebSearch) or the Carbon row in src/runner/pricing/prices.ts, and run the preflight again before any review spends.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RMS_INPUT
+
+The review-models supply (rm-supply) was given input it cannot use: a missing option, a suite or frame in another shape, or a record that does not match.
+
+Fix: Pass the files gstack-evals rm-supply --help names, in the shapes it writes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_RMS_GIT
+
+The review-models supply could not read what a gate needs from git or GitHub: a clone, a commit, a diff, a blame, or a review comment's or pull request's date.
+
+Fix: Check the network and the clone under --work, then run the same subcommand again; records already written are kept and skipped.
+
+Exit 2. Side effects: Records for units already checked are kept in the out file; nothing is paid. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_RMS_PENDING
+
+The review-models draw found a unit whose gate results are not all in: a gate not yet run, or a B unit that passed gates 1, 2 and 4 with no settled visibility read.
+
+Fix: Finish p-gates, b-gates and the visibility read (vis-requests, vis-send, vis-read), then draw again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_RMS_FLOOR
+
+The review-models draw cannot fill a set: the pilot lacks 5 never-run P units, 5 B units or a decoy, or the counted set holds fewer than 80 bug units. The plan does not start the run below its floor.
+
+Fix: Take the counts to the Captain; the run does not start until the supply reaches the floor.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_JUDGE
+
+The review-models Carbon judge call cannot be built or read (lanes/review-models/score/judge.ts): Carbon's price row is not pinned to google-vertex alone, a review's finding ids repeat, or the call answered with an HTTP status other than 200.
+
+Fix: Keep Carbon's row in src/runner/pricing/prices.ts pinned to google-vertex alone, give each finding its own id, and let the run driver retry or stop a transport failure; an empty, cut-off or unreadable reply is retried once and then ruled can't tell, never refused.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_SCORE_INPUT
+
+The review-models scorer, staged rule or look refused its input (lanes/review-models/score/): a unit reviewed twice by one arm, a scored review with no metered cost or no judge result, cost rows that are not cost.tsv's columns, a pilot unit missing an OS or OA review, shares that do not add to 1, or a seeded look order that does not list the counted units.
+
+Fix: Rebuild the reviews from the run's findings, judge results and cost.tsv rows so each unit and arm appears once with its cost; the message names the first problems.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_HISTORY
+
+The review-models staged rule refused Harness Evals' per-pass stage 1 CSV: its sha256 is not the one pre-run change 1 freezes, a column is missing, or it does not hold 54 outside bugs with 2 passes each.
+
+Fix: Pass the path of review-real-bugs-stage1-per-pass.csv from Harness Evals' stage 1 grid (sha256 fae7595b...). Never commit it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_LABELS
+
+The review-models judge check's labels cannot be built or read (lanes/review-models/score/labels.ts): a label model has no price row pinned to its one provider, a reply that read no longer reads, or a decoy review was given to the check.
+
+Fix: Pin the label model's price row in src/runner/pricing/prices.ts to the one provider frozen.ts names, keep the batch's replies.jsonl as written, and keep decoy reviews out of the check.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_RUN
+
+The review-models pilot path (gstack-evals rm-run, src/trial/review/rm-run.ts) refused its input: a quote for a ledger item is not in the approvals file or the pre-run changes verbatim, the draw's pilot is not 5 P, 5 B and 1 decoy, or a pilot or retry item has no approved cap or too little left.
+
+Fix: Read the message: record the item's cap with the Captain's words (gstack-evals rm-run items --approvals &lt;file>), pass the draw rm-supply wrote, or take a shortfall to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_RM_RESERVE
+
+A review-models session ended on a provider or infrastructure error, and the retry reserve's lease cannot hold its one rerun (prereg section 8; pre-run change 2). Reruns stop; the cell stays a gap and is reported as an infrastructure miss for its arm.
+
+Fix: Take the shortfall to the Captain as a cap ask; never rerun from an arm's own item.
+
+Exit 2. Side effects: The run goes on; the cell's first attempt and its spend are kept in the journal entry's rerun record. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_RM_POST_INPUT
+
+A review-models post-run step refused its input (lanes/review-models/post/): the post key is not rm-post-key.v1 or repeats a unit, a pilot unit has no gate record or advisory, a step ran before the one it needs (contamination before labels, the second read before labels, the judge before the readout), or the readout would name a unit id, PR, fix commit or advisory the key holds.
+
+Fix: Run the rm-post steps in the order README.md lists, from the pilot's own out dir and key; a readout that would name the key's contents is a bug to fix, never a file to write.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_POST_SEND
+
+A review-models second-read call answered with an HTTP status other than 200 after the metering proxy's own retries, so the batch stopped (lanes/review-models/post/send.ts).
+
+Fix: Rerun the same command: every reply so far is kept and every answered request is cached by digest, so it resumes at the call that stopped and pays for nothing twice.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_RM_POST_DESK
+
+No longer raised since pre-run change 9 retired the person-label path and desk.ts with it. It meant: a review-models labelling package for the desk failed its privacy and blinding check (lanes/review-models/post/desk.ts): a page, the guide, the first message, job.json or items.json names a grader, a model or vendor, an arm, gstack, Carbon, earlier answers or the other labeller, or holds a key-shaped string; or python3 could not run the check.
+
+Fix: Read privacy-check.md in the package folder, remove the named words from the package's own text or the item that carries them, and rebuild. Send nothing from a package whose check failed.
+
+Exit 2. Side effects: The package folder is written with a privacy-check.md that says FAILED; nothing is sent and nothing is spent. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_POST_LABELS
+
+No longer raised since pre-run change 9 retired the person-label path and desk.ts with it. It meant: a returned person labels file did not import (lanes/review-models/post/desk.ts): it is not a labels file from this package's page, a screen has no valid answer or no reason, it answers a question its page does not hold, the first import did not get one file from seat A's page and one from seat B's, both name the same labeller, the third round got other than one file, or seat C's file names seat A's or seat B's labeller code.
+
+Fix: Ask the desk for the right file (the one Download my labels saves), a redo with the printed problems, or a seat C labeller who is neither seat A's nor seat B's, then import again. Nothing was written.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_POST_RETIRED
+
+No longer raised: pre-run change 9 has rm-post label-send run again, with Grok 4.7 as the judge check's labeller. It meant that label-send refused while people made the labels (pre-run changes 5 to 8).
+
+Fix: Run gstack-evals rm-post label-send (lanes/review-models/post/README.md).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_RM_POST_DESK_RETIRED
+
+rm-post desk-package and labels-import are retired: under pre-run change 9 (R126) no people label the review-models judge check, so no labelling package is built and no labels file is read.
+
+Fix: Run gstack-evals rm-post label-send, which has Grok 4.7 label the judge check with Kimi K3.1 Pro as its fallback (lanes/review-models/post/README.md).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_RM_NOT_OPEN
+
+A paid review-models step ran before its phase opened (lanes/review-models/score/opening.ts, pre-run change 10): pilot steps and their paid preparation open at 2026-11-26 21:30Z, counted steps, the validation batch included, at 2026-11-28 06:00Z.
+
+Fix: Wait for the printed opening time. Counted steps also wait for the gstack-evals Captain's read of the pilot readout. No flag or variable moves either time; a new time needs a dated change to the plan.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_RM_CLOSED
+
+A closed step of the review-models eval ran (lanes/review-models/score/opening.ts): the pilot stopped under R111 on 2026-11-27, and the steps that reach the seven unresolved defects on its results page (rm-post's sends, contamination and validation readout, rm-supply's visibility steps, rm-run's pilot plan, pilot run and e2e, and review-units with --cell-items) refuse before they read, write or spend anything. This does not close a generic review-units run without --cell-items, which can still spend against a separately admitted ledger item, or rm-run items, which can still raise caps; neither is authorized for this stopped eval.
+
+Fix: Read the historical result with rm-post readout or on the results page. Reopening needs a new preregistration and fixes for the defects the results page lists under What would reopen it; no flag or variable reopens these steps.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
