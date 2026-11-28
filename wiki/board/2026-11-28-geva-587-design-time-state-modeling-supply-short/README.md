@@ -1,7 +1,7 @@
 ---
 id: 2026-11-28-geva-587-design-time-state-modeling-supply-short
 kind: finding
-title: "Design-time state modeling eval 1 stopped SUPPLY SHORT: 8 of 126 screened units from this pool passed both state screens, so at most 47 comparison units could exist against a floor of 48; no effectiveness verdict"
+title: "Design-time state modeling eval 1 stopped SUPPLY SHORT: 8 of 126 screened units from this pool passed both screens (state and reach), so at most 47 comparison units could exist against a floor of 48; no effectiveness verdict"
 summary: "Eval 1 ran no counted cell. 8 of 126 screened units passed both screens; the bound fell to 47, under the floor of 48. Pilot reviews 84 of 84, builds 39 of 84. $143.48 paid. No verdict."
 author: GEVA-587
 model: anthropic/claude-opus-5-5
@@ -39,9 +39,10 @@ The prereg's floor is 48 comparison units: "under 48 it stops for the Captain (S
 | Passed both screens (state and reach) | 8 |
 | Drawn: calibration / comparison / reserve | 6 / 1 / 0 |
 | Skipped by the draw: state, authoring, Codex config, unforeseeable, reach | 105, 41, 15, 8, 6 |
-| Upper bound after the last screens and authoring: comparison 1 plus undecided candidates 46 | 47 |
+| Left undecided when the walk stopped: still live / already dropped at authoring before the walk reached them | 46 / 6 |
+| Upper bound after the last screens and authoring: comparison 1 plus live undecided candidates 46 | 47 |
 
-Kappa between the two state raters was 0.57 on state-shaped and 0.47 on defect, over 123 units. Wave 2 emitted 113 units. The 5 units it held back track a .mcp.json file, and ruling A set them aside before any outcome, so 108 entered the walk.
+The walk adds up: 7 drawn, 175 skipped and 52 undecided make 234. Kappa between the two state raters was 0.57 on state-shaped and 0.47 on defect, over 123 units. Wave 2 emitted 113 units. The 5 units it held back track a .mcp.json file, and ruling A set them aside before any outcome, so 108 entered the walk.
 
 ### When the stop fired, and what ran after it
 
@@ -88,7 +89,8 @@ A code review of the results PR raised three issues. None of them changed a numb
 
 - **A rebuilt unit that fails custody admission still sits in the units folder,** and the draw does not read the rebuild status. This run assembled its units folder from admitted units only: 133 of 138 rebuilt pool units, matched line for line to their sealed digests. So no unadmitted unit entered.
 - **The screen step also visits units the draw skipped.** 8 authored units with Codex files were screened, for $0.46.
-- **Extending a construct search does not reapply its repository exclusions.** Wave 2 continued attempt 3's frozen search order past the 953 repositories already searched. Attempt 3's unit repositories sit inside those 953, so wave 2 should not reach them again. The run checked that no repository sat on two wave 2 VMs and that no label was shared with the pool. It did not check wave 2's repositories by name against attempt 3's unit repositories, so this is unverified.
+- **Extending a construct search does not reapply its repository exclusions.** `ep search --extend` returns before it reads `--exclude`, and the saved pool is unfiltered, so an extension can draw excluded repositories again. Wave 2 did not extend a search. Attempt 3's pools and seeds were gone, so pre-run change 1 ran a fresh search with a new seed and left out attempt 3's 79 unit repositories by digest. All four wave 2 shards carry the same pool, seed and manifest, and the run log records that none of wave 2's constructed repositories is among those 79.
+- **The exposure detectors may undercount on some paths.** On Sol, a checker result that arrives by polling a background command is not tied back to the checker call, so C on Sol can read low. On Claude hosts, P's evidence reads Claude Code's own session file, and a failed copy of that file is not logged. Subagent work counts on Sol but not on Claude hosts. A provider safety stop on Claude hosts is read as an upstream gap rather than a result. So the pilot's low exposure counts, P on Opus above all, are not proof that a model skipped the procedure.
 
 ## Cost
 
