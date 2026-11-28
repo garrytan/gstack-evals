@@ -11,7 +11,6 @@ status: open
 links:
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-prereg/README.md
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-pre-run-change-2/README.md
-  - lanes/eng-planted/e1/commands.ts
 ---
 
 # Pre-run change 3 to the design-time state modeling eval
@@ -29,7 +28,7 @@ This change governs where it and the plan differ.
 
 The prereg's run order, step 3, read "From 2026-11-28 06:00Z: rebuild the pool from custody and check each unit against its sealed digests; the two state screens on the pool; the calibration draw; wave 2 if needed, alongside the pilot." Step 3 and the pilot now open at 2026-11-26T21:08:58Z. Every step after the pilot readout is unchanged.
 
-The harness enforces both times. Each paid e1 command checks the clock before it opens a lease (lanes/eng-planted/e1/commands.ts, E1_NOT_BEFORE):
+The harness enforces both times. Each paid e1 command checks the clock before it opens a lease (lanes/eng-planted/e1/commands.ts (at commit 7b3dae94), E1_NOT_BEFORE):
 
 | Commands | Opens at |
 |---|---|
@@ -37,7 +36,7 @@ The harness enforces both times. Each paid e1 command checks the clock before it
 | ep e1-reviews and ep e1-builds with --phase pilot (item e1-pilot) | 2026-11-26T21:08:58Z |
 | ep e1-reviews and ep e1-builds with --phase comparison (the 14 counted items) | 2026-11-28T06:00:00Z |
 
-Before its time, a command refuses with E_USAGE and opens nothing. The tests in tests/ep/e1/commands.test.ts run the guard on both sides of each time: a second before the pilot's time, every pilot and preparation command refuses; a second after it, the pilot runs while every counted command still refuses; after the counted time, a counted command runs. A counted command also still needs e1/comparison.json, which ep e1-freeze writes only after the pilot (pre-run change 2, section 9).
+Before its time, a command refuses with E_USAGE and opens nothing. The tests in tests/ep/e1/commands.test.ts (at commit 7b3dae94) run the guard on both sides of each time: a second before the pilot's time, every pilot and preparation command refuses; a second after it, the pilot runs while every counted command still refuses; after the counted time, a counted command runs. A counted command also still needs e1/comparison.json, which ep e1-freeze writes only after the pilot (pre-run change 2, section 9).
 
 ## What this does not change
 

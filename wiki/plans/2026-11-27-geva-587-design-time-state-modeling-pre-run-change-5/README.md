@@ -12,8 +12,6 @@ links:
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-prereg/README.md
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-pre-run-change-2/README.md
   - wiki/plans/2026-11-27-geva-587-design-time-state-modeling-pre-run-change-4/README.md
-  - lanes/eng-planted/e1/supply.ts
-  - lanes/eng-planted/e1/commands.ts
 ---
 
 # Pre-run change 5 to the design-time state modeling eval
@@ -36,4 +34,4 @@ The draw's sets only grow (pre-run change 2, section 9). One exception now appli
 
 For this run, that means the calibration unit leaves before any session of it. The walk then fills calibration from the next passing unit in seeded order. On today's screens that is the one unit the draw had placed in comparison, so comparison goes back to 0 until more units pass their screens.
 
-The tests in tests/ep/e1/supply.test.ts and tests/ep/e1/commands.test.ts cover the skip and the exception. A unit with a .agents path takes no set and no repository slot. A placed unit leaves the draw only while no review record of it exists, and the units after it keep their seeded order.
+The tests in tests/ep/e1/supply.test.ts (at commit 7b3dae94) and tests/ep/e1/commands.test.ts (at commit 7b3dae94) cover the skip and the exception. A unit with a .agents path takes no set and no repository slot. A placed unit leaves the draw only while no review record of it exists, and the units after it keep their seeded order.

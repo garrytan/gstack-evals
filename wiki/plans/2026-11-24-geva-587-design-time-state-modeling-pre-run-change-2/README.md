@@ -11,7 +11,6 @@ status: open
 links:
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-prereg/README.md
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-pre-run-change-1/README.md
-  - lanes/eng-planted/e1/
 ---
 
 # Pre-run change 2 to the design-time state modeling eval
@@ -41,7 +40,7 @@ This change governs where it and the plan differ.
 
 ## 2. Power: one fit for the start rule
 
-- The prereg's pooled MDD rows treat a model's two builds as independent. lanes/eng-planted/e1/power.py adds what they share. It imports attempt 3's power.py unchanged (section 8's frozen simulator) and adds two terms per unit and model: a baseline b ~ N(0, sd_mu) on both arms' builds of that model, and a variation in the modeling arm's effect z ~ N(0, tau_mu), shared by that model's two builds.
+- The prereg's pooled MDD rows treat a model's two builds as independent. lanes/eng-planted/e1/power.py (at commit 7b3dae94) adds what they share. It imports attempt 3's power.py unchanged (section 8's frozen simulator) and adds two terms per unit and model: a baseline b ~ N(0, sd_mu) on both arms' builds of that model, and a variation in the modeling arm's effect z ~ N(0, tau_mu), shared by that model's two builds.
 - The pilot runs one cell per unit and model, so it can't separate a model's shared part from build noise. So each design prints at two ends: (sd_mu, tau_mu) = (0, 0), and (the fitted sd_e, power.py's effect SD of 0.5). The larger MDD governs.
 - The fit reads N's pilot builds as power.py --fit reads plain's: a unit's builds across models count as its K builds. Model level differences then inflate sd_e, which errs toward a larger MDD.
 - The start rule runs this fit after the pilot and again once the comparison draw is fixed, at the drawn unit count. Designs printed: 64 and 48 units, on three and two models. A C minus N or D minus N MDD over 10 points at the governing end goes to the Captain before any counted cell. The prereg's "before the pilot" (line 218) reads as "before the counted cells", which is when the measured values exist.
@@ -85,7 +84,7 @@ This change governs where it and the plan differ.
 
 ## 8. What the driven launch found
 
-The driven launch (lanes/eng-planted/e1/e2e.ts) runs the pilot's own commands (ep e1-reviews, e1-builds and e1-pilot) on one Go fixture unit. It uses the real review launcher on the Docker rig, the real build launcher on Harbor and a stub upstream in place of every model. It found these faults, all fixed before any paid call:
+The driven launch (lanes/eng-planted/e1/e2e.ts (at commit 7b3dae94)) runs the pilot's own commands (ep e1-reviews, e1-builds and e1-pilot) on one Go fixture unit. It uses the real review launcher on the Docker rig, the real build launcher on Harbor and a stub upstream in place of every model. It found these faults, all fixed before any paid call:
 
 - **Leases on a shared item.** Each stage group opened its lease for the item's whole cap, so the pilot's second pair on e1-pilot hit a cap stop once the first pair had spent anything. The screens, authoring and hinted builds on e1-supply had the same fault. A group's lease now asks for the smaller of --cap-usd and what the item has left, and the ledger still refuses an item that has nothing left.
 - **Sol's transcript.** The launcher passed the contents of Sol's rollout files where codexAsClaude reads paths, so every Sol session failed after it ended. It now passes the paths.

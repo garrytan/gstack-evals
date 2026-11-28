@@ -12,7 +12,6 @@ links:
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-prereg/README.md
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-pre-run-change-2/README.md
   - wiki/plans/2026-11-26-geva-587-design-time-state-modeling-pre-run-change-3/README.md
-  - lanes/eng-planted/e1/commands.ts
 ---
 
 # Pre-run change 4 to the design-time state modeling eval
@@ -30,4 +29,4 @@ This change governs where it and the plan differ.
 
 Without `--pair`, the command behaves as before. With it, the pilot runs the one pair it names. It refuses with E_USAGE, before any lease, when the pair does not run (P runs on Opus and particle-1 only, prereg section 4) or when the phase is comparison, whose item already names its pair.
 
-The test in tests/ep/e1/commands.test.ts runs one pair under one lease, and checks that an unknown pair and a comparison command with `--pair` both refuse with no lease opened.
+The test in tests/ep/e1/commands.test.ts (at commit 7b3dae94) runs one pair under one lease, and checks that an unknown pair and a comparison command with `--pair` both refuse with no lease opened.

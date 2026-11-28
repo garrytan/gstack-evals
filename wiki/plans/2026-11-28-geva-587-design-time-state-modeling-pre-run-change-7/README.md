@@ -12,7 +12,6 @@ links:
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-prereg/README.md
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-pre-run-change-2/README.md
   - wiki/plans/2026-11-27-geva-587-design-time-state-modeling-pre-run-change-6/README.md
-  - lanes/eng-planted/e1/supply.ts
 ---
 
 # Pre-run change 7 to the design-time state modeling eval
@@ -31,4 +30,4 @@ This change governs where it and the plan differ.
 
 With every step done, such a unit is skipped for its screens, its repository or its ratings. Each of those paths skips it, and a skipped unit takes no set and no repository slot. So skipping it early leaves every set and the order of every placed unit as they would be. Only its skip reason can differ. A unit that its screens already dropped keeps its screen reason, because the early skip applies only while the unit is still owed. Before calibration is full, the walk still waits on the unit, because calibration takes unforeseeable units.
 
-The test in tests/ep/e1/supply.test.ts covers both cases. With calibration full, an owed unforeseeable unit is skipped and the walk goes on to the next unit. With calibration one short, the walk still waits on it.
+The test in tests/ep/e1/supply.test.ts (at commit 7b3dae94) covers both cases. With calibration full, an owed unforeseeable unit is skipped and the walk goes on to the next unit. With calibration one short, the walk still waits on it.

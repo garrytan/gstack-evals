@@ -12,7 +12,6 @@ links:
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-prereg/README.md
   - wiki/plans/2026-11-24-geva-587-design-time-state-modeling-pre-run-change-2/README.md
   - wiki/plans/2026-11-27-geva-587-design-time-state-modeling-pre-run-change-5/README.md
-  - lanes/eng-planted/e1/commands.ts
 ---
 
 # Pre-run change 6 to the design-time state modeling eval
@@ -29,6 +28,6 @@ This change governs where it and the plan differ.
 
 ## The change
 
-`e1Driver(run)` in lanes/eng-planted/e1/commands.ts names the folder, and `ep e1-author --step hinted` and `ep e1-builds` both pass it to the build launcher. Each cell keeps its own key, so the hinted cells and eval 1's build cells do not collide in the driver's records.
+`e1Driver(run)` in lanes/eng-planted/e1/commands.ts (at commit 7b3dae94) names the folder, and `ep e1-author --step hinted` and `ep e1-builds` both pass it to the build launcher. Each cell keeps its own key, so the hinted cells and eval 1's build cells do not collide in the driver's records.
 
-The tests in tests/ep/e1/commands.test.ts check that the hinted step and the pilot builds both hand the launcher this one folder.
+The tests in tests/ep/e1/commands.test.ts (at commit 7b3dae94) check that the hinted step and the pilot builds both hand the launcher this one folder.

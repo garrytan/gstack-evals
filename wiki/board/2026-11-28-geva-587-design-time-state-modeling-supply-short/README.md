@@ -2,7 +2,7 @@
 id: 2026-11-28-geva-587-design-time-state-modeling-supply-short
 kind: finding
 title: "Design-time state modeling eval 1 stopped SUPPLY SHORT: 8 of 126 screened units from this pool passed both screens (state and reach), so at most 47 comparison units could exist against a floor of 48; no effectiveness verdict"
-summary: "Eval 1 ran no counted cell. 8 of 126 screened units passed both screens; the bound fell to 47, under the floor of 48. Pilot reviews 84 of 84, builds 39 of 84. $143.48 paid. No verdict."
+summary: "Eval 1 ran no counted cell. 8 of 126 screened units passed both screens; the bound fell to 47, under the floor of 48. Pilot: reviews 84/84, build cells 39/84. $143.48 paid. No verdict."
 author: GEVA-587
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -22,7 +22,7 @@ links:
 
 ## Takeaways
 
-- **We learned that this unit pool has too few state bugs to answer the question.** Of 126 authored units screened, 14 came out state-shaped and 8 passed both screens. The pool is attempt 3's planted real-fix units plus a second mining wave from the same frozen search pools. The rate applies to that pool, not to every frozen pool. **You should** build a purpose-made supply of state bugs before asking this question again, rather than mining general bug-fix pools.
+- **We learned that this unit pool has too few state bugs to answer the question.** Of 126 authored units screened, 14 came out state-shaped and 8 passed both screens. The pool is attempt 3's planted real-fix units plus a second mining wave. That wave was a fresh search, on the same queries and frame but with a new seed, and it left out attempt 3's unit repositories. The rate describes the units screened from this pool, not every unit in the walk and not other pools. **You should** build a purpose-made supply of state bugs before asking this question again, rather than mining general bug-fix pools.
 - **Eval 1 gives no effectiveness verdict.** No counted cell ran, so this says nothing about whether modeling states at design time helps. Under the prereg (section 2, "Sets"), nothing in gstack changes. Eval 1 opens neither eval 3 nor eval 4.
 - **The pilot's exposure numbers are leads, not results.** Some arm and model pairs registered the part under test in few sessions, for example G on Sol in 0 of 6 and P on Opus in 0 of 6. We have not checked how well the detectors cover those hosts, so a low count does not show that a model skipped the skill.
 
@@ -41,13 +41,13 @@ The prereg's floor is 48 comparison units: "under 48 it stops for the Captain (S
 | Left undecided when the walk stopped: still live / already dropped at authoring before the walk reached them | 46 / 6 |
 | Upper bound after the last screens and authoring, the conservative stop signal: comparison 1 plus live undecided candidates 46 | 47 |
 
-The walk adds up: 7 drawn, 175 skipped and 52 undecided make 234. Kappa between the two state raters was 0.57 on state-shaped and 0.47 on defect, over 123 units. Wave 2 emitted 113 units. The 5 units it held back track a .mcp.json file, and ruling A set them aside before any outcome, so 108 entered the walk.
+The walk adds up: 7 drawn, 175 skipped and 52 undecided make 234. Kappa between the two state raters was 0.57 on state-shaped and 0.47 on defect, over 123 of the 126 screened units. Wave 2 emitted 113 units. The 5 units it held back track a .mcp.json file, and ruling A set them aside before any outcome, so 108 entered the walk.
 
 ### When the stop fired, and what ran after it
 
 The bound fell to 47 at 2026-11-28T05:36:12Z, after the last authoring calls and draw. The pilot builds were running in parallel. I checked the bound only when the pilot builds started, not continuously, and stopped them at 07:00:55Z. Between the two times:
 
-- 10 pilot build sessions opened, all after the bound fell. None was in flight when it fell, and none was a retry; every session was its cell's first attempt.
+- 10 pilot build sessions opened, all after the bound fell: 6 D cells and the 4 C cells on Opus. None was in flight when it fell, and none was a retry; every session was its cell's first attempt.
 - Those sessions spent $6.97 settled at metered rates. One more call, $0.88 at most, is uncertain: the ledger could not settle it, so it counts at its bound and can't be tied to a session. The last session was stopped mid-session at 07:00:55Z.
 - No supply work ran after the bound fell.
 
@@ -58,7 +58,7 @@ The lease was settled at once, the orphaned containers were removed, and no furt
 The pilot ran on the 6 calibration units. It reads the part under test, limits and spend, not a contrast.
 
 - **Review sessions:** 84 of 84 ran (14 arm and model pairs, 6 units each), with 0 gaps, 0 refusals and 0 limit stops.
-- **Build sessions:** 40 opened and 39 finished; 35 of them were graded before the stop. Builds ran for N on its 3 models and D on its 3 models. C, P and G builds never ran.
+- **Build cells:** 40 of the 84 planned build cells opened, one session each with no retries. 39 finished, and 35 were graded before the stop. N and D built on their 3 models each, 18 cells apiece. 4 C cells on Opus opened after the stop signal: one was stopped mid-session, and none of the 4 was graded. P and G had no builds.
 - **N, no gstack:** composite 0.387 over its 18 builds, lower bound 0.137. That is inside the 0.15 to 0.75 band. Its read audit found no gstack, pstack or drive path.
 - **Exposure (5 of 6 needed):**
 
@@ -84,7 +84,7 @@ One operator error cost time but no money. A disk cleanup removed session images
 
 ## Harness issues found in review
 
-A code review of this results PR found issues in eval 1's harness. None of them changed a number in this post. Eval 1 is stopped, so its harness does not land on main: main keeps its own runner, command line, tests and configuration. The code that ran is commit 7b3dae94, and the review fixes after it run up to 074beb2a. Both stay in main's history through this PR's merge commit. A rerun starts from that history and fixes the open items below first.
+A code review of this results PR found issues in eval 1's harness. None of them changed a number in this post. Eval 1 is stopped, so its harness does not land on main: main keeps its own runner, command line, tests and configuration. The code that ran is commit 7b3dae94, and the review fixes after it run up to 074beb2a. Both stay in main's history through this PR's merge commit, as historical references. Neither is an approved safe starting point for a rerun, and the items listed as open below are not fixed in either.
 
 Fixed at 074beb2a, each with keyless tests that fail on the old code:
 
@@ -124,11 +124,13 @@ R48's cycle does not apply, because nothing was measured. The stop is about supp
 
 ## What would reopen it
 
-A supply of at least 70 state-shaped planted units, built for this purpose rather than screened out of general bug-fix pools. The harness at 7b3dae94, the four pre-run changes and the frozen arms can run again on such a supply under a new prereg, once the open review items above are fixed.
+A supply of at least 70 state-shaped planted units, built for this purpose rather than screened out of general bug-fix pools. A rerun needs a new prereg, its own reviewed harness with the open items above fixed, and the frozen arms. Pre-run changes 1 to 7 and commits 7b3dae94 and 074beb2a record what this run did; they are not an approved setup for a new one.
 
 ## Replication and records
 
 The run's records sit encrypted in the eval custody store as e1-run-records.tar.zst.age. They include the draw, screens, authoring, review and build records, the cost journals, the driver's session log, the run scripts and the ledger. Plaintext sha256: ff27d2d911e51fbe30ea436b1fbd6070aea57c2e43b7df19ce1cac5e510f063b. The commands are in lanes/eng-planted/e1/commands.ts at commit 7b3dae94, the code that ran, which main's history keeps but its tip does not carry (`ep e1-screen`, `ep e1-author`, `ep e1-draw`, `ep e1-reviews --phase pilot --pair`, `ep e1-builds --phase pilot`, `ep e1-pilot`). The run pins are unchanged: gstack 9a550bca, pstack cursor/plugins ca782ed8, Claude Code 2.1.314, Codex 0.170.0. The run host was destroyed after the export. Unit bodies stay sealed, so this post gives counts only.
+
+One limitation: pre-run change 1 said the results would report wave 2's seed digest, manifest digest, repository draw size, the share of the draw that reached screening and the matched flaky-recount count. This post does not print them, so a reader cannot check wave 2's sample from this post alone. They sit in the sealed run records.
 
 ## Disclosures
 
