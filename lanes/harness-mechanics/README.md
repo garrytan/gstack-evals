@@ -82,7 +82,7 @@ The judge tar is the hook arm's tree plus the judgment hooks, for judge-jev and 
 - /root/.hm/judge/: hm_judge.py, its stop and risky wrappers, facts.js (judge.ts bundled by bun build, which runs `bun judge.ts facts <transcript> --regex <file>`), match.re (section 6's frozen regex), band.json and admission.json (the replay's, copied byte for byte from lanes/harness-mechanics/judge/replay by arms.ts judge-inputs, which refuses any other file; D14) and the two backend configs, judge-jev.json and judge-p1.json;
 - settings.json with the contract Stop entry running /root/.hm/judge/stop, and one PreToolUse entry for Bash running the risky hook.
 
-No key is in the tar: step 1 checks every env key value across the whole tar and key shapes under .hm/judge. facts.js reads no file from the repo. match.ts takes gstack's quote transform from quotes.ts as a Bun macro, so Bun reads it from the vendored checker when it transpiles or bundles match.ts, and the bundle carries the regex.
+No key is in the tar: step 1 checks every env key value across the whole tar and key shapes under .hm/judge. facts.js reads no file from the repo. match.ts writes gstack's quote transform out as a literal, so the bundle carries the regex. tests/harness-mechanics/match.test.ts checks that literal against quotes.ts, which reads it from the vendored checker.
 
 hm_judge.py's Stop entry runs gstack's contract hook first, then section 8's exact rules, then the typed question; a no blocks once. Its PreToolUse entry checks the frozen list, then check-careful.sh at the pin, then the question. Fail-open at 2 s (Jev) and 30 s (particle-1) covers the decider's whole answer, its own retry included. Each decision writes one JSON line to /root/.hm/log/hooks.jsonl.
 
